@@ -196,6 +196,7 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
       <div class="dest-input-wrap">
         <input type="text" class="dest-input" id="destInput" placeholder="¿A dónde vas?" oninput="onDestInput(this.value)">
         <button class="voice-btn" onclick="startVoice()" title="Búsqueda por voz">🎤</button>
+        <button class="voice-btn" onclick="enableDestPin()" title="Marcar en el mapa">📌</button>
       </div>
     </div>
     <div class="search-loading hidden" id="searchLoading">Buscando direcciones...</div>
@@ -302,7 +303,7 @@ let searchTimer = null;
 let originSearchTimer = null;
 let lastNominatimCall = 0;
 let submittedHashes = new Set();
-let mapTapEnabled = false;
+let mapTapMode = null; // null | 'origin' | 'dest'
 let gpsAttempted = false;
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
@@ -322,15 +323,21 @@ function initMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'&copy; OSM'
   }).addTo(map);
-  // Map click handler for setting origin
+  // Map click handler for setting origin or dest
   map.on('click', function(e) {
-    if(!mapTapEnabled) return;
-    setOrigin(e.latlng.lat, e.latlng.lng, e.latlng.lat.toFixed(4)+', '+e.latlng.lng.toFixed(4));
-    reverseGeocode(e.latlng.lat, e.latlng.lng);
-    mapTapEnabled = false;
+    if(!mapTapMode) return;
+    if(mapTapMode==='origin') {
+      setOrigin(e.latlng.lat, e.latlng.lng, e.latlng.lat.toFixed(4)+', '+e.latlng.lng.toFixed(4));
+      reverseGeocode(e.latlng.lat, e.latlng.lng);
+      showToast('Origen establecido ✓','success');
+    } else if(mapTapMode==='dest') {
+      setDest(e.latlng.lat, e.latlng.lng, e.latlng.lat.toFixed(4)+', '+e.latlng.lng.toFixed(4));
+      reverseGeocodeDest(e.latlng.lat, e.latlng.lng);
+      showToast('Destino establecido ✓','success');
+    }
+    mapTapMode = null;
     $('mapHint').classList.add('hidden');
     map.getContainer().style.cursor = '';
-    showToast('Ubicación establecida ✓','success');
   });
   setTimeout(()=>map.invalidateSize(),300);
 }
@@ -434,13 +441,22 @@ function useDefaultOrigin() {
 
 // ─── Fallback: Map tap ────────────────────────────────────────────────────────
 function enableMapTap() {
-  mapTapEnabled = true;
+  mapTapMode = 'origin';
   map.getContainer().style.cursor = 'crosshair';
+  $('mapHint').textContent='👆 Tocá el mapa para marcar tu ubicación';
   $('mapHint').classList.remove('hidden');
   $('originError').classList.add('hidden');
   $('originFallback').classList.add('hidden');
   showToast('Tocá el mapa para marcar tu ubicación','info');
-  // Scroll to map
+  $('map').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function enableDestPin() {
+  mapTapMode = 'dest';
+  map.getContainer().style.cursor = 'crosshair';
+  $('mapHint').textContent='👆 Tocá el mapa para marcar el destino';
+  $('mapHint').classList.remove('hidden');
+  showToast('Tocá el mapa para marcar el destino','info');
   $('map').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
@@ -464,7 +480,8 @@ async function doOriginSearch() {
   $('originSearchResults').classList.add('hidden');
   try {
     await rateLimit();
-    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=5&accept-language=es&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=0',{
+    const qLocal = /santa\s*fe/i.test(q) ? q : q + ', Santa Fe, Argentina';
+    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(qLocal)+'&format=json&limit=5&accept-language=es&countrycodes=ar&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=0',{
       headers:{'User-Agent':'MovilidadAsistente/1.0'},
       signal:AbortSignal.timeout(8000)
     });
@@ -583,7 +600,9 @@ async function searchDest(q) {
   $('searchResults').classList.add('hidden');
   try {
     await rateLimit();
-    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=5&accept-language=es',{
+    // Append Santa Fe if not already there, to bias results locally
+    const qLocal = /santa\s*fe/i.test(q) ? q : q + ', Santa Fe, Argentina';
+    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(qLocal)+'&format=json&limit=5&accept-language=es&countrycodes=ar&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=0',{
       headers:{'User-Agent':'MovilidadAsistente/1.0'},
       signal:AbortSignal.timeout(8000)
     });
@@ -604,15 +623,35 @@ async function searchDest(q) {
   $('searchLoading').classList.add('hidden');
 }
 
-function selectDest(lat,lon,name) {
+function setDest(lat, lon, name) {
   if(isNaN(lat)||isNaN(lon)) return;
   dest={lat,lon,name};
-  $('destInput').value=name.split(',')[0];
+  $('destInput').value=name?name.split(',')[0]:(lat.toFixed(4)+', '+lon.toFixed(4));
   $('searchResults').classList.add('hidden');
   $('predictionsCard').classList.add('hidden');
   updateMap();
   if(origin.lat) runEstimate();
   else showToast('Primero establecé tu ubicación de origen','error');
+}
+
+function selectDest(lat,lon,name) {
+  setDest(lat,lon,name);
+}
+
+async function reverseGeocodeDest(lat,lon) {
+  try {
+    await rateLimit();
+    const r=await fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es',{
+      headers:{'User-Agent':'MovilidadAsistente/1.0'},
+      signal:AbortSignal.timeout(8000)
+    });
+    if(!r.ok) throw 0;
+    const d=await r.json();
+    if(d.display_name) {
+      dest.name=d.display_name;
+      $('destInput').value=d.display_name.split(',')[0];
+    }
+  } catch(e) { /* fallback coords already shown */ }
 }
 
 // ─── Voice ────────────────────────────────────────────────────────────────────
