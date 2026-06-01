@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         data: {
           originLat: oLat,
           originLon: oLon,
-          originName: originName || '',
+          originName: typeof originName === 'string' ? originName : '',
           destLat: dLat,
           destLon: dLon,
           destName: destName.trim(),

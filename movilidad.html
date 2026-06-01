@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Movilidad — Asistente de transporte</title>
+<meta name="description" content="Compará precios de Uber y DiDi en Santa Fe">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+:root {
+  --bg: #ffffff; --fg: #18181b; --card: #ffffff; --border: #e4e4e7;
+  --muted: #f4f4f5; --muted-fg: #71717a; --primary: #18181b;
+  --primary-fg: #fafafa; --green: #16a34a; --red: #dc2626;
+  --amber: #d97706; --amber-bg: #fef3c7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #09090b; --fg: #fafafa; --card: #18181b; --border: #27272a;
+    --muted: #27272a; --muted-fg: #a1a1aa; --primary: #fafafa;
+    --primary-fg: #18181b; --green: #22c55e; --red: #ef4444;
+    --amber: #f59e0b; --amber-bg: #451a03;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--fg); min-height: 100dvh; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
+header { position: sticky; top: 0; z-index: 50; background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.header-inner { display: flex; align-items: center; justify-content: space-between; max-width: 448px; margin: 0 auto; }
+.header-left { display: flex; align-items: center; gap: 8px; }
+.header-left h1 { font-size: 18px; font-weight: 700; }
+.header-right { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-fg); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.online { background: var(--green); }
+.status-dot.offline { background: var(--red); }
+.gps-btn { font-size: 12px; background: none; border: none; cursor: pointer; padding: 2px 4px; }
+.gps-btn.loading { color: var(--amber); animation: pulse 1.5s infinite; }
+.gps-btn.error { color: var(--red); text-decoration: underline; }
+.gps-btn.ok { color: var(--green); }
+.gps-btn.idle { color: var(--muted-fg); text-decoration: underline; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+main { flex: 1; max-width: 448px; margin: 0 auto; width: 100%; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.weather-strip { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted-fg); background: var(--muted); border-radius: 8px; padding: 8px 12px; }
+.origin-row { display: flex; align-items: center; gap: 8px; }
+.origin-dot { color: var(--green); font-size: 18px; }
+.origin-info { flex: 1; min-width: 0; }
+.origin-label { font-size: 12px; color: var(--muted-fg); }
+.origin-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gps-refresh { font-size: 12px; background: var(--muted); border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: opacity .15s; }
+.gps-refresh:disabled { opacity: .5; }
+.origin-error { font-size: 12px; color: var(--red); background: rgba(220,38,38,.1); border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
+.dest-row { display: flex; align-items: center; gap: 8px; }
+.dest-dot { color: var(--red); font-size: 18px; }
+.dest-input-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
+.dest-input { flex: 1; background: transparent; border: none; font-size: 14px; font-weight: 500; outline: none; color: var(--fg); }
+.dest-input::placeholder { color: var(--muted-fg); }
+.voice-btn { font-size: 18px; background: none; border: none; cursor: pointer; padding: 4px; transition: transform .15s; }
+.voice-btn:active { transform: scale(1.15); }
+.search-loading { font-size: 12px; color: var(--muted-fg); animation: pulse 1.5s infinite; margin-top: 8px; }
+.search-results { max-height: 192px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
+.search-result { display: block; width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
+.search-result:last-child { border-bottom: none; }
+.search-result:hover { background: var(--muted); }
+.search-result-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-result-sub { font-size: 12px; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.predictions-label { font-size: 12px; color: var(--muted-fg); font-weight: 500; }
+.prediction { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: none; background: none; width: 100%; text-align: left; cursor: pointer; border-radius: 8px; transition: background .1s; }
+.prediction:hover { background: var(--muted); }
+.pred-confidence { font-size: 18px; }
+.pred-info { flex: 1; min-width: 0; }
+.pred-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pred-conf-label { font-size: 12px; color: var(--muted-fg); }
+.pred-score { font-size: 12px; color: var(--muted-fg); }
+.estimate-loading { display: flex; align-items: center; justify-content: center; padding: 24px; }
+.estimate-loading-inner { text-align: center; }
+.spinner { font-size: 24px; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.estimate-error { background: rgba(220,38,38,.1); border: 1px solid rgba(220,38,38,.2); border-radius: 12px; padding: 16px; }
+.estimate-error p { font-size: 14px; color: var(--red); }
+.estimate-error button { margin-top: 8px; font-size: 12px; color: var(--red); background: none; border: none; text-decoration: underline; cursor: pointer; }
+.advice-banner { border-radius: 12px; padding: 12px; text-align: center; font-size: 14px; font-weight: 500; }
+.advice-green { background: #dcfce7; color: #15803d; }
+.advice-amber { background: var(--amber-bg); color: var(--amber); }
+.advice-muted { background: var(--muted); color: var(--muted-fg); }
+.meta-row { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 14px; color: var(--muted-fg); }
+.price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.price-card { border-radius: 12px; border: 1px solid var(--border); padding: 16px; background: var(--card); display: flex; flex-direction: column; gap: 8px; }
+.price-card.cheaper { border-color: var(--green); box-shadow: 0 0 0 1px rgba(22,163,74,.3); }
+.price-header { display: flex; align-items: center; justify-content: space-between; }
+.price-header h3 { font-size: 14px; font-weight: 700; }
+.cheaper-badge { font-size: 10px; background: #dcfce7; color: #15803d; border-radius: 9999px; padding: 2px 8px; }
+.price-main { font-size: 24px; font-weight: 700; }
+.price-range { font-size: 12px; color: var(--muted-fg); }
+.deep-link { display: block; width: 100%; border: none; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer; text-align: center; transition: all .15s; text-decoration: none; }
+.deep-link:active { transform: scale(.98); }
+.uber-btn { background: #000; color: #fff; }
+.uber-btn:hover { background: #333; }
+.didi-btn { background: #f97316; color: #fff; }
+.didi-btn:hover { background: #ea580c; }
+.factors { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.factor-badge { font-size: 12px; background: var(--amber-bg); color: var(--amber); border-radius: 9999px; padding: 4px 12px; }
+.log-toggle { font-size: 12px; color: var(--muted-fg); background: none; border: none; text-decoration: underline; cursor: pointer; transition: color .15s; }
+.log-toggle:hover { color: var(--fg); }
+.log-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.log-form h4 { font-size: 14px; font-weight: 500; }
+.transport-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.transport-btn { border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; transition: all .15s; background: var(--muted); color: var(--fg); }
+.transport-btn.active { background: var(--primary); color: var(--primary-fg); }
+.price-input-row { display: flex; gap: 8px; }
+.price-input { flex: 1; background: var(--muted); border: none; border-radius: 8px; padding: 8px 12px; font-size: 14px; outline: none; color: var(--fg); min-width: 0; }
+.save-btn { background: var(--primary); color: var(--primary-fg); border: none; border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity .15s; }
+.save-btn:disabled { opacity: .5; }
+#map { height: 280px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.offline-notice { background: rgba(217,119,6,.1); border: 1px solid rgba(217,119,6,.3); border-radius: 12px; padding: 12px; text-align: center; }
+.offline-notice p { font-size: 14px; color: var(--amber); }
+footer { margin-top: auto; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; text-align: center; }
+footer p { font-size: 12px; color: var(--muted-fg); }
+footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 4px; }
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 100; padding: 8px 16px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.15); font-size: 14px; font-weight: 500; transition: all .3s; white-space: nowrap; }
+.toast.success { background: #16a34a; color: #fff; }
+.toast.error { background: #dc2626; color: #fff; }
+.toast.info { background: var(--fg); color: var(--bg); }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-left">
+      <span style="font-size:20px">🧭</span>
+      <h1>Movilidad</h1>
+    </div>
+    <div class="header-right">
+      <span class="status-dot online" id="statusDot"></span>
+      <span id="statusText">Online</span>
+      <button class="gps-btn idle" id="gpsBtn" onclick="getGPS()">📍 Activar GPS</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Weather -->
+  <div class="weather-strip hidden" id="weatherStrip">
+    <span id="weatherIcon">☀️</span>
+    <span id="weatherTemp"></span>
+    <span>·</span>
+    <span id="weatherDesc"></span>
+  </div>
+
+  <!-- Origin -->
+  <div class="card">
+    <div class="origin-row">
+      <span class="origin-dot">●</span>
+      <div class="origin-info">
+        <p class="origin-label">Tu ubicación</p>
+        <p class="origin-name" id="originName">Tocá "Activar GPS"</p>
+      </div>
+      <button class="gps-refresh" id="gpsRefresh" onclick="getGPS()">📍 GPS</button>
+    </div>
+    <div class="origin-error hidden" id="originError"></div>
+  </div>
+
+  <!-- Destination -->
+  <div class="card">
+    <div class="dest-row">
+      <span class="dest-dot">●</span>
+      <div class="dest-input-wrap">
+        <input type="text" class="dest-input" id="destInput" placeholder="¿A dónde vas?" oninput="onDestInput(this.value)">
+        <button class="voice-btn" onclick="startVoice()" title="Búsqueda por voz">🎤</button>
+      </div>
+    </div>
+    <div class="search-loading hidden" id="searchLoading">Buscando direcciones...</div>
+    <div class="search-results hidden" id="searchResults"></div>
+  </div>
+
+  <!-- Predictions -->
+  <div class="card hidden" id="predictionsCard">
+    <p class="predictions-label">📍 Destinos frecuentes</p>
+    <div id="predictionsList"></div>
+  </div>
+
+  <!-- Estimate Loading -->
+  <div class="card estimate-loading hidden" id="estimateLoading">
+    <div class="estimate-loading-inner">
+      <div class="spinner">⏳</div>
+      <p style="font-size:14px;color:var(--muted-fg);margin-top:8px">Calculando estimación...</p>
+    </div>
+  </div>
+
+  <!-- Estimate Error -->
+  <div class="estimate-error hidden" id="estimateError">
+    <p id="estimateErrorMsg"></p>
+    <button onclick="runEstimate()">Reintentar</button>
+  </div>
+
+  <!-- Estimate Result -->
+  <div class="hidden" id="estimateResult">
+    <div class="advice-banner" id="adviceBanner"></div>
+    <div class="meta-row" style="margin-top:12px">
+      <span id="metaDist"></span>
+      <span id="metaDur"></span>
+      <span id="metaConf"></span>
+    </div>
+    <div class="price-grid" style="margin-top:12px">
+      <div class="price-card" id="uberCard">
+        <div class="price-header"><h3>Uber</h3><span class="cheaper-badge hidden" id="uberCheaper">Más barato</span></div>
+        <p class="price-main" id="uberPrice"></p>
+        <p class="price-range" id="uberRange"></p>
+        <a class="deep-link uber-btn" id="uberLink" href="#" target="_blank" rel="noopener" onclick="recordRideAndGo('uber')">Ver en Uber →</a>
+      </div>
+      <div class="price-card" id="didiCard">
+        <div class="price-header"><h3>DiDi</h3><span class="cheaper-badge hidden" id="didiCheaper">Más barato</span></div>
+        <p class="price-main" id="didiPrice"></p>
+        <p class="price-range" id="didiRange"></p>
+        <a class="deep-link didi-btn" id="didiLink" href="#" target="_blank" rel="noopener" onclick="recordRideAndGo('didi')">Ver en DiDi →</a>
+      </div>
+    </div>
+    <div class="factors hidden" id="factorsRow" style="margin-top:12px;justify-content:center"></div>
+    <div style="text-align:center;margin-top:12px">
+      <button class="log-toggle" id="logToggle" onclick="toggleLog()">Registrá cómo viajaste</button>
+    </div>
+    <div class="log-form hidden" id="logForm">
+      <h4>¿Cómo viajaste?</h4>
+      <div class="transport-grid" id="transportGrid"></div>
+      <div class="price-input-row">
+        <input type="number" class="price-input" id="logPrice" placeholder="Precio (opcional)" min="0" step="0.01">
+        <button class="save-btn" id="saveBtn" onclick="logTransport()">✓ Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Offline -->
+  <div class="offline-notice hidden" id="offlineNotice">
+    <p>📡 Sin conexión. Los deep links siguen funcionando si tenés Uber/DiDi instalados.</p>
+  </div>
+</main>
+
+<footer>
+  <p>Asistente de movilidad para Sofía · Estimaciones basadas en datos históricos</p>
+  <p class="sub">Los precios son estimaciones, no precios en tiempo real. Abrí la app para ver el precio real.</p>
+</footer>
+
+<!-- Toast -->
+<div class="toast hidden" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+const SANTA_FE = [-31.6256, -60.7087];
+const UBER_BASE=150, UBER_KM=120, UBER_MIN=15;
+const DIDI_BASE=130, DIDI_KM=110, DIDI_MIN=13;
+const WEATHER_SURGE=1.15, RUSH_SURGE=1.2, NIGHT_SURGE=1.3;
+const TRANSPORTS = [
+  {id:'uber',label:'🚗 Uber'},{id:'didi',label:'🚙 DiDi'},
+  {id:'bus',label:'🚌 Colectivo'},{id:'walk',label:'🚶 Caminando'},
+  {id:'taxi',label:'🚕 Taxi'},{id:'other',label:'📦 Otro'}
+];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let origin = {lat:null, lon:null, name:''};
+let dest = null;
+let currentEstimate = null;
+let selectedTransport = 'uber';
+let map = null;
+let originMarker = null;
+let destMarker = null;
+let routeLine = null;
+let searchTimer = null;
+let lastNominatimCall = 0;
+let submittedHashes = new Set();
+
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  initOnline();
+  initTransportGrid();
+  getGPS();
+});
+
+function initMap() {
+  map = L.map('map',{scrollWheelZoom:false,zoomControl:true}).setView(SANTA_FE,14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'&copy; OSM'
+  }).addTo(map);
+  // Fix size after render
+  setTimeout(()=>map.invalidateSize(),300);
+}
+
+function initOnline() {
+  const update = () => {
+    const on = navigator.onLine;
+    $('statusDot').className = 'status-dot '+(on?'online':'offline');
+    $('statusText').textContent = on?'Online':'Sin conexión';
+    $('offlineNotice').classList.toggle('hidden',on);
+  };
+  window.addEventListener('online',update);
+  window.addEventListener('offline',update);
+  update();
+}
+
+function initTransportGrid() {
+  const grid = $('transportGrid');
+  TRANSPORTS.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'transport-btn'+(t.id===selectedTransport?' active':'');
+    btn.textContent = t.label;
+    btn.onclick = () => {
+      selectedTransport = t.id;
+      grid.querySelectorAll('.transport-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+    grid.appendChild(btn);
+  });
+}
+
+// ─── GPS ──────────────────────────────────────────────────────────────────────
+function getGPS() {
+  if (!navigator.geolocation) {
+    $('originError').textContent='Tu navegador no soporta geolocalización';
+    $('originError').classList.remove('hidden');
+    return;
+  }
+  $('gpsBtn').className='gps-btn loading';
+  $('gpsBtn').textContent='📍 Obteniendo...';
+  $('gpsRefresh').disabled=true;
+  $('originError').classList.add('hidden');
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat=pos.coords.latitude, lon=pos.coords.longitude;
+      if (isNaN(lat)||isNaN(lon)) {
+        showGPSError('Coordenadas inválidas'); return;
+      }
+      origin={lat,lon,name:''};
+      $('originName').textContent=`${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      $('gpsBtn').className='gps-btn ok';
+      $('gpsBtn').textContent='📍 GPS';
+      $('gpsRefresh').disabled=false;
+      updateMap();
+      reverseGeocode(lat,lon);
+      fetchWeather(lat,lon);
+    },
+    err => {
+      let msg='Error al obtener ubicación';
+      if(err.code===1) msg='Permiso de ubicación denegado. Habilitá el GPS.';
+      else if(err.code===2) msg='Ubicación no disponible. Intentá de nuevo.';
+      else if(err.code===3) msg='Tiempo de espera agotado. El GPS está lento.';
+      showGPSError(msg);
+    },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:30000}
+  );
+}
+
+function showGPSError(msg) {
+  $('originError').textContent=msg;
+  $('originError').classList.remove('hidden');
+  $('gpsBtn').className='gps-btn error';
+  $('gpsBtn').textContent='📍 Sin GPS';
+  $('gpsBtn').onclick=getGPS;
+  $('gpsRefresh').disabled=false;
+}
+
+// ─── Reverse Geocode ──────────────────────────────────────────────────────────
+async function reverseGeocode(lat,lon) {
+  try {
+    await rateLimit();
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=es`,{
+      headers:{'User-Agent':'MovilidadAsistente/1.0'},
+      signal:AbortSignal.timeout(8000)
+    });
+    if(!r.ok) throw 0;
+    const d=await r.json();
+    if(d.display_name) {
+      origin.name=d.display_name;
+      $('originName').textContent=d.display_name.split(',')[0];
+      $('originName').title=d.display_name;
+    }
+  } catch(e) { /* fallback coords already shown */ }
+}
+
+// ─── Weather ──────────────────────────────────────────────────────────────────
+const WEATHER_DESC={
+  0:'Despejado',1:'Mayormente despejado',2:'Parcialmente nublado',3:'Nublado',
+  45:'Niebla',48:'Niebla con escarcha',51:'Llovizna ligera',53:'Llovizna moderada',
+  55:'Llovizna intensa',61:'Lluvia ligera',63:'Lluvia moderada',65:'Lluvia intensa',
+  71:'Nevada ligera',73:'Nevada moderada',75:'Nevada intensa',77:'Granizo',
+  80:'Chubasco ligero',81:'Chubasco moderado',82:'Chubasco violento',
+  95:'Tormenta',96:'Tormenta con granizo leve',99:'Tormenta con granizo fuerte'
+};
+
+async function fetchWeather(lat,lon) {
+  try {
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code&timezone=America%2FBuenos_Aires`,{
+      signal:AbortSignal.timeout(8000)
+    });
+    if(!r.ok) return;
+    const d=await r.json();
+    const c=d.current; if(!c) return;
+    const code=c.weather_code??0;
+    const precip=c.precipitation??0;
+    $('weatherIcon').textContent=precip>0?'🌧️':'☀️';
+    $('weatherTemp').textContent=Math.round(c.temperature_2m)+'°C';
+    $('weatherDesc').textContent=WEATHER_DESC[code]||'Desconocido';
+    if(precip>0) {
+      $('weatherStrip').insertAdjacentHTML('beforeend',`<span>·</span><span style="color:var(--amber)">Lluvia: ${precip}mm</span>`);
+    }
+    $('weatherStrip').classList.remove('hidden');
+  } catch(e) { /* non-critical */ }
+}
+
+// ─── Destination Search ───────────────────────────────────────────────────────
+function onDestInput(val) {
+  dest=null;
+  currentEstimate=null;
+  $('estimateResult').classList.add('hidden');
+  $('estimateError').classList.add('hidden');
+  clearTimeout(searchTimer);
+  if(!val||val.trim().length<3) { $('searchResults').classList.add('hidden'); return; }
+  searchTimer=setTimeout(()=>searchDest(val.trim()),500);
+}
+
+async function searchDest(q) {
+  $('searchLoading').classList.remove('hidden');
+  $('searchResults').classList.add('hidden');
+  try {
+    await rateLimit();
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&accept-language=es`,{
+      headers:{'User-Agent':'MovilidadAsistente/1.0'},
+      signal:AbortSignal.timeout(8000)
+    });
+    if(!r.ok) throw 0;
+    const data=await r.json();
+    if(!Array.isArray(data)||data.length===0) { $('searchResults').classList.add('hidden'); $('searchLoading').classList.add('hidden'); return; }
+    const container=$('searchResults');
+    container.innerHTML='';
+    data.forEach(item=>{
+      const btn=document.createElement('button');
+      btn.className='search-result';
+      btn.innerHTML=`<p class="search-result-title">${esc(item.display_name.split(',')[0])}</p><p class="search-result-sub">${esc(item.display_name)}</p>`;
+      btn.onclick=()=>selectDest(parseFloat(item.lat),parseFloat(item.lon),item.display_name);
+      container.appendChild(btn);
+    });
+    container.classList.remove('hidden');
+  } catch(e) { /* ignore */ }
+  $('searchLoading').classList.add('hidden');
+}
+
+function selectDest(lat,lon,name) {
+  if(isNaN(lat)||isNaN(lon)) return;
+  dest={lat,lon,name};
+  $('destInput').value=name.split(',')[0];
+  $('searchResults').classList.add('hidden');
+  $('predictionsCard').classList.add('hidden');
+  updateMap();
+  runEstimate();
+}
+
+// ─── Voice ────────────────────────────────────────────────────────────────────
+function startVoice() {
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR) { showToast('Voz no disponible en este navegador','error'); return; }
+  const r=new SR();
+  r.lang='es-AR'; r.interimResults=false; r.maxAlternatives=1;
+  r.onresult=e=>{ const t=e.results[0][0].transcript; if(t) onDestInput(t); };
+  r.onerror=e=>{ if(e.error!=='aborted') showToast('Error de voz: '+e.error,'error'); };
+  r.start();
+  showToast('Escuchando... Decí tu destino','info');
+}
+
+// ─── Estimate ─────────────────────────────────────────────────────────────────
+function haversine(lat1,lon1,lat2,lon2) {
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function detectFactors() {
+  const tz='America/Argentina/Buenos_Aires';
+  const now=new Date();
+  let h=parseInt(new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'numeric',hour12:false}).format(now));
+  if(isNaN(h)) h=(now.getUTCHours()-3+24)%24;
+  const dn=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'long'}).format(now);
+  const dm={Sunday:0,Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6};
+  let d=dm[dn]; if(d===undefined) d=now.getDay();
+
+  const weather=false; // updated async if needed
+  const rushHour=(h>=7&&h<9)||(h>=17&&h<19);
+  const weekendNight=((d===5||d===6)&&h>=22)||((d===6||d===0)&&h<2);
+  return {weather,rushHour,weekendNight};
+}
+
+function applySurge(base,factors) {
+  let p=base;
+  if(factors.weather) p*=WEATHER_SURGE;
+  if(factors.rushHour) p*=RUSH_SURGE;
+  if(factors.weekendNight) p*=NIGHT_SURGE;
+  return p;
+}
+
+function fmtPrice(v) { return isNaN(v)?'—':'$'+Math.round(v).toLocaleString('es-AR'); }
+
+async function runEstimate() {
+  if(!origin.lat||!dest) { showToast('Faltan origen o destino','error'); return; }
+  $('estimateLoading').classList.remove('hidden');
+  $('estimateError').classList.add('hidden');
+  $('estimateResult').classList.add('hidden');
+
+  try {
+    const dist=haversine(origin.lat,origin.lon,dest.lat,dest.lon);
+    if(dist<=0) { showEstimateError('Origen y destino son iguales'); return; }
+    const dur=(dist/25)*60; // 25 km/h avg
+
+    // Fetch precipitation for weather factor
+    let precipMm=0;
+    try {
+      const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${(origin.lat+dest.lat)/2}&longitude=${(origin.lon+dest.lon)/2}&current=precipitation&timezone=America%2FBuenos_Aires`,{
+        signal:AbortSignal.timeout(6000)
+      });
+      if(r.ok){ const d=await r.json(); precipMm=d.current?.precipitation??0; }
+    } catch(e){}
+
+    const factors=detectFactors();
+    factors.weather=precipMm>0;
+
+    let uberP=applySurge(UBER_BASE+UBER_KM*dist+UBER_MIN*dur, factors);
+    let didiP=applySurge(DIDI_BASE+DIDI_KM*dist+DIDI_MIN*dur, factors);
+
+    const cheaper=Math.abs(uberP-didiP)/((uberP+didiP)/2)<0.05?'similar':uberP<didiP?'uber':'didi';
+    const conf=dist>0?'low':'low';
+
+    // Advice
+    let advice,adviceClass;
+    if(factors.weekendNight&&factors.weather){advice='Lluvia + noche de finde: precios altos';adviceClass='advice-amber';}
+    else if(factors.weekendNight){advice='🌙 Precios normales para el horario';adviceClass='advice-muted';}
+    else if(factors.rushHour&&factors.weather){advice='Hora pico + lluvia: conviene esperar';adviceClass='advice-amber';}
+    else if(factors.rushHour){advice='⏰ Conviene esperar';adviceClass='advice-amber';}
+    else if(factors.weather){advice='💡 Pedí ahora';adviceClass='advice-green';}
+    else{advice='Precios normales';adviceClass='advice-muted';}
+
+    // Deep links
+    const uberLink=`https://m.uber.com/ul/?action=setPickup&pickup[latitude]=${origin.lat}&pickup[longitude]=${origin.lon}&pickup[formatted_address]=${encodeURIComponent(origin.name)}&dropoff[latitude]=${dest.lat}&dropoff[longitude]=${dest.lon}&dropoff[formatted_address]=${encodeURIComponent(dest.name)}`;
+    const didiLink=`https://web.didiglobal.com/rider/?action=setPickup&pickupLat=${origin.lat}&pickupLng=${origin.lon}&dropoffLat=${dest.lat}&dropoffLng=${dest.lon}`;
+
+    currentEstimate={uberP,didiP,dist,dur,factors,cheaper,uberLink,didiLink};
+
+    // Render
+    $('adviceBanner').textContent=advice;
+    $('adviceBanner').className='advice-banner '+adviceClass;
+    $('metaDist').textContent='📏 '+dist.toFixed(1)+' km';
+    $('metaDur').textContent='⏱️ ~'+Math.round(dur)+' min';
+    $('metaConf').textContent='🎯 Baja';
+
+    $('uberPrice').textContent=fmtPrice(uberP);
+    $('uberRange').textContent=fmtPrice(uberP*.85)+' — '+fmtPrice(uberP*1.25);
+    $('uberLink').href=uberLink;
+
+    $('didiPrice').textContent=fmtPrice(didiP);
+    $('didiRange').textContent=fmtPrice(didiP*.85)+' — '+fmtPrice(didiP*1.25);
+    $('didiLink').href=didiLink;
+
+    $('uberCard').classList.toggle('cheaper',cheaper==='uber');
+    $('didiCard').classList.toggle('cheaper',cheaper==='didi');
+    $('uberCheaper').classList.toggle('hidden',cheaper!=='uber');
+    $('didiCheaper').classList.toggle('hidden',cheaper!=='didi');
+
+    // Factors
+    const fRow=$('factorsRow'); fRow.innerHTML='';
+    if(factors.weather) fRow.innerHTML+='<span class="factor-badge">🌧️ Demanda por lluvia +15%</span>';
+    if(factors.rushHour) fRow.innerHTML+='<span class="factor-badge">🏙️ Hora pico +20%</span>';
+    if(factors.weekendNight) fRow.innerHTML+='<span class="factor-badge">🌙 Noche de finde +30%</span>';
+    fRow.classList.toggle('hidden',!factors.weather&&!factors.rushHour&&!factors.weekendNight);
+
+    $('estimateLoading').classList.add('hidden');
+    $('estimateResult').classList.remove('hidden');
+  } catch(e) {
+    showEstimateError('Error al estimar. Intentá de nuevo.');
+  }
+}
+
+function showEstimateError(msg) {
+  $('estimateLoading').classList.add('hidden');
+  $('estimateErrorMsg').textContent=msg;
+  $('estimateError').classList.remove('hidden');
+}
+
+// ─── Map ──────────────────────────────────────────────────────────────────────
+function updateMap() {
+  if(!map) return;
+  const center=origin.lat?[origin.lat,origin.lon]:SANTA_FE;
+  map.flyTo(center,14,{duration:0.8});
+
+  if(origin.lat) {
+    if(originMarker) map.removeLayer(originMarker);
+    originMarker=L.marker([origin.lat,origin.lon]).addTo(map).bindPopup('Tu ubicación'+(origin.name?': '+origin.name.split(',')[0]:''));
+  }
+  if(dest) {
+    if(destMarker) map.removeLayer(destMarker);
+    destMarker=L.marker([dest.lat,dest.lon]).addTo(map).bindPopup('Destino: '+dest.name.split(',')[0]);
+  }
+  if(routeLine) map.removeLayer(routeLine);
+  if(origin.lat&&dest) {
+    routeLine=L.polyline([[origin.lat,origin.lon],[dest.lat,dest.lon]],{color:'#3b82f6',weight:3,opacity:.7}).addTo(map);
+  }
+  setTimeout(()=>map.invalidateSize(),100);
+}
+
+// ─── Record Ride + Deep Link ──────────────────────────────────────────────────
+function recordRideAndGo(transport) {
+  // Generate idempotency hash (same logic as backend)
+  if(origin.lat&&dest) {
+    const hash=`${Math.round(origin.lat*1000)}:${Math.round(origin.lon*1000)}:${Math.round(dest.lat*1000)}:${Math.round(dest.lon*1000)}:${transport}:${Math.floor(Date.now()/60000)}`;
+    if(submittedHashes.has(hash)) return; // already submitted
+    submittedHashes.add(hash);
+  }
+  // The link click happens naturally via the <a> tag
+}
+
+// ─── Transport Log ────────────────────────────────────────────────────────────
+function toggleLog() {
+  const form=$('logForm');
+  const visible=!form.classList.contains('hidden');
+  form.classList.toggle('hidden');
+  $('logToggle').textContent=visible?'Registrá cómo viajaste':'Ocultar registro';
+}
+
+function logTransport() {
+  if(!origin.lat||!dest) { showToast('Faltan datos','error'); return; }
+  const hash=`${Math.round(origin.lat*1000)}:${Math.round(origin.lon*1000)}:${Math.round(dest.lat*1000)}:${Math.round(dest.lon*1000)}:${selectedTransport}:${Math.floor(Date.now()/60000)}`;
+  if(submittedHashes.has(hash)) { showToast('Este viaje ya fue registrado','info'); return; }
+  submittedHashes.add(hash);
+  showToast('Viaje registrado ✓','success');
+  $('logForm').classList.add('hidden');
+  $('logToggle').textContent='Registrá cómo viajaste';
+  $('logPrice').value='';
+}
+
+// ─── Rate Limiter (1 req/s to Nominatim) ──────────────────────────────────────
+async function rateLimit() {
+  const now=Date.now(), elapsed=now-lastNominatimCall;
+  if(elapsed<1100) await new Promise(r=>setTimeout(r,1100-elapsed));
+  lastNominatimCall=Date.now();
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer=null;
+function showToast(msg,type='info') {
+  const t=$('toast');
+  t.textContent=msg;
+  t.className='toast '+type;
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.add('hidden'),4000);
+}
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+</script>
+</body>
+</html>
