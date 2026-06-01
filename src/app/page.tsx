@@ -56,26 +56,10 @@ interface LocationState {
 
 // ─── Dynamic Map Import (avoids SSR issues with Leaflet) ──────────────────────
 
-const MapContainer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.MapContainer),
-  { ssr: false }
-)
-const TileLayer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.TileLayer),
-  { ssr: false }
-)
-const Marker = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Marker),
-  { ssr: false }
-)
-const Popup = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Popup),
-  { ssr: false }
-)
-const Polyline = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Polyline),
-  { ssr: false }
-)
+// Dynamically import the entire map component to avoid SSR issues with Leaflet.
+// Individual component dynamic imports cause react-leaflet context problems
+// and prevent useMap() from working.
+const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -120,14 +104,16 @@ export default function Home() {
   const [logPrice, setLogPrice] = useState('')
   const [logLoading, setLogLoading] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
-  const [mapReady, setMapReady] = useState(false)
-  const [leafletIcon, setLeafletIcon] = useState<unknown>(null)
+  // Map is always ready — MapView handles its own Leaflet init via dynamic import
 
   // Refs for preventing duplicate operations
-  const gpsWatchIdRef = useRef<number | null>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const speechRef = useRef<unknown>(null)
-  const isEstimatingRef = useRef(false)
+  const estimateAbortRef = useRef<AbortController | null>(null)
+  const searchAbortRef = useRef<AbortController | null>(null)
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const weatherAbortRef = useRef<AbortController | null>(null)
+  const predictAbortRef = useRef<AbortController | null>(null)
 
   // ── Online/Offline Detection ─────────────────────────────────────────────
 
@@ -140,32 +126,31 @@ export default function Home() {
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      // Cleanup toast timeout on unmount
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+      // Cleanup search timeout on unmount
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+      // Stop SpeechRecognition if active on unmount
+      if (speechRef.current && typeof (speechRef.current as { stop: () => void }).stop === 'function') {
+        (speechRef.current as { stop: () => void }).stop()
+      }
+      // Cleanup weather/predict/estimate/search abort controllers on unmount
+      weatherAbortRef.current?.abort()
+      predictAbortRef.current?.abort()
+      estimateAbortRef.current?.abort()
+      searchAbortRef.current?.abort()
     }
   }, [])
 
-  // ── Load Leaflet CSS & Icons ─────────────────────────────────────────────
+  // ── Load Leaflet CSS (Icons are handled inside MapView.tsx) ──────────────
 
   useEffect(() => {
-    // Load Leaflet CSS
     const link = document.createElement('link')
     link.rel = 'stylesheet'
     link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
     link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='
     link.crossOrigin = ''
     document.head.appendChild(link)
-
-    // Load Leaflet JS for icon fix
-    import('leaflet').then((L) => {
-      delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      })
-      setLeafletIcon(true)
-      setMapReady(true)
-    })
-
     return () => {
       document.head.removeChild(link)
     }
@@ -228,37 +213,50 @@ export default function Home() {
   // Auto-detect GPS on mount
   useEffect(() => {
     getGPS()
-    return () => {
-      if (gpsWatchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(gpsWatchIdRef.current)
-      }
-    }
   }, [getGPS])
 
   // ── Weather ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (origin.lat == null || origin.lon == null) return
-    fetch(`/api/weather?lat=${origin.lat}&lon=${origin.lon}`)
+
+    // Abort previous in-flight weather request
+    weatherAbortRef.current?.abort()
+    const controller = new AbortController()
+    weatherAbortRef.current = controller
+
+    fetch(`/api/weather?lat=${origin.lat}&lon=${origin.lon}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         if (data.weather) setWeather(data.weather)
       })
-      .catch(() => { /* weather failure is non-critical */ })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        /* weather failure is non-critical */
+      })
   }, [origin.lat, origin.lon])
 
   // ── Predictions ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (origin.lat == null || origin.lon == null) return
-    fetch(`/api/predict?lat=${origin.lat}&lon=${origin.lon}`)
+
+    // Abort previous in-flight predict request
+    predictAbortRef.current?.abort()
+    const controller = new AbortController()
+    predictAbortRef.current = controller
+
+    fetch(`/api/predict?lat=${origin.lat}&lon=${origin.lon}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         if (data.predictions && data.predictions.length > 0) {
           setPredictions(data.predictions)
         }
       })
-      .catch(() => { /* prediction failure is non-critical */ })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        /* prediction failure is non-critical */
+      })
   }, [origin.lat, origin.lon])
 
   // ── Destination Search (debounced) ───────────────────────────────────────
@@ -274,19 +272,30 @@ export default function Home() {
     }
 
     searchTimeoutRef.current = setTimeout(async () => {
+      // Abort previous in-flight geocode request
+      searchAbortRef.current?.abort()
+      const controller = new AbortController()
+      searchAbortRef.current = controller
+
       setSearchLoading(true)
       try {
-        const res = await fetch(`/api/geocode?q=${encodeURIComponent(query.trim())}&limit=5`)
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(query.trim())}&limit=5`, {
+          signal: controller.signal,
+        })
         if (res.ok) {
           const data = await res.json()
           setSearchResults(data.results || [])
         } else {
           setSearchResults([])
         }
-      } catch {
+      } catch (err) {
+        // Ignore AbortError — a newer search replaced this one
+        if (err instanceof DOMException && err.name === 'AbortError') return
         setSearchResults([])
       } finally {
-        setSearchLoading(false)
+        if (searchAbortRef.current === controller) {
+          setSearchLoading(false)
+        }
       }
     }, 500)
   }, [])
@@ -306,12 +315,16 @@ export default function Home() {
     setDestCoords({ lat, lon, name: result.display_name })
     setDestInput(result.display_name.split(',')[0]) // Short name for input
     setSearchResults([])
+    setEstimate(null)
+    setEstimateError(null)
   }, [])
 
   const selectPrediction = useCallback((pred: Prediction) => {
     setDestCoords({ lat: pred.destLat, lon: pred.destLon, name: pred.destName })
     setDestInput(pred.destName)
     setSearchResults([])
+    setEstimate(null)
+    setEstimateError(null)
   }, [])
 
   // ── Voice Input ──────────────────────────────────────────────────────────
@@ -375,8 +388,12 @@ export default function Home() {
       showToast('Ingresá un destino para estimar', 'error')
       return
     }
-    if (isEstimatingRef.current) return
-    isEstimatingRef.current = true
+
+    // Abort any previous in-flight estimate request
+    estimateAbortRef.current?.abort()
+    const controller = new AbortController()
+    estimateAbortRef.current = controller
+
     setEstimateLoading(true)
     setEstimateError(null)
 
@@ -392,6 +409,7 @@ export default function Home() {
           destLon: destCoords.lon,
           destName: destCoords.name,
         }),
+        signal: controller.signal,
       })
 
       if (!res.ok) {
@@ -403,23 +421,31 @@ export default function Home() {
       const data: EstimateData = await res.json()
       setEstimate(data)
     } catch (err) {
+      // Ignore AbortError — it means a newer request replaced this one
+      if (err instanceof DOMException && err.name === 'AbortError') return
       if (!navigator.onLine) {
         setEstimateError('Sin conexión. Verificá tu internet.')
       } else {
         setEstimateError('Error de red. Intentá de nuevo.')
       }
     } finally {
-      setEstimateLoading(false)
-      isEstimatingRef.current = false
+      // Only clear loading if this is still the active request
+      if (estimateAbortRef.current === controller) {
+        setEstimateLoading(false)
+      }
     }
   }, [origin, destCoords])
 
   // Auto-estimate when both origin and destination are set
+  // Use a ref to avoid re-triggering when runEstimate changes due to origin.name updates
+  const runEstimateRef = useRef(runEstimate)
+  runEstimateRef.current = runEstimate
+
   useEffect(() => {
-    if (origin.lat != null && destCoords) {
-      runEstimate()
+    if (origin.lat != null && origin.lon != null && destCoords) {
+      runEstimateRef.current()
     }
-  }, [origin.lat, destCoords, runEstimate])
+  }, [origin.lat, origin.lon, destCoords])
 
   // ── Record Ride ──────────────────────────────────────────────────────────
 
@@ -519,8 +545,9 @@ export default function Home() {
   // ── Toast ────────────────────────────────────────────────────────────────
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
     setToast({ message, type })
-    setTimeout(() => setToast(null), 4000)
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000)
   }, [])
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -860,34 +887,14 @@ export default function Home() {
         )}
 
         {/* Map */}
-        {mapReady && (
-          <div className="rounded-xl overflow-hidden border border-border" style={{ height: '280px' }}>
-            <MapContainer
-              center={mapCenter}
-              zoom={14}
-              scrollWheelZoom={false}
-              style={{ height: '100%', width: '100%' }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {origin.lat != null && origin.lon != null && leafletIcon && (
-                <Marker position={[origin.lat, origin.lon]}>
-                  <Popup>Tu ubicación{origin.name ? `: ${origin.name.split(',')[0]}` : ''}</Popup>
-                </Marker>
-              )}
-              {destCoords && leafletIcon && (
-                <Marker position={[destCoords.lat, destCoords.lon]}>
-                  <Popup>Destino: {destCoords.name.split(',')[0]}</Popup>
-                </Marker>
-              )}
-              {routeCoords.length === 2 && (
-                <Polyline positions={routeCoords} color="#3b82f6" weight={3} opacity={0.7} />
-              )}
-            </MapContainer>
-          </div>
-        )}
+        <div className="rounded-xl overflow-hidden border border-border" style={{ height: '280px' }}>
+          <MapView
+            center={mapCenter}
+            origin={origin.lat != null && origin.lon != null ? { lat: origin.lat, lon: origin.lon, name: origin.name } : null}
+            destCoords={destCoords}
+            routeCoords={routeCoords}
+          />
+        </div>
 
         {/* Offline notice */}
         {!isOnline && (

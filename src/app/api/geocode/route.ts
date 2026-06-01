@@ -1,5 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// ─── In-memory cache for Nominatim (5 min TTL, respects 1 req/s policy) ──────
+
+const cache = new Map<string, { data: unknown; expires: number }>()
+
+function getCached(key: string): unknown | null {
+  const entry = cache.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expires) {
+    cache.delete(key)
+    return null
+  }
+  return entry.data
+}
+
+function setCache(key: string, data: unknown, ttlMs = 300_000): void {
+  cache.set(key, { data, expires: Date.now() + ttlMs })
+  // Evict oldest entries if cache grows too large
+  if (cache.size > 200) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+}
+
+// ─── Rate limiter (1 request per second to Nominatim) ────────────────────────
+
+let lastNominatimCall = 0
+
+async function waitForRateLimit(): Promise<void> {
+  const now = Date.now()
+  const elapsed = now - lastNominatimCall
+  if (elapsed < 1100) {
+    await new Promise((resolve) => setTimeout(resolve, 1100 - elapsed))
+  }
+  lastNominatimCall = Date.now()
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
@@ -21,6 +57,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check cache first
+    const cacheKey = `geocode:${q.trim().toLowerCase()}:${limit}`
+    const cached = getCached(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
+
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q.trim())}&format=json&limit=${limit}&accept-language=es`
 
     const controller = new AbortController()
@@ -28,6 +71,8 @@ export async function GET(request: NextRequest) {
 
     let response: Response
     try {
+      // Wait for rate limit before calling Nominatim
+      await waitForRateLimit()
       response = await fetch(url, {
         headers: {
           'User-Agent': 'MovilidadAsistente/1.0',
@@ -66,7 +111,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ results: data })
+    const result = { results: data }
+    setCache(cacheKey, result)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Geocode error:', error)
     return NextResponse.json(

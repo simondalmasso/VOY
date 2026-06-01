@@ -1,7 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// ─── In-memory cache for Open-Meteo (10 min TTL) ─────────────────────────────
+
+const cache = new Map<string, { data: unknown; expires: number }>()
+
+function getCached(key: string): unknown | null {
+  const entry = cache.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expires) {
+    cache.delete(key)
+    return null
+  }
+  return entry.data
+}
+
+function setCache(key: string, data: unknown, ttlMs = 600_000): void {
+  cache.set(key, { data, expires: Date.now() + ttlMs })
+  if (cache.size > 50) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+}
+
 // WMO Weather interpretation codes mapped to Spanish descriptions
-// Reference: https://open-meteo.com/en/docs#weathervariables
 const weatherDescriptions: Record<number, string> = {
   0: 'Despejado',
   1: 'Mayormente despejado',
@@ -58,9 +79,16 @@ export async function GET(request: NextRequest) {
 
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
       return NextResponse.json(
-        { error: 'Coordinates out of range: lat must be -90 to 90, lon must be -180 to 180' },
+        { error: 'Coordinates out of range' },
         { status: 400 }
       )
+    }
+
+    // Check cache (round to 2 decimals ≈ 1.1km for weather — good enough)
+    const cacheKey = `weather:${lat.toFixed(2)},${lon.toFixed(2)}`
+    const cached = getCached(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
     }
 
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code&timezone=America%2FBuenos_Aires`
@@ -75,16 +103,13 @@ export async function GET(request: NextRequest) {
       })
     } catch (fetchError) {
       clearTimeout(timeoutId)
-      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
-        return NextResponse.json(
-          { error: 'Weather service request timed out', weather: null },
-          { status: 200 }
-        )
+      const fallback = {
+        error: fetchError instanceof DOMException && fetchError.name === 'AbortError'
+          ? 'Weather service request timed out'
+          : 'Failed to connect to weather service',
+        weather: null,
       }
-      return NextResponse.json(
-        { error: 'Failed to connect to weather service', weather: null },
-        { status: 200 }
-      )
+      return NextResponse.json(fallback, { status: 200 })
     } finally {
       clearTimeout(timeoutId)
     }
@@ -108,7 +133,7 @@ export async function GET(request: NextRequest) {
     const current = data.current
     const weatherCode = current.weather_code ?? 0
 
-    return NextResponse.json({
+    const result = {
       weather: {
         temperature: current.temperature_2m ?? null,
         humidity: current.relative_humidity_2m ?? null,
@@ -116,10 +141,11 @@ export async function GET(request: NextRequest) {
         weatherCode,
         description: weatherDescriptions[weatherCode] ?? 'Desconocido',
       },
-    })
+    }
+    setCache(cacheKey, result)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Weather error:', error)
-    // Don't break the app - return null weather
     return NextResponse.json(
       { error: 'Failed to fetch weather data', weather: null },
       { status: 200 }

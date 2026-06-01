@@ -93,15 +93,19 @@ export async function GET(request: NextRequest) {
 
     // Query rides and transport_log using raw SQL with UNION ALL
     // IMPORTANT: Prisma with SQLite uses camelCase column names and PascalCase table names
+    // Proximity: 0.005° ≈ 555m at equator, reasonable for "same neighborhood" matching
+    const proximityDeg = 0.005
     const results: RawTrip[] = await db.$queryRaw`
       SELECT destLat, destLon, destName, createdAt FROM Ride
-      WHERE ABS(originLat - ${lat}) < 0.01 AND ABS(originLon - ${lon}) < 0.01
+      WHERE ABS(originLat - ${lat}) < ${proximityDeg} AND ABS(originLon - ${lon}) < ${proximityDeg}
       UNION ALL
       SELECT destLat, destLon, destName, createdAt FROM TransportLog
-      WHERE ABS(originLat - ${lat}) < 0.01 AND ABS(originLon - ${lon}) < 0.01
+      WHERE ABS(originLat - ${lat}) < ${proximityDeg} AND ABS(originLon - ${lon}) < ${proximityDeg}
+      ORDER BY createdAt DESC
+      LIMIT 200
     `
 
-    if (results.length < 3) {
+    if (results.length < 1) {
       return NextResponse.json({
         predictions: [],
         message: 'Insufficient data',

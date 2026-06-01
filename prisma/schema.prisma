@@ -26,6 +26,7 @@ model Ride {
   @@index([createdAt])
   @@index([transport])
   @@index([originLat, originLon])
+  @@index([originLat, originLon, destLat, destLon])
 }
 
 model TransportLog {
@@ -44,4 +45,5 @@ model TransportLog {
   @@index([createdAt])
   @@index([transport])
   @@index([originLat, originLon])
+  @@index([originLat, originLon, destLat, destLon])
 }

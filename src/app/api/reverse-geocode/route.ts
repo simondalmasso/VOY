@@ -1,5 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// ─── In-memory cache for Nominatim reverse geocode (10 min TTL) ──────────────
+
+const cache = new Map<string, { data: unknown; expires: number }>()
+
+function getCached(key: string): unknown | null {
+  const entry = cache.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expires) {
+    cache.delete(key)
+    return null
+  }
+  return entry.data
+}
+
+function setCache(key: string, data: unknown, ttlMs = 600_000): void {
+  cache.set(key, { data, expires: Date.now() + ttlMs })
+  if (cache.size > 100) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
@@ -30,6 +52,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check cache (round to 4 decimals ≈ 11m for cache key)
+    const cacheKey = `revgeo:${lat.toFixed(4)},${lon.toFixed(4)}`
+    const cached = getCached(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
+
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=es`
 
     const controller = new AbortController()
@@ -45,8 +74,7 @@ export async function GET(request: NextRequest) {
       })
     } catch (fetchError) {
       clearTimeout(timeoutId)
-      // Fallback: return coordinates as display
-      return NextResponse.json({
+      const fallback = {
         displayName: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
         city: null,
         road: null,
@@ -57,14 +85,15 @@ export async function GET(request: NextRequest) {
         error: fetchError instanceof DOMException && fetchError.name === 'AbortError'
           ? 'Reverse geocoding request timed out'
           : 'Failed to connect to reverse geocoding service',
-      })
+      }
+      setCache(cacheKey, fallback, 60_000) // Cache fallbacks for 1 min only
+      return NextResponse.json(fallback)
     } finally {
       clearTimeout(timeoutId)
     }
 
     if (!response.ok) {
-      // Fallback: return coordinates as display
-      return NextResponse.json({
+      const fallback = {
         displayName: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
         city: null,
         road: null,
@@ -73,14 +102,15 @@ export async function GET(request: NextRequest) {
         lon,
         fallback: true,
         error: `Reverse geocoding service returned status ${response.status}`,
-      })
+      }
+      setCache(cacheKey, fallback, 60_000)
+      return NextResponse.json(fallback)
     }
 
     const data = await response.json()
 
     if (data.error) {
-      // Nominatim returned an error (e.g., "Unable to geocode")
-      return NextResponse.json({
+      const fallback = {
         displayName: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
         city: null,
         road: null,
@@ -89,19 +119,23 @@ export async function GET(request: NextRequest) {
         lon,
         fallback: true,
         error: data.error,
-      })
+      }
+      setCache(cacheKey, fallback, 60_000)
+      return NextResponse.json(fallback)
     }
 
     const address = data.address ?? {}
 
-    return NextResponse.json({
+    const result = {
       displayName: data.display_name ?? `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
       city: address.city ?? address.town ?? address.village ?? address.hamlet ?? null,
       road: address.road ?? address.street ?? address.pedestrian ?? null,
       neighborhood: address.neighbourhood ?? address.suburb ?? address.quarter ?? null,
       lat,
       lon,
-    })
+    }
+    setCache(cacheKey, result)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Reverse geocode error:', error)
     return NextResponse.json(
