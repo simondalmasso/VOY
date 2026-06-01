@@ -116,6 +116,7 @@ export default function Home() {
   const predictAbortRef = useRef<AbortController | null>(null)
   const reverseGeoAbortRef = useRef<AbortController | null>(null)
   const recordRideAbortRef = useRef<AbortController | null>(null)
+  const logTransportAbortRef = useRef<AbortController | null>(null)
 
   // ── Online/Offline Detection ─────────────────────────────────────────────
 
@@ -143,6 +144,7 @@ export default function Home() {
       searchAbortRef.current?.abort()
       reverseGeoAbortRef.current?.abort()
       recordRideAbortRef.current?.abort()
+      logTransportAbortRef.current?.abort()
     }
   }, [])
 
@@ -502,6 +504,11 @@ export default function Home() {
       return
     }
 
+    // Abort any previous in-flight logTransport request
+    logTransportAbortRef.current?.abort()
+    const controller = new AbortController()
+    logTransportAbortRef.current = controller
+
     setLogLoading(true)
     try {
       const price = logPrice ? parseFloat(logPrice) : null
@@ -523,6 +530,7 @@ export default function Home() {
           transport: selectedTransport,
           price,
         }),
+        signal: controller.signal,
       })
 
       if (res.ok) {
@@ -537,7 +545,8 @@ export default function Home() {
           showToast(errData.error || 'Error al registrar', 'error')
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       showToast('Error de conexión al registrar', 'error')
     } finally {
       setLogLoading(false)

@@ -17,9 +17,14 @@ function isValidCoordinate(lat: unknown, lon: unknown): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
 
-    const { originLat, originLon, originName, destLat, destLon, destName, transport, price } = body
+    const { originLat, originLon, originName, destLat, destLon, destName, transport, price } = body as Record<string, unknown>
 
     // Validate required fields
     if (originLat === undefined || originLat === null) {

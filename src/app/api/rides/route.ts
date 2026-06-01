@@ -17,9 +17,14 @@ function isValidCoordinate(lat: unknown, lon: unknown): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
 
-    const { originLat, originLon, originName, destLat, destLon, destName, priceUber, priceDidi, distanceKm, durationMin, transport } = body
+    const { originLat, originLon, originName, destLat, destLon, destName, priceUber, priceDidi, distanceKm, durationMin, transport } = body as Record<string, unknown>
 
     // Validate required fields
     if (originLat === undefined || originLat === null) {
@@ -105,6 +110,7 @@ export async function POST(request: NextRequest) {
     const result = await db.$transaction(async (tx) => {
       const duplicate = await tx.ride.findFirst({
         where: {
+          transport: resolvedTransport,
           createdAt: { gte: sixtySecondsAgo },
           originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
           originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
@@ -136,7 +142,14 @@ export async function POST(request: NextRequest) {
       return { data: ride, isDuplicate: false }
     }, { maxWait: 5000, timeout: 10000 })
 
-    return NextResponse.json(result.data, { status: result.isDuplicate ? 200 : 201 })
+    if (result.isDuplicate) {
+      return NextResponse.json(
+        { error: 'Duplicate entry: a similar ride was created within the last 60 seconds' },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json(result.data, { status: 201 })
   } catch (error) {
     console.error('Error creating ride:', error)
     return NextResponse.json({ error: 'Failed to create ride' }, { status: 500 })

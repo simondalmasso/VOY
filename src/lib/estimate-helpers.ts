@@ -209,9 +209,11 @@ export function determineCheaper(
 // ─── Advice ───────────────────────────────────────────────────────────────────
 
 export function generateAdvice(factors: EstimateFactors): string {
+  if (factors.weekendNight && factors.weather) return "Lluvia + noche de finde: precios altos";
   if (factors.weekendNight) return "Precios normales para el horario";
-  if (factors.rushHour && !factors.weather) return "Conviene esperar";
-  if (!factors.rushHour && factors.weather) return "Pedí ahora";
+  if (factors.rushHour && factors.weather) return "Hora pico + lluvia: conviene esperar";
+  if (factors.rushHour) return "Conviene esperar";
+  if (factors.weather) return "Pedí ahora";
   return "Precios normales";
 }
 

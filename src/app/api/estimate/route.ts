@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { fetchPrecipitation } from "@/lib/weather";
 import {
   haversine,
   estimateDuration,
@@ -90,43 +91,6 @@ function validateInput(body: unknown): {
       destName: typeof raw.destName === "string" ? raw.destName : "",
     },
   };
-}
-
-// ─── Weather Fetch (Open-Meteo) ──────────────────────────────────────────────
-
-async function fetchPrecipitation(
-  lat: number,
-  lon: number
-): Promise<number> {
-  try {
-    const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-      `&current=precipitation&timezone=auto`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        // Cache Open-Meteo response for 600s to avoid redundant API calls
-        // within the same server-side render cycle
-        next: { revalidate: 600 },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    if (!res.ok) return 0;
-
-    const data = await res.json();
-    const precip = data?.current?.precipitation;
-    return typeof precip === "number" && precip > 0 ? precip : 0;
-  } catch {
-    // Weather service unavailable or timed out — assume no rain
-    return 0;
-  }
 }
 
 // ─── Historical Data Lookup ───────────────────────────────────────────────────
