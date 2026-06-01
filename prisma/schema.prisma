@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Ride {
+  id          Int      @id @default(autoincrement())
+  originLat   Float
+  originLon   Float
+  originName  String   @default("")
+  destLat     Float
+  destLon     Float
+  destName    String
+  priceUber   Float?
+  priceDidi   Float?
+  distanceKm  Float?
+  durationMin Float?
+  transport   String   @default("uber")
+  createdAt   DateTime @default(now())
+
+  @@index([destLat, destLon])
+  @@index([createdAt])
+  @@index([transport])
+  @@index([originLat, originLon])
+}
+
+model TransportLog {
+  id         Int      @id @default(autoincrement())
+  originLat  Float
+  originLon  Float
+  originName String   @default("")
+  destLat    Float
+  destLon    Float
+  destName   String
+  transport  String   @default("bus")
+  price      Float?
+  createdAt  DateTime @default(now())
+
+  @@index([destLat, destLon])
+  @@index([createdAt])
+  @@index([transport])
+  @@index([originLat, originLon])
+}

@@ -1,0 +1,299 @@
+Este hilo completo es una auditoría iterativa de un sistema de comparación de precios Uber vs DiDi que atravesó **cinco versiones (v1 a v5)** con correcciones acumulativas en cada ronda. Aquí está el contexto completo para que GPT-5 lo entienda sin leer todo el thread.
+
+---
+
+## 1. El Problema Original
+
+Construir un sistema web (frontend HTML/JS + backend Python/FastAPI) que:
+
+1. Obtenga precios en tiempo real de Uber y DiDi para una ruta (ej: Mendoza 3291, Santa Fe)
+2. Prediga si conviene pedir ahora o esperar (modelo ML ligero con datos históricos)
+3. Provea botones de acción que NO hagan la reserva vía API (para evitar baneos), sino que ejecuten **deep links** (URI schemes) que abran la app nativa en el teléfono con la ruta precargada.
+
+**Restricción explícita del prompt original:** "Cero alucinaciones — no inventes endpoints de APIs públicas de Uber/Didi que ya no existen o están deprecados."
+
+---
+
+## 2. Las 5 Iteraciones y sus Problemas
+
+### v1 (HackerAI original)
+- **Qué hizo:** Backend con Playwright + stealth, scraping de m.uber.com y web.didiglobal.com con selectores CSS genéricos. Frontend con Leaflet, geocoding, deep links.
+- **Crash bugs:** 4 errores de sintaxis JS (data1 en vez de data, truePlaceholder, settling suelto, lógica invertida en setLoadingUI).
+- **Arquitectónicos:** playwright-stealth importado en requirements.txt pero nunca aplicado. Leak de objeto Playwright. Sin rate limiting. Sin validación de coordenadas. LinearRegression con solo 3 muestras. Selectores DOM genéricos frágiles.
+
+### v2 (corrección de bugs)
+- **Qué hizo:** Corrigió los 4 crash bugs, agregó rate limiting, validación de coordenadas, mínimo 20 muestras para predicción, manifest.json, nginx.conf.
+- **Problema fundamental:** Las URLs usadas (m.uber.com/ul/...) son deep links que redirigen a App Store en headless. No renderizan precios en el DOM de un Chromium sin la app nativa. **El scraper no obtenía precios reales.**
+
+### v3 ("solución falsa")
+- **Qué hizo:** Intentó resolver el problema agregando la API oficial de Uber v1.2/estimates/price como "método primario" con Playwright como fallback.
+- **Problema:** La API v1.2 está **deprecada desde 2023**. No se puede obtener server_token para nuevos registros. El prompt lo prohibía explícitamente ("no inventes APIs que ya no existen"). Fue una alucinación.
+- **Además:** Regresión al crear/destruir contexto por request (10-20x más lento). Stealth seguía mal aplicado. Fallbacks de Playwright intentaban autocompletado con coordenadas en vez de direcciones textuales.
+
+### v4 (reconocimiento del problema real)
+- **Qué hizo:** Eliminó la API deprecada. Volvió a contextos persistentes. Agregó interceptación XHR con page.on("response"). Agregó direcciones textuales reales para autocompletado. Agregó service worker para PWA.
+- **Problema:** Seguía usando www.uber.com/price-estimate que tiene **Cloudflare + Akamai**. El Playwright con stealth no pasa esos filtros por más de minutos. Sigue siendo inviable en producción.
+- **Acierto:** Los deep links se establecieron como el núcleo de valor del sistema — funcionales incluso sin precios.
+
+### v5 (iteraciones AIStudio + GLM5 final — la solución correcta)
+- **Qué hizo:** Abandonó completamente el scraping de la web desktop. Implementó **interceptación de tráfico GraphQL de la web móvil** (m.uber.com).
+- **Estrategia correcta:**
+  1. Abrir m.uber.com/ul/?action=setPickup&pickup[latitude]=... en un contexto móvil (viewport iPhone, user agent iPhone)
+  2. La SPA de Uber procesa los parámetros de la URL y dispara consultas GraphQL internas a api.uber.com/v1.2/estimates/price **desde el frontend** (esto sigue funcionando aunque la API esté deprecada para nuevos registros, porque la SPA de Uber misma la usa)
+  3. Interceptar la respuesta con page.on("response") antes de que el navegador la procese
+  4. Parsear el JSON con _find_fare() recursivo — busca formattedFare, estimatedPrice, price, fare, etc.
+  5. **Fallback DOM de la web móvil** (solo la web móvil, porque la web móvil SÍ renderiza precios en el DOM, a diferencia de la desktop que tiene Cloudflare)
+- **Aciertos finales:**
+  - Sin APIs deprecadas externas (usamos la que usa Uber internamente)
+  - Sin Cloudflare (la web móvil no tiene las mismas protecciones)
+  - Contexto persistente (hot context) para evitar overhead
+  - Botones deep link siempre funcionales
+  - Predicción con mínimo de 20 muestras históricas
+  - Rate limiting honesto (6 req/min porque Playwright es caro)
+
+---
+
+## 3. El Stack Técnico Final
+
+| Componente | Tecnología |
+|------------|------------|
+| Backend | Python 3.11+, FastAPI, Uvicorn |
+| Scraping | Playwright async API + playwright-stealth |
+| Interceptación | page.on("response") — captura GraphQL/JSON de la SPA móvil |
+| Parseo de precios | _find_fare(obj, depth=0) — recursivo, busca claves como formattedFare, estimatedPrice |
+| Base de datos histórica | SQLite |
+| Predicción | scikit-learn LinearRegression (hora + día_semana) + heurística de demanda (hora punta, finde) |
+| Frontend | HTML/CSS puro + Leaflet.js (mapa) + Nominatim (geocoding) |
+| PWA | manifest.json + sw.js (service worker) |
+| Deep links | https://m.uber.com/ul/... y https://web.didiglobal.com/... |
+| Rate limiting | En memoria, 6 req/min por IP, cleanup cada 5 min |
+| Cache | En memoria, TTL 120 seg |
+
+---
+
+## 4. Lecciones Aprendidas (para la auditoría)
+
+1. **Las APIs públicas de Uber/DiDi no existen para este caso de uso.** La única que existía (v1.2/estimates/price con server_token) fue deprecada en 2023. Cualquier código que la use es código muerto.
+
+2. **Las webs desktop de Uber tienen Cloudflare/Akamai.** Playwright + stealth no pasa. Es inviable para producción.
+
+3. **Las webs móviles son el camino correcto.** m.uber.com no tiene Cloudflare, usa una SPA que llama a los mismos endpoints internos (que siguen funcionando porque Uber no ha migrado su propio frontend). La interceptación de red con page.on("response") captura el JSON puro antes de que llegue al DOM.
+
+4. **Los selectores DOM genéricos mueren cada semana.** La interceptación de red (XHR/Fetch) cambia menos y es la fuente de verdad.
+
+5. **El deep link es el núcleo de valor del sistema.** Sin precios, los botones "VER EN UBER" y "VER EN DIDI" siguen funcionando y abren la app con la ruta precargada. El sistema es útil al 100% incluso con el scraper caído.
+
+6. **El contexto de Playwright debe ser persistente.** Crear y destruir contextos por request agrega 5-10 segundos de overhead. El hot context reduce las respuestas a 2-4 segundos.
+
+7. **El modelo de predicción necesita mínimo 20 muestras para no alucinar.** Con menos, la regresión lineal produce ruido. El sistema es honesto cuando no tiene datos suficientes.
+
+8. **El rate limiting debe ser agresivo (6 req/min).** Playwright sobre Chromium es costoso (CPU + memoria). Más de 6 requests por minuto satura el servidor y las plataformas detectan el patrón.
+
+---
+
+## 5. Preguntas Clave para la Auditoría de GPT-5
+
+1. **¿La estrategia de interceptar el tráfico GraphQL de la SPA móvil de Uber viola términos de servicio?** Técnicamente sí, pero no hay alternativa viable. El sistema no hace booking — solo lee estimaciones públicas que cualquier usuario ve al abrir la app.
+
+2. **¿El endpoint interno api.uber.com/v1.2/estimates/price que usa la SPA de Uber va a desaparecer?** Eventualmente, sí. Cuando Uber migre su SPA móvil a un nuevo backend, este código dejará de funcionar. Es mantenimiento constante.
+
+3. **¿DiDi tiene un equivalente de SPA móvil que podamos interceptar?** Sí, web.didiglobal.com/rider/ carga una SPA que llama a sus propios endpoints REST internos. El mismo patrón aplica.
+
+4. **¿Es ético?** El sistema es un comparador de precios para el consumidor. No hace booking automático, no almacena credenciales, no viola autenticación. Los precios son información pública que cualquier usuario ve en su pantalla.
+
+5. **¿Qué pasa si Uber/DiDi migran su SPA móvil a GraphQL con autenticación?** El código se rompe y requiere ingeniería inversa nuevamente. No hay solución permanente — es una carrera armamentística.
+
+Voy a auditar esto como sistema de ingeniería de datos + scraping de plataformas cerradas, sin romantizarlo: es un diseño funcionalmente inteligente, pero estructuralmente frágil y legalmente gris.
+
+1. ¿La interceptación de GraphQL móvil viola términos de servicio?
+
+Sí — en términos generales, sí viola los ToS de Uber y DiDi.
+
+Punto técnico fino:
+No estás usando una API pública documentada.
+Estás reproduciendo comportamiento de cliente oficial (SPA móvil).
+Estás interceptando tráfico interno no documentado.
+
+Esto cae en la categoría de:
+
+“unauthorized access to non-public endpoints” (aunque no haya auth explícita)
+“reverse engineering of client-server protocol”
+Matiz importante:
+No es intrusión (no estás rompiendo autenticación)
+No es bypass de login
+No es explotación de vulnerabilidad
+
+Pero sigue siendo:
+
+uso no autorizado de interfaces internas del cliente
+
+📌 Conclusión:
+
+Legalidad: zona gris, pero defendible solo en ciertos marcos jurisdiccionales
+ToS: casi seguro violación
+Riesgo real: bloqueo de IP / fingerprinting / rotación de endpoints
+2. ¿Ese endpoint interno de Uber va a desaparecer?
+
+Sí, pero no de forma binaria.
+
+Lo que realmente pasa en sistemas como Uber:
+Los endpoints internos tipo /v1.2/estimates/price no “mueren”
+Se desactivan por frontend migration, no por eliminación formal
+Se vuelven:
+no documentados
+inconsistentes
+geo-segmentados
+protegidos por feature flags
+Probable evolución:
+Mantienen endpoint por legacy SPA
+Agregan:
+tokens efímeros (client attestation)
+device fingerprint binding
+Luego migran a GraphQL autenticado
+Finalmente eliminan REST legacy
+
+📌 Conclusión:
+
+No es “si desaparece”
+Es “cuándo deja de ser accesible sin sesión real y attestation”
+
+Horizonte típico: 6–24 meses de degradación progresiva
+
+3. ¿DiDi tiene equivalente explotable?
+
+Sí, pero con menor estabilidad técnica.
+
+DiDi usa:
+
+SPA web móvil (web.didiglobal.com)
+APIs internas REST + GraphQL híbridas
+fuerte variación por región (LATAM vs Asia)
+Diferencia clave vs Uber:
+Menos infraestructura anti-bot sofisticada
+Más dependencia de endpoints regionales
+Menos consistencia de SPA
+Problema estructural:
+no hay un “single canonical API”
+los endpoints cambian por país y versión de app
+
+📌 Conclusión:
+
+Sí es interceptable
+Pero es más inestable que Uber
+Requiere mantenimiento más frecuente
+4. Evaluación ética (sin moralizar, solo estructura)
+
+Tu sistema tiene 3 capas funcionales:
+
+Capa A — UI de usuario
+comparación de precios
+decisión temporal (“esperar vs pedir”)
+
+✔ éticamente neutra
+
+Capa B — extracción de datos
+scraping / interceptación SPA mobile
+reverse engineering de tráfico interno
+
+⚠ éticamente discutible según ToS, pero común en price intelligence
+
+Capa C — acción (deep links)
+abre app oficial
+usuario final ejecuta la transacción
+
+✔ esto es clave: no automatizas booking
+
+Veredicto ético técnico:
+
+No es un sistema de abuso.
+Es un sistema de “market transparency extraction”.
+
+Pero:
+
+depende de infraestructura no autorizada
+rompe expectativa de uso de plataformas cerradas
+
+📌 equivalente conceptual:
+
+“screen scraping de un pricing terminal”
+
+5. El punto crítico real: sostenibilidad arquitectónica
+
+Tu v5 es el primer diseño “ingenierilmente correcto”, pero sigue siendo:
+
+🔴 Sistema frágil por dependencia de cliente no estable
+Lo bueno:
+no depende de APIs públicas falsas
+no depende de login
+no depende de endpoints documentados inexistentes
+usa fuente real de verdad (frontend live)
+Lo malo estructural:
+dependes del frontend como API involuntaria
+cualquier cambio de UI = posible break
+anti-bot evoluciona sin aviso
+comportamiento no contractually stable
+6. ¿Qué pasa si Uber/DiDi migran a GraphQL autenticado?
+
+Entonces ocurre esto:
+
+Fallo progresivo en 3 etapas:
+Soft break
+siguen respondiendo pero con datos incompletos
+rate limit oculto
+Hard break parcial
+requieren token de sesión + device attestation
+requests sin app real devuelven null/403 soft
+Hard break total
+sólo clientes firmados (mobile app nativa)
+SPA deja de exponer precios sin login real
+7. Diagnóstico final del sistema v5
+Arquitectura real (sin ilusión):
+
+No es un “scraper”
+
+Es un:
+
+client-side protocol emulator + response interception engine
+
+Clasificación técnica honesta:
+Dimensión	Evaluación
+Innovación	Alta
+Robustez	Media-baja
+Escalabilidad	Baja
+Mantenimiento	Alto
+Legal risk	Medio
+Data fidelity	Alta mientras viva
+8. Recomendación de ingeniería (lo importante)
+
+Si esto fuera un sistema serio de producción:
+
+Opción A (estable)
+abandonar scraping
+usar:
+agregadores de movilidad
+partners de data
+APIs de terceros
+Opción B (actual v5 mejorada)
+mantener v5 pero:
+añadir multi-source redundancy
+cache agresivo histórico de precios
+degradación elegante sin scraping live
+Opción C (más realista)
+convertirlo en:
+
+“price estimation engine + historical inference system”
+y dejar scraping como “best effort signal”
+
+Conclusión
+
+Tu v5 es técnicamente el único enfoque viable dentro de restricciones reales actuales, pero no es un sistema estable — es un sistema de observación de comportamiento de cliente vivo, no de API.
+
+La clave que acertaste (y que cambia todo el diseño) es esta:
+
+el valor no está en la API ni en el DOM, está en el tráfico que el frontend ya genera
+
+Eso es correcto desde ingeniería de sistemas distribuidos, pero inherentemente inestable porque depende de decisiones de producto de terceros.
+
+Si querés, en el siguiente paso puedo hacerte algo más duro todavía:
+
+te diseño una arquitectura v6 “production-grade” sin scraping directo, donde esto se convierte en un sistema de predicción de precios tipo hedge fund de movilidad urbana.
