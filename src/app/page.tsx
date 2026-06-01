@@ -136,6 +136,14 @@ export default function Home() {
   // Idempotency: track submitted dedup hashes to prevent double-submit at UI level
   const submittedHashesRef = useRef<Set<string>>(new Set())
 
+  // ── Toast (defined early so other callbacks can reference it) ────────────
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+    setToast({ message, type })
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000)
+  }, [])
+
   // ── Online/Offline Detection ─────────────────────────────────────────────
 
   useEffect(() => {
@@ -182,9 +190,20 @@ export default function Home() {
 
   // ── GPS Location ─────────────────────────────────────────────────────────
 
+  // Auto-set Santa Fe center as fallback
+  const fallbackToSantaFe = useCallback(() => {
+    setOrigin({ lat: SANTA_FE_CENTER[0], lon: SANTA_FE_CENTER[1], name: 'Centro de Santa Fe', loading: false, error: null })
+    showToast('Usando centro de Santa Fe como origen', 'info')
+  }, [showToast])
+
   const getGPS = useCallback(() => {
+    // On file:// protocol, GPS is always blocked
+    if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
+      fallbackToSantaFe()
+      return
+    }
     if (!navigator.geolocation) {
-      setOrigin((prev) => ({ ...prev, error: 'Tu navegador no soporta geolocalización', loading: false }))
+      fallbackToSantaFe()
       return
     }
 
@@ -196,7 +215,7 @@ export default function Home() {
         const lon = position.coords.longitude
 
         if (Number.isNaN(lat) || Number.isNaN(lon)) {
-          setOrigin((prev) => ({ ...prev, error: 'Coordenadas inválidas recibidas', loading: false }))
+          fallbackToSantaFe()
           return
         }
 
@@ -220,24 +239,13 @@ export default function Home() {
           setOrigin((prev) => ({ ...prev, name: `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
         }
       },
-      (error) => {
-        let msg = 'Error al obtener ubicación'
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            msg = 'Permiso de ubicación denegado. Habilitá el GPS en tu dispositivo.'
-            break
-          case error.POSITION_UNAVAILABLE:
-            msg = 'Ubicación no disponible. Intentá de nuevo.'
-            break
-          case error.TIMEOUT:
-            msg = 'Tiempo de espera agotado. El GPS está lento.'
-            break
-        }
-        setOrigin((prev) => ({ ...prev, error: msg, loading: false }))
+      () => {
+        // GPS failed — auto-fallback to Santa Fe center
+        fallbackToSantaFe()
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     )
-  }, [])
+  }, [fallbackToSantaFe])
 
   // Auto-detect GPS on mount
   useEffect(() => {
@@ -598,14 +606,6 @@ export default function Home() {
     link.click()
   }, [recordRide])
 
-  // ── Toast ────────────────────────────────────────────────────────────────
-
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
-    setToast({ message, type })
-    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000)
-  }, [])
-
   // ── Render ───────────────────────────────────────────────────────────────
 
   const mapCenter: [number, number] = origin.lat != null && origin.lon != null
@@ -963,7 +963,7 @@ export default function Home() {
       </main>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <footer className="mt-auto bg-card border-t border-border px-4 py-3">
+      <footer className="mt-auto bg-card border-t border-border px-4 py-3 pb-20">
         <div className="max-w-lg mx-auto text-center">
           <p className="text-xs text-muted-foreground">
             Asistente de movilidad para Sofía · Estimaciones basadas en datos históricos
@@ -974,9 +974,27 @@ export default function Home() {
         </div>
       </footer>
 
+      {/* ── Sticky Action Bar ─────────────────────────────────────────────── */}
+      {estimate && !estimateLoading && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border px-4 py-2.5 flex gap-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.1)]" style={{ paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}>
+          <button
+            onClick={() => openDeepLink(estimate.deepLinks.uber, 'uber')}
+            className="flex-1 bg-black text-white rounded-xl py-3 text-sm font-semibold active:scale-[0.97] transition-transform"
+          >
+            🚗 Uber · {formatPrice(estimate.uber.estimate)}
+          </button>
+          <button
+            onClick={() => openDeepLink(estimate.deepLinks.didi, 'didi')}
+            className="flex-1 bg-orange-500 text-white rounded-xl py-3 text-sm font-semibold active:scale-[0.97] transition-transform"
+          >
+            🚙 DiDi · {formatPrice(estimate.didi.estimate)}
+          </button>
+        </div>
+      )}
+
       {/* ── Toast ─────────────────────────────────────────────────────────── */}
       {toast && (
-        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-lg text-sm font-medium transition-all animate-in fade-in slide-in-from-bottom-4 ${
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-lg text-sm font-medium transition-all animate-in fade-in slide-in-from-bottom-4 ${
           toast.type === 'success' ? 'bg-green-600 text-white' :
           toast.type === 'error' ? 'bg-destructive text-destructive-foreground' :
           'bg-foreground text-background'
