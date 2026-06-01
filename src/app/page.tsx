@@ -81,6 +81,22 @@ function formatPrice(val: number | null | undefined): string {
   return `$${Math.round(val).toLocaleString('es-AR')}`
 }
 
+// ─── Helper: generate idempotency hash ────────────────────────────────────────
+// Matches the server-side dedupHash logic (coords rounded to ~111m + 60s bucket)
+
+function generateIdempotencyHash(
+  oLat: number, oLon: number,
+  dLat: number, dLon: number,
+  transport: string
+): string {
+  const oLatR = Math.round(oLat * 1000)
+  const oLonR = Math.round(oLon * 1000)
+  const dLatR = Math.round(dLat * 1000)
+  const dLonR = Math.round(dLon * 1000)
+  const timeBucket = Math.floor(Date.now() / 60_000)
+  return `${oLatR}:${oLonR}:${dLatR}:${dLonR}:${transport}:${timeBucket}`
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -117,6 +133,8 @@ export default function Home() {
   const reverseGeoAbortRef = useRef<AbortController | null>(null)
   const recordRideAbortRef = useRef<AbortController | null>(null)
   const logTransportAbortRef = useRef<AbortController | null>(null)
+  // Idempotency: track submitted dedup hashes to prevent double-submit at UI level
+  const submittedHashesRef = useRef<Set<string>>(new Set())
 
   // ── Online/Offline Detection ─────────────────────────────────────────────
 
@@ -463,6 +481,11 @@ export default function Home() {
   const recordRide = useCallback(async (transport: string) => {
     if (origin.lat == null || origin.lon == null || !destCoords) return
 
+    // Idempotency check: prevent double submit at UI level
+    const hash = generateIdempotencyHash(origin.lat, origin.lon, destCoords.lat, destCoords.lon, transport)
+    if (submittedHashesRef.current.has(hash)) return
+    submittedHashesRef.current.add(hash)
+
     // Abort any previous in-flight recordRide request
     recordRideAbortRef.current?.abort()
     const controller = new AbortController()
@@ -503,6 +526,14 @@ export default function Home() {
       showToast('Faltan datos para registrar el viaje', 'error')
       return
     }
+
+    // Idempotency check: prevent double submit at UI level
+    const hash = generateIdempotencyHash(origin.lat, origin.lon, destCoords.lat, destCoords.lon, selectedTransport)
+    if (submittedHashesRef.current.has(hash)) {
+      showToast('Este viaje ya fue enviado', 'info')
+      return
+    }
+    submittedHashesRef.current.add(hash)
 
     // Abort any previous in-flight logTransport request
     logTransportAbortRef.current?.abort()

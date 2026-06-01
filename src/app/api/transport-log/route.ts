@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 
 const VALID_TRANSPORTS = ['uber', 'didi', 'bus', 'walk', 'taxi', 'other']
-
-// Approximate degree delta for 50 meters
-// 1 degree latitude ≈ 111,320 meters, so 50m ≈ 0.0004496 degrees
-const METERS_TO_DEGREES = 50 / 111320
 
 function isValidCoordinate(lat: unknown, lon: unknown): boolean {
   if (typeof lat !== 'number' || typeof lon !== 'number') return false
@@ -13,6 +10,24 @@ function isValidCoordinate(lat: unknown, lon: unknown): boolean {
   if (lat < -90 || lat > 90) return false
   if (lon < -180 || lon > 180) return false
   return true
+}
+
+/**
+ * Generate a deterministic dedup hash from origin, destination, transport,
+ * and the current 60-second time bucket.
+ * DB UNIQUE constraint handles atomicity — no transaction needed.
+ */
+function generateDedupHash(
+  oLat: number, oLon: number,
+  dLat: number, dLon: number,
+  transport: string
+): string {
+  const oLatR = Math.round(oLat * 1000)
+  const oLonR = Math.round(oLon * 1000)
+  const dLatR = Math.round(dLat * 1000)
+  const dLonR = Math.round(dLon * 1000)
+  const timeBucket = Math.floor(Date.now() / 60_000)
+  return `${oLatR}:${oLonR}:${dLatR}:${dLonR}:${transport}:${timeBucket}`
 }
 
 export async function POST(request: NextRequest) {
@@ -26,7 +41,6 @@ export async function POST(request: NextRequest) {
 
     const { originLat, originLon, originName, destLat, destLon, destName, transport, price } = body as Record<string, unknown>
 
-    // Validate required fields
     if (originLat === undefined || originLat === null) {
       return NextResponse.json({ error: 'originLat is required' }, { status: 400 })
     }
@@ -43,7 +57,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'destName is required' }, { status: 400 })
     }
 
-    // Validate coordinates (coerce to number first)
     if (!isValidCoordinate(Number(originLat), Number(originLon))) {
       return NextResponse.json(
         { error: 'Invalid origin coordinates. Lat must be -90 to 90, lon must be -180 to 180' },
@@ -57,13 +70,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Coerce to numbers (in case they arrive as strings)
     const oLat = Number(originLat)
     const oLon = Number(originLon)
     const dLat = Number(destLat)
     const dLon = Number(destLon)
 
-    // Validate transport type
     const resolvedTransport = transport || 'bus'
     if (typeof resolvedTransport !== 'string' || !VALID_TRANSPORTS.includes(resolvedTransport)) {
       return NextResponse.json(
@@ -72,41 +83,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate price if provided
     if (price !== undefined && price !== null) {
       if (typeof price !== 'number' || Number.isNaN(price) || price < 0) {
         return NextResponse.json({ error: 'Price must be a valid non-negative number' }, { status: 400 })
       }
     }
 
-    // Check for duplicate entries: same origin (within 50m), same destination (within 50m),
-    // same transport type, created in the last 60 seconds
-    // Use $transaction to prevent TOCTOU race condition between findFirst and create
-    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000)
+    const dedupHash = generateDedupHash(oLat, oLon, dLat, dLon, resolvedTransport)
 
-    // Calculate bounding boxes for 50m radius
-    const originLatDelta = METERS_TO_DEGREES
-    const originLonDelta = METERS_TO_DEGREES / Math.cos((oLat * Math.PI) / 180)
-    const destLatDelta = METERS_TO_DEGREES
-    const destLonDelta = METERS_TO_DEGREES / Math.cos((dLat * Math.PI) / 180)
-
-    const result = await db.$transaction(async (tx) => {
-      const duplicate = await tx.transportLog.findFirst({
-        where: {
-          transport: resolvedTransport,
-          createdAt: { gte: sixtySecondsAgo },
-          originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
-          originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
-          destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
-          destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
-        },
-      })
-
-      if (duplicate) {
-        return { data: duplicate, isDuplicate: true }
-      }
-
-      const transportLog = await tx.transportLog.create({
+    try {
+      const transportLog = await db.transportLog.create({
         data: {
           originLat: oLat,
           originLon: oLon,
@@ -116,20 +102,21 @@ export async function POST(request: NextRequest) {
           destName: destName.trim(),
           transport: resolvedTransport,
           price: price != null ? Number(price) : null,
+          dedupHash,
         },
       })
 
-      return { data: transportLog, isDuplicate: false }
-    }, { maxWait: 5000, timeout: 10000 })
-
-    if (result.isDuplicate) {
-      return NextResponse.json(
-        { error: 'Duplicate entry: a similar transport log was created within the last 60 seconds' },
-        { status: 409 }
-      )
+      return NextResponse.json(transportLog, { status: 201 })
+    } catch (createError) {
+      // Prisma unique constraint violation → P2002
+      if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Duplicate entry: a similar transport log was created within the last 60 seconds' },
+          { status: 409 }
+        )
+      }
+      throw createError
     }
-
-    return NextResponse.json(result.data, { status: 201 })
   } catch (error) {
     console.error('Error creating transport log:', error)
     return NextResponse.json({ error: 'Failed to create transport log' }, { status: 500 })
@@ -140,7 +127,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
 
-    // Parse and validate limit
     let limit = 50
     const limitParam = searchParams.get('limit')
     if (limitParam !== null) {
@@ -151,7 +137,6 @@ export async function GET(request: NextRequest) {
       limit = Math.min(parsed, 200)
     }
 
-    // Parse and validate offset
     let offset = 0
     const offsetParam = searchParams.get('offset')
     if (offsetParam !== null) {
@@ -162,7 +147,6 @@ export async function GET(request: NextRequest) {
       offset = parsed
     }
 
-    // Build where clause
     const where: { transport?: string } = {}
     const transportParam = searchParams.get('transport')
     if (transportParam) {
@@ -175,7 +159,6 @@ export async function GET(request: NextRequest) {
       where.transport = transportParam
     }
 
-    // Get total count and entries
     const [total, entries] = await Promise.all([
       db.transportLog.count({ where }),
       db.transportLog.findMany({

@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 
 const VALID_TRANSPORTS = ['uber', 'didi', 'bus', 'walk', 'taxi', 'other']
-
-// Approximate degree delta for 50 meters
-// 1 degree latitude ≈ 111,320 meters, so 50m ≈ 0.0004496 degrees
-const METERS_TO_DEGREES = 50 / 111320
 
 function isValidCoordinate(lat: unknown, lon: unknown): boolean {
   if (typeof lat !== 'number' || typeof lon !== 'number') return false
@@ -13,6 +10,31 @@ function isValidCoordinate(lat: unknown, lon: unknown): boolean {
   if (lat < -90 || lat > 90) return false
   if (lon < -180 || lon > 180) return false
   return true
+}
+
+/**
+ * Generate a deterministic dedup hash from origin, destination, transport,
+ * and the current 60-second time bucket.
+ * This allows the DB UNIQUE constraint to reject duplicates atomically,
+ * without relying on findFirst+create inside a transaction (which fails
+ * under SQLite concurrent write load).
+ */
+function generateDedupHash(
+  oLat: number, oLon: number,
+  dLat: number, dLon: number,
+  transport: string
+): string {
+  // Round coordinates to ~50m precision (3 decimal places ≈ 111m)
+  const oLatR = Math.round(oLat * 1000)
+  const oLonR = Math.round(oLon * 1000)
+  const dLatR = Math.round(dLat * 1000)
+  const dLonR = Math.round(dLon * 1000)
+  // 60-second time bucket
+  const timeBucket = Math.floor(Date.now() / 60_000)
+  // Simple hash using Bun's hash or a basic string
+  const raw = `${oLatR}:${oLonR}:${dLatR}:${dLonR}:${transport}:${timeBucket}`
+  // Use a fast hash — Bun.cryptoHash or simple hex
+  return raw
 }
 
 export async function POST(request: NextRequest) {
@@ -57,7 +79,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Coerce to numbers (in case they arrive as strings)
     const oLat = Number(originLat)
     const oLon = Number(originLon)
     const dLat = Number(destLat)
@@ -98,32 +119,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Duplicate prevention: same origin (within 50m), same destination (within 50m), created in last 60s
-    // Use $transaction to prevent TOCTOU race condition between findFirst and create
-    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000)
+    // Generate deterministic dedup hash — DB UNIQUE constraint handles atomicity
+    const dedupHash = generateDedupHash(oLat, oLon, dLat, dLon, resolvedTransport)
 
-    const originLatDelta = METERS_TO_DEGREES
-    const originLonDelta = METERS_TO_DEGREES / Math.cos((oLat * Math.PI) / 180)
-    const destLatDelta = METERS_TO_DEGREES
-    const destLonDelta = METERS_TO_DEGREES / Math.cos((dLat * Math.PI) / 180)
-
-    const result = await db.$transaction(async (tx) => {
-      const duplicate = await tx.ride.findFirst({
-        where: {
-          transport: resolvedTransport,
-          createdAt: { gte: sixtySecondsAgo },
-          originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
-          originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
-          destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
-          destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
-        },
-      })
-
-      if (duplicate) {
-        return { data: duplicate, isDuplicate: true }
-      }
-
-      const ride = await tx.ride.create({
+    try {
+      const ride = await db.ride.create({
         data: {
           originLat: oLat,
           originLon: oLon,
@@ -136,20 +136,21 @@ export async function POST(request: NextRequest) {
           distanceKm: distanceKm != null ? Number(distanceKm) : null,
           durationMin: durationMin != null ? Number(durationMin) : null,
           transport: resolvedTransport,
+          dedupHash,
         },
       })
 
-      return { data: ride, isDuplicate: false }
-    }, { maxWait: 5000, timeout: 10000 })
-
-    if (result.isDuplicate) {
-      return NextResponse.json(
-        { error: 'Duplicate entry: a similar ride was created within the last 60 seconds' },
-        { status: 409 }
-      )
+      return NextResponse.json(ride, { status: 201 })
+    } catch (createError) {
+      // Prisma unique constraint violation → P2002
+      if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Duplicate entry: a similar ride was created within the last 60 seconds' },
+          { status: 409 }
+        )
+      }
+      throw createError // re-throw unexpected errors
     }
-
-    return NextResponse.json(result.data, { status: 201 })
   } catch (error) {
     console.error('Error creating ride:', error)
     return NextResponse.json({ error: 'Failed to create ride' }, { status: 500 })
@@ -160,7 +161,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
 
-    // Parse and validate limit
     let limit = 50
     const limitParam = searchParams.get('limit')
     if (limitParam !== null) {
@@ -171,7 +171,6 @@ export async function GET(request: NextRequest) {
       limit = Math.min(parsed, 200)
     }
 
-    // Parse and validate offset
     let offset = 0
     const offsetParam = searchParams.get('offset')
     if (offsetParam !== null) {
@@ -182,7 +181,6 @@ export async function GET(request: NextRequest) {
       offset = parsed
     }
 
-    // Build where clause
     const where: { transport?: string } = {}
     const transportParam = searchParams.get('transport')
     if (transportParam) {
@@ -195,7 +193,6 @@ export async function GET(request: NextRequest) {
       where.transport = transportParam
     }
 
-    // Get total count and rides
     const [total, rides] = await Promise.all([
       db.ride.count({ where }),
       db.ride.findMany({

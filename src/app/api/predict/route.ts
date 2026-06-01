@@ -5,7 +5,6 @@ interface RawTrip {
   destLat: number
   destLon: number
   destName: string
-  // SQLite $queryRaw returns DateTime columns as strings (ISO 8601)
   createdAt: string
 }
 
@@ -15,6 +14,30 @@ interface Prediction {
   destName: string
   score: number
   confidence: 'low' | 'medium' | 'high'
+}
+
+// ─── In-memory cache for predictions (2 min TTL) ─────────────────────────────
+// Avoids hitting the DB on every GPS update; predictions don't change
+// meaningfully in 2 minutes.
+
+const predictCache = new Map<string, { data: { predictions: Prediction[]; totalRecords: number; currentHour: number; currentDayOfWeek: number }; expires: number }>()
+
+function getPredictCached(key: string): { data: { predictions: Prediction[]; totalRecords: number; currentHour: number; currentDayOfWeek: number }; expires: number } | null {
+  const entry = predictCache.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expires) {
+    predictCache.delete(key)
+    return null
+  }
+  return entry
+}
+
+function setPredictCache(key: string, data: { predictions: Prediction[]; totalRecords: number; currentHour: number; currentDayOfWeek: number }, ttlMs = 120_000): void {
+  predictCache.set(key, { data, expires: Date.now() + ttlMs })
+  if (predictCache.size > 50) {
+    const oldest = predictCache.keys().next().value
+    if (oldest !== undefined) predictCache.delete(oldest)
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -47,6 +70,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Check cache first (round to 3 decimals ≈ 111m for cache key)
+    const cacheKey = `predict:${lat.toFixed(3)},${lon.toFixed(3)}`
+    const cached = getPredictCached(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached.data)
+    }
+
     // Get current hour and day of week in user's timezone
     const timezone = 'America/Argentina/Buenos_Aires'
     const now = new Date()
@@ -58,7 +88,6 @@ export async function GET(request: NextRequest) {
     })
     let currentHour = parseInt(hourFormatter.format(now), 10)
     if (isNaN(currentHour)) {
-      // Fallback to UTC-3 (Argentina) if Intl fails — same strategy as detectFactors
       const utcHour = now.getUTCHours()
       currentHour = (utcHour - 3 + 24) % 24
     }
@@ -69,29 +98,17 @@ export async function GET(request: NextRequest) {
     })
     const dayName = dayFormatter.format(now)
     const dayMap: Record<string, number> = {
-      Sunday: 0,
-      Monday: 1,
-      Tuesday: 2,
-      Wednesday: 3,
-      Thursday: 4,
-      Friday: 5,
-      Saturday: 6,
+      Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+      Thursday: 4, Friday: 5, Saturday: 6,
     }
     let currentDayOfWeek = dayMap[dayName]
     if (currentDayOfWeek === undefined) {
-      // Fallback: Argentina UTC-3, compute day from UTC offset
       const utcDay = now.getUTCDay()
       const utcHour = now.getUTCHours()
-      // If it's before 3am UTC, it's still the previous day in Argentina
       currentDayOfWeek = utcHour < 3 ? (utcDay - 1 + 7) % 7 : utcDay
     }
 
-    // Query rides and transport_log using raw SQL with UNION ALL
-    // IMPORTANT: Prisma with SQLite uses camelCase column names and PascalCase table names
-    // Proximity: 0.005° ≈ 555m at equator, reasonable for "same neighborhood" matching
-    // Date filter: only consider trips from the last 6 months for relevant predictions
-    // Using BETWEEN instead of ABS() so SQLite can use the composite index on
-    // [originLat, originLon] for efficient range scans (ABS() prevents index usage).
+    // Query using BETWEEN for index usage (not ABS())
     const proximityDeg = 0.005
     const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
     const latMin = lat - proximityDeg
@@ -113,11 +130,15 @@ export async function GET(request: NextRequest) {
     `
 
     if (results.length < 1) {
-      return NextResponse.json({
+      const emptyResult = {
         predictions: [],
         message: 'Insufficient data',
         totalRecords: results.length,
-      })
+        currentHour,
+        currentDayOfWeek,
+      }
+      setPredictCache(cacheKey, { predictions: [], totalRecords: 0, currentHour, currentDayOfWeek })
+      return NextResponse.json(emptyResult)
     }
 
     // Group by rounded destination (3 decimal places ≈ 111m)
@@ -143,9 +164,8 @@ export async function GET(request: NextRequest) {
       const group = groups.get(key)!
       group.names.push(trip.destName)
 
-      // Parse hour and day of week from createdAt in the user's timezone
       const tripDate = new Date(trip.createdAt)
-      if (isNaN(tripDate.getTime())) continue // Skip invalid dates
+      if (isNaN(tripDate.getTime())) continue
 
       const tripHour = parseInt(
         new Intl.DateTimeFormat('en-US', {
@@ -155,43 +175,38 @@ export async function GET(request: NextRequest) {
         }).format(tripDate),
         10
       )
-      if (isNaN(tripHour)) continue // Skip if hour parsing fails
+      if (isNaN(tripHour)) continue
 
       const tripDayName = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
         weekday: 'long',
       }).format(tripDate)
       const tripDayOfWeek = dayMap[tripDayName]
-      if (tripDayOfWeek === undefined) continue // Skip if day parsing fails
+      if (tripDayOfWeek === undefined) continue
 
       group.trips.push({ hour: tripHour, dayOfWeek: tripDayOfWeek })
     }
 
-    // Calculate scores for each group
     const predictions: Prediction[] = []
 
     for (const [, group] of groups) {
       const totalCount = group.trips.length
 
-      // Hour match: count trips where hour is within ±2 of current hour (wrapping around midnight)
       const hourMatch = group.trips.filter((t) => {
         const diff = Math.abs(t.hour - currentHour)
-        return diff <= 2 || diff >= 22 // wraps around midnight
+        return diff <= 2 || diff >= 22
       }).length
 
-      // Day match: count trips on same day of week
       const dayMatch = group.trips.filter((t) => t.dayOfWeek === currentDayOfWeek).length
 
       const score = totalCount * 0.3 + hourMatch * 0.4 + dayMatch * 0.3
 
-      // Pick the most common destName
       const nameCounts: Map<string, number> = new Map()
       for (const name of group.names) {
         nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1)
       }
       const destName = [...nameCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
 
-      // Determine confidence based on score
       let confidence: 'low' | 'medium' | 'high'
       if (score < 1) {
         confidence = 'low'
@@ -210,16 +225,18 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Sort by score descending and return top 3
     predictions.sort((a, b) => b.score - a.score)
     const top3 = predictions.slice(0, 3)
 
-    return NextResponse.json({
+    const result = {
       predictions: top3,
       totalRecords: results.length,
       currentHour,
       currentDayOfWeek,
-    })
+    }
+
+    setPredictCache(cacheKey, result)
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Prediction error:', error)
     return NextResponse.json(

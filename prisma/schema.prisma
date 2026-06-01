@@ -20,6 +20,7 @@ model Ride {
   distanceKm  Float?
   durationMin Float?
   transport   String   @default("uber")
+  dedupHash   String   @unique
   createdAt   DateTime @default(now())
 
   @@index([destLat, destLon])
@@ -39,6 +40,7 @@ model TransportLog {
   destName   String
   transport  String   @default("bus")
   price      Float?
+  dedupHash  String   @unique
   createdAt  DateTime @default(now())
 
   @@index([destLat, destLon])
