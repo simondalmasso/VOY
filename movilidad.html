@@ -64,10 +64,13 @@ main { flex: 1; max-width: 448px; margin: 0 auto; width: 100%; padding: 16px; di
 .dest-row { display: flex; align-items: center; gap: 8px; }
 .dest-dot { color: var(--red); font-size: 18px; }
 .dest-input-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
-.dest-input { flex: 1; background: transparent; border: none; font-size: 14px; font-weight: 500; outline: none; color: var(--fg); }
+.dest-input { flex: 1; background: transparent; border: none; font-size: 14px; font-weight: 500; outline: none; color: var(--fg); min-width: 0; }
 .dest-input::placeholder { color: var(--muted-fg); }
-.voice-btn { font-size: 18px; background: none; border: none; cursor: pointer; padding: 4px; transition: transform .15s; }
+.voice-btn { font-size: 18px; background: none; border: none; cursor: pointer; padding: 4px; flex-shrink: 0; transition: transform .15s; }
 .voice-btn:active { transform: scale(1.15); }
+.dest-actions { display: flex; gap: 8px; margin-top: 8px; }
+.dest-action-btn { font-size: 13px; background: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; color: var(--fg); transition: all .15s; }
+.dest-action-btn:hover { background: var(--primary); color: var(--primary-fg); }
 .search-loading { font-size: 12px; color: var(--muted-fg); animation: pulse 1.5s infinite; margin-top: 8px; }
 .search-results { max-height: 192px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
 .search-result { display: block; width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
@@ -196,7 +199,9 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
       <div class="dest-input-wrap">
         <input type="text" class="dest-input" id="destInput" placeholder="¿A dónde vas?" oninput="onDestInput(this.value)">
         <button class="voice-btn" onclick="startVoice()" title="Búsqueda por voz">🎤</button>
-        <button class="voice-btn" onclick="enableDestPin()" title="Marcar en el mapa">📌</button>
+      </div>
+      <div class="dest-actions">
+        <button class="dest-action-btn" onclick="enableDestPin()">📌 Marcar en el mapa</button>
       </div>
     </div>
     <div class="search-loading hidden" id="searchLoading">Buscando direcciones...</div>
