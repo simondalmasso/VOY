@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitForNominatimRateLimit } from '@/lib/nominatim'
 
 // ─── In-memory cache for Nominatim reverse geocode (10 min TTL) ──────────────
 
@@ -66,6 +67,8 @@ export async function GET(request: NextRequest) {
 
     let response: Response
     try {
+      // Wait for shared Nominatim rate limit before calling
+      await waitForNominatimRateLimit()
       response = await fetch(url, {
         headers: {
           'User-Agent': 'MovilidadAsistente/1.0',

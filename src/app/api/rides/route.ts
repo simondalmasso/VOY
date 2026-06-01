@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Duplicate prevention: same origin (within 50m), same destination (within 50m), created in last 60s
+    // Use $transaction to prevent TOCTOU race condition between findFirst and create
     const sixtySecondsAgo = new Date(Date.now() - 60 * 1000)
 
     const originLatDelta = METERS_TO_DEGREES
@@ -101,39 +102,41 @@ export async function POST(request: NextRequest) {
     const destLatDelta = METERS_TO_DEGREES
     const destLonDelta = METERS_TO_DEGREES / Math.cos((dLat * Math.PI) / 180)
 
-    const duplicate = await db.ride.findFirst({
-      where: {
-        createdAt: { gte: sixtySecondsAgo },
-        originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
-        originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
-        destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
-        destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
-      },
-    })
+    const result = await db.$transaction(async (tx) => {
+      const duplicate = await tx.ride.findFirst({
+        where: {
+          createdAt: { gte: sixtySecondsAgo },
+          originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
+          originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
+          destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
+          destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
+        },
+      })
 
-    if (duplicate) {
-      // Return the existing ride instead of creating a duplicate
-      return NextResponse.json(duplicate, { status: 200 })
-    }
+      if (duplicate) {
+        return { data: duplicate, isDuplicate: true }
+      }
 
-    // Create the ride
-    const ride = await db.ride.create({
-      data: {
-        originLat: oLat,
-        originLon: oLon,
-        originName: originName || '',
-        destLat: dLat,
-        destLon: dLon,
-        destName: destName.trim(),
-        priceUber: priceUber != null ? Number(priceUber) : null,
-        priceDidi: priceDidi != null ? Number(priceDidi) : null,
-        distanceKm: distanceKm != null ? Number(distanceKm) : null,
-        durationMin: durationMin != null ? Number(durationMin) : null,
-        transport: resolvedTransport,
-      },
-    })
+      const ride = await tx.ride.create({
+        data: {
+          originLat: oLat,
+          originLon: oLon,
+          originName: originName || '',
+          destLat: dLat,
+          destLon: dLon,
+          destName: destName.trim(),
+          priceUber: priceUber != null ? Number(priceUber) : null,
+          priceDidi: priceDidi != null ? Number(priceDidi) : null,
+          distanceKm: distanceKm != null ? Number(distanceKm) : null,
+          durationMin: durationMin != null ? Number(durationMin) : null,
+          transport: resolvedTransport,
+        },
+      })
 
-    return NextResponse.json(ride, { status: 201 })
+      return { data: ride, isDuplicate: false }
+    }, { maxWait: 5000, timeout: 10000 })
+
+    return NextResponse.json(result.data, { status: result.isDuplicate ? 200 : 201 })
   } catch (error) {
     console.error('Error creating ride:', error)
     return NextResponse.json({ error: 'Failed to create ride' }, { status: 500 })
@@ -167,7 +170,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause
-    const where: Record<string, string> = {}
+    const where: { transport?: string } = {}
     const transportParam = searchParams.get('transport')
     if (transportParam) {
       if (!VALID_TRANSPORTS.includes(transportParam)) {

@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
 
     // Check for duplicate entries: same origin (within 50m), same destination (within 50m),
     // same transport type, created in the last 60 seconds
+    // Use $transaction to prevent TOCTOU race condition between findFirst and create
     const sixtySecondsAgo = new Date(Date.now() - 60 * 1000)
 
     // Calculate bounding boxes for 50m radius
@@ -84,39 +85,46 @@ export async function POST(request: NextRequest) {
     const destLatDelta = METERS_TO_DEGREES
     const destLonDelta = METERS_TO_DEGREES / Math.cos((dLat * Math.PI) / 180)
 
-    const duplicate = await db.transportLog.findFirst({
-      where: {
-        transport: resolvedTransport,
-        createdAt: { gte: sixtySecondsAgo },
-        originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
-        originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
-        destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
-        destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
-      },
-    })
+    const result = await db.$transaction(async (tx) => {
+      const duplicate = await tx.transportLog.findFirst({
+        where: {
+          transport: resolvedTransport,
+          createdAt: { gte: sixtySecondsAgo },
+          originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
+          originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
+          destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
+          destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
+        },
+      })
 
-    if (duplicate) {
+      if (duplicate) {
+        return { data: duplicate, isDuplicate: true }
+      }
+
+      const transportLog = await tx.transportLog.create({
+        data: {
+          originLat: oLat,
+          originLon: oLon,
+          originName: originName || '',
+          destLat: dLat,
+          destLon: dLon,
+          destName: destName.trim(),
+          transport: resolvedTransport,
+          price: price != null ? Number(price) : null,
+        },
+      })
+
+      return { data: transportLog, isDuplicate: false }
+    }, { maxWait: 5000, timeout: 10000 })
+
+    if (result.isDuplicate) {
       return NextResponse.json(
         { error: 'Duplicate entry: a similar transport log was created within the last 60 seconds' },
         { status: 409 }
       )
     }
 
-    // Create the transport log
-    const transportLog = await db.transportLog.create({
-      data: {
-        originLat: oLat,
-        originLon: oLon,
-        originName: originName || '',
-        destLat: dLat,
-        destLon: dLon,
-        destName: destName.trim(),
-        transport: resolvedTransport,
-        price: price != null ? Number(price) : null,
-      },
-    })
-
-    return NextResponse.json(transportLog, { status: 201 })
+    return NextResponse.json(result.data, { status: 201 })
   } catch (error) {
     console.error('Error creating transport log:', error)
     return NextResponse.json({ error: 'Failed to create transport log' }, { status: 500 })
@@ -150,7 +158,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause
-    const where: Record<string, string> = {}
+    const where: { transport?: string } = {}
     const transportParam = searchParams.get('transport')
     if (transportParam) {
       if (!VALID_TRANSPORTS.includes(transportParam)) {

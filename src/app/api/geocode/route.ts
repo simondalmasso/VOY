@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitForNominatimRateLimit } from '@/lib/nominatim'
 
 // ─── In-memory cache for Nominatim (5 min TTL, respects 1 req/s policy) ──────
 
@@ -23,18 +24,8 @@ function setCache(key: string, data: unknown, ttlMs = 300_000): void {
   }
 }
 
-// ─── Rate limiter (1 request per second to Nominatim) ────────────────────────
-
-let lastNominatimCall = 0
-
-async function waitForRateLimit(): Promise<void> {
-  const now = Date.now()
-  const elapsed = now - lastNominatimCall
-  if (elapsed < 1100) {
-    await new Promise((resolve) => setTimeout(resolve, 1100 - elapsed))
-  }
-  lastNominatimCall = Date.now()
-}
+// ─── Rate limiter (shared via @/lib/nominatim — 1 request per second to Nominatim) ──
+// See src/lib/nominatim.ts for the shared rate limiter used by both geocode and reverse-geocode
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,7 +63,7 @@ export async function GET(request: NextRequest) {
     let response: Response
     try {
       // Wait for rate limit before calling Nominatim
-      await waitForRateLimit()
+      await waitForNominatimRateLimit()
       response = await fetch(url, {
         headers: {
           'User-Agent': 'MovilidadAsistente/1.0',

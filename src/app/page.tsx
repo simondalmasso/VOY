@@ -114,6 +114,8 @@ export default function Home() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const weatherAbortRef = useRef<AbortController | null>(null)
   const predictAbortRef = useRef<AbortController | null>(null)
+  const reverseGeoAbortRef = useRef<AbortController | null>(null)
+  const recordRideAbortRef = useRef<AbortController | null>(null)
 
   // ── Online/Offline Detection ─────────────────────────────────────────────
 
@@ -134,11 +136,13 @@ export default function Home() {
       if (speechRef.current && typeof (speechRef.current as { stop: () => void }).stop === 'function') {
         (speechRef.current as { stop: () => void }).stop()
       }
-      // Cleanup weather/predict/estimate/search abort controllers on unmount
+      // Cleanup all abort controllers on unmount
       weatherAbortRef.current?.abort()
       predictAbortRef.current?.abort()
       estimateAbortRef.current?.abort()
       searchAbortRef.current?.abort()
+      reverseGeoAbortRef.current?.abort()
+      recordRideAbortRef.current?.abort()
     }
   }, [])
 
@@ -178,16 +182,21 @@ export default function Home() {
 
         setOrigin((prev) => ({ ...prev, lat, lon, loading: false, error: null }))
 
-        // Reverse geocode
+        // Reverse geocode (abort any previous in-flight request)
+        reverseGeoAbortRef.current?.abort()
+        const geoController = new AbortController()
+        reverseGeoAbortRef.current = geoController
+
         try {
-          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`)
+          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`, { signal: geoController.signal })
           if (res.ok) {
             const data = await res.json()
             setOrigin((prev) => ({ ...prev, name: data.displayName || `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
           } else {
             setOrigin((prev) => ({ ...prev, name: `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
           }
-        } catch {
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return
           setOrigin((prev) => ({ ...prev, name: `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
         }
       },
@@ -452,6 +461,11 @@ export default function Home() {
   const recordRide = useCallback(async (transport: string) => {
     if (origin.lat == null || origin.lon == null || !destCoords) return
 
+    // Abort any previous in-flight recordRide request
+    recordRideAbortRef.current?.abort()
+    const controller = new AbortController()
+    recordRideAbortRef.current = controller
+
     try {
       const res = await fetch('/api/rides', {
         method: 'POST',
@@ -469,11 +483,13 @@ export default function Home() {
           durationMin: estimate?.durationMin ?? null,
           transport,
         }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         console.warn('Ride recording failed:', res.status)
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       console.warn('Ride recording error:', err)
     }
   }, [origin, destCoords, estimate])
