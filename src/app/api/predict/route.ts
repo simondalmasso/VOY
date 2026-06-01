@@ -5,7 +5,8 @@ interface RawTrip {
   destLat: number
   destLon: number
   destName: string
-  createdAt: Date
+  // SQLite $queryRaw returns DateTime columns as strings (ISO 8601)
+  createdAt: string
 }
 
 interface Prediction {
@@ -55,17 +56,11 @@ export async function GET(request: NextRequest) {
       hour: 'numeric',
       hour12: false,
     })
-    const currentHour = parseInt(hourFormatter.format(now), 10)
+    let currentHour = parseInt(hourFormatter.format(now), 10)
     if (isNaN(currentHour)) {
-      // Fallback to UTC hour if Intl fails
+      // Fallback to UTC-3 (Argentina) if Intl fails — same strategy as detectFactors
       const utcHour = now.getUTCHours()
-      // Argentina is UTC-3
-      const adjustedHour = (utcHour - 3 + 24) % 24
-      return NextResponse.json({
-        predictions: [],
-        message: 'Timezone detection failed',
-        totalRecords: 0,
-      })
+      currentHour = (utcHour - 3 + 24) % 24
     }
 
     const dayFormatter = new Intl.DateTimeFormat('en-US', {
@@ -82,13 +77,13 @@ export async function GET(request: NextRequest) {
       Friday: 5,
       Saturday: 6,
     }
-    const currentDayOfWeek = dayMap[dayName]
+    let currentDayOfWeek = dayMap[dayName]
     if (currentDayOfWeek === undefined) {
-      return NextResponse.json({
-        predictions: [],
-        message: 'Day detection failed',
-        totalRecords: 0,
-      })
+      // Fallback: Argentina UTC-3, compute day from UTC offset
+      const utcDay = now.getUTCDay()
+      const utcHour = now.getUTCHours()
+      // If it's before 3am UTC, it's still the previous day in Argentina
+      currentDayOfWeek = utcHour < 3 ? (utcDay - 1 + 7) % 7 : utcDay
     }
 
     // Query rides and transport_log using raw SQL with UNION ALL

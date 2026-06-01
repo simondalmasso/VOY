@@ -109,6 +109,8 @@ async function fetchPrecipitation(
     let res: Response;
     try {
       res = await fetch(url, {
+        // Cache Open-Meteo response for 600s to avoid redundant API calls
+        // within the same server-side render cycle
         next: { revalidate: 600 },
         signal: controller.signal,
       });
