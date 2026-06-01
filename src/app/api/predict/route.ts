@@ -90,15 +90,23 @@ export async function GET(request: NextRequest) {
     // IMPORTANT: Prisma with SQLite uses camelCase column names and PascalCase table names
     // Proximity: 0.005° ≈ 555m at equator, reasonable for "same neighborhood" matching
     // Date filter: only consider trips from the last 6 months for relevant predictions
+    // Using BETWEEN instead of ABS() so SQLite can use the composite index on
+    // [originLat, originLon] for efficient range scans (ABS() prevents index usage).
     const proximityDeg = 0.005
     const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+    const latMin = lat - proximityDeg
+    const latMax = lat + proximityDeg
+    const lonMin = lon - proximityDeg
+    const lonMax = lon + proximityDeg
     const results: RawTrip[] = await db.$queryRaw`
       SELECT destLat, destLon, destName, createdAt FROM Ride
-      WHERE ABS(originLat - ${lat}) < ${proximityDeg} AND ABS(originLon - ${lon}) < ${proximityDeg}
+      WHERE originLat BETWEEN ${latMin} AND ${latMax}
+      AND originLon BETWEEN ${lonMin} AND ${lonMax}
       AND createdAt >= ${sixMonthsAgo}
       UNION ALL
       SELECT destLat, destLon, destName, createdAt FROM TransportLog
-      WHERE ABS(originLat - ${lat}) < ${proximityDeg} AND ABS(originLon - ${lon}) < ${proximityDeg}
+      WHERE originLat BETWEEN ${latMin} AND ${latMax}
+      AND originLon BETWEEN ${lonMin} AND ${lonMax}
       AND createdAt >= ${sixMonthsAgo}
       ORDER BY createdAt DESC
       LIMIT 200
