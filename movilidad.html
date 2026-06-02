@@ -142,6 +142,14 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
 .toast.error { background: #dc2626; color: #fff; }
 .toast.info { background: var(--fg); color: var(--bg); }
 .hidden { display: none !important; }
+.quick-dest-btn {
+  font-size: 12px; background: var(--muted); border: 1px solid var(--border);
+  border-radius: 9999px; padding: 5px 12px; cursor: pointer; color: var(--fg);
+  transition: all .15s; white-space: nowrap; max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.quick-dest-btn:hover { background: var(--primary); color: var(--primary-fg); }
+.quick-dest-label { font-size: 11px; color: var(--muted-fg); margin-top: 4px; margin-bottom: 2px; }
 </style>
 </head>
 <body>
@@ -209,6 +217,8 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
     <div class="dest-actions">
       <button class="dest-action-btn" onclick="enableDestPin()">📌 Marcar destino en el mapa</button>
     </div>
+    <!-- Destinos frecuentes -->
+    <div id="quickDests" class="hidden" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;"></div>
     <div class="search-loading hidden" id="searchLoading">Buscando direcciones...</div>
     <div class="search-results hidden" id="searchResults"></div>
   </div>
@@ -252,7 +262,7 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
         <div class="price-header"><h3>DiDi</h3><span class="cheaper-badge hidden" id="didiCheaper">Más barato</span></div>
         <p class="price-main" id="didiPrice"></p>
         <p class="price-range" id="didiRange"></p>
-        <a class="deep-link didi-btn" id="didiLink" href="#" target="_blank" rel="noopener" onclick="recordRideAndGo('didi')">Ver en DiDi →</a>
+        <a class="deep-link didi-btn" id="didiLink" href="#" target="_blank" rel="noopener" onclick="event.preventDefault();openDiDiTracked()">Ver en DiDi →</a>
       </div>
     </div>
     <div class="factors hidden" id="factorsRow" style="margin-top:12px;justify-content:center"></div>
@@ -287,7 +297,7 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
 <!-- Sticky Action Bar -->
 <div class="action-bar hidden" id="actionBar">
   <a class="action-bar-link uber-btn" id="actionUberLink" href="#" target="_blank" rel="noopener">🚗 Uber</a>
-  <a class="action-bar-link didi-btn" id="actionDidiLink" href="#" target="_blank" rel="noopener">🚙 DiDi</a>
+  <a class="action-bar-link didi-btn" id="actionDidiLink" href="#" target="_blank" rel="noopener" onclick="event.preventDefault();openDiDiTracked()">🚙 DiDi</a>
 </div>
 
 <!-- Toast -->
@@ -297,14 +307,23 @@ footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 
 <script>
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SANTA_FE = [-31.6256, -60.7087];
-const UBER_BASE=150, UBER_KM=120, UBER_MIN=15;
-const DIDI_BASE=130, DIDI_KM=110, DIDI_MIN=13;
-const WEATHER_SURGE=1.15, RUSH_SURGE=1.2, NIGHT_SURGE=1.3;
 const TRANSPORTS = [
   {id:'uber',label:'🚗 Uber'},{id:'didi',label:'🚙 DiDi'},
   {id:'bus',label:'🚌 Colectivo'},{id:'walk',label:'🚶 Caminando'},
   {id:'taxi',label:'🚕 Taxi'},{id:'other',label:'📦 Otro'}
 ];
+
+// DEPLOY: para actualizar precios sin tocar código,
+// editar fares.json en el mismo directorio que movilidad.html.
+// En Cloudflare Pages: subir fares.json actualizado → redeploy automático.
+// Valores actuales son base Santa Fe 2025/2026. Revisar cada 2-3 meses.
+// ─── Fares (editable sin tocar lógica) ───────────────────────────────────────
+const FARES_DEFAULT = {
+  uber: { base: 1000, km: 500, min: 65, minFare: 3000 },
+  didi: { base: 900,  km: 440, min: 55, minFare: 2500 },
+  surge: { weather: 1.15, rush: 1.20, night: 1.30 }
+};
+let FARES = { ...FARES_DEFAULT };
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let origin = {lat:null, lon:null, name:''};
@@ -325,19 +344,44 @@ let gpsAttempted = false;
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
+// ─── Fares loader ─────────────────────────────────────────────────────────────
+async function loadFares() {
+  try {
+    const r = await fetch('./fares.json', { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.uber)  FARES.uber  = { ...FARES_DEFAULT.uber,  ...data.uber  };
+    if (data.didi)  FARES.didi  = { ...FARES_DEFAULT.didi,  ...data.didi  };
+    if (data.surge) FARES.surge = { ...FARES_DEFAULT.surge, ...data.surge };
+    console.log('[FARES] loaded from fares.json:', FARES);
+  } catch(e) {
+    console.log('[FARES] using defaults');
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initMap();
   initOnline();
   initTransportGrid();
+  await loadFares();
+  // Sofia pre-load
+  if (!localStorage.getItem('movilidad_trips')) {
+    localStorage.setItem('movilidad_trips', JSON.stringify([
+      { ts: '2026-01-01T00:00:00.000Z', from: {lat: -31.6256, lon: -60.7087, name: 'Centro de Santa Fe'}, to: {lat: -31.63550, lon: -60.70149, name: 'Cremolatti, Santa Fe'}, transport: 'didi', price: null, estimate: null },
+      { ts: '2026-01-02T00:00:00.000Z', from: {lat: -31.6256, lon: -60.7087, name: 'Centro de Santa Fe'}, to: {lat: -31.63550, lon: -60.70149, name: 'Cremolatti, Santa Fe'}, transport: 'didi', price: null, estimate: null },
+      { ts: '2026-01-03T00:00:00.000Z', from: {lat: -31.63550, lon: -60.70149, name: 'Cremolatti, Santa Fe'}, to: {lat: -31.64690, lon: -60.71605, name: 'Mendoza 3291, Santa Fe'}, transport: 'didi', price: null, estimate: null }
+    ]));
+  }
+  loadQuickDests();
   // Try GPS but don't block on it
   tryGPS();
 });
 
 function initMap() {
   map = L.map('map',{scrollWheelZoom:false,zoomControl:true}).setView(SANTA_FE,14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'&copy; OSM'
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OSM &copy; CARTO'
   }).addTo(map);
   // Map click handler for setting origin or dest
   map.on('click', function(e) {
@@ -383,6 +427,37 @@ function initTransportGrid() {
     };
     grid.appendChild(btn);
   });
+}
+
+// ─── Quick Destinations ───────────────────────────────────────────────────────
+function loadQuickDests() {
+  try {
+    const trips = JSON.parse(localStorage.getItem('movilidad_trips') || '[]');
+    if (!Array.isArray(trips) || trips.length === 0) return;
+    const freq = {};
+    trips.forEach(t => {
+      if (!t?.to?.name || !t?.to?.lat || !t?.to?.lon) return;
+      const key = t.to.name.trim().toLowerCase();
+      if (!freq[key]) freq[key] = { count: 0, lat: t.to.lat, lon: t.to.lon, name: t.to.name };
+      freq[key].count++;
+    });
+    const top3 = Object.values(freq).sort((a, b) => b.count - a.count).slice(0, 3);
+    if (top3.length === 0) return;
+    const container = $('quickDests');
+    container.innerHTML = '';
+    const label = document.createElement('p');
+    label.className = 'quick-dest-label'; label.style.width = '100%';
+    label.textContent = '📍 Tus destinos frecuentes:';
+    container.appendChild(label);
+    top3.forEach(d => {
+      const btn = document.createElement('button');
+      btn.className = 'quick-dest-btn'; btn.title = d.name;
+      btn.textContent = d.name.split(',')[0];
+      btn.onclick = () => { setDest(d.lat, d.lon, d.name); showToast('Destino: ' + d.name.split(',')[0], 'success'); };
+      container.appendChild(btn);
+    });
+    container.classList.remove('hidden'); container.style.display = 'flex';
+  } catch(e) {}
 }
 
 // ─── GPS (with fallback) ──────────────────────────────────────────────────────
@@ -602,8 +677,9 @@ function onDestInput(val) {
   $('estimateResult').classList.add('hidden');
   $('estimateError').classList.add('hidden');
   $('actionBar').classList.add('hidden');
+  $('quickDests').classList.add('hidden');
   clearTimeout(searchTimer);
-  if(!val||val.trim().length<3) { $('searchResults').classList.add('hidden'); return; }
+  if(!val||val.trim().length<3) { $('searchResults').classList.add('hidden'); loadQuickDests(); return; }
   searchTimer=setTimeout(()=>searchDest(val.trim()),500);
 }
 
@@ -699,13 +775,24 @@ function detectFactors() {
 
 function applySurge(base,factors) {
   let p=base;
-  if(factors.weather) p*=WEATHER_SURGE;
-  if(factors.rushHour) p*=RUSH_SURGE;
-  if(factors.weekendNight) p*=NIGHT_SURGE;
+  if(factors.weather) p*=FARES.surge.weather;
+  if(factors.rushHour) p*=FARES.surge.rush;
+  if(factors.weekendNight) p*=FARES.surge.night;
   return p;
 }
 
 function fmtPrice(v) { return isNaN(v)?'—':'$'+Math.round(v).toLocaleString('es-AR'); }
+
+function calcConfidence(dist, factors, uberP, didiP) {
+  const surgeCount = [factors.weather, factors.rushHour, factors.weekendNight].filter(Boolean).length;
+  const diff = Math.abs(uberP - didiP) / Math.max(uberP, didiP);
+  if (surgeCount >= 2) return 'Baja';
+  if (dist <= 0) return 'Baja';
+  if (uberP === didiP) return 'Baja';
+  if (diff >= 0.30) return 'Baja';
+  if (surgeCount === 0 && dist >= 0.5 && dist <= 8 && diff < 0.15) return 'Alta';
+  return 'Media';
+}
 
 async function runEstimate() {
   if(!origin.lat||!dest) {
@@ -734,23 +821,27 @@ async function runEstimate() {
     const factors=detectFactors();
     factors.weather=precipMm>0;
 
-    let uberP=applySurge(UBER_BASE+UBER_KM*dist+UBER_MIN*dur, factors);
-    let didiP=applySurge(DIDI_BASE+DIDI_KM*dist+DIDI_MIN*dur, factors);
+    let uberP=Math.max(FARES.uber.minFare, applySurge(FARES.uber.base+FARES.uber.km*dist+FARES.uber.min*dur, factors));
+    let didiP=Math.max(FARES.didi.minFare, applySurge(FARES.didi.base+FARES.didi.km*dist+FARES.didi.min*dur, factors));
+
+    const confidence = calcConfidence(dist, factors, uberP, didiP);
 
     const cheaper=Math.abs(uberP-didiP)/((uberP+didiP)/2)<0.05?'similar':uberP<didiP?'uber':'didi';
 
     // Advice
     let advice,adviceClass;
-    if(factors.weekendNight&&factors.weather){advice='Lluvia + noche de finde: precios altos';adviceClass='advice-amber';}
-    else if(factors.weekendNight){advice='🌙 Precios normales para el horario';adviceClass='advice-muted';}
-    else if(factors.rushHour&&factors.weather){advice='Hora pico + lluvia: conviene esperar';adviceClass='advice-amber';}
-    else if(factors.rushHour){advice='⏰ Conviene esperar';adviceClass='advice-amber';}
-    else if(factors.weather){advice='💡 Pedí ahora';adviceClass='advice-green';}
-    else{advice='Precios normales';adviceClass='advice-muted';}
+    if(factors.weekendNight&&factors.weather){advice='🌧️🌙 Lluvia + noche de finde: precios altos';adviceClass='advice-amber';}
+    else if(factors.weekendNight&&factors.rushHour){advice='🌙⏰ Noche de finde + hora pico: precios muy altos';adviceClass='advice-amber';}
+    else if(factors.weekendNight){advice='🌙 Noche de finde: precios altos (+30%)';adviceClass='advice-amber';}
+    else if(factors.rushHour&&factors.weather){advice='⏰🌧️ Hora pico + lluvia: conviene esperar';adviceClass='advice-amber';}
+    else if(factors.rushHour){advice='⏰ Hora pico: conviene esperar un poco';adviceClass='advice-amber';}
+    else if(factors.weather){advice='🌧️ Lluvia: demanda alta, pedí igual si urgente';adviceClass='advice-amber';}
+    else{advice='✅ Precios normales';adviceClass='advice-muted';}
 
     // Deep links
     const uberLink='https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+'&pickup[formatted_address]='+encodeURIComponent(origin.name)+'&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon+'&dropoff[formatted_address]='+encodeURIComponent(dest.name);
-    const didiLink='https://web.didiglobal.com/rider/?action=setPickup&pickupLat='+origin.lat+'&pickupLng='+origin.lon+'&dropoffLat='+dest.lat+'&dropoffLng='+dest.lon;
+    const didiLinkData = buildDiDiLinkSafe(origin, dest);
+    const didiLink = didiLinkData.primary;
 
     currentEstimate={uberP,didiP,dist,dur,factors,cheaper,uberLink,didiLink};
 
@@ -759,7 +850,8 @@ async function runEstimate() {
     $('adviceBanner').className='advice-banner '+adviceClass;
     $('metaDist').textContent='📏 '+dist.toFixed(1)+' km';
     $('metaDur').textContent='⏱️ ~'+Math.round(dur)+' min';
-    $('metaConf').textContent='🎯 Baja';
+    const confEmoji = { 'Alta': '🟢', 'Media': '🟡', 'Baja': '🔴' };
+    $('metaConf').textContent = confEmoji[confidence] + ' ' + confidence;
 
     $('uberPrice').textContent=fmtPrice(uberP);
     $('uberRange').textContent=fmtPrice(uberP*.85)+' — '+fmtPrice(uberP*1.25);
@@ -799,6 +891,70 @@ function showEstimateError(msg) {
   $('actionBar').classList.add('hidden');
   $('estimateErrorMsg').textContent=msg;
   $('estimateError').classList.remove('hidden');
+}
+
+// ─── DiDi Deep Link (Android intent:// + ADFS) ───────────────────────────────
+function buildDiDiLinkSafe(org, dst) {
+  if (!org || !dst || !org.lat || !dst.lat) {
+    return { primary: 'https://web.didiglobal.com/', fallback: 'https://web.didiglobal.com/', isIntent: false };
+  }
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (isAndroid) {
+    const pickupLat = org.lat, pickupLng = org.lon;
+    const dropoffLat = dst.lat, dropoffLng = dst.lon;
+    const fallbackUrl = encodeURIComponent('https://web.didiglobal.com/rider/?action=setPickup&pickupLat='+pickupLat+'&pickupLng='+pickupLng+'&dropoffLat='+dropoffLat+'&dropoffLng='+dropoffLng);
+    const intentUrl = 'intent://ride/?pickup_lat='+pickupLat+'&pickup_lng='+pickupLng+'&dropoff_lat='+dropoffLat+'&dropoff_lng='+dropoffLng+'#Intent;scheme=https;package=com.didiglobal.passenger;S.browser_fallback_url='+fallbackUrl+';end';
+    return { primary: intentUrl, fallback: 'https://web.didiglobal.com/', isIntent: true };
+  }
+  return { primary: 'https://web.didiglobal.com/', fallback: 'https://web.didiglobal.com/', isIntent: false };
+}
+
+const deepLinkState = { pending: null, timeout: null, startTime: 0, _focusHandler: null, _visibilityHandler: null };
+
+function openDiDiTracked() {
+  const linkData = buildDiDiLinkSafe(origin, dest);
+  const url = linkData.primary;
+  const start = Date.now();
+  deepLinkState.pending = 'didi'; deepLinkState.startTime = start;
+
+  function onVisible() {
+    if (document.visibilityState !== 'visible') return;
+    const elapsed = Date.now() - deepLinkState.startTime;
+    if (elapsed > 500 && deepLinkState.pending === 'didi') {
+      clearTimeout(deepLinkState.timeout); deepLinkState.pending = null;
+      console.log('[DiDi] deep link likely succeeded');
+      document.removeEventListener('visibilitychange', onVisible); deepLinkState._visibilityHandler = null;
+    }
+  }
+  if (deepLinkState._visibilityHandler) document.removeEventListener('visibilitychange', deepLinkState._visibilityHandler);
+  deepLinkState._visibilityHandler = onVisible;
+  document.addEventListener('visibilitychange', onVisible);
+
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!win) { clearTimeout(deepLinkState.timeout); deepLinkState.pending = null; showDiDiFallback('popup_blocked', url); return; }
+
+  deepLinkState.timeout = setTimeout(function() {
+    if (deepLinkState.pending === 'didi') { deepLinkState.pending = null; showDiDiFallback('no_confirmed_open', url); }
+  }, 2500);
+
+  function onFocusReturn() {
+    var elapsed = Date.now() - start;
+    if (elapsed > 500) { clearTimeout(deepLinkState.timeout); deepLinkState.pending = null; window.removeEventListener('focus', onFocusReturn); }
+  }
+  if (deepLinkState._focusHandler) window.removeEventListener('focus', deepLinkState._focusHandler);
+  deepLinkState._focusHandler = onFocusReturn;
+  window.addEventListener('focus', onFocusReturn);
+
+  recordRideAndGo('didi');
+}
+
+function showDiDiFallback(reason, url) {
+  var msgs = { popup_blocked: 'El navegador bloqueó la apertura de DiDi.', no_confirmed_open: 'No se pudo confirmar la apertura de DiDi.', generic: 'No se pudo abrir DiDi.' };
+  var msg = msgs[reason] || msgs.generic;
+  var copyOk = confirm(msg + '\n\nOK → Copiar link al portapapeles\nCancelar → Abrir web de DiDi');
+  if (copyOk) {
+    try { navigator.clipboard.writeText(url); showToast('Link de DiDi copiado ✓', 'success'); } catch(e) { showToast('No se pudo copiar el link', 'error'); }
+  } else { window.open('https://web.didiglobal.com/', '_blank'); }
 }
 
 // ─── Map ──────────────────────────────────────────────────────────────────────
@@ -864,6 +1020,7 @@ function logTransport() {
   $('logForm').classList.add('hidden');
   $('logToggle').textContent='Registrá cómo viajaste';
   $('logPrice').value='';
+  loadQuickDests();
 }
 
 // ─── Rate Limiter (1 req/s to Nominatim) ──────────────────────────────────────
@@ -884,7 +1041,10 @@ function showToast(msg,type='info') {
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
-function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 </script>
 </body>
 </html>
