@@ -75,3 +75,40 @@ Stage Summary:
 - Example output for 2km route: Más barato: Uber Moto $2.250, Más rápido: Empate técnico · Uber/DiDi/Maxim, Mejor equilibrio: Uber Moto $2.250/6min
 - Zero modifications to existing CSS, layout, cards, drag-and-drop, providers, FareRegistry
 - Backup created at movilidad.backup.html
+
+---
+Task ID: MODO-DIABLO-FASE-3.2
+Agent: Main
+Task: Implementar PreferenceEngine personalizado para VOY v2
+
+Work Log:
+- Read current movilidad.html with FASE 3.1 RecommendationEngine
+- Added _prefs state object with 7 boolean preferences
+- Added loadPrefs()/savePrefs() with localStorage persistence (key: voy_prefs)
+- Added togglePref() with mutual exclusion for price/speed
+- Added renderPrefsPanel() with collapsible UI (7 checkboxes with icons)
+- Added prefsPanel HTML div between recommendationBlock and cardsContainer
+- Modified computeRecommendation() to:
+  - Use dynamic weights (price 0.8/0.2, speed 0.2/0.8, default 0.6/0.4)
+  - Filter moto alternatives when avoidMoto=true
+  - Add bus walkMin and hasTransfer to alternatives for penalty calculation
+  - Apply penalties: avoidLongWalks (*1.3+0.15), avoidTransfers (*1.5+0.25), withLuggage (*2.0+0.3), withChildren (*2.5+0.5)
+  - Build transparency reason text
+- Modified renderRecommendation() to display reason below "Mejor equilibrio"
+- Added additive floor to penalties (0.15-0.5) so they work even when score=0
+- QA: All 7 cases verified with Agent Browser
+
+Stage Summary:
+- PreferenceEngine fully functional with localStorage persistence
+- Panel is collapsible, shows active count when collapsed
+- Mutual exclusion: price/speed toggles
+- Transparency: reason shown below recommendation
+- QA results:
+  - Caso 1 (sin prefs): "configuración estándar" → Uber Moto wins ✓
+  - Caso 2 (evitar motos): moto excluded → Maxim wins ✓
+  - Caso 3 (equipaje): moto penalized → Maxim wins balance ✓
+  - Caso 4 (niños): moto heavily penalized → Maxim wins balance ✓
+  - Caso 5 (precio): price weight 80% → cheapest wins balance ✓
+  - Caso 6 (velocidad): time weight 80% → fastest wins balance ✓
+  - Caso 7 (combinado): multiple reasons shown correctly ✓
+- Zero regressions: cards, drag-and-drop, GPS, map all working
