@@ -52,6 +52,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .voy-label--red{background:#dc2626;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
 .voy-label-popup .maplibregl-popup-tip{display:none}
+.voy-label--amber{background:#f59e0b;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 /* MAP HINT */
 .map-hint{display:none;padding:6px 12px;background:#eff6ff;color:#1d4ed8;font-size:12px;border-bottom:1px solid #bfdbfe}
 .map-hint.show{display:block}
@@ -250,6 +251,10 @@ var _originMarker=null;
 var _destMarker=null;
 var _originPopup=null;
 var _destPopup=null;
+var _busStopMarkers=[];
+var _busStopPopups=[];
+var _busRouteActive=false;
+var _busRouteIdx=-1;
 var _estimations=null; // array of {mode,...}
 var _lastSearchTime=0;
 var _acTimeout=null; // autocomplete debounce
@@ -475,6 +480,7 @@ function updateMapMarkers(){
     _map.flyTo({center:[_origin.lon,_origin.lat],zoom:15});
   }
 
+  if(_busRouteActive)clearBusRoute();
   drawRouteLine();
 
   var cBtn=document.getElementById('centerRouteBtn');
@@ -523,6 +529,126 @@ function refreshDestLabel(){
     .setLngLat([_dest.lon,_dest.lat])
     .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
     .addTo(_map);
+}
+
+// ===================== BUS ROUTE OVERLAY =====================
+function drawBusRoute(est){
+  if(!est||!est.stopOrigen||!_origin||!_dest)return;
+
+  // Remove normal route line first
+  if(_map.getSource('route-src')){
+    if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
+    if(_map.getLayer('route-line'))_map.removeLayer('route-line');
+    _map.removeSource('route-src');
+  }
+
+  // Build segment coordinates
+  var walkSegs=[];
+  var rideSegs=[];
+  var transSegs=[];
+
+  if(est.combination){
+    // 5 segments: walk→ride1→trans→ride2→walk
+    walkSegs.push([[_origin.lon,_origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
+    rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopTransbordo.lon,est.stopTransbordo.lat]]);
+    transSegs.push([[est.stopTransbordo.lon,est.stopTransbordo.lat],[est.stopTransbordo2.lon,est.stopTransbordo2.lat]]);
+    rideSegs.push([[est.stopTransbordo2.lon,est.stopTransbordo2.lat],[est.stopDest.lon,est.stopDest.lat]]);
+    walkSegs.push([[est.stopDest.lon,est.stopDest.lat],[_dest.lon,_dest.lat]]);
+  }else{
+    // 3 segments: walk→ride→walk
+    walkSegs.push([[_origin.lon,_origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
+    rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopDest.lon,est.stopDest.lat]]);
+    walkSegs.push([[est.stopDest.lon,est.stopDest.lat],[_dest.lon,_dest.lat]]);
+  }
+
+  // Add walk segments (green dashed)
+  if(walkSegs.length){
+    _map.addSource('bus-walk-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:walkSegs}}});
+    _map.addLayer({id:'bus-walk-line',type:'line',source:'bus-walk-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#22c55e','line-width':3,'line-opacity':0.75,'line-dasharray':[2,2]}});
+  }
+
+  // Add ride segments (blue solid + shadow)
+  if(rideSegs.length){
+    _map.addSource('bus-ride-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:rideSegs}}});
+    _map.addLayer({id:'bus-ride-shadow',type:'line',source:'bus-ride-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
+    _map.addLayer({id:'bus-ride-line',type:'line',source:'bus-ride-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.9}});
+  }
+
+  // Add transfer segment (orange dashed)
+  if(transSegs.length){
+    _map.addSource('bus-trans-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:transSegs}}});
+    _map.addLayer({id:'bus-trans-line',type:'line',source:'bus-trans-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#f59e0b','line-width':3,'line-opacity':0.8,'line-dasharray':[3,2]}});
+  }
+
+  // Add stop markers
+  var stops=[];
+  stops.push({point:est.stopOrigen,label:'Subida'});
+  stops.push({point:est.stopDest,label:'Bajada'});
+  if(est.combination){
+    stops.push({point:est.stopTransbordo,label:'Bajada transbordo'});
+    stops.push({point:est.stopTransbordo2,label:'Subida transbordo'});
+  }
+
+  stops.forEach(function(s){
+    var el=document.createElement('div');
+    el.style.cssText='width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+    var marker=new maplibregl.Marker({element:el}).setLngLat([s.point.lon,s.point.lat]).addTo(_map);
+    _busStopMarkers.push(marker);
+    var popup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:14,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([s.point.lon,s.point.lat])
+      .setHTML('<div class="voy-label voy-label--amber">'+escapeHtml(s.point.nombre)+' · '+s.label+'</div>')
+      .addTo(_map);
+    _busStopPopups.push(popup);
+  });
+
+  // Fit bounds to include all stops + origin/dest
+  var bounds=new maplibregl.LngLatBounds();
+  bounds.extend([_origin.lon,_origin.lat]);
+  bounds.extend([_dest.lon,_dest.lat]);
+  stops.forEach(function(s){bounds.extend([s.point.lon,s.point.lat])});
+  _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
+}
+
+function clearBusRoute(){
+  // Remove bus route sources/layers
+  ['bus-walk-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-ride-shadow','bus-ride-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-trans-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-walk-src','bus-ride-src','bus-trans-src'].forEach(function(id){if(_map.getSource(id))_map.removeSource(id)});
+
+  // Remove stop markers & popups
+  _busStopMarkers.forEach(function(m){m.remove()});
+  _busStopPopups.forEach(function(p){p.remove()});
+  _busStopMarkers=[];
+  _busStopPopups=[];
+
+  _busRouteActive=false;
+  _busRouteIdx=-1;
+}
+
+function toggleBusRoute(idx){
+  if(!_estimations||!_estimations[idx])return;
+  var est=_estimations[idx];
+
+  if(_busRouteActive&&_busRouteIdx===idx){
+    // Toggle OFF
+    clearBusRoute();
+    drawRouteLine();
+    // Update button text
+    var btn=document.querySelector('[data-action="bus-detail"][data-bus-idx="'+idx+'"]');
+    if(btn)btn.textContent='Ver recorrido';
+  }else{
+    // Toggle ON (or switch to different bus)
+    if(_busRouteActive)clearBusRoute();
+    drawBusRoute(est);
+    _busRouteActive=true;
+    _busRouteIdx=idx;
+    // Update all bus buttons
+    document.querySelectorAll('[data-action="bus-detail"]').forEach(function(b){
+      var bIdx=parseInt(b.getAttribute('data-bus-idx'));
+      b.textContent=(bIdx===idx)?'Ocultar recorrido':'Ver recorrido';
+    });
+  }
 }
 
 // ===================== FIX 4+5+6: INLINE AUTOCOMPLETE =====================
@@ -725,6 +851,7 @@ function runEstimations(){
   var distKm=haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon);
 
   _estimations=[];
+  if(_busRouteActive)clearBusRoute();
 
   // 1. Walk
   var walkMin=(distKm/5)*60;
@@ -943,7 +1070,9 @@ function renderActiveCard(est,idx){
     var busText=formatBusText(est);
     h+='<p class="rc-subtitle" style="font-size:13px;line-height:1.5;white-space:pre-line">'+busText+'</p>';
     h+='<div class="rc-actions">';
-    h+='<button class="rc-action bus" data-action="bus-detail">Ver recorrido</button>';
+    if(est.stopOrigen){
+      h+='<button class="rc-action bus" data-action="bus-detail" data-bus-idx="'+idx+'">Ver recorrido</button>';
+    }
     h+='</div>';
   }
 
@@ -1104,7 +1233,8 @@ function attachButtonEvents(){
   document.querySelectorAll('[data-action="bus-detail"]').forEach(function(btn){
     btn.addEventListener('click',function(e){
       e.stopPropagation();
-      showToast('Función de recorrido próximamente','info');
+      var idx=parseInt(btn.getAttribute('data-bus-idx'));
+      if(!isNaN(idx))toggleBusRoute(idx);
     });
   });
 }
