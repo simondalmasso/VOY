@@ -451,20 +451,20 @@ function updateMapMarkers(){
   if(_destPopup){_destPopup.remove();_destPopup=null}
 
   if(_origin){
-    var el=document.createElement('div');
+    const el=document.createElement('div');
     el.style.cssText='width:18px;height:18px;background:#16a34a;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
     _originMarker=new maplibregl.Marker({element:el}).setLngLat([_origin.lon,_origin.lat]).addTo(_map);
-    var oLabel=_origin.name||'Origen';
+    const oLabel=_origin.name||'Origen';
     _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
       .setLngLat([_origin.lon,_origin.lat])
       .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
       .addTo(_map);
   }
   if(_dest){
-    var el2=document.createElement('div');
+    const el2=document.createElement('div');
     el2.style.cssText='width:18px;height:18px;background:#dc2626;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
     _destMarker=new maplibregl.Marker({element:el2}).setLngLat([_dest.lon,_dest.lat]).addTo(_map);
-    var dLabel=_dest.name||'Destino';
+    const dLabel=_dest.name||'Destino';
     _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
       .setLngLat([_dest.lon,_dest.lat])
       .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
@@ -472,7 +472,7 @@ function updateMapMarkers(){
   }
 
   if(_origin&&_dest){
-    var bounds=new maplibregl.LngLatBounds();
+    const bounds=new maplibregl.LngLatBounds();
     bounds.extend([_origin.lon,_origin.lat]);
     bounds.extend([_dest.lon,_dest.lat]);
     _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:800});
@@ -483,7 +483,7 @@ function updateMapMarkers(){
   if(_busRouteActive)clearBusRoute();
   drawRouteLine();
 
-  var cBtn=document.getElementById('centerRouteBtn');
+  const cBtn=document.getElementById('centerRouteBtn');
   if(cBtn)cBtn.style.display=(_origin&&_dest)?'block':'none';
 }
 
@@ -548,6 +548,8 @@ function drawBusRoute(est){
   var transSegs=[];
 
   if(est.combination){
+    // Guard: stopTransbordo2 puede no existir en datos legacy
+    if(!est.stopTransbordo2) est.stopTransbordo2 = est.stopTransbordo;
     // 5 segments: walk→ride1→trans→ride2→walk
     walkSegs.push([[_origin.lon,_origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
     rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopTransbordo.lon,est.stopTransbordo.lat]]);
@@ -584,9 +586,9 @@ function drawBusRoute(est){
   var stops=[];
   stops.push({point:est.stopOrigen,label:'Subida'});
   stops.push({point:est.stopDest,label:'Bajada'});
-  if(est.combination){
+  if(est.combination && est.stopTransbordo){
     stops.push({point:est.stopTransbordo,label:'Bajada transbordo'});
-    stops.push({point:est.stopTransbordo2,label:'Subida transbordo'});
+    stops.push({point:est.stopTransbordo2||est.stopTransbordo,label:'Subida transbordo'});
   }
 
   stops.forEach(function(s){
@@ -979,26 +981,35 @@ function findNearestBikeStation(point){
 
 // Moto: solo Uber Moto confirmado, DiDi Moto sin confirmar → Consultar
 function estimateMoto(distKm){
-  var timeMin=(distKm/35)*60;
+  var durMoto=(distKm/35)*60;
   var autoResult=estimateAuto(distKm);
   var d=FareRegistry.moto.discount;
   return{
-    timeMin:timeMin,
+    timeMin:Math.round(durMoto),
+    uberMotoTimeMin:Math.round(durMoto*1.00),
+    didiMotoTimeMin:Math.round(durMoto*1.04),
     uberMotoPrice:autoResult.uberPrice!=null?Math.ceil(autoResult.uberPrice*d):null,
     didiMotoPrice:null // No confirmado en Santa Fe → Consultar
   };
 }
 
 function estimateAuto(distKm){
-  var timeMin=(distKm/25)*60;
-  var uberPrice=calcAppPrice('uber',distKm,timeMin);
-  var didiPrice=calcAppPrice('didi',distKm,timeMin);
-  var maximPrice=calcAppPrice('maxim',distKm,timeMin);
-  var cabifyPrice=calcAppPrice('cabify',distKm,timeMin); // null
+  var durCar=(distKm/25)*60;
+  var uberPrice=calcAppPrice('uber',distKm,durCar);
+  var didiPrice=calcAppPrice('didi',distKm,durCar);
+  var maximPrice=calcAppPrice('maxim',distKm,durCar);
+  var cabifyPrice=calcAppPrice('cabify',distKm,durCar); // null
   var taxiPrice=estimateTaxi(distKm);
   var remisPrice=taxiPrice;
   var taxiappPrice=taxiPrice;
-  return{timeMin:timeMin,uberPrice:uberPrice,didiPrice:didiPrice,
+  return{timeMin:Math.round(durCar),
+    uberTimeMin:Math.round(durCar*1.00),
+    didiTimeMin:Math.round(durCar*1.03),
+    maximTimeMin:Math.round(durCar*1.05),
+    taxiTimeMin:Math.round(durCar*1.10),
+    remisTimeMin:Math.round(durCar*1.08),
+    taxiappTimeMin:Math.round(durCar*1.07),
+    uberPrice:uberPrice,didiPrice:didiPrice,
     maximPrice:maximPrice,cabifyPrice:cabifyPrice,
     taxiPrice:taxiPrice,remisPrice:remisPrice,taxiappPrice:taxiappPrice};
 }
@@ -1096,22 +1107,20 @@ function renderActiveCard(est,idx){
   else if(est.mode==='moto'){
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    var motoTime=est.timeMin+2;
-    h+=renderProviderRow('uber_moto','Uber Moto',est.uberMotoPrice,'uber-moto',motoTime);
-    h+=renderProviderRow('didi_moto','DiDi Moto',est.didiMotoPrice,'moto-didi',motoTime);
+    h+=renderProviderRow('uber_moto','Uber Moto',est.uberMotoPrice,'uber-moto',est.uberMotoTimeMin);
+    h+=renderProviderRow('didi_moto','DiDi Moto',est.didiMotoPrice,'moto-didi',est.didiMotoTimeMin);
   }
 
   else if(est.mode==='auto'){
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    h+=renderProviderRow('uber','Uber',est.uberPrice,'uber');
-    h+=renderProviderRow('didi','DiDi',est.didiPrice,'didi');
-    h+=renderProviderRow('maxim','Maxim',est.maximPrice,'maxim');
+    h+=renderProviderRow('uber','Uber',est.uberPrice,'uber',est.uberTimeMin);
+    h+=renderProviderRow('didi','DiDi',est.didiPrice,'didi',est.didiTimeMin);
+    h+=renderProviderRow('maxim','Maxim',est.maximPrice,'maxim',est.maximTimeMin);
     h+=renderProviderRow('cabify','Cabify',est.cabifyPrice,'cabify');
-    var taxiTime=est.timeMin+2;
-    h+=renderProviderRow('taxi','Radiotaxi',est.taxiPrice,'radiotaxi',taxiTime,'https://wa.link/n7u2e7');
-    h+=renderProviderRow('remis','Remises Real',est.remisPrice,'remis',taxiTime,'https://wa.link/rqov56');
-    h+=renderProviderRow('taxiapp','TaxiApp',est.taxiappPrice,'taxiapp',taxiTime,'https://wa.link/vavbcl');
+    h+=renderProviderRow('taxi','Radiotaxi',est.taxiPrice,'radiotaxi',est.taxiTimeMin,'https://wa.link/n7u2e7');
+    h+=renderProviderRow('remis','Remises Real',est.remisPrice,'remis',est.remisTimeMin,'https://wa.link/rqov56');
+    h+=renderProviderRow('taxiapp','TaxiApp',est.taxiappPrice,'taxiapp',est.taxiappTimeMin,'https://wa.link/vavbcl');
   }
 
   h+='</div>';
@@ -1424,26 +1433,26 @@ function computeRecommendation(){
     }
 
     if(est.mode==='moto'){
-      var motoTime=Math.ceil(est.timeMin+2);
       if(est.uberMotoPrice!=null){
-        alternatives.push({name:'Uber Moto',price:est.uberMotoPrice,time:motoTime,mode:'moto',icon:'🏍️'});
+        alternatives.push({name:'Uber Moto',price:est.uberMotoPrice,time:est.uberMotoTimeMin||est.timeMin,mode:'moto',icon:'🏍️'});
       }
       // DiDi Moto price=null → excluded from recommendation (can't score without price)
     }
 
     if(est.mode==='auto'){
       var autoProviders=[
-        {key:'uber',name:'Uber',priceKey:'uberPrice',timeOffset:0},
-        {key:'didi',name:'DiDi',priceKey:'didiPrice',timeOffset:0},
-        {key:'maxim',name:'Maxim',priceKey:'maximPrice',timeOffset:0},
-        {key:'cabify',name:'Cabify',priceKey:'cabifyPrice',timeOffset:0},
-        {key:'taxi',name:'Radiotaxi',priceKey:'taxiPrice',timeOffset:2},
-        {key:'remis',name:'Remises Real',priceKey:'remisPrice',timeOffset:2},
-        {key:'taxiapp',name:'TaxiApp',priceKey:'taxiappPrice',timeOffset:2}
+        {key:'uber',name:'Uber',priceKey:'uberPrice',timeKey:'uberTimeMin'},
+        {key:'didi',name:'DiDi',priceKey:'didiPrice',timeKey:'didiTimeMin'},
+        {key:'maxim',name:'Maxim',priceKey:'maximPrice',timeKey:'maximTimeMin'},
+        {key:'cabify',name:'Cabify',priceKey:'cabifyPrice',timeKey:null},
+        {key:'taxi',name:'Radiotaxi',priceKey:'taxiPrice',timeKey:'taxiTimeMin'},
+        {key:'remis',name:'Remises Real',priceKey:'remisPrice',timeKey:'remisTimeMin'},
+        {key:'taxiapp',name:'TaxiApp',priceKey:'taxiappPrice',timeKey:'taxiappTimeMin'}
       ];
       autoProviders.forEach(function(p){
         if(est[p.priceKey]!=null&&PROVIDERS[p.key]&&PROVIDERS[p.key].available){
-          alternatives.push({name:p.name,price:est[p.priceKey],time:Math.ceil(est.timeMin+p.timeOffset),mode:'auto',icon:'🚗'});
+          var pTime=p.timeKey&&est[p.timeKey]?est[p.timeKey]:est.timeMin;
+          alternatives.push({name:p.name,price:est[p.priceKey],time:pTime,mode:'auto',icon:'🚗'});
         }
       });
     }
@@ -1469,22 +1478,21 @@ function computeRecommendation(){
     var timeNorm=maxTime>minTime?(a.time-minTime)/(maxTime-minTime):0;
     a.score=priceNorm*priceW+timeNorm*timeW;
 
-    // Penalty: avoid long walks → +30% if walkMin > 10
-    if(_prefs.avoidLongWalks&&a.walkMin&&a.walkMin>10){
-      a.score=a.score*1.3+0.15;
+    // Penalizaciones aditivas (lineales, independientes del score base)
+    if(_prefs.avoidLongWalks&&a.walkMin&&a.walkMin>8){
+      a.score+=0.20;
     }
-    // Penalty: avoid transfers → +50% if bus has combination
     if(_prefs.avoidTransfers&&a.hasTransfer){
-      a.score=a.score*1.5+0.25;
+      a.score+=0.25;
     }
-    // Penalty: with luggage → +100% for moto
-    if(_prefs.withLuggage&&a.mode==='moto'){
-      a.score=a.score*2.0+0.3;
+    if(_prefs.withLuggage&&(a.mode==='bike'||a.mode==='walk')){
+      a.score+=0.30;
     }
-    // Penalty: with children → +150% for moto and bike
-    if(_prefs.withChildren&&(a.mode==='moto'||a.mode==='bike')){
-      a.score=a.score*2.5+0.5;
+    if(_prefs.withChildren&&a.mode==='moto'){
+      a.score+=0.35;
     }
+    // Clamp score to max 1.0
+    a.score=Math.min(a.score,1.0);
   });
 
   // Sort by each criterion
