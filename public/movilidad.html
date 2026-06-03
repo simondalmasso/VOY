@@ -128,6 +128,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <!-- MAP HINT -->
 <div class="map-hint" id="mapHint">🗺️ Ruta en mapa · Arrastrá para cambiar</div>
 
+<!-- RECOMMENDATION BLOCK -->
+<div id="recommendationBlock" style="display:none;background:var(--card-bg);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 12px;margin:8px 12px 0;box-shadow:0 0 0 1px rgba(37,99,235,.1)"></div>
+
 <!-- ROUTE CARDS -->
 <div class="cards" id="cardsContainer"></div>
 
@@ -854,6 +857,7 @@ function renderCards(){
   container.innerHTML=html;
   initDragAndDrop();
   attachButtonEvents();
+  renderRecommendation();
 }
 
 function renderActiveCard(est,idx){
@@ -1126,6 +1130,139 @@ function showToast(msg,type){
     el.style.transition='opacity .3s';
     setTimeout(function(){el.remove()},300);
   },2500);
+}
+
+// ===================== RECOMMENDATION ENGINE =====================
+function computeRecommendation(){
+  if(!_estimations||!_estimations.length)return null;
+  var alternatives=[];
+
+  _estimations.forEach(function(est){
+    // Skip walk/bike: free options trivialize price-based recommendations
+    if(est.mode==='walk'||est.mode==='bike')return;
+
+    if(est.mode==='bus'){
+      if(est.price!=null&&est.timeMin!=null&&est.timeMin>0){
+        alternatives.push({name:'Colectivo',price:est.price,time:Math.ceil(est.timeMin),mode:'bus',icon:'🚌'});
+      }
+    }
+
+    if(est.mode==='moto'){
+      var motoTime=Math.ceil(est.timeMin+2);
+      if(est.uberMotoPrice!=null){
+        alternatives.push({name:'Uber Moto',price:est.uberMotoPrice,time:motoTime,mode:'moto',icon:'🏍️'});
+      }
+      // DiDi Moto price=null → excluded from recommendation (can't score without price)
+    }
+
+    if(est.mode==='auto'){
+      var autoProviders=[
+        {key:'uber',name:'Uber',priceKey:'uberPrice',timeOffset:0},
+        {key:'didi',name:'DiDi',priceKey:'didiPrice',timeOffset:0},
+        {key:'maxim',name:'Maxim',priceKey:'maximPrice',timeOffset:0},
+        {key:'cabify',name:'Cabify',priceKey:'cabifyPrice',timeOffset:0},
+        {key:'taxi',name:'Radiotaxi',priceKey:'taxiPrice',timeOffset:2},
+        {key:'remis',name:'Remises Real',priceKey:'remisPrice',timeOffset:2},
+        {key:'taxiapp',name:'TaxiApp',priceKey:'taxiappPrice',timeOffset:2}
+      ];
+      autoProviders.forEach(function(p){
+        if(est[p.priceKey]!=null&&PROVIDERS[p.key]&&PROVIDERS[p.key].available){
+          alternatives.push({name:p.name,price:est[p.priceKey],time:Math.ceil(est.timeMin+p.timeOffset),mode:'auto',icon:'🚗'});
+        }
+      });
+    }
+  });
+
+  if(!alternatives.length)return null;
+
+  // Normalize price and time to [0,1] range
+  var prices=alternatives.map(function(a){return a.price});
+  var times=alternatives.map(function(a){return a.time});
+  var minPrice=Math.min.apply(null,prices);
+  var maxPrice=Math.max.apply(null,prices);
+  var minTime=Math.min.apply(null,times);
+  var maxTime=Math.max.apply(null,times);
+
+  alternatives.forEach(function(a){
+    var priceNorm=maxPrice>minPrice?(a.price-minPrice)/(maxPrice-minPrice):0;
+    var timeNorm=maxTime>minTime?(a.time-minTime)/(maxTime-minTime):0;
+    a.score=priceNorm*0.6+timeNorm*0.4;
+  });
+
+  // Sort by each criterion
+  var byPrice=alternatives.slice().sort(function(a,b){return a.price-b.price});
+  var byTime=alternatives.slice().sort(function(a,b){return a.time-b.time});
+  var byScore=alternatives.slice().sort(function(a,b){return a.score-b.score});
+
+  // Tie detection: < 5% difference → empate técnico
+  function getTied(arr,prop){
+    if(!arr.length)return[];
+    var best=arr[0];
+    var threshold=Math.abs(best[prop])*0.05;
+    return arr.filter(function(a){return Math.abs(a[prop]-best[prop])<=threshold});
+  }
+
+  return{
+    cheapest:getTied(byPrice,'price'),
+    fastest:getTied(byTime,'time'),
+    balanced:getTied(byScore,'score')
+  };
+}
+
+function renderRecommendation(){
+  var el=document.getElementById('recommendationBlock');
+  if(!el)return;
+
+  var rec=computeRecommendation();
+  if(!rec||(!rec.cheapest.length&&!rec.fastest.length&&!rec.balanced.length)){
+    el.style.display='none';
+    return;
+  }
+
+  el.style.display='block';
+  var html='';
+
+  // Header
+  html+='<div style="font-size:11px;font-weight:800;color:var(--accent);margin-bottom:6px;letter-spacing:.5px">🏆 RECOMENDACIÓN VOY</div>';
+
+  // Más barato
+  if(rec.cheapest.length){
+    html+='<div style="font-size:12px;margin-bottom:4px;line-height:1.4">💰 <b>Más barato:</b> ';
+    if(rec.cheapest.length>1){
+      html+='<span style="color:var(--orange);font-weight:600">Empate técnico</span> · '+
+        rec.cheapest.map(function(a){return a.name}).join(' / ');
+    }else{
+      html+=rec.cheapest[0].name+' — <b>'+formatPrice(rec.cheapest[0].price)+'</b>';
+    }
+    html+='</div>';
+  }
+
+  // Más rápido
+  if(rec.fastest.length){
+    html+='<div style="font-size:12px;margin-bottom:4px;line-height:1.4">⚡ <b>Más rápido:</b> ';
+    if(rec.fastest.length>1){
+      html+='<span style="color:var(--orange);font-weight:600">Empate técnico</span> · '+
+        rec.fastest.map(function(a){return a.name}).join(' / ');
+    }else{
+      html+=rec.fastest[0].icon+' '+rec.fastest[0].name+' — <b>'+formatMin(rec.fastest[0].time)+'</b>';
+    }
+    html+='</div>';
+  }
+
+  // Mejor equilibrio
+  if(rec.balanced.length){
+    html+='<div style="font-size:12px;line-height:1.4">⚖️ <b>Mejor equilibrio:</b> ';
+    if(rec.balanced.length>1){
+      html+='<span style="color:var(--orange);font-weight:600">Empate técnico</span> · '+
+        rec.balanced.map(function(a){return a.name}).join(' / ');
+    }else{
+      var b=rec.balanced[0];
+      html+=b.name+' — <b>'+formatPrice(b.price)+'</b> / '+formatMin(b.time);
+    }
+    html+='</div>';
+  }
+
+  el.innerHTML=html;
 }
 
 // ===================== DARK MODE AUTO =====================
