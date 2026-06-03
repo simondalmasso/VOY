@@ -167,61 +167,33 @@ var BIKE_STATIONS=[
   {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'}
 ];
 
-var LANDMARKS=[
-  {nombre:'Puente Colgante',lat:-31.6230,lon:-60.6850,calles:'Av. Costanera y Av. del Valle'},
-  {nombre:'Catedral Metropolitana',lat:-31.6315,lon:-60.7010,calles:'San Martín y San Jerónimo'},
-  {nombre:'Universidad Nacional del Litoral',lat:-31.6340,lon:-60.6990,calles:'9 de Julio y San Jerónimo'},
-  {nombre:'Parque del Encuentro',lat:-31.6270,lon:-60.6800,calles:'Av. Costanera Oeste'},
-  {nombre:'Museo Histórico',lat:-31.6330,lon:-60.7015,calles:'San Martín y 25 de Mayo'},
-  {nombre:'Puente Oroño',lat:-31.6190,lon:-60.6820,calles:'Av. Costanera y Bvd. Pellegrini'},
-  {nombre:'Mercado Norte',lat:-31.6360,lon:-60.6980,calles:'San Martín y Tucumán'},
-  {nombre:'Iglesia San Francisco',lat:-31.6320,lon:-60.7030,calles:'San Martín y Ameghino'},
-  {nombre:'Shopping La Estación',lat:-31.6290,lon:-60.6895,calles:'Gral. López y Javier de la Rosa'},
-  {nombre:'Barrio Candioti',lat:-31.6080,lon:-60.6900,calles:'Norte de la ciudad'},
-  {nombre:'Barrio Guadalupe',lat:-31.6380,lon:-60.6800,calles:'Noreste de la ciudad'},
-  {nombre:'Barrio Centenario',lat:-31.6140,lon:-60.7100,calles:'Oeste de la ciudad'}
-];
-
 var PROVIDERS={
-  uber:{name:'Uber',available:true,color:'#000',confirmed:true,source:'uber.com + operadores locales'},
-  didi:{name:'DiDi',available:true,color:'#f97316',confirmed:true,source:'DiDi Argentina - operativo desde Nov 2024'},
-  maxim:{name:'Maxim',available:true,color:'#8b5cf6',confirmed:true,source:'maxim.taxi + noticias locales'},
-  cabify:{name:'Cabify',available:true,color:'#2DC4B2',confirmed:true,price:null,source:'cabify.com lista Santa Fe'},
-  indriver:{name:'inDriver',available:false,confirmed:true,source:'No opera en Argentina'},
-  bolt:{name:'Bolt',available:false,confirmed:true,source:'No opera en Argentina'},
-  taxi:{name:'Radiotaxi',available:true,color:'#d97706',confirmed:true,source:'wa.link/n7u2e7 servicio local'},
-  remis:{name:'Remises Real',available:true,color:'#6b7280',confirmed:true,source:'wa.link/rqov56 servicio local'},
-  taxiapp:{name:'TaxiApp',available:true,color:'#25d366',confirmed:true,source:'@taxiapp_santafe app local'},
-  uber_moto:{name:'Uber Moto',available:true,color:'#000',confirmed:true,source:'YouTube/TikTok - operativo en Santa Fe'},
-  didi_moto:{name:'DiDi Moto',available:true,color:'#f97316',confirmed:false,price:null,source:'Disponible en Argentina, no confirmado en SF'}
+  uber:{name:'Uber',available:true,color:'#000'},
+  didi:{name:'DiDi',available:true,color:'#f97316'},
+  maxim:{name:'Maxim',available:true,color:'#8b5cf6'},
+  indriver:{name:'inDriver',available:false,unavailableLabel:'No disponible en Santa Fe'},
+  cabify:{name:'Cabify',available:false,unavailableLabel:'No disponible en Santa Fe'},
+  bolt:{name:'Bolt',available:false,unavailableLabel:'No disponible en Santa Fe'},
+  taxi:{name:'Radiotaxi',available:true,color:'#d97706'},
+  remis:{name:'Remises Real',available:true,color:'#6b7280'},
+  taxiapp:{name:'TaxiApp',available:true,color:'#25d366'}
 };
 
-// ===================== FARE REGISTRY =====================
-var FareRegistry={
-  taxi:{
-    diurno:{bajada:1600,ficha:160,distFicha:130},
-    nocturno:{bajada:1840,ficha:184,distFicha:130},
-    source:'Resolución N°217/2026',
-    updated_at:'2026-01-01'
-  },
-  bus:{
-    sube:1900,
-    cash:2111,
-    source:'SUBE tariff table Argentina',
-    updated_at:'2025-06-01'
-  },
-  apps:{
-    uber:{base:1000,km:500,min:65,minFare:3000,source:'Uber app estimate range',updated_at:'2025-12-01'},
-    didi:{base:900,km:440,min:55,minFare:2500,source:'DiDi app estimate range',updated_at:'2025-12-01'},
-    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'},
-    cabify:{base:null,km:null,min:null,minFare:null,source:'Cabify - sin tarifa pública',updated_at:'2025-12-01'}
-  },
-  moto:{
-    discount:0.75,
-    source:'Estimado: precio auto * 0.75',
-    updated_at:'2025-12-01'
-  }
+var _appFares={
+  uber:{base:1000,km:500,min:65,minFare:3000},
+  didi:{base:900,km:440,min:55,minFare:2500},
+  maxim:{base:855,km:418,min:52,minFare:2375}
 };
+
+var TAXI_TARIFF={
+  diurno:{bajada:1600,ficha:160,distFicha:130},
+  nocturno:{bajada:1840,ficha:184,distFicha:130}
+};
+var BUS_FARE_SUBE=1900;
+var BUS_FARE_CASH=2111;
+
+// ===================== PRICING ENGINE =====================
+var _motoDiscount=0.75; // FIX 2: moto = auto * 0.75, adjustable
 
 // ===================== STATE =====================
 var _origin=null; // {lat,lon,name,source}
@@ -271,15 +243,10 @@ function initDarkMode(){
   }
 }
 
-// ===================== GPS: silent, cache, retry =====================
-var _gpsRetryCount=0;
-var _gpsMaxRetries=3;
-var _gpsRetryTimer=null;
-
+// ===================== GPS - FIX 11: silent fallback =====================
 function initGPS(){
   if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
   _gpsWatch=navigator.geolocation.watchPosition(function(pos){
-    _gpsRetryCount=0;
     updateGPSStatus(true);
     cachePosition(pos.coords.latitude,pos.coords.longitude);
     if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
@@ -291,24 +258,6 @@ function initGPS(){
   },function(err){
     updateGPSStatus(false);
     loadCachedPosition();
-    // Silent retry with backoff
-    if(_gpsRetryCount<_gpsMaxRetries){
-      _gpsRetryCount++;
-      clearTimeout(_gpsRetryTimer);
-      _gpsRetryTimer=setTimeout(function(){
-        navigator.geolocation.getCurrentPosition(function(pos){
-          _gpsRetryCount=0;
-          updateGPSStatus(true);
-          cachePosition(pos.coords.latitude,pos.coords.longitude);
-          if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
-            _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
-            updateOriginUI();
-            updateMapMarkers();
-            if(_dest)runEstimations();
-          }
-        },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
-      },_gpsRetryCount*5000);
-    }
   },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
 }
 
@@ -510,17 +459,6 @@ function searchPlaces(q,field){
     }
   });
 
-  // Search landmarks (Puente Colgante, Catedral, etc.)
-  LANDMARKS.forEach(function(s){
-    var score=Math.max(
-      fuzzyScore(q,s.nombre),
-      fuzzyScore(q,s.calles)
-    );
-    if(score>0){
-      localResults.push({type:'place',name:s.nombre,sub:s.calles,lat:s.lat,lon:s.lon,score:score});
-    }
-  });
-
   // Nominatim remote search
   var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Santa Fe, Argentina')+'&format=json&limit=5&accept-language=es&viewbox=-60.75,-31.58,-60.63,-31.69&bounded=1';
   fetch(url).then(function(r){return r.json()}).then(function(data){
@@ -670,7 +608,7 @@ function runEstimations(){
   var nearDestBike=_dest?findNearestBikeStation(_dest):null;
   _estimations.push({mode:'bike',icon:'🚲',title:'Bicicleta',timeMin:bikeMin,distance:distKm,priority:2,nearStation:nearBike,nearDestStation:nearDestBike});
 
-  // 4. Moto - uses FareRegistry.moto.discount
+  // 4. Moto - FIX 2: uses PricingEngine._motoDiscount
   var motoResult=estimateMoto(distKm);
   _estimations.push(Object.assign({mode:'moto',icon:'🏍️',title:'Moto',priority:3,distance:distKm},motoResult));
 
@@ -710,7 +648,7 @@ function estimateBus(distKm){
       var rideMin=rideDist/15*60;
       var walkFromMin=minDD/5*60+5;
       var totalMin=walkToMin+rideMin+walkFromMin;
-      var price=FareRegistry.bus.sube;
+      var price=BUS_FARE_SUBE;
       if(!bestDirect||totalMin<bestDirect.totalMin){
         bestDirect={linea:linea,stopOrigen:nearOrig,stopDest:nearDest,
           walkToStopMin:Math.ceil(walkToMin),rideMin:Math.ceil(rideMin),
@@ -747,7 +685,7 @@ function estimateBus(distKm){
         var ride2Min=seg2Dist/15*60;
         var walkFromMin2=minD2/5*60+5;
         var totalMin=walkToMin1+ride1Min+transWalkMin+ride2Min+walkFromMin2;
-        var price=FareRegistry.bus.sube*2;
+        var price=BUS_FARE_SUBE*2;
         if(!bestCombo||totalMin<bestCombo.totalMin){
           bestCombo={linea1:line1,linea2:line2,
             stopOrigen:bestS1,stopTransbordo:bestTrans1,stopTransbordo2:bestTrans2,stopDest:bestS2,
@@ -763,7 +701,7 @@ function estimateBus(distKm){
 
   var chosen=bestCombo||bestDirect;
   if(!chosen){
-    chosen={totalMin:Math.ceil((distKm/15)*60+8),price:FareRegistry.bus.sube,boletos:1,combination:false,
+    chosen={totalMin:Math.ceil((distKm/15)*60+8),price:BUS_FARE_SUBE,boletos:1,combination:false,
       linea:'?',stopOrigenCalles:'—',walkToStopMin:3};
   }
   return chosen;
@@ -778,15 +716,18 @@ function findNearestBikeStation(point){
   return best;
 }
 
-// Moto: solo Uber Moto confirmado, DiDi Moto sin confirmar → Consultar
+// FIX 2: Moto pricing = auto * _motoDiscount
 function estimateMoto(distKm){
   var timeMin=(distKm/35)*60;
   var autoResult=estimateAuto(distKm);
-  var d=FareRegistry.moto.discount;
   return{
     timeMin:timeMin,
-    uberMotoPrice:autoResult.uberPrice!=null?Math.ceil(autoResult.uberPrice*d):null,
-    didiMotoPrice:null // No confirmado en Santa Fe → Consultar
+    uberMotoPrice:Math.ceil(autoResult.uberPrice*_motoDiscount),
+    didiMotoPrice:Math.ceil(autoResult.didiPrice*_motoDiscount),
+    maximMotoPrice:Math.ceil(autoResult.maximPrice*_motoDiscount),
+    taxiMotoPrice:Math.ceil(autoResult.taxiPrice*_motoDiscount),
+    remisMotoPrice:Math.ceil(autoResult.remisPrice*_motoDiscount),
+    taxiappMotoPrice:Math.ceil(autoResult.taxiappPrice*_motoDiscount)
   };
 }
 
@@ -795,25 +736,23 @@ function estimateAuto(distKm){
   var uberPrice=calcAppPrice('uber',distKm,timeMin);
   var didiPrice=calcAppPrice('didi',distKm,timeMin);
   var maximPrice=calcAppPrice('maxim',distKm,timeMin);
-  var cabifyPrice=calcAppPrice('cabify',distKm,timeMin); // null
   var taxiPrice=estimateTaxi(distKm);
   var remisPrice=taxiPrice;
   var taxiappPrice=taxiPrice;
   return{timeMin:timeMin,uberPrice:uberPrice,didiPrice:didiPrice,
-    maximPrice:maximPrice,cabifyPrice:cabifyPrice,
-    taxiPrice:taxiPrice,remisPrice:remisPrice,taxiappPrice:taxiappPrice};
+    maximPrice:maximPrice,taxiPrice:taxiPrice,remisPrice:remisPrice,taxiappPrice:taxiappPrice};
 }
 
 function calcAppPrice(fareKey,distKm,timeMin){
-  var f=FareRegistry.apps[fareKey];
-  if(!f||f.base===null)return null;
+  var f=_appFares[fareKey];
+  if(!f)return 0;
   var price=f.base+f.km*distKm+f.min*timeMin;
   return Math.max(price,f.minFare);
 }
 
 function estimateTaxi(distKm){
   var h=new Date().getHours();
-  var t=(h>=6&&h<22)?FareRegistry.taxi.diurno:FareRegistry.taxi.nocturno;
+  var t=(h>=6&&h<22)?TAXI_TARIFF.diurno:TAXI_TARIFF.nocturno;
   var fichas=Math.floor(distKm*1000/t.distFicha);
   return t.bajada+fichas*t.ficha;
 }
@@ -890,13 +829,17 @@ function renderActiveCard(est,idx){
     h+='</div>';
   }
 
-  // Moto: mismo renderer que Auto, solo providers confirmados
+  // FIX 1: Moto identical to Auto layout
   else if(est.mode==='moto'){
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    var motoTime=est.timeMin+2;
-    h+=renderProviderRow('uber_moto','Uber Moto',est.uberMotoPrice,'uber-moto',motoTime);
-    h+=renderProviderRow('didi_moto','DiDi Moto',est.didiMotoPrice,'moto-didi',motoTime);
+    var motoTime=est.timeMin+2; // +2min wait
+    h+=renderMotoProviderRow('uber','Uber Moto',est.uberMotoPrice,'moto-uber',motoTime);
+    h+=renderMotoProviderRow('didi','DiDi Moto',est.didiMotoPrice,'moto-didi',motoTime);
+    h+=renderMotoProviderRow('maxim','Maxim Moto',est.maximMotoPrice,'moto-maxim',motoTime);
+    h+=renderMotoProviderRow('taxi','Radiotaxi',est.taxiMotoPrice,'moto-taxi',motoTime,'https://wa.link/n7u2e7');
+    h+=renderMotoProviderRow('remis','Remises Real',est.remisMotoPrice,'moto-remis',motoTime,'https://wa.link/rqov56');
+    h+=renderMotoProviderRow('taxiapp','TaxiApp',est.taxiappMotoPrice,'moto-taxiapp',motoTime,'https://wa.link/vavbcl');
   }
 
   else if(est.mode==='auto'){
@@ -905,7 +848,6 @@ function renderActiveCard(est,idx){
     h+=renderProviderRow('uber','Uber',est.uberPrice,'uber');
     h+=renderProviderRow('didi','DiDi',est.didiPrice,'didi');
     h+=renderProviderRow('maxim','Maxim',est.maximPrice,'maxim');
-    h+=renderProviderRow('cabify','Cabify',est.cabifyPrice,'cabify');
     var taxiTime=est.timeMin+2;
     h+=renderProviderRow('taxi','Radiotaxi',est.taxiPrice,'radiotaxi',taxiTime,'https://wa.link/n7u2e7');
     h+=renderProviderRow('remis','Remises Real',est.remisPrice,'remis',taxiTime,'https://wa.link/rqov56');
@@ -922,10 +864,9 @@ function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,waText){
   var color=provider.color||'#666';
   var t=timeOverride?formatMin(timeOverride):'';
   var url='';
-  if(key==='uber'||key==='uber_moto')url=buildUberLink();
-  else if(key==='didi'||key==='didi_moto')url=buildDiDiLink();
+  if(key==='uber')url=buildUberLink();
+  else if(key==='didi')url=buildDiDiLink();
   else if(key==='maxim')url=buildMaximLink();
-  else if(key==='cabify')url='https://cabify.com/';
   else if(waLink)url=waLink;
 
   var h='<div class="provider-row">';
@@ -935,13 +876,36 @@ function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,waText){
   if(url){
     h+='<button class="btn-pedir" data-action="'+key+'" data-url="'+url+'">Pedir</button>';
   }
-  h+='<span class="card-price">'+(price!=null?formatPrice(price):'Consultar')+'</span>';
+  h+='<span class="card-price">'+formatPrice(price)+'</span>';
   if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
   h+='</div></div>';
   return h;
 }
 
-// Removed: renderMotoProviderRow - moto now uses same renderProviderRow as auto
+// FIX 1: Moto provider row identical structure to Auto
+function renderMotoProviderRow(key,name,price,colorKey,timeOverride,waLink){
+  var provider=PROVIDERS[key];
+  if(!provider||!provider.available)return'';
+  var color=provider.color||'#666';
+  var t=timeOverride?formatMin(timeOverride):'';
+  var url='';
+  if(key==='uber')url=buildUberLink();
+  else if(key==='didi')url=buildDiDiLink();
+  else if(key==='maxim')url=buildMaximLink();
+  else if(waLink)url=waLink;
+
+  var h='<div class="provider-row">';
+  h+='<div class="provider-color" style="background:'+color+'"></div>';
+  h+='<span class="provider-name">'+name+'</span>';
+  h+='<div class="card-action-row">';
+  if(url){
+    h+='<button class="btn-pedir" data-action="moto-'+key+'" data-url="'+url+'">Pedir</button>';
+  }
+  h+='<span class="card-price">'+formatPrice(price)+'</span>';
+  if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
+  h+='</div></div>';
+  return h;
+}
 
 function renderUnavailableCard(icon,title,reason){
   return '<div class="route-card route-card--unavailable" draggable="false">'+
