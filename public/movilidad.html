@@ -2,1048 +2,1009 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Movilidad — Asistente de transporte</title>
-<meta name="description" content="Compará precios de Uber y DiDi en Santa Fe">
-<meta name="theme-color" content="#ffffff">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VOY – Asistente de Movilidad Santa Fe</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
-:root {
-  --bg: #ffffff; --fg: #18181b; --card: #ffffff; --border: #e4e4e7;
-  --muted: #f4f4f5; --muted-fg: #71717a; --primary: #18181b;
-  --primary-fg: #fafafa; --green: #16a34a; --red: #dc2626;
-  --amber: #d97706; --amber-bg: #fef3c7;
+:root{
+  --bg:#f5f5f5;--bg2:#fff;--bg3:#e8e8e8;--text:#1a1a1a;--text2:#555;--accent:#2563eb;
+  --green:#16a34a;--red:#dc2626;--orange:#f97316;--purple:#8b5cf6;--card-bg:#fff;
+  --card-border:#e5e5e5;--shadow:0 1px 3px rgba(0,0,0,.1);--radius:12px;
+  --header-bg:#1e293b;--footer-bg:#1e293b;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #09090b; --fg: #fafafa; --card: #18181b; --border: #27272a;
-    --muted: #27272a; --muted-fg: #a1a1aa; --primary: #fafafa;
-    --primary-fg: #18181b; --green: #22c55e; --red: #ef4444;
-    --amber: #f59e0b; --amber-bg: #451a03;
-  }
+[data-theme="dark"]{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--text:#e2e8f0;--text2:#94a3b8;
+  --card-bg:#1e293b;--card-border:#334155;--shadow:0 1px 3px rgba(0,0,0,.4);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--fg); min-height: 100dvh; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
-header { position: sticky; top: 0; z-index: 50; background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
-.header-inner { display: flex; align-items: center; justify-content: space-between; max-width: 448px; margin: 0 auto; }
-.header-left { display: flex; align-items: center; gap: 8px; }
-.header-left h1 { font-size: 18px; font-weight: 700; }
-.header-right { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-fg); }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; }
-.status-dot.online { background: var(--green); }
-.status-dot.offline { background: var(--red); }
-.gps-btn { font-size: 12px; background: none; border: none; cursor: pointer; padding: 2px 4px; }
-.gps-btn.loading { color: var(--amber); animation: pulse 1.5s infinite; }
-.gps-btn.error { color: var(--red); text-decoration: underline; }
-.gps-btn.ok { color: var(--green); }
-.gps-btn.idle { color: var(--muted-fg); text-decoration: underline; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
-main { flex: 1; max-width: 448px; margin: 0 auto; width: 100%; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-.weather-strip { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted-fg); background: var(--muted); border-radius: 8px; padding: 8px 12px; }
-.origin-row { display: flex; align-items: center; gap: 8px; }
-.origin-dot { color: var(--green); font-size: 18px; }
-.origin-info { flex: 1; min-width: 0; }
-.origin-label { font-size: 12px; color: var(--muted-fg); }
-.origin-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gps-refresh { font-size: 12px; background: var(--muted); border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: opacity .15s; }
-.gps-refresh:disabled { opacity: .5; }
-.origin-error { font-size: 12px; color: var(--red); background: rgba(220,38,38,.1); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
-.origin-fallback { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.fallback-btn { font-size: 12px; background: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: all .15s; color: var(--fg); }
-.fallback-btn:hover { background: var(--primary); color: var(--primary-fg); }
-.origin-search-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.origin-search-input { flex: 1; background: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; outline: none; color: var(--fg); min-width: 0; }
-.origin-search-input::placeholder { color: var(--muted-fg); }
-.origin-search-btn { font-size: 12px; background: var(--primary); color: var(--primary-fg); border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-.origin-search-results { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
-.origin-search-result { display: block; width: 100%; text-align: left; padding: 6px 10px; border: none; background: none; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--fg); }
-.origin-search-result:last-child { border-bottom: none; }
-.origin-search-result:hover { background: var(--muted); }
-.dest-row { display: flex; align-items: center; gap: 8px; }
-.dest-dot { color: var(--red); font-size: 18px; }
-.dest-input-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
-.dest-input { flex: 1; background: transparent; border: none; font-size: 14px; font-weight: 500; outline: none; color: var(--fg); min-width: 0; }
-.dest-input::placeholder { color: var(--muted-fg); }
-.voice-btn { font-size: 18px; background: none; border: none; cursor: pointer; padding: 4px; flex-shrink: 0; transition: transform .15s; }
-.voice-btn:active { transform: scale(1.15); }
-.dest-actions { display: block; margin-top: 10px; }
-.dest-action-btn { display: block; width: 100%; font-size: 14px; background: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; color: var(--fg); text-align: center; transition: all .15s; }
-.dest-action-btn:active { background: var(--primary); color: var(--primary-fg); }
-.search-loading { font-size: 12px; color: var(--muted-fg); animation: pulse 1.5s infinite; margin-top: 8px; }
-.search-results { max-height: 192px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
-.search-result { display: block; width: 100%; text-align: left; padding: 8px 12px; border: none; background: none; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
-.search-result:last-child { border-bottom: none; }
-.search-result:hover { background: var(--muted); }
-.search-result-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.search-result-sub { font-size: 12px; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.predictions-label { font-size: 12px; color: var(--muted-fg); font-weight: 500; }
-.prediction { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: none; background: none; width: 100%; text-align: left; cursor: pointer; border-radius: 8px; transition: background .1s; }
-.prediction:hover { background: var(--muted); }
-.pred-confidence { font-size: 18px; }
-.pred-info { flex: 1; min-width: 0; }
-.pred-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pred-conf-label { font-size: 12px; color: var(--muted-fg); }
-.pred-score { font-size: 12px; color: var(--muted-fg); }
-.estimate-loading { display: flex; align-items: center; justify-content: center; padding: 24px; }
-.estimate-loading-inner { text-align: center; }
-.spinner { font-size: 24px; animation: spin 1s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.estimate-error { background: rgba(220,38,38,.1); border: 1px solid rgba(220,38,38,.2); border-radius: 12px; padding: 16px; }
-.estimate-error p { font-size: 14px; color: var(--red); }
-.estimate-error button { margin-top: 8px; font-size: 12px; color: var(--red); background: none; border: none; text-decoration: underline; cursor: pointer; }
-.advice-banner { border-radius: 12px; padding: 12px; text-align: center; font-size: 14px; font-weight: 500; }
-.advice-green { background: #dcfce7; color: #15803d; }
-.advice-amber { background: var(--amber-bg); color: var(--amber); }
-.advice-muted { background: var(--muted); color: var(--muted-fg); }
-.meta-row { display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 14px; color: var(--muted-fg); }
-.price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.price-card { border-radius: 12px; border: 1px solid var(--border); padding: 16px; background: var(--card); display: flex; flex-direction: column; gap: 8px; }
-.price-card.cheaper { border-color: var(--green); box-shadow: 0 0 0 1px rgba(22,163,74,.3); }
-.price-header { display: flex; align-items: center; justify-content: space-between; }
-.price-header h3 { font-size: 14px; font-weight: 700; }
-.cheaper-badge { font-size: 10px; background: #dcfce7; color: #15803d; border-radius: 9999px; padding: 2px 8px; }
-.price-main { font-size: 24px; font-weight: 700; }
-.price-range { font-size: 12px; color: var(--muted-fg); }
-.deep-link { display: block; width: 100%; border: none; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer; text-align: center; transition: all .15s; text-decoration: none; }
-.deep-link:active { transform: scale(.98); }
-.uber-btn { background: #000; color: #fff; }
-.uber-btn:hover { background: #333; }
-.didi-btn { background: #f97316; color: #fff; }
-.didi-btn:hover { background: #ea580c; }
-.factors { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.factor-badge { font-size: 12px; background: var(--amber-bg); color: var(--amber); border-radius: 9999px; padding: 4px 12px; }
-.log-toggle { font-size: 12px; color: var(--muted-fg); background: none; border: none; text-decoration: underline; cursor: pointer; transition: color .15s; }
-.log-toggle:hover { color: var(--fg); }
-.log-form { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.log-form h4 { font-size: 14px; font-weight: 500; }
-.transport-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
-.transport-btn { border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 500; border: none; cursor: pointer; transition: all .15s; background: var(--muted); color: var(--fg); }
-.transport-btn.active { background: var(--primary); color: var(--primary-fg); }
-.price-input-row { display: flex; gap: 8px; }
-.price-input { flex: 1; background: var(--muted); border: none; border-radius: 8px; padding: 8px 12px; font-size: 14px; outline: none; color: var(--fg); min-width: 0; }
-.save-btn { background: var(--primary); color: var(--primary-fg); border: none; border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity .15s; }
-.save-btn:disabled { opacity: .5; }
-#map { height: 280px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
-.map-hint { font-size: 11px; color: var(--muted-fg); text-align: center; margin-top: 4px; }
-.offline-notice { background: rgba(217,119,6,.1); border: 1px solid rgba(217,119,6,.3); border-radius: 12px; padding: 12px; text-align: center; }
-.offline-notice p { font-size: 14px; color: var(--amber); }
-footer { margin-top: auto; background: var(--card); border-top: 1px solid var(--border); padding: 12px 16px; padding-bottom: 80px; text-align: center; }
-.action-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 90; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; padding-bottom: max(10px, env(safe-area-inset-bottom)); box-shadow: 0 -2px 8px rgba(0,0,0,.1); display: flex; gap: 10px; }
-.action-bar-link { flex: 1; display: block; border: none; border-radius: 10px; padding: 12px 8px; font-size: 15px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; transition: all .15s; }
-.action-bar-link:active { transform: scale(.97); }
-.action-bar .uber-btn { background: #000; color: #fff; }
-.action-bar .didi-btn { background: #f97316; color: #fff; }
-footer p { font-size: 12px; color: var(--muted-fg); }
-footer .sub { font-size: 10px; color: var(--muted-fg); opacity: .6; margin-top: 4px; }
-.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 100; padding: 8px 16px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.15); font-size: 14px; font-weight: 500; transition: all .3s; white-space: nowrap; }
-.toast.success { background: #16a34a; color: #fff; }
-.toast.error { background: #dc2626; color: #fff; }
-.toast.info { background: var(--fg); color: var(--bg); }
-.hidden { display: none !important; }
-.quick-dest-btn {
-  font-size: 12px; background: var(--muted); border: 1px solid var(--border);
-  border-radius: 9999px; padding: 5px 12px; cursor: pointer; color: var(--fg);
-  transition: all .15s; white-space: nowrap; max-width: 160px;
-  overflow: hidden; text-overflow: ellipsis;
-}
-.quick-dest-btn:hover { background: var(--primary); color: var(--primary-fg); }
-.quick-dest-label { font-size: 11px; color: var(--muted-fg); margin-top: 4px; margin-bottom: 2px; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100dvh;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent}
+/* HEADER */
+.header{background:var(--header-bg);color:#fff;padding:8px 12px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:800;letter-spacing:1px;flex:1}
+.header .gps-status{font-size:12px;display:flex;align-items:center;gap:4px}
+.header .weather{font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer}
+/* INPUTS */
+.inputs{background:var(--bg2);padding:10px 12px;border-bottom:1px solid var(--card-border)}
+.input-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.input-row:last-child{margin-bottom:0}
+.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.dot.green{background:var(--green)}.dot.red{background:var(--red)}
+.input-label{font-size:11px;color:var(--text2);min-width:52px}
+.input-value{flex:1;font-size:13px;min-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.input-btn{font-size:10px;padding:4px 8px;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.btn-locate{background:#dbeafe;color:#1d4ed8}
+.btn-map{background:#fef3c7;color:#92400e}
+.btn-search{background:#dbeafe;color:#1d4ed8}
+.gps-fallback{display:none;background:#fef2f2;padding:8px 12px;font-size:12px;color:#991b1b;border-bottom:1px solid #fecaca}
+.gps-fallback.show{display:block}
+/* MAP */
+#map{width:100%;height:20vh;max-height:220px;min-height:160px;background:var(--bg3)}
+#map.crosshair .maplibregl-canvas{cursor:crosshair!important}
+/* MAP HINT */
+.map-hint{display:none;padding:6px 12px;background:#eff6ff;color:#1d4ed8;font-size:12px;border-bottom:1px solid #bfdbfe}
+.map-hint.show{display:block}
+/* ROUTE CARDS */
+.cards{flex:1;padding:8px 12px;overflow-y:auto;padding-bottom:80px}
+.route-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:12px;margin-bottom:8px;box-shadow:var(--shadow);position:relative;transition:transform .15s}
+.route-card.dragging{opacity:.6;transform:scale(.97)}
+.route-card.drag-over{border-top:3px solid var(--accent)}
+.rc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rc-icon{font-size:20px}
+.rc-title{font-size:14px;font-weight:700;flex:1}
+.rc-time{font-size:12px;color:var(--text2)}
+.rc-subtitle{font-size:13px;color:var(--text2);margin-bottom:6px;white-space:pre-line;line-height:1.5}
+/* Provider row */
+.provider-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--card-border)}
+.provider-name{font-size:12px;font-weight:600;min-width:70px}
+.provider-color{width:4px;height:24px;border-radius:2px;flex-shrink:0}
+.card-action-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.btn-pedir{background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn-pedir:active{transform:scale(.95)}
+.card-price{font-size:14px;font-weight:700}
+/* Action buttons in cards */
+.rc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rc-action{padding:6px 12px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#fff}
+.rc-action.uber{background:#000}.rc-action.didi{background:var(--orange)}
+.rc-action.maxim{background:var(--purple)}.rc-action.radiotaxi{background:#d97706}
+.rc-action.remis{background:#6b7280}.rc-action.taxiapp{background:#25d366}
+.rc-action.moto{background:#374151}.rc-action.bike{background:var(--green)}
+.rc-action.bus{background:#2563eb}.rc-action.walk{background:var(--green)}
+/* Unavailable cards */
+.route-card--unavailable{opacity:.45;filter:grayscale(.6);pointer-events:none}
+.unavailable-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2}
+.unavailable-overlay span{background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;letter-spacing:.5px}
+/* Footer */
+.footer{position:fixed;bottom:0;left:0;right:0;background:var(--footer-bg);color:#94a3b8;font-size:10px;padding:6px 12px;text-align:center;z-index:100}
+/* Toast */
+.toast-container{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;animation:toastIn .3s ease;pointer-events:auto;max-width:90vw;text-align:center}
+.toast.info{background:#2563eb}.toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.warn{background:#f59e0b;color:#1a1a1a}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+/* Search overlay */
+.search-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:none;flex-direction:column}
+.search-overlay.show{display:flex}
+.search-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--card-border)}
+.search-bar input{flex:1;border:1px solid var(--card-border);border-radius:8px;padding:8px 12px;font-size:14px;background:var(--bg);color:var(--text);outline:none}
+.search-bar button{border:none;background:none;font-size:14px;cursor:pointer;color:var(--text);padding:8px}
+.search-results{flex:1;overflow-y:auto;padding:8px}
+.search-item{padding:10px 12px;border-bottom:1px solid var(--card-border);cursor:pointer;font-size:13px}
+.search-item:active{background:var(--bg3)}
+.search-item small{color:var(--text2);font-size:11px}
+/* Drag handle */
+.drag-handle{position:absolute;top:4px;right:8px;font-size:16px;cursor:grab;color:var(--text2);opacity:.4}
+.drag-handle:active{cursor:grabbing}
+/* Bike station / Bus stop badges */
+.badge{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-right:4px;margin-bottom:2px}
+.badge-line{background:#dbeafe;color:#1d4ed8}
+.badge-station{background:#dcfce7;color:#166534}
 </style>
 </head>
-<body>
+<body data-theme="light">
 
-<header>
-  <div class="header-inner">
-    <div class="header-left">
-      <span style="font-size:20px">🧭</span>
-      <h1>Movilidad</h1>
-    </div>
-    <div class="header-right">
-      <span class="status-dot online" id="statusDot"></span>
-      <span id="statusText">Online</span>
-      <button class="gps-btn idle" id="gpsBtn" onclick="getGPS()">📍 GPS</button>
-    </div>
-  </div>
-</header>
-
-<main>
-  <!-- Weather -->
-  <div class="weather-strip hidden" id="weatherStrip">
-    <span id="weatherIcon">☀️</span>
-    <span id="weatherTemp"></span>
-    <span>·</span>
-    <span id="weatherDesc"></span>
-  </div>
-
-  <!-- Origin -->
-  <div class="card">
-    <div class="origin-row">
-      <span class="origin-dot">●</span>
-      <div class="origin-info">
-        <p class="origin-label">Tu ubicación</p>
-        <p class="origin-name" id="originName">Cargando...</p>
-      </div>
-      <button class="gps-refresh" id="gpsRefresh" onclick="getGPS()">📍 GPS</button>
-    </div>
-    <div class="origin-error hidden" id="originError"></div>
-    <!-- Fallback buttons when GPS fails -->
-    <div class="origin-fallback hidden" id="originFallback">
-      <button class="fallback-btn" onclick="useDefaultOrigin()">📍 Usar centro de Santa Fe</button>
-      <button class="fallback-btn" onclick="showOriginSearch()">✏️ Escribir dirección</button>
-      <button class="fallback-btn" onclick="enableMapTap()">🗺️ Tocar en el mapa</button>
-    </div>
-    <!-- Manual origin search -->
-    <div class="hidden" id="originSearchWrap">
-      <div class="origin-search-row">
-        <input type="text" class="origin-search-input" id="originSearchInput" placeholder="Ej: San Martín 1200, Santa Fe" oninput="onOriginSearchInput(this.value)">
-        <button class="origin-search-btn" onclick="doOriginSearch()">Buscar</button>
-      </div>
-      <div class="search-loading hidden" id="originSearchLoading">Buscando...</div>
-      <div class="origin-search-results hidden" id="originSearchResults"></div>
-    </div>
-  </div>
-
-  <!-- Destination -->
-  <div class="card">
-    <div class="dest-row">
-      <span class="dest-dot">●</span>
-      <div class="dest-input-wrap">
-        <input type="text" class="dest-input" id="destInput" placeholder="¿A dónde vas?" oninput="onDestInput(this.value)">
-        <button class="voice-btn" onclick="startVoice()" title="Búsqueda por voz">🎤</button>
-      </div>
-    </div>
-    <div class="dest-actions">
-      <button class="dest-action-btn" onclick="enableDestPin()">📌 Marcar destino en el mapa</button>
-    </div>
-    <!-- Destinos frecuentes -->
-    <div id="quickDests" class="hidden" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;"></div>
-    <div class="search-loading hidden" id="searchLoading">Buscando direcciones...</div>
-    <div class="search-results hidden" id="searchResults"></div>
-  </div>
-
-  <!-- Predictions -->
-  <div class="card hidden" id="predictionsCard">
-    <p class="predictions-label">📍 Destinos frecuentes</p>
-    <div id="predictionsList"></div>
-  </div>
-
-  <!-- Estimate Loading -->
-  <div class="card estimate-loading hidden" id="estimateLoading">
-    <div class="estimate-loading-inner">
-      <div class="spinner">⏳</div>
-      <p style="font-size:14px;color:var(--muted-fg);margin-top:8px">Calculando estimación...</p>
-    </div>
-  </div>
-
-  <!-- Estimate Error -->
-  <div class="estimate-error hidden" id="estimateError">
-    <p id="estimateErrorMsg"></p>
-    <button onclick="runEstimate()">Reintentar</button>
-  </div>
-
-  <!-- Estimate Result -->
-  <div class="hidden" id="estimateResult">
-    <div class="advice-banner" id="adviceBanner"></div>
-    <div class="meta-row" style="margin-top:12px">
-      <span id="metaDist"></span>
-      <span id="metaDur"></span>
-      <span id="metaConf"></span>
-    </div>
-    <div class="price-grid" style="margin-top:12px">
-      <div class="price-card" id="uberCard">
-        <div class="price-header"><h3>Uber</h3><span class="cheaper-badge hidden" id="uberCheaper">Más barato</span></div>
-        <p class="price-main" id="uberPrice"></p>
-        <p class="price-range" id="uberRange"></p>
-        <a class="deep-link uber-btn" id="uberLink" href="#" target="_blank" rel="noopener" onclick="recordRideAndGo('uber')">Ver en Uber →</a>
-      </div>
-      <div class="price-card" id="didiCard">
-        <div class="price-header"><h3>DiDi</h3><span class="cheaper-badge hidden" id="didiCheaper">Más barato</span></div>
-        <p class="price-main" id="didiPrice"></p>
-        <p class="price-range" id="didiRange"></p>
-        <a class="deep-link didi-btn" id="didiLink" href="#" target="_blank" rel="noopener" onclick="event.preventDefault();openDiDiTracked()">Ver en DiDi →</a>
-      </div>
-    </div>
-    <div class="factors hidden" id="factorsRow" style="margin-top:12px;justify-content:center"></div>
-    <div style="text-align:center;margin-top:12px">
-      <button class="log-toggle" id="logToggle" onclick="toggleLog()">Registrá cómo viajaste</button>
-    </div>
-    <div class="log-form hidden" id="logForm">
-      <h4>¿Cómo viajaste?</h4>
-      <div class="transport-grid" id="transportGrid"></div>
-      <div class="price-input-row">
-        <input type="number" class="price-input" id="logPrice" placeholder="Precio (opcional)" min="0" step="0.01">
-        <button class="save-btn" id="saveBtn" onclick="logTransport()">✓ Guardar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Map -->
-  <div id="map"></div>
-  <p class="map-hint hidden" id="mapHint">👆 Tocá el mapa para marcar tu ubicación</p>
-
-  <!-- Offline -->
-  <div class="offline-notice hidden" id="offlineNotice">
-    <p>📡 Sin conexión. Los deep links siguen funcionando si tenés Uber/DiDi instalados.</p>
-  </div>
-</main>
-
-<footer>
-  <p>Asistente de movilidad para Sofía · Estimaciones basadas en datos históricos</p>
-  <p class="sub">Los precios son estimaciones, no precios en tiempo real. Abrí la app para ver el precio real.</p>
-</footer>
-
-<!-- Sticky Action Bar -->
-<div class="action-bar hidden" id="actionBar">
-  <a class="action-bar-link uber-btn" id="actionUberLink" href="#" target="_blank" rel="noopener">🚗 Uber</a>
-  <a class="action-bar-link didi-btn" id="actionDidiLink" href="#" target="_blank" rel="noopener" onclick="event.preventDefault();openDiDiTracked()">🚙 DiDi</a>
+<!-- HEADER -->
+<div class="header">
+  <h1>VOY</h1>
+  <div class="gps-status" id="gpsStatus">🔴 GPS OFF</div>
+  <div class="weather" id="weatherInfo" title="Clima en Santa Fe">🌤️ --°</div>
 </div>
 
-<!-- Toast -->
-<div class="toast hidden" id="toast"></div>
+<!-- INPUTS -->
+<div class="inputs">
+  <div class="input-row">
+    <div class="dot green"></div>
+    <span class="input-label">Origen</span>
+    <span class="input-value" id="originValue">Tocá 📍 para localizarte</span>
+    <button class="input-btn btn-locate" id="btnLocate" onclick="locateMe()">📍 Localizame</button>
+    <button class="input-btn btn-map" id="btnMapOrigin" onclick="activateMapOrigin()">📌 Elegir en el mapa</button>
+  </div>
+  <div class="input-row">
+    <div class="dot red"></div>
+    <span class="input-label">Destino</span>
+    <span class="input-value" id="destValue">Ingresá tu destino</span>
+    <button class="input-btn btn-search" onclick="openSearch()">🔍 Buscar</button>
+    <button class="input-btn btn-map" id="btnMapDest" onclick="activateMapDest()">📌 Elegir en el mapa</button>
+  </div>
+</div>
+<div class="gps-fallback" id="gpsFallback">
+  ⚠️ No se pudo obtener tu ubicación. Usá "📌 Elegir en el mapa" para fijar el origen manualmente.
+</div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- MAP HINT -->
+<div class="map-hint" id="mapHint">🗺️ Ruta en mapa: caminando · Arrastrá para cambiar</div>
+
+<!-- ROUTE CARDS -->
+<div class="cards" id="cardsContainer"></div>
+
+<!-- SEARCH OVERLAY -->
+<div class="search-overlay" id="searchOverlay">
+  <div class="search-bar">
+    <button onclick="closeSearch()">✕</button>
+    <input type="text" id="searchInput" placeholder="Buscar destino en Santa Fe..." oninput="onSearchInput()">
+    <button onclick="doSearch()">🔍</button>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">VOY v2 · Asistente de movilidad Santa Fe · Datos informativos, no contractuales · Resolución N°217/2026</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
-// ─── Constants ────────────────────────────────────────────────────────────────
-const SANTA_FE = [-31.6256, -60.7087];
-const TRANSPORTS = [
-  {id:'uber',label:'🚗 Uber'},{id:'didi',label:'🚙 DiDi'},
-  {id:'bus',label:'🚌 Colectivo'},{id:'walk',label:'🚶 Caminando'},
-  {id:'taxi',label:'🚕 Taxi'},{id:'other',label:'📦 Otro'}
+// ===================== DATA =====================
+var BUS_STOPS=[
+  {linea:'1',nombre:'Terminal',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
+  {linea:'1',nombre:'Plaza Mayor',lat:-31.6313,lon:-60.7008,calles:'San Martín y Rivadavia'},
+  {linea:'4',nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {linea:'4',nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'},
+  {linea:'8',nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {linea:'8',nombre:'Avenida Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {linea:'11',nombre:'Centro Cívico',lat:-31.6354,lon:-60.6999,calles:'25 de Mayo y San Martín'},
+  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y España'},
+  {linea:'16',nombre:'Plaza Pueyrredón',lat:-31.6445,lon:-60.7087,calles:'Cándido Pujato y Aristóbulo'},
+  {linea:'16',nombre:'Belgrano',lat:-31.6312,lon:-60.6945,calles:'Belgrano y Rivadavia'}
 ];
 
-// DEPLOY: para actualizar precios sin tocar código,
-// editar fares.json en el mismo directorio que movilidad.html.
-// En Cloudflare Pages: subir fares.json actualizado → redeploy automático.
-// Valores actuales son base Santa Fe 2025/2026. Revisar cada 2-3 meses.
-// ─── Fares (editable sin tocar lógica) ───────────────────────────────────────
-const FARES_DEFAULT = {
-  uber: { base: 1000, km: 500, min: 65, minFare: 3000 },
-  didi: { base: 900,  km: 440, min: 55, minFare: 2500 },
-  surge: { weather: 1.15, rush: 1.20, night: 1.30 }
+var BIKE_STATIONS=[
+  {nombre:'Municipalidad',lat:-31.6349,lon:-60.7007,calles:'25 de Mayo y San Martín'},
+  {nombre:'Plaza 25 de Mayo',lat:-31.6311,lon:-60.6990,calles:'San Martín y Rivadavia'},
+  {nombre:'Teatro Municipal',lat:-31.6325,lon:-60.7012,calles:'San Martín y Córdoba'},
+  {nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Estación Mitre',lat:-31.6356,lon:-60.7089,calles:'Bvd. Pellegrini y Rivadavia'},
+  {nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {nombre:'Av. Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {nombre:'Plaza Constituyentes',lat:-31.6401,lon:-60.7001,calles:'Rivadavia y Tucumán'},
+  {nombre:'Legislatura',lat:-31.6298,lon:-60.6955,calles:'Amenábar y 25 de Mayo'},
+  {nombre:'Plaza del Soldado',lat:-31.6337,lon:-60.6978,calles:'San Jerónimo y Tucumán'},
+  {nombre:'Hospital Iturraspe',lat:-31.6445,lon:-60.6934,calles:'Bvd. Gálvez y Francia'},
+  {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'}
+];
+
+var PROVIDERS={
+  uber:{name:'Uber',available:true,color:'#000'},
+  didi:{name:'DiDi',available:true,color:'#f97316'},
+  maxim:{name:'Maxim',available:true,color:'#8b5cf6'},
+  indriver:{name:'inDriver',available:false,unavailableLabel:'No disponible en Santa Fe'},
+  cabify:{name:'Cabify',available:false,unavailableLabel:'No disponible en Santa Fe'},
+  bolt:{name:'Bolt',available:false,unavailableLabel:'No disponible en Santa Fe'},
+  taxi:{name:'Radiotaxi',available:true,color:'#d97706'},
+  remis:{name:'Remises Real',available:true,color:'#6b7280'},
+  taxiapp:{name:'TaxiApp',available:true,color:'#25d366'}
 };
-let FARES = { ...FARES_DEFAULT };
 
-// ─── State ────────────────────────────────────────────────────────────────────
-let origin = {lat:null, lon:null, name:''};
-let dest = null;
-let currentEstimate = null;
-let selectedTransport = 'uber';
-let map = null;
-let originMarker = null;
-let destMarker = null;
-let routeLine = null;
-let searchTimer = null;
-let originSearchTimer = null;
-let lastNominatimCall = 0;
-let submittedHashes = new Set();
-let mapTapMode = null; // null | 'origin' | 'dest'
-let gpsAttempted = false;
+var _appFares={
+  uber:{base:1000,km:500,min:65,minFare:3000},
+  didi:{base:900,km:440,min:55,minFare:2500},
+  maxim:{base:855,km:418,min:52,minFare:2375},
+  uberMoto:{base:800,km:380,min:50,minFare:2200},
+  didiMoto:{base:720,km:340,min:45,minFare:2000}
+};
 
-// ─── DOM refs ─────────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
+var TAXI_TARIFF={
+  diurno:{bajada:1600,ficha:160,distFicha:130},
+  nocturno:{bajada:1840,ficha:184,distFicha:130}
+};
+var BUS_FARE_SUBE=1900;
+var BUS_FARE_CASH=2111;
 
-// ─── Fares loader ─────────────────────────────────────────────────────────────
-async function loadFares() {
-  try {
-    const r = await fetch('./fares.json', { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) return;
-    const data = await r.json();
-    if (data.uber)  FARES.uber  = { ...FARES_DEFAULT.uber,  ...data.uber  };
-    if (data.didi)  FARES.didi  = { ...FARES_DEFAULT.didi,  ...data.didi  };
-    if (data.surge) FARES.surge = { ...FARES_DEFAULT.surge, ...data.surge };
-    console.log('[FARES] loaded from fares.json:', FARES);
-  } catch(e) {
-    console.log('[FARES] using defaults');
-  }
-}
+// ===================== STATE =====================
+var _origin=null; // {lat,lon,name}
+var _dest=null;
+var _manualOriginMode=false;
+var _manualDestMode=false;  // FIX 1
+var _gpsWatch=null;
+var _map=null;
+var _originMarker=null;
+var _destMarker=null;
+var _routeGeojson=null;
+var _estimations=null; // array of {mode,...}
+var _lastSearchTime=0;
+var _searchTimeout=null;
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded',function(){
   initMap();
-  initOnline();
-  initTransportGrid();
-  await loadFares();
-  // Sofia pre-load
-  if (!localStorage.getItem('movilidad_trips')) {
-    localStorage.setItem('movilidad_trips', JSON.stringify([
-      { ts: '2026-01-01T00:00:00.000Z', from: {lat: -31.6256, lon: -60.7087, name: 'Centro de Santa Fe'}, to: {lat: -31.63550, lon: -60.70149, name: 'Cremolatti, Santa Fe'}, transport: 'didi', price: null, estimate: null },
-      { ts: '2026-01-02T00:00:00.000Z', from: {lat: -31.6256, lon: -60.7087, name: 'Centro de Santa Fe'}, to: {lat: -31.63550, lon: -60.70149, name: 'Cremolatti, Santa Fe'}, transport: 'didi', price: null, estimate: null },
-      { ts: '2026-01-03T00:00:00.000Z', from: {lat: -31.63550, lon: -60.70149, name: 'Cremolatti, Santa Fe'}, to: {lat: -31.64690, lon: -60.71605, name: 'Mendoza 3291, Santa Fe'}, transport: 'didi', price: null, estimate: null }
-    ]));
-  }
-  loadQuickDests();
-  // Try GPS but don't block on it
-  tryGPS();
+  initGPS();
+  initDarkMode();
+  fetchWeather();
+  renderCards();
 });
 
-function initMap() {
-  map = L.map('map',{scrollWheelZoom:false,zoomControl:true}).setView(SANTA_FE,14);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-    attribution:'&copy; OSM &copy; CARTO'
-  }).addTo(map);
-  // Map click handler for setting origin or dest
-  map.on('click', function(e) {
-    if(!mapTapMode) return;
-    if(mapTapMode==='origin') {
-      setOrigin(e.latlng.lat, e.latlng.lng, e.latlng.lat.toFixed(4)+', '+e.latlng.lng.toFixed(4));
-      reverseGeocode(e.latlng.lat, e.latlng.lng);
-      showToast('Origen establecido ✓','success');
-    } else if(mapTapMode==='dest') {
-      setDest(e.latlng.lat, e.latlng.lng, e.latlng.lat.toFixed(4)+', '+e.latlng.lng.toFixed(4));
-      reverseGeocodeDest(e.latlng.lat, e.latlng.lng);
-      showToast('Destino establecido ✓','success');
+function initMap(){
+  _map=new maplibregl.Map({
+    container:'map',
+    style:'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    center:[-60.7000,-31.6333],
+    zoom:13,
+    attributionControl:false
+  });
+  _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+  _map.on('click',onMapClick);
+}
+
+function initDarkMode(){
+  if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
+    document.body.setAttribute('data-theme','dark');
+  }
+}
+
+// ===================== GPS =====================
+function initGPS(){
+  if(!navigator.geolocation){updateGPSStatus(false);return}
+  _gpsWatch=navigator.geolocation.watchPosition(function(pos){
+    updateGPSStatus(true);
+    if(!_origin||_origin.source==='gps'){
+      _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
+      updateOriginUI();
+      updateMapMarkers();
+      if(_dest)runEstimations();
     }
-    mapTapMode = null;
-    $('mapHint').classList.add('hidden');
-    map.getContainer().style.cursor = '';
-  });
-  setTimeout(()=>map.invalidateSize(),300);
+  },function(err){
+    updateGPSStatus(false);
+    showGPSFallback();
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
 }
 
-function initOnline() {
-  const update = () => {
-    const on = navigator.onLine;
-    $('statusDot').className = 'status-dot '+(on?'online':'offline');
-    $('statusText').textContent = on?'Online':'Sin conexión';
-    $('offlineNotice').classList.toggle('hidden',on);
-  };
-  window.addEventListener('online',update);
-  window.addEventListener('offline',update);
-  update();
+function updateGPSStatus(ok){
+  var el=document.getElementById('gpsStatus');
+  el.textContent=ok?'🟢 GPS ON':'🔴 GPS OFF';
 }
 
-function initTransportGrid() {
-  const grid = $('transportGrid');
-  TRANSPORTS.forEach(t => {
-    const btn = document.createElement('button');
-    btn.className = 'transport-btn'+(t.id===selectedTransport?' active':'');
-    btn.textContent = t.label;
-    btn.onclick = () => {
-      selectedTransport = t.id;
-      grid.querySelectorAll('.transport-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-    };
-    grid.appendChild(btn);
-  });
+function showGPSFallback(){
+  document.getElementById('gpsFallback').classList.add('show');
 }
 
-// ─── Quick Destinations ───────────────────────────────────────────────────────
-function loadQuickDests() {
-  try {
-    const trips = JSON.parse(localStorage.getItem('movilidad_trips') || '[]');
-    if (!Array.isArray(trips) || trips.length === 0) return;
-    const freq = {};
-    trips.forEach(t => {
-      if (!t?.to?.name || !t?.to?.lat || !t?.to?.lon) return;
-      const key = t.to.name.trim().toLowerCase();
-      if (!freq[key]) freq[key] = { count: 0, lat: t.to.lat, lon: t.to.lon, name: t.to.name };
-      freq[key].count++;
-    });
-    const top3 = Object.values(freq).sort((a, b) => b.count - a.count).slice(0, 3);
-    if (top3.length === 0) return;
-    const container = $('quickDests');
-    container.innerHTML = '';
-    const label = document.createElement('p');
-    label.className = 'quick-dest-label'; label.style.width = '100%';
-    label.textContent = '📍 Tus destinos frecuentes:';
-    container.appendChild(label);
-    top3.forEach(d => {
-      const btn = document.createElement('button');
-      btn.className = 'quick-dest-btn'; btn.title = d.name;
-      btn.textContent = d.name.split(',')[0];
-      btn.onclick = () => { setDest(d.lat, d.lon, d.name); showToast('Destino: ' + d.name.split(',')[0], 'success'); };
-      container.appendChild(btn);
-    });
-    container.classList.remove('hidden'); container.style.display = 'flex';
-  } catch(e) {}
+function locateMe(){
+  if(!navigator.geolocation){showToast('GPS no disponible','error');return}
+  showToast('Obteniendo ubicación...','info');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
+    updateOriginUI();
+    updateMapMarkers();
+    _map.flyTo({center:[_origin.lon,_origin.lat],zoom:15});
+    showToast('Ubicación obtenida','success');
+    document.getElementById('gpsFallback').classList.remove('show');
+    if(_dest)runEstimations();
+  },function(){
+    showToast('No se pudo obtener ubicación','error');
+    showGPSFallback();
+  },{enableHighAccuracy:true,timeout:10000});
 }
 
-// ─── GPS (with fallback) ──────────────────────────────────────────────────────
-function tryGPS() {
-  // On file:// protocol, GPS is always blocked — auto-set Santa Fe center
-  if (location.protocol === 'file:') {
-    useDefaultOrigin();
+// ===================== MAP CLICK / MANUAL PIN =====================
+// FIX 1: destination map pin mode
+function activateMapOrigin(){
+  _manualOriginMode=true;
+  _manualDestMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el origen','info');
+}
+
+function activateMapDest(){
+  _manualDestMode=true;
+  _manualOriginMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el destino','info');
+}
+
+function onMapClick(e){
+  if(!_manualOriginMode&&!_manualDestMode)return;
+  var lat=e.lngLat.lat;
+  var lon=e.lngLat.lng;
+
+  // FIX 1: check dest mode first
+  if(_manualDestMode){
+    _manualDestMode=false;
+    document.getElementById('map').classList.remove('crosshair');
+    _dest={lat:lat,lon:lon,name:'',source:'map'};
+    reverseGeocodeDest(lat,lon);
+    updateMapMarkers();
+    if(_origin)runEstimations();
+    showToast('Destino fijado','success');
     return;
   }
-  if (!navigator.geolocation) {
-    useDefaultOrigin();
-    return;
-  }
-  $('gpsBtn').className='gps-btn loading';
-  $('gpsBtn').textContent='📍 Obteniendo...';
-  $('gpsRefresh').disabled=true;
-  $('originError').classList.add('hidden');
 
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat=pos.coords.latitude, lon=pos.coords.longitude;
-      if (isNaN(lat)||isNaN(lon)) {
-        useDefaultOrigin();
-        return;
+  if(_manualOriginMode){
+    _manualOriginMode=false;
+    document.getElementById('map').classList.remove('crosshair');
+    _origin={lat:lat,lon:lon,name:'',source:'map'};
+    reverseGeocodeOrigin(lat,lon);
+    updateOriginUI();
+    updateMapMarkers();
+    if(_dest)runEstimations();
+    showToast('Origen fijado','success');
+  }
+}
+
+function reverseGeocodeOrigin(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        _origin.name=d.display_name.split(',').slice(0,2).join(', ');
+        updateOriginUI();
       }
-      setOrigin(lat, lon, lat.toFixed(4)+', '+lon.toFixed(4));
-      $('gpsBtn').className='gps-btn ok';
-      $('gpsBtn').textContent='📍 GPS ✓';
-      $('gpsRefresh').disabled=false;
-      $('originFallback').classList.add('hidden');
-      reverseGeocode(lat,lon);
-      fetchWeather(lat,lon);
-    },
-    err => {
-      // GPS failed — auto-fallback to Santa Fe center
-      useDefaultOrigin();
-    },
-    {enableHighAccuracy:true, timeout:10000, maximumAge:30000}
-  );
+    }).catch(function(){});
 }
 
-function getGPS() {
-  // Re-try GPS
-  tryGPS();
+function reverseGeocodeDest(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        _dest.name=d.display_name.split(',').slice(0,2).join(', ');
+        document.getElementById('destValue').textContent=_dest.name;
+      }
+    }).catch(function(){});
 }
 
-function showGPSUnavailable(msg) {
-  $('originError').textContent=msg;
-  $('originError').classList.remove('hidden');
-  $('originFallback').classList.remove('hidden');
-  $('gpsBtn').className='gps-btn error';
-  $('gpsBtn').textContent='📍 Sin GPS';
-  $('gpsRefresh').disabled=false;
-  gpsAttempted = true;
-}
+// ===================== MAP MARKERS =====================
+function updateMapMarkers(){
+  if(_originMarker){_originMarker.remove();_originMarker=null}
+  if(_destMarker){_destMarker.remove();_destMarker=null}
 
-// ─── Fallback: Use default Santa Fe ───────────────────────────────────────────
-function useDefaultOrigin() {
-  setOrigin(SANTA_FE[0], SANTA_FE[1], 'Centro de Santa Fe');
-  $('originError').classList.add('hidden');
-  $('originFallback').classList.add('hidden');
-  $('originSearchWrap').classList.add('hidden');
-  $('gpsBtn').className='gps-btn ok';
-  $('gpsBtn').textContent='📍 Centro SF';
-  fetchWeather(SANTA_FE[0], SANTA_FE[1]);
-  showToast('Usando centro de Santa Fe como origen','info');
-}
-
-// ─── Fallback: Map tap ────────────────────────────────────────────────────────
-function enableMapTap() {
-  mapTapMode = 'origin';
-  map.getContainer().style.cursor = 'crosshair';
-  $('mapHint').textContent='👆 Tocá el mapa para marcar tu ubicación';
-  $('mapHint').classList.remove('hidden');
-  $('originError').classList.add('hidden');
-  $('originFallback').classList.add('hidden');
-  showToast('Tocá el mapa para marcar tu ubicación','info');
-  $('map').scrollIntoView({behavior:'smooth', block:'center'});
-}
-
-function enableDestPin() {
-  mapTapMode = 'dest';
-  map.getContainer().style.cursor = 'crosshair';
-  $('mapHint').textContent='👆 Tocá el mapa para marcar el destino';
-  $('mapHint').classList.remove('hidden');
-  showToast('Tocá el mapa para marcar el destino','info');
-  $('map').scrollIntoView({behavior:'smooth', block:'center'});
-}
-
-// ─── Fallback: Origin search ──────────────────────────────────────────────────
-function showOriginSearch() {
-  $('originSearchWrap').classList.toggle('hidden');
-  $('originError').classList.add('hidden');
-  $('originSearchInput').focus();
-}
-
-function onOriginSearchInput(val) {
-  clearTimeout(originSearchTimer);
-  if(!val||val.trim().length<3) { $('originSearchResults').classList.add('hidden'); return; }
-  originSearchTimer = setTimeout(()=>doOriginSearch(val.trim()),600);
-}
-
-async function doOriginSearch() {
-  const q = $('originSearchInput').value.trim();
-  if(q.length<3) return;
-  $('originSearchLoading').classList.remove('hidden');
-  $('originSearchResults').classList.add('hidden');
-  try {
-    await rateLimit();
-    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Ciudad de Santa Fe, Santa Fe, Argentina')+'&format=json&limit=5&accept-language=es&countrycodes=ar&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=1',{
-      headers:{'User-Agent':'MovilidadAsistente/1.0'},
-      signal:AbortSignal.timeout(8000)
-    });
-    if(!r.ok) throw 0;
-    const data=await r.json();
-    if(!Array.isArray(data)||data.length===0) {
-      $('originSearchResults').innerHTML='<div style="padding:8px 10px;font-size:13px;color:var(--muted-fg)">Sin resultados en Santa Fe</div>';
-      $('originSearchResults').classList.remove('hidden');
-      $('originSearchLoading').classList.add('hidden');
-      return;
-    }
-    const container=$('originSearchResults');
-    container.innerHTML='';
-    data.forEach(item=>{
-      const btn=document.createElement('button');
-      btn.className='origin-search-result';
-      btn.innerHTML=esc(item.display_name.split(',')[0])+'<br><span style="font-size:11px;color:var(--muted-fg)">'+esc(item.display_name)+'</span>';
-      btn.onclick=()=>{
-        setOrigin(parseFloat(item.lat),parseFloat(item.lon),item.display_name);
-        $('originSearchWrap').classList.add('hidden');
-        $('originFallback').classList.add('hidden');
-        $('originError').classList.add('hidden');
-        $('gpsBtn').className='gps-btn ok';
-        $('gpsBtn').textContent='📍 Manual';
-        fetchWeather(parseFloat(item.lat),parseFloat(item.lon));
-        showToast('Ubicación establecida ✓','success');
-      };
-      container.appendChild(btn);
-    });
-    container.classList.remove('hidden');
-  } catch(e) {
-    $('originSearchResults').innerHTML='<div style="padding:8px 10px;font-size:13px;color:var(--red)">Error de búsqueda. Intentá de nuevo.</div>';
-    $('originSearchResults').classList.remove('hidden');
+  if(_origin){
+    var el=document.createElement('div');
+    el.style.cssText='width:16px;height:16px;background:#16a34a;border:2px solid #fff;border-radius:50%;box-shadow:0 0 4px rgba(0,0,0,.4)';
+    _originMarker=new maplibregl.Marker({element:el}).setLngLat([_origin.lon,_origin.lat]).addTo(_map);
   }
-  $('originSearchLoading').classList.add('hidden');
+  if(_dest){
+    var el2=document.createElement('div');
+    el2.style.cssText='width:16px;height:16px;background:#dc2626;border:2px solid #fff;border-radius:50%;box-shadow:0 0 4px rgba(0,0,0,.4)';
+    _destMarker=new maplibregl.Marker({element:el2}).setLngLat([_dest.lon,_dest.lat]).addTo(_map);
+  }
+
+  // Fit bounds
+  if(_origin&&_dest){
+    var bounds=new maplibregl.LngLatBounds();
+    bounds.extend([_origin.lon,_origin.lat]);
+    bounds.extend([_dest.lon,_dest.lat]);
+    _map.fitBounds(bounds,{padding:30,maxZoom:16,duration:800});
+  } else if(_origin){
+    _map.flyTo({center:[_origin.lon,_origin.lat],zoom:15});
+  }
+
+  // Draw route line
+  drawRouteLine();
 }
 
-// ─── Set Origin ───────────────────────────────────────────────────────────────
-function setOrigin(lat, lon, name) {
-  if(isNaN(lat)||isNaN(lon)) return;
-  origin={lat,lon,name:name||''};
-  $('originName').textContent=name?name.split(',')[0]:(lat.toFixed(4)+', '+lon.toFixed(4));
-  $('originName').title=name||'';
-  updateMap();
-  // If we already have a destination, re-estimate
-  if(dest) runEstimate();
+function drawRouteLine(){
+  if(!_origin||!_dest)return;
+  if(_map.getSource('route-src')){_map.removeLayer('route-line');_map.removeSource('route-src')}
+  var geojson={
+    type:'Feature',
+    geometry:{type:'LineString',coordinates:[[_origin.lon,_origin.lat],[_dest.lon,_dest.lat]]}
+  };
+  _map.addSource('route-src',{type:'geojson',data:geojson});
+  _map.addLayer({id:'route-line',type:'line',source:'route-src',paint:{'line-color':'#2563eb','line-width':4,'line-opacity':.6,'line-dasharray':[2,2]}});
 }
 
-// ─── Reverse Geocode ──────────────────────────────────────────────────────────
-async function reverseGeocode(lat,lon) {
-  try {
-    await rateLimit();
-    const r=await fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es',{
-      headers:{'User-Agent':'MovilidadAsistente/1.0'},
-      signal:AbortSignal.timeout(8000)
-    });
-    if(!r.ok) throw 0;
-    const d=await r.json();
-    if(d.display_name) {
-      origin.name=d.display_name;
-      $('originName').textContent=d.display_name.split(',')[0];
-      $('originName').title=d.display_name;
+// ===================== SEARCH OVERLAY =====================
+function openSearch(){
+  document.getElementById('searchOverlay').classList.add('show');
+  document.getElementById('searchInput').value='';
+  document.getElementById('searchResults').innerHTML='';
+  setTimeout(function(){document.getElementById('searchInput').focus()},200);
+}
+
+function closeSearch(){
+  document.getElementById('searchOverlay').classList.remove('show');
+}
+
+function onSearchInput(){
+  if(_searchTimeout)clearTimeout(_searchTimeout);
+  _searchTimeout=setTimeout(doSearch,400);
+}
+
+function doSearch(){
+  var q=document.getElementById('searchInput').value.trim();
+  if(q.length<2)return;
+  var now=Date.now();
+  if(now-_lastSearchTime<1100)return; // rate limit 1.1s
+  _lastSearchTime=now;
+
+  // Search local bus stops and bike stations first
+  var localResults=[];
+  BUS_STOPS.forEach(function(s){
+    if(s.nombre.toLowerCase().indexOf(q.toLowerCase())>=0||s.calles.toLowerCase().indexOf(q.toLowerCase())>=0||s.linea.indexOf(q)>=0){
+      localResults.push({type:'bus',name:'Línea '+s.linea+' – '+s.nombre,sub:s.calles,lat:s.lat,lon:s.lon});
     }
-  } catch(e) { /* fallback coords already shown */ }
-}
-
-// ─── Weather ──────────────────────────────────────────────────────────────────
-const WEATHER_DESC={
-  0:'Despejado',1:'Mayormente despejado',2:'Parcialmente nublado',3:'Nublado',
-  45:'Niebla',48:'Niebla con escarcha',51:'Llovizna ligera',53:'Llovizna moderada',
-  55:'Llovizna intensa',61:'Lluvia ligera',63:'Lluvia moderada',65:'Lluvia intensa',
-  71:'Nevada ligera',73:'Nevada moderada',75:'Nevada intensa',77:'Granizo',
-  80:'Chubasco ligero',81:'Chubasco moderado',82:'Chubasco violento',
-  95:'Tormenta',96:'Tormenta con granizo leve',99:'Tormenta con granizo fuerte'
-};
-
-async function fetchWeather(lat,lon) {
-  try {
-    const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,relative_humidity_2m,precipitation,weather_code&timezone=America%2FBuenos_Aires',{
-      signal:AbortSignal.timeout(8000)
-    });
-    if(!r.ok) return;
-    const d=await r.json();
-    const c=d.current; if(!c) return;
-    const code=c.weather_code??0;
-    const precip=c.precipitation??0;
-    $('weatherIcon').textContent=precip>0?'🌧️':'☀️';
-    $('weatherTemp').textContent=Math.round(c.temperature_2m)+'°C';
-    $('weatherDesc').textContent=WEATHER_DESC[code]||'Desconocido';
-    // Remove old rain badge if any
-    const oldBadge=$('weatherRainBadge');
-    if(oldBadge) oldBadge.remove();
-    if(precip>0) {
-      const sp=document.createElement('span');
-      sp.id='weatherRainBadge';
-      sp.innerHTML=' <span>·</span> <span style="color:var(--amber)">Lluvia: '+precip+'mm</span>';
-      $('weatherStrip').appendChild(sp);
+  });
+  BIKE_STATIONS.forEach(function(s){
+    if(s.nombre.toLowerCase().indexOf(q.toLowerCase())>=0||s.calles.toLowerCase().indexOf(q.toLowerCase())>=0){
+      localResults.push({type:'bike',name:'🚲 '+s.nombre,sub:s.calles,lat:s.lat,lon:s.lon});
     }
-    $('weatherStrip').classList.remove('hidden');
-  } catch(e) { /* non-critical */ }
-}
+  });
 
-// ─── Destination Search ───────────────────────────────────────────────────────
-function onDestInput(val) {
-  dest=null;
-  currentEstimate=null;
-  $('estimateResult').classList.add('hidden');
-  $('estimateError').classList.add('hidden');
-  $('actionBar').classList.add('hidden');
-  $('quickDests').classList.add('hidden');
-  clearTimeout(searchTimer);
-  if(!val||val.trim().length<3) { $('searchResults').classList.add('hidden'); loadQuickDests(); return; }
-  searchTimer=setTimeout(()=>searchDest(val.trim()),500);
-}
-
-async function searchDest(q) {
-  $('searchLoading').classList.remove('hidden');
-  $('searchResults').classList.add('hidden');
-  try {
-    await rateLimit();
-    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Ciudad de Santa Fe, Santa Fe, Argentina')+'&format=json&limit=5&accept-language=es&countrycodes=ar&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=1',{
-      headers:{'User-Agent':'MovilidadAsistente/1.0'},
-      signal:AbortSignal.timeout(8000)
+  // Nominatim search
+  var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Santa Fe, Argentina')+'&format=json&limit=8&accept-language=es&viewbox=-60.75,-31.58,-60.63,-31.69&bounded=1';
+  fetch(url).then(function(r){return r.json()}).then(function(data){
+    var remoteResults=(data||[]).map(function(d){
+      return {type:'place',name:d.display_name.split(',').slice(0,2).join(', '),sub:d.display_name,lat:parseFloat(d.lat),lon:parseFloat(d.lon)};
     });
-    if(!r.ok) throw 0;
-    const data=await r.json();
-    if(!Array.isArray(data)||data.length===0) { $('searchResults').classList.add('hidden'); $('searchLoading').classList.add('hidden'); return; }
-    const container=$('searchResults');
-    container.innerHTML='';
-    data.forEach(item=>{
-      const btn=document.createElement('button');
-      btn.className='search-result';
-      btn.innerHTML='<p class="search-result-title">'+esc(item.display_name.split(',')[0])+'</p><p class="search-result-sub">'+esc(item.display_name)+'</p>';
-      btn.onclick=()=>selectDest(parseFloat(item.lat),parseFloat(item.lon),item.display_name);
-      container.appendChild(btn);
-    });
-    container.classList.remove('hidden');
-  } catch(e) { /* ignore */ }
-  $('searchLoading').classList.add('hidden');
+    var all=localResults.concat(remoteResults);
+    renderSearchResults(all);
+  }).catch(function(){
+    renderSearchResults(localResults);
+  });
 }
 
-function setDest(lat, lon, name) {
-  if(isNaN(lat)||isNaN(lon)) return;
-  dest={lat,lon,name};
-  $('destInput').value=name?name.split(',')[0]:(lat.toFixed(4)+', '+lon.toFixed(4));
-  $('searchResults').classList.add('hidden');
-  $('predictionsCard').classList.add('hidden');
-  updateMap();
-  if(origin.lat) runEstimate();
-  else showToast('Primero establecé tu ubicación de origen','error');
+function renderSearchResults(results){
+  var html='';
+  results.forEach(function(r){
+    var icon=r.type==='bus'?'🚌':r.type==='bike'?'🚲':'📍';
+    html+='<div class="search-item" onclick="selectSearchResult('+r.lat+','+r.lon+',\''+escapeStr(r.name)+'\')">'+icon+' '+r.name+'<br><small>'+r.sub+'</small></div>';
+  });
+  if(!results.length)html='<div class="search-item" style="color:var(--text2)">Sin resultados</div>';
+  document.getElementById('searchResults').innerHTML=html;
 }
 
-function selectDest(lat,lon,name) {
-  setDest(lat,lon,name);
+function escapeStr(s){return s.replace(/'/g,"\\'").replace(/"/g,'&quot;')}
+
+function selectSearchResult(lat,lon,name){
+  _dest={lat:lat,lon:lon,name:name,source:'search'};
+  document.getElementById('destValue').textContent=name;
+  closeSearch();
+  updateMapMarkers();
+  if(_origin)runEstimations();
+  showToast('Destino: '+name,'success');
 }
 
-async function reverseGeocodeDest(lat,lon) {
-  try {
-    await rateLimit();
-    const r=await fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es',{
-      headers:{'User-Agent':'MovilidadAsistente/1.0'},
-      signal:AbortSignal.timeout(8000)
-    });
-    if(!r.ok) throw 0;
-    const d=await r.json();
-    if(d.display_name) {
-      dest.name=d.display_name;
-      $('destInput').value=d.display_name.split(',')[0];
-    }
-  } catch(e) { /* fallback coords already shown */ }
+// ===================== WEATHER =====================
+function fetchWeather(){
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=-31.6333&longitude=-60.7000&current_weather=true')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.current_weather){
+        var w=d.current_weather;
+        var icon=weatherIcon(w.weathercode);
+        var temp=Math.round(w.temperature);
+        document.getElementById('weatherInfo').textContent=icon+' '+temp+'°';
+      }
+    }).catch(function(){});
 }
 
-// ─── Voice ────────────────────────────────────────────────────────────────────
-function startVoice() {
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR) { showToast('Voz no disponible en este navegador','error'); return; }
-  const r=new SR();
-  r.lang='es-AR'; r.interimResults=false; r.maxAlternatives=1;
-  r.onresult=e=>{ const t=e.results[0][0].transcript; if(t) onDestInput(t); };
-  r.onerror=e=>{ if(e.error!=='aborted') showToast('Error de voz: '+e.error,'error'); };
-  r.start();
-  showToast('Escuchando... Decí tu destino','info');
+function weatherIcon(code){
+  if(code===0)return'☀️';if(code<=3)return'⛅';if(code<=48)return'🌫️';
+  if(code<=57)return'🌧️';if(code<=67)return'🌧️';if(code<=77)return'🌨️';
+  if(code<=82)return'🌧️';if(code<=86)return'🌨️';if(code<=99)return'⛈️';
+  return'🌤️';
 }
 
-// ─── Estimate ─────────────────────────────────────────────────────────────────
-function haversine(lat1,lon1,lat2,lon2) {
-  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
-  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+// ===================== UTILS =====================
+function haversine(lat1,lon1,lat2,lon2){
+  var R=6371;var dLat=(lat2-lat1)*Math.PI/180;var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-function detectFactors() {
-  const tz='America/Argentina/Buenos_Aires';
-  const now=new Date();
-  let h=parseInt(new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'numeric',hour12:false}).format(now));
-  if(isNaN(h)) h=(now.getUTCHours()-3+24)%24;
-  const dn=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'long'}).format(now);
-  const dm={Sunday:0,Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6};
-  let d=dm[dn]; if(d===undefined) d=now.getDay();
+function formatPrice(n){return '$'+n.toLocaleString('es-AR')}
+function formatMin(m){return Math.ceil(m)+' min'}
 
-  const rushHour=(h>=7&&h<9)||(h>=17&&h<19);
-  const weekendNight=((d===5||d===6)&&h>=22)||((d===6||d===0)&&h<2);
-  return {weather:false,rushHour,weekendNight};
+// ===================== ESTIMATION ENGINE =====================
+function runEstimations(){
+  if(!_origin||!_dest)return;
+  var distKm=haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon);
+
+  _estimations=[];
+
+  // 1. Walk
+  var walkMin=(distKm/5)*60;
+  var walkPri=distKm<=0.8?1:3;
+  _estimations.push({mode:'walk',icon:'🚶',title:'Caminando',timeMin:walkMin,distance:distKm,priority:walkPri});
+
+  // 2. Bus
+  var busResult=estimateBus(distKm);
+  if(busResult) busResult.timeMin=busResult.totalMin;
+  _estimations.push(Object.assign({mode:'bus',icon:'🚌',title:'Colectivo',priority:2,distance:distKm},busResult||{timeMin:0,totalMin:0,price:0,boletos:1,combination:false}));
+
+  // 3. Bike
+  var bikeMin=(distKm/15)*60;
+  var nearBike=findNearestBikeStation(_origin);
+  var nearDestBike=_dest?findNearestBikeStation(_dest):null;
+  _estimations.push({mode:'bike',icon:'🚲',title:'Bicicleta',timeMin:bikeMin,distance:distKm,priority:2,nearStation:nearBike,nearDestStation:nearDestBike});
+
+  // 4. Moto - FIX 3
+  var motoResult=estimateMoto(distKm);
+  _estimations.push(Object.assign({mode:'moto',icon:'🏍️',title:'Moto',priority:3,distance:distKm},motoResult));
+
+  // 5. Auto
+  var autoResult=estimateAuto(distKm);
+  _estimations.push(Object.assign({mode:'auto',icon:'🚗',title:'Auto',priority:4,distance:distKm},autoResult));
+
+  // Sort by priority, then time
+  _estimations.sort(function(a,b){return a.priority-b.priority||a.timeMin-b.timeMin});
+
+  renderCards();
+  updateMapHint();
 }
 
-function applySurge(base,factors) {
-  let p=base;
-  if(factors.weather) p*=FARES.surge.weather;
-  if(factors.rushHour) p*=FARES.surge.rush;
-  if(factors.weekendNight) p*=FARES.surge.night;
-  return p;
-}
+function estimateBus(distKm){
+  // Find nearest bus stops to origin and destination
+  var stopsByLine={};
+  BUS_STOPS.forEach(function(s){
+    if(!stopsByLine[s.linea])stopsByLine[s.linea]=[];
+    stopsByLine[s.linea].push(s);
+  });
 
-function fmtPrice(v) { return isNaN(v)?'—':'$'+Math.round(v).toLocaleString('es-AR'); }
+  var bestDirect=null;
+  var bestCombo=null;
 
-function calcConfidence(dist, factors, uberP, didiP) {
-  const surgeCount = [factors.weather, factors.rushHour, factors.weekendNight].filter(Boolean).length;
-  const diff = Math.abs(uberP - didiP) / Math.max(uberP, didiP);
-  if (surgeCount >= 2) return 'Baja';
-  if (dist <= 0) return 'Baja';
-  if (uberP === didiP) return 'Baja';
-  if (diff >= 0.30) return 'Baja';
-  if (surgeCount === 0 && dist >= 0.5 && dist <= 8 && diff < 0.15) return 'Alta';
-  return 'Media';
-}
+  // Direct route: same line has stops near both origin and dest
+  Object.keys(stopsByLine).forEach(function(linea){
+    var stops=stopsByLine[linea];
+    var nearOrig=null,nearDest=null;
+    var minDO=Infinity,minDD=Infinity;
+    stops.forEach(function(s){
+      var dO=haversine(_origin.lat,_origin.lon,s.lat,s.lon);
+      var dD=haversine(_dest.lat,_dest.lon,s.lat,s.lon);
+      if(dO<minDO){minDO=dO;nearOrig=s}
+      if(dD<minDD){minDD=dD;nearDest=s}
+    });
+    // Check if same line serves both (need at least 2 stops)
+    if(nearOrig&&nearDest&&stops.length>=2){
+      var rideDist=haversine(nearOrig.lat,nearOrig.lon,nearDest.lat,nearDest.lon);
+      var walkToO=minDO;var walkFromD=minDD;
+      var walkToMin=walkToO/5*60+3; // FIX 6: 3min to stop
+      var rideMin=rideDist/15*60;
+      var walkFromMin=walkFromD/5*60+5; // FIX 6: 5min from stop
+      var totalMin=walkToMin+rideMin+walkFromMin;
+      var price=BUS_FARE_SUBE;
+      if(!bestDirect||totalMin<bestDirect.totalMin){
+        bestDirect={linea:linea,stopOrigen:nearOrig,stopDest:nearDest,
+          walkToStopMin:Math.ceil(walkToMin),rideMin:Math.ceil(rideMin),
+          walkFromStopMin:Math.ceil(walkFromMin),totalMin:Math.ceil(totalMin),
+          price:price,boletos:1,combination:false,
+          stopOrigenCalles:nearOrig.calles,stopDestCalles:nearDest.calles};
+      }
+    }
+  });
 
-async function runEstimate() {
-  if(!origin.lat||!dest) {
-    if(!origin.lat) showToast('Primero establecé tu ubicación de origen','error');
-    if(!dest) showToast('Elegí un destino','error');
-    return;
-  }
-  $('estimateLoading').classList.remove('hidden');
-  $('estimateError').classList.add('hidden');
-  $('estimateResult').classList.add('hidden');
-
-  try {
-    const dist=haversine(origin.lat,origin.lon,dest.lat,dest.lon);
-    if(dist<=0) { showEstimateError('Origen y destino son iguales'); return; }
-    const dur=(dist/25)*60; // 25 km/h avg
-
-    // Fetch precipitation for weather factor
-    let precipMm=0;
-    try {
-      const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude='+((origin.lat+dest.lat)/2)+'&longitude='+((origin.lon+dest.lon)/2)+'&current=precipitation&timezone=America%2FBuenos_Aires',{
-        signal:AbortSignal.timeout(6000)
+  // Combination: try line1 near origin + line2 near dest
+  var lines=Object.keys(stopsByLine);
+  for(var i=0;i<lines.length;i++){
+    for(var j=0;j<lines.length;j++){
+      if(i===j)continue;
+      var line1=lines[i];var line2=lines[j];
+      var stops1=stopsByLine[line1];var stops2=stopsByLine[line2];
+      // Find nearest stop of line1 to origin
+      var bestS1=null,minD1=Infinity;
+      stops1.forEach(function(s){var d=haversine(_origin.lat,_origin.lon,s.lat,s.lon);if(d<minD1){minD1=d;bestS1=s}});
+      // Find nearest stop of line2 to destination
+      var bestS2=null,minD2=Infinity;
+      stops2.forEach(function(s){var d=haversine(_dest.lat,_dest.lon,s.lat,s.lon);if(d<minD2){minD2=d;bestS2=s}});
+      // Find transfer point: nearest stops between line1 and line2
+      var bestTrans1=null,bestTrans2=null,minTrans=Infinity;
+      stops1.forEach(function(s1){
+        stops2.forEach(function(s2){
+          var d=haversine(s1.lat,s1.lon,s2.lat,s2.lon);
+          if(d<minTrans){minTrans=d;bestTrans1=s1;bestTrans2=s2}
+        });
       });
-      if(r.ok){ const d=await r.json(); precipMm=d.current?.precipitation??0; }
-    } catch(e){}
-
-    const factors=detectFactors();
-    factors.weather=precipMm>0;
-
-    let uberP=Math.max(FARES.uber.minFare, applySurge(FARES.uber.base+FARES.uber.km*dist+FARES.uber.min*dur, factors));
-    let didiP=Math.max(FARES.didi.minFare, applySurge(FARES.didi.base+FARES.didi.km*dist+FARES.didi.min*dur, factors));
-
-    const confidence = calcConfidence(dist, factors, uberP, didiP);
-
-    const cheaper=Math.abs(uberP-didiP)/((uberP+didiP)/2)<0.05?'similar':uberP<didiP?'uber':'didi';
-
-    // Advice
-    let advice,adviceClass;
-    if(factors.weekendNight&&factors.weather){advice='🌧️🌙 Lluvia + noche de finde: precios altos';adviceClass='advice-amber';}
-    else if(factors.weekendNight&&factors.rushHour){advice='🌙⏰ Noche de finde + hora pico: precios muy altos';adviceClass='advice-amber';}
-    else if(factors.weekendNight){advice='🌙 Noche de finde: precios altos (+30%)';adviceClass='advice-amber';}
-    else if(factors.rushHour&&factors.weather){advice='⏰🌧️ Hora pico + lluvia: conviene esperar';adviceClass='advice-amber';}
-    else if(factors.rushHour){advice='⏰ Hora pico: conviene esperar un poco';adviceClass='advice-amber';}
-    else if(factors.weather){advice='🌧️ Lluvia: demanda alta, pedí igual si urgente';adviceClass='advice-amber';}
-    else{advice='✅ Precios normales';adviceClass='advice-muted';}
-
-    // Deep links
-    const uberLink='https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+'&pickup[formatted_address]='+encodeURIComponent(origin.name)+'&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon+'&dropoff[formatted_address]='+encodeURIComponent(dest.name);
-    const didiLinkData = buildDiDiLinkSafe(origin, dest);
-    const didiLink = didiLinkData.primary;
-
-    currentEstimate={uberP,didiP,dist,dur,factors,cheaper,uberLink,didiLink};
-
-    // Render
-    $('adviceBanner').textContent=advice;
-    $('adviceBanner').className='advice-banner '+adviceClass;
-    $('metaDist').textContent='📏 '+dist.toFixed(1)+' km';
-    $('metaDur').textContent='⏱️ ~'+Math.round(dur)+' min';
-    const confEmoji = { 'Alta': '🟢', 'Media': '🟡', 'Baja': '🔴' };
-    $('metaConf').textContent = confEmoji[confidence] + ' ' + confidence;
-
-    $('uberPrice').textContent=fmtPrice(uberP);
-    $('uberRange').textContent=fmtPrice(uberP*.85)+' — '+fmtPrice(uberP*1.25);
-    $('uberLink').href=uberLink;
-
-    $('didiPrice').textContent=fmtPrice(didiP);
-    $('didiRange').textContent=fmtPrice(didiP*.85)+' — '+fmtPrice(didiP*1.25);
-    $('didiLink').href=didiLink;
-
-    $('uberCard').classList.toggle('cheaper',cheaper==='uber');
-    $('didiCard').classList.toggle('cheaper',cheaper==='didi');
-    $('uberCheaper').classList.toggle('hidden',cheaper!=='uber');
-    $('didiCheaper').classList.toggle('hidden',cheaper!=='didi');
-
-    // Factors
-    const fRow=$('factorsRow'); fRow.innerHTML='';
-    if(factors.weather) fRow.innerHTML+='<span class="factor-badge">🌧️ Demanda por lluvia +15%</span>';
-    if(factors.rushHour) fRow.innerHTML+='<span class="factor-badge">🏙️ Hora pico +20%</span>';
-    if(factors.weekendNight) fRow.innerHTML+='<span class="factor-badge">🌙 Noche de finde +30%</span>';
-    fRow.classList.toggle('hidden',!factors.weather&&!factors.rushHour&&!factors.weekendNight);
-
-    $('estimateLoading').classList.add('hidden');
-    $('estimateResult').classList.remove('hidden');
-
-    // Update sticky action bar
-    $('actionUberLink').href=uberLink;
-    $('actionDidiLink').href=didiLink;
-    $('actionBar').classList.remove('hidden');
-  } catch(e) {
-    showEstimateError('Error al estimar. Intentá de nuevo.');
-    $('actionBar').classList.add('hidden');
-  }
-}
-
-function showEstimateError(msg) {
-  $('estimateLoading').classList.add('hidden');
-  $('actionBar').classList.add('hidden');
-  $('estimateErrorMsg').textContent=msg;
-  $('estimateError').classList.remove('hidden');
-}
-
-// ─── DiDi Deep Link (Android intent:// + ADFS) ───────────────────────────────
-function buildDiDiLinkSafe(org, dst) {
-  if (!org || !dst || !org.lat || !dst.lat) {
-    return { primary: 'https://web.didiglobal.com/', fallback: 'https://web.didiglobal.com/', isIntent: false };
-  }
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  if (isAndroid) {
-    const pickupLat = org.lat, pickupLng = org.lon;
-    const dropoffLat = dst.lat, dropoffLng = dst.lon;
-    const fallbackUrl = encodeURIComponent('https://web.didiglobal.com/rider/?action=setPickup&pickupLat='+pickupLat+'&pickupLng='+pickupLng+'&dropoffLat='+dropoffLat+'&dropoffLng='+dropoffLng);
-    const intentUrl = 'intent://ride/?pickup_lat='+pickupLat+'&pickup_lng='+pickupLng+'&dropoff_lat='+dropoffLat+'&dropoff_lng='+dropoffLng+'#Intent;scheme=https;package=com.didiglobal.passenger;S.browser_fallback_url='+fallbackUrl+';end';
-    return { primary: intentUrl, fallback: 'https://web.didiglobal.com/', isIntent: true };
-  }
-  return { primary: 'https://web.didiglobal.com/', fallback: 'https://web.didiglobal.com/', isIntent: false };
-}
-
-const deepLinkState = { pending: null, timeout: null, startTime: 0, _focusHandler: null, _visibilityHandler: null };
-
-function openDiDiTracked() {
-  const linkData = buildDiDiLinkSafe(origin, dest);
-  const url = linkData.primary;
-  const start = Date.now();
-  deepLinkState.pending = 'didi'; deepLinkState.startTime = start;
-
-  function onVisible() {
-    if (document.visibilityState !== 'visible') return;
-    const elapsed = Date.now() - deepLinkState.startTime;
-    if (elapsed > 500 && deepLinkState.pending === 'didi') {
-      clearTimeout(deepLinkState.timeout); deepLinkState.pending = null;
-      console.log('[DiDi] deep link likely succeeded');
-      document.removeEventListener('visibilitychange', onVisible); deepLinkState._visibilityHandler = null;
+      if(bestS1&&bestS2&&bestTrans1&&bestTrans2&&minTrans<0.8){
+        var seg1Dist=haversine(bestS1.lat,bestS1.lon,bestTrans1.lat,bestTrans1.lon);
+        var transWalk=minTrans;
+        var seg2Dist=haversine(bestTrans2.lat,bestTrans2.lon,bestS2.lat,bestS2.lon);
+        var walkToMin1=minD1/5*60+3;
+        var ride1Min=seg1Dist/15*60;
+        var transWalkMin=transWalk/5*60;
+        var ride2Min=seg2Dist/15*60;
+        var walkFromMin2=minD2/5*60+5;
+        var totalMin=walkToMin1+ride1Min+transWalkMin+ride2Min+walkFromMin2;
+        var price=BUS_FARE_SUBE*2;
+        if(!bestCombo||totalMin<bestCombo.totalMin){
+          bestCombo={linea1:line1,linea2:line2,
+            stopOrigen:bestS1,stopTransbordo:bestTrans1,stopTransbordo2:bestTrans2,stopDest:bestS2,
+            walkToStopMin:Math.ceil(walkToMin1),ride1Min:Math.ceil(ride1Min),
+            transWalkMin:Math.ceil(transWalkMin),ride2Min:Math.ceil(ride2Min),
+            walkFromStopMin:Math.ceil(walkFromMin2),totalMin:Math.ceil(totalMin),
+            price:price,boletos:2,combination:true,
+            stopOrigenCalles:bestS1.calles,stopTransbordoCalles:bestTrans1.calles};
+        }
+      }
     }
   }
-  if (deepLinkState._visibilityHandler) document.removeEventListener('visibilitychange', deepLinkState._visibilityHandler);
-  deepLinkState._visibilityHandler = onVisible;
-  document.addEventListener('visibilitychange', onVisible);
 
-  const win = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!win) { clearTimeout(deepLinkState.timeout); deepLinkState.pending = null; showDiDiFallback('popup_blocked', url); return; }
-
-  deepLinkState.timeout = setTimeout(function() {
-    if (deepLinkState.pending === 'didi') { deepLinkState.pending = null; showDiDiFallback('no_confirmed_open', url); }
-  }, 2500);
-
-  function onFocusReturn() {
-    var elapsed = Date.now() - start;
-    if (elapsed > 500) { clearTimeout(deepLinkState.timeout); deepLinkState.pending = null; window.removeEventListener('focus', onFocusReturn); }
+  var chosen=bestCombo||bestDirect;
+  if(!chosen){
+    chosen={totalMin:Math.ceil((distKm/15)*60+8),price:BUS_FARE_SUBE,boletos:1,combination:false,
+      linea:'?',stopOrigenCalles:'—',walkToStopMin:3};
   }
-  if (deepLinkState._focusHandler) window.removeEventListener('focus', deepLinkState._focusHandler);
-  deepLinkState._focusHandler = onFocusReturn;
-  window.addEventListener('focus', onFocusReturn);
-
-  recordRideAndGo('didi');
+  return chosen;
 }
 
-function showDiDiFallback(reason, url) {
-  var msgs = { popup_blocked: 'El navegador bloqueó la apertura de DiDi.', no_confirmed_open: 'No se pudo confirmar la apertura de DiDi.', generic: 'No se pudo abrir DiDi.' };
-  var msg = msgs[reason] || msgs.generic;
-  var copyOk = confirm(msg + '\n\nOK → Copiar link al portapapeles\nCancelar → Abrir web de DiDi');
-  if (copyOk) {
-    try { navigator.clipboard.writeText(url); showToast('Link de DiDi copiado ✓', 'success'); } catch(e) { showToast('No se pudo copiar el link', 'error'); }
-  } else { window.open('https://web.didiglobal.com/', '_blank'); }
+function findNearestBikeStation(point){
+  var best=null,minD=Infinity;
+  BIKE_STATIONS.forEach(function(s){
+    var d=haversine(point.lat,point.lon,s.lat,s.lon);
+    if(d<minD){minD=d;best=s}
+  });
+  return best;
 }
 
-// ─── Map ──────────────────────────────────────────────────────────────────────
-function updateMap() {
-  if(!map) return;
-  const center=origin.lat?[origin.lat,origin.lon]:SANTA_FE;
-  map.flyTo(center,14,{duration:0.8});
-
-  if(origin.lat) {
-    if(originMarker) map.removeLayer(originMarker);
-    originMarker=L.marker([origin.lat,origin.lon]).addTo(map).bindPopup('Tu ubicación'+(origin.name?': '+origin.name.split(',')[0]:''));
-  }
-  if(dest) {
-    if(destMarker) map.removeLayer(destMarker);
-    destMarker=L.marker([dest.lat,dest.lon]).addTo(map).bindPopup('Destino: '+dest.name.split(',')[0]);
-  }
-  if(routeLine) map.removeLayer(routeLine);
-  if(origin.lat&&dest) {
-    routeLine=L.polyline([[origin.lat,origin.lon],[dest.lat,dest.lon]],{color:'#3b82f6',weight:3,opacity:.7}).addTo(map);
-    // Fit map to show both markers
-    const bounds=L.latLngBounds([[origin.lat,origin.lon],[dest.lat,dest.lon]]);
-    map.fitBounds(bounds,{padding:[30,30],maxZoom:15});
-  }
-  setTimeout(()=>map.invalidateSize(),100);
+// FIX 3: MOTO estimation
+function estimateMoto(distKm){
+  var timeMin=(distKm/35)*60; // 35 km/h
+  var uberPrice=calcAppPrice('uberMoto',distKm,timeMin);
+  var didiPrice=calcAppPrice('didiMoto',distKm,timeMin);
+  return{timeMin:timeMin,uberMotoPrice:uberPrice,didiMotoPrice:didiPrice};
 }
 
-// ─── Record Ride + Deep Link ──────────────────────────────────────────────────
-function recordRideAndGo(transport) {
-  if(origin.lat&&dest) {
-    const hash=Math.round(origin.lat*1000)+':'+Math.round(origin.lon*1000)+':'+Math.round(dest.lat*1000)+':'+Math.round(dest.lon*1000)+':'+transport+':'+Math.floor(Date.now()/60000);
-    if(submittedHashes.has(hash)) return;
-    submittedHashes.add(hash);
-  }
+function estimateAuto(distKm){
+  var timeMin=(distKm/25)*60; // FIX 6: auto 25 km/h
+  var uberPrice=calcAppPrice('uber',distKm,timeMin);
+  var didiPrice=calcAppPrice('didi',distKm,timeMin);
+  var maximPrice=calcAppPrice('maxim',distKm,timeMin);
+  var taxiPrice=estimateTaxi(distKm);
+  var remisPrice=taxiPrice; // same tariff
+  var taxiappPrice=taxiPrice; // FIX 4: TaxiApp same tariff
+  return{timeMin:timeMin,uberPrice:uberPrice,didiPrice:didiPrice,
+    maximPrice:maximPrice,taxiPrice:taxiPrice,remisPrice:remisPrice,taxiappPrice:taxiappPrice};
 }
 
-// ─── Transport Log ────────────────────────────────────────────────────────────
-function toggleLog() {
-  const form=$('logForm');
-  const visible=!form.classList.contains('hidden');
-  form.classList.toggle('hidden');
-  $('logToggle').textContent=visible?'Registrá cómo viajaste':'Ocultar registro';
+function calcAppPrice(fareKey,distKm,timeMin){
+  var f=_appFares[fareKey];
+  if(!f)return 0;
+  var price=f.base+f.km*distKm+f.min*timeMin;
+  return Math.max(price,f.minFare);
 }
 
-function logTransport() {
-  if(!origin.lat||!dest) { showToast('Faltan datos','error'); return; }
-  const hash=Math.round(origin.lat*1000)+':'+Math.round(origin.lon*1000)+':'+Math.round(dest.lat*1000)+':'+Math.round(dest.lon*1000)+':'+selectedTransport+':'+Math.floor(Date.now()/60000);
-  if(submittedHashes.has(hash)) { showToast('Este viaje ya fue registrado','info'); return; }
-  submittedHashes.add(hash);
-  // Save to localStorage
-  try {
-    const trips=JSON.parse(localStorage.getItem('movilidad_trips')||'[]');
-    trips.push({
-      ts:new Date().toISOString(),
-      from:{lat:origin.lat,lon:origin.lon,name:origin.name},
-      to:{lat:dest.lat,lon:dest.lon,name:dest.name},
-      transport:selectedTransport,
-      price:$('logPrice').value?parseFloat($('logPrice').value):null,
-      estimate:currentEstimate?{uber:currentEstimate.uberP,didi:currentEstimate.didiP}:null
+function estimateTaxi(distKm){
+  var h=new Date().getHours();
+  var t=(h>=6&&h<22)?TAXI_TARIFF.diurno:TAXI_TARIFF.nocturno;
+  var fichas=Math.floor(distKm*1000/t.distFicha);
+  return t.bajada+fichas*t.ficha;
+}
+
+// ===================== MAP HINT =====================
+function updateMapHint(){
+  var el=document.getElementById('mapHint');
+  if(!_estimations||!_estimations.length){el.classList.remove('show');return}
+  el.classList.add('show');
+  var modeNames={walk:'caminando',bus:'colectivo',bike:'bicicleta',moto:'moto',auto:'auto'};
+  var first=_estimations[0];
+  var modeLabel=modeNames[first.mode]||first.mode;
+  el.textContent='🗺️ Ruta en mapa: '+modeLabel+' · Arrastrá para cambiar';
+}
+
+// ===================== RENDER CARDS =====================
+function renderCards(){
+  var container=document.getElementById('cardsContainer');
+  var html='';
+
+  if(!_estimations||!_estimations.length){
+    // Show placeholder
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:13px">'+
+      'Ingresá origen y destino para ver opciones de viaje</div>';
+  } else {
+    _estimations.forEach(function(est,idx){
+      html+=renderActiveCard(est,idx);
     });
-    localStorage.setItem('movilidad_trips',JSON.stringify(trips.slice(-100)));
-  } catch(e){}
-  showToast('Viaje registrado ✓','success');
-  $('logForm').classList.add('hidden');
-  $('logToggle').textContent='Registrá cómo viajaste';
-  $('logPrice').value='';
-  loadQuickDests();
+  }
+
+  // Unavailable cards (always shown)
+  html+=renderUnavailableCard('🚆','Tren','Sin servicio en Santa Fe');
+  html+=renderUnavailableCard('🚇','Subte','Sin servicio en Santa Fe');
+  html+=renderUnavailableCard('✈️','Avión','Solo viajes interurbanos');
+
+  container.innerHTML=html;
+
+  // Attach drag events
+  initDragAndDrop();
+
+  // Attach button events
+  attachButtonEvents();
 }
 
-// ─── Rate Limiter (1 req/s to Nominatim) ──────────────────────────────────────
-async function rateLimit() {
-  const now=Date.now(), elapsed=now-lastNominatimCall;
-  if(elapsed<1100) await new Promise(r=>setTimeout(r,1100-elapsed));
-  lastNominatimCall=Date.now();
+function renderActiveCard(est,idx){
+  var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'" draggable="true">';
+  h+='<span class="drag-handle" title="Arrastrar">⋮⋮</span>';
+
+  if(est.mode==='walk'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km a pie · GRATIS</div>';
+  }
+
+  else if(est.mode==='bus'){
+    // FIX 5: title always starts with "🚌 Colectivo"
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">Colectivo</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    // FIX 11: natural Argentine language
+    var busText=formatBusText(est);
+    h+='<p class="rc-subtitle" style="font-size:13px;line-height:1.5;white-space:pre-line">'+busText+'</p>';
+    h+='<div class="rc-actions">';
+    h+='<button class="rc-action bus" data-action="bus-detail">Ver recorrido</button>';
+    h+='</div>';
+  }
+
+  else if(est.mode==='bike'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle" style="white-space:pre-line">'+est.distance.toFixed(1)+' km · GRATIS';
+    if(est.nearStation){
+      h+='\n📍 Retirar en: '+est.nearStation.nombre+' ('+est.nearStation.calles+')';
+    }
+    if(est.nearDestStation){
+      h+='\n📍 Dejar en: '+est.nearDestStation.nombre+' ('+est.nearDestStation.calles+')';
+    }
+    h+='</div>';
+    h+='<div class="rc-actions">';
+    var bikeLink=buildBikeLink();
+    h+='<a href="'+bikeLink+'" class="rc-action bike" target="_blank">Bicicleta</a>';
+    h+='</div>';
+  }
+
+  else if(est.mode==='moto'){
+    // FIX 3
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km · desde '+formatPrice(Math.min(est.uberMotoPrice,est.didiMotoPrice))+'</div>';
+    h+='<div class="rc-actions">';
+    h+='<button class="rc-action moto" data-action="uber-moto" data-url="'+buildUberLink()+'">Uber Moto</button>';
+    h+='<button class="rc-action moto" data-action="didi-moto" data-url="'+buildDiDiLink()+'">DiDi Moto</button>';
+    h+='</div>';
+  }
+
+  else if(est.mode==='auto'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
+
+    // Provider rows - FIX 2: no garbage color blocks, FIX 10: PEDIR left of price
+    h+=renderProviderRow('uber','Uber',est.uberPrice,'uber');
+    h+=renderProviderRow('didi','DiDi',est.didiPrice,'didi');
+    h+=renderProviderRow('maxim','Maxim',est.maximPrice,'maxim');
+
+    // Taxi providers with same tariff + 2min wait (FIX 6, FIX 7)
+    var taxiTime=est.timeMin+2;
+    h+=renderProviderRow('taxi','Radiotaxi',est.taxiPrice,'radiotaxi',taxiTime,'https://wa.link/n7u2e7','🚕 Radiotaxi WA');
+    h+=renderProviderRow('remis','Remises Real',est.remisPrice,'remis',taxiTime,'https://wa.link/rqov56','🚗 Remises Real WA');
+    // FIX 4: TaxiApp
+    h+=renderProviderRow('taxiapp','TaxiApp',est.taxiappPrice,'taxiapp',taxiTime,'https://wa.link/vavbcl','📱 TaxiApp WA');
+  }
+
+  h+='</div>';
+  return h;
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
-let toastTimer=null;
-function showToast(msg,type='info') {
-  const t=$('toast');
-  t.textContent=msg;
-  t.className='toast '+type;
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.classList.add('hidden'),4000);
+function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,waText){
+  var provider=PROVIDERS[key];
+  if(!provider||!provider.available)return'';
+  var color=provider.color||'#666';
+  var t=timeOverride?formatMin(timeOverride):'';
+  var url='';
+  if(key==='uber')url=buildUberLink();
+  else if(key==='didi')url=buildDiDiLink();
+  else if(key==='maxim')url=buildMaximLink();
+  else if(waLink)url=waLink;
+
+  var h='<div class="provider-row">';
+  h+='<div class="provider-color" style="background:'+color+'"></div>';
+  h+='<span class="provider-name">'+name+'</span>';
+  h+='<div class="card-action-row">';
+  if(url){
+    var btnLabel=key==='taxi'||key==='remis'||key==='taxiapp'?'Pedir':'Pedir';
+    h+='<button class="btn-pedir" data-action="'+key+'" data-url="'+url+'">'+btnLabel+'</button>';
+  }
+  h+='<span class="card-price">'+formatPrice(price)+'</span>';
+  if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
+  h+='</div></div>';
+  return h;
 }
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
-function esc(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+function renderUnavailableCard(icon,title,reason){
+  return '<div class="route-card route-card--unavailable">'+
+    '<div class="unavailable-overlay"><span>NO DISPONIBLE</span></div>'+
+    '<div class="rc-header"><span class="rc-icon">'+icon+'</span><span class="rc-title">'+title+'</span></div>'+
+    '<div class="rc-subtitle">'+reason+'</div></div>';
+}
+
+// FIX 11: Bus text in natural Argentine language
+function formatBusText(r){
+  if(!r.combination){
+    return 'La Línea '+r.linea+' te lleva directo.\n'+
+           'Subite a '+r.walkToStopMin+' min, en '+r.stopOrigenCalles+'.\n'+
+           'En '+r.totalMin+' min llegás. Te sale '+formatPrice(r.price)+'.';
+  } else {
+    return 'Podés combinar la Línea '+r.linea1+' con la Línea '+r.linea2+' para llegar.\n'+
+           'Subite a la '+r.linea1+' en '+r.stopOrigenCalles+'.\n'+
+           'Pasate a la '+r.linea2+' en '+r.stopTransbordoCalles+'.\n'+
+           'En total '+r.totalMin+' min. Te sale '+formatPrice(r.price)+' ('+r.boletos+' boletos).';
+  }
+}
+
+// ===================== LINK BUILDERS =====================
+function buildUberLink(){
+  if(!_origin||!_dest)return '#';
+  return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+_origin.lat+'&pickup[longitude]='+_origin.lon+
+    '&pickup[formatted_address]=Origen&dropoff[latitude]='+_dest.lat+'&dropoff[longitude]='+_dest.lon;
+}
+
+function buildDiDiLink(){
+  if(!_origin||!_dest)return '#';
+  return 'https://web.didiglobal.com/ar/passenger/ride/?pickup_lat='+_origin.lat+'&pickup_lng='+_origin.lon+
+    '&dropoff_lat='+_dest.lat+'&dropoff_lng='+_dest.lon;
+}
+
+// FIX 8: Maxim intent:// for Android
+function buildMaximLink(){
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  if(isAndroid){
+    return 'intent://passenger/#Intent;scheme=maxim;package=com.taxsee.taxsee;S.browser_fallback_url='+
+      encodeURIComponent('https://play.google.com/store/apps/details?id=com.taxsee.taxsee')+';end';
+  }
+  return 'https://taximaxim.com/ar/';
+}
+
+function buildBikeLink(){
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  if(isAndroid)return 'intent://#Intent;scheme=lasbicis;package=com.santafe.lasbicis;end';
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS)return 'https://apps.apple.com/ar/app/id6444962582';
+  return 'https://www.santafe.gob.ar/index.php/educacionycultura/content/download/55027/283898/file/Las%20Bicis.pdf';
+}
+
+// ===================== FIX 9: Double tap to confirm =====================
+var _confirmState={};
+function requestRide(mode,url){
+  var now=Date.now();
+  var last=_confirmState[mode]||0;
+  var DOUBLE_TAP_MS=2000;
+  if(now-last<DOUBLE_TAP_MS){
+    _confirmState[mode]=0;
+    window.open(url,'_blank');
+  } else {
+    _confirmState[mode]=now;
+    showToast('Tocá de nuevo para confirmar','info');
+    setTimeout(function(){_confirmState[mode]=0},DOUBLE_TAP_MS+100);
+  }
+}
+
+// ===================== BUTTON EVENTS =====================
+function attachButtonEvents(){
+  // PEDIR buttons (auto providers)
+  document.querySelectorAll('.btn-pedir').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var action=btn.getAttribute('data-action');
+      var url=btn.getAttribute('data-url');
+      if(url&&url!=='#'){
+        requestRide(action,url); // FIX 9
+      }
+    });
+  });
+
+  // Moto buttons
+  document.querySelectorAll('.rc-action.moto').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var action=btn.getAttribute('data-action');
+      var url=btn.getAttribute('data-url');
+      if(url&&url!=='#'){
+        requestRide(action,url); // FIX 9
+      }
+    });
+  });
+
+  // Bike link
+  document.querySelectorAll('.rc-action.bike').forEach(function(a){
+    // Already an <a> tag, let it work normally but add confirm
+    a.addEventListener('click',function(e){
+      e.stopPropagation();
+    });
+  });
+
+  // Bus detail
+  document.querySelectorAll('[data-action="bus-detail"]').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      showToast('Función de recorrido próximamente','info');
+    });
+  });
+}
+
+// ===================== DRAG AND DROP =====================
+function initDragAndDrop(){
+  var cards=document.querySelectorAll('.route-card:not(.route-card--unavailable)');
+  var dragSrc=null;
+
+  cards.forEach(function(card){
+    card.addEventListener('dragstart',function(e){
+      dragSrc=card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',card.getAttribute('data-mode'));
+    });
+
+    card.addEventListener('dragend',function(){
+      card.classList.remove('dragging');
+      document.querySelectorAll('.route-card').forEach(function(c){c.classList.remove('drag-over')});
+    });
+
+    card.addEventListener('dragover',function(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect='move';
+      if(card!==dragSrc){
+        card.classList.add('drag-over');
+      }
+    });
+
+    card.addEventListener('dragleave',function(){
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop',function(e){
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if(dragSrc&&dragSrc!==card){
+        // Reorder in DOM
+        var container=document.getElementById('cardsContainer');
+        var allCards=Array.from(container.querySelectorAll('.route-card:not(.route-card--unavailable)'));
+        var fromIdx=allCards.indexOf(dragSrc);
+        var toIdx=allCards.indexOf(card);
+        if(fromIdx<toIdx){
+          container.insertBefore(dragSrc,card.nextSibling);
+        } else {
+          container.insertBefore(dragSrc,card);
+        }
+        // Update map hint with new first mode
+        var firstMode=document.querySelector('.route-card:not(.route-card--unavailable)');
+        if(firstMode){
+          var modeNames={walk:'caminando',bus:'colectivo',bike:'bicicleta',moto:'moto',auto:'auto'};
+          var m=firstMode.getAttribute('data-mode');
+          document.getElementById('mapHint').textContent='🗺️ Ruta en mapa: '+(modeNames[m]||m)+' · Arrastrá para cambiar';
+        }
+      }
+    });
+  });
+}
+
+// ===================== UI UPDATES =====================
+function updateOriginUI(){
+  document.getElementById('originValue').textContent=_origin?_origin.name:'Tocá 📍 para localizarte';
+}
+
+// ===================== TOAST =====================
+function showToast(msg,type){
+  type=type||'info';
+  var container=document.getElementById('toastContainer');
+  var el=document.createElement('div');
+  el.className='toast '+type;
+  el.textContent=msg;
+  container.appendChild(el);
+  setTimeout(function(){
+    el.style.opacity='0';
+    el.style.transition='opacity .3s';
+    setTimeout(function(){el.remove()},300);
+  },2500);
+}
+
+// ===================== DARK MODE AUTO =====================
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){
+    document.body.setAttribute('data-theme',e.matches?'dark':'light');
+  });
 }
 </script>
 </body>
