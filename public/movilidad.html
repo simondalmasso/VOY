@@ -43,8 +43,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ac-item:last-child{border-bottom:none}
 .ac-item:active{background:var(--bg3)}
 .ac-item small{color:var(--text2);font-size:11px;display:block;margin-top:2px}
-/* MAP - FIX 8: height reduced 40% */
-#map{width:100%;height:12vh;max-height:132px;min-height:96px;background:var(--bg3)}
+/* MAP - height fija para mobile (MapLibre requiere height>0 al init) */
+#map{width:100%;height:220px;min-height:160px;background:#e8e0d8;position:relative}
+@media(min-width:600px){#map{height:320px}}
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
 /* Map floating labels */
 .voy-label{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;line-height:1.3;pointer-events:none}
@@ -71,12 +72,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .provider-name{font-size:12px;font-weight:600;min-width:70px}
 .provider-color{width:4px;height:24px;border-radius:2px;flex-shrink:0}
 .card-action-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
-.btn-pedir{background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn-pedir{background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:44px}
 .btn-pedir:active{transform:scale(.95)}
 .card-price{font-size:14px;font-weight:700}
 /* Action buttons in cards */
 .rc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.rc-action{padding:6px 12px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#fff}
+.rc-action{padding:6px 12px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#fff;min-height:44px}
 .rc-action.uber{background:#000}.rc-action.didi{background:var(--orange)}
 .rc-action.maxim{background:var(--purple)}.rc-action.radiotaxi{background:#d97706}
 .rc-action.remis{background:#6b7280}.rc-action.taxiapp{background:#25d366}
@@ -89,6 +90,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .route-card--unavailable{opacity:.45;filter:grayscale(.6);pointer-events:none}
 .unavailable-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2}
 .unavailable-overlay span{background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;letter-spacing:.5px}
+.unavailable-summary{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px;color:var(--text2);opacity:.6;border-top:1px solid var(--card-border);margin-top:4px}
+.unavailable-summary span{margin-left:auto;font-size:11px}
 /* Footer */
 .footer{position:fixed;bottom:0;left:0;right:0;background:var(--footer-bg);color:#94a3b8;font-size:10px;padding:6px 12px;text-align:center;z-index:100}
 /* Toast */
@@ -132,6 +135,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <!-- MAP -->
 <div style="position:relative">
 <div id="map"></div>
+<div id="mapLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg2);font-size:13px;color:var(--text2);pointer-events:none;z-index:5">Cargando mapa...</div>
 <button id="centerRouteBtn" onclick="centerRoute()" style="position:absolute;bottom:8px;right:8px;z-index:10;background:var(--bg2);border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);display:none;color:var(--text)">🎯 Centrar</button>
 </div>
 
@@ -279,16 +283,42 @@ document.addEventListener('DOMContentLoaded',function(){
   });
 });
 
+var CARTO_STYLE='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+var FALLBACK_STYLE={
+  version:8,
+  sources:{
+    osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}
+  },
+  layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]
+};
+
 function initMap(){
-  _map=new maplibregl.Map({
-    container:'map',
-    style:'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    center:[-60.7000,-31.6333],
-    zoom:13,
-    attributionControl:false
-  });
-  _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
-  _map.on('click',onMapClick);
+  try{
+    _map=new maplibregl.Map({
+      container:'map',
+      style:CARTO_STYLE,
+      center:[-60.7087,-31.6256],
+      zoom:13,
+      attributionControl:false
+    });
+    _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+    _map.on('click',onMapClick);
+    _map.on('error',function(e){
+      console.warn('[MAP] CARTO style error, switching to OSM fallback:',e);
+      _map.setStyle(FALLBACK_STYLE);
+      var ml=document.getElementById('mapLoading');if(ml)ml.style.display='none';
+    });
+    _map.on('load',function(){
+      _map.resize();
+      var ml=document.getElementById('mapLoading');if(ml)ml.style.display='none';
+    });
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){if(_map)_map.resize()});
+    });
+  }catch(e){
+    console.error('[MAP] Init failed:',e);
+    var ml=document.getElementById('mapLoading');if(ml)ml.textContent='Mapa no disponible';
+  }
 }
 
 function initDarkMode(){
@@ -1055,10 +1085,8 @@ function renderCards(){
     _estimations.forEach(function(est,idx){
       html+=renderActiveCard(est,idx);
     });
-    // Unavailable cards only shown when there are results
-    html+=renderUnavailableCard('🚆','Tren','Sin servicio en Santa Fe');
-    html+=renderUnavailableCard('🚇','Subte','Sin servicio en Santa Fe');
-    html+=renderUnavailableCard('✈️','Avión','Solo viajes interurbanos');
+    // Unavailable: 1 línea compacta
+    html+='<div class="unavailable-summary">🚆 Tren &nbsp;·&nbsp; 🚇 Subte &nbsp;·&nbsp; ✈️ Avión <span>No disponibles en Santa Fe</span></div>';
   }
 
   container.innerHTML=html;
@@ -1103,24 +1131,35 @@ function renderActiveCard(est,idx){
     h+='</div>';
   }
 
-  // Moto: mismo renderer que Auto, solo providers confirmados
+  // Moto: providers ordenados por precio ascendente
   else if(est.mode==='moto'){
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    h+=renderProviderRow('uber_moto','Uber Moto',est.uberMotoPrice,'uber-moto',est.uberMotoTimeMin);
-    h+=renderProviderRow('didi_moto','DiDi Moto',est.didiMotoPrice,'moto-didi',est.didiMotoTimeMin);
+    var motoProvidersList=[
+      {id:'uber_moto',name:'Uber Moto',price:est.uberMotoPrice,timeMin:est.uberMotoTimeMin},
+      {id:'didi_moto',name:'DiDi Moto',price:est.didiMotoPrice,timeMin:est.didiMotoTimeMin}
+    ].filter(function(p){return p.price!=null}).sort(function(a,b){return a.price-b.price});
+    motoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin);
+    });
   }
 
   else if(est.mode==='auto'){
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    h+=renderProviderRow('uber','Uber',est.uberPrice,'uber',est.uberTimeMin);
-    h+=renderProviderRow('didi','DiDi',est.didiPrice,'didi',est.didiTimeMin);
-    h+=renderProviderRow('maxim','Maxim',est.maximPrice,'maxim',est.maximTimeMin);
+    var autoProvidersList=[
+      {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
+      {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
+      {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
+      {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
+      {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
+      {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
+    ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available}).sort(function(a,b){return a.price-b.price});
+    autoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url);
+    });
+    // Cabify: price=null → siempre al final como "Consultar"
     h+=renderProviderRow('cabify','Cabify',est.cabifyPrice,'cabify');
-    h+=renderProviderRow('taxi','Radiotaxi',est.taxiPrice,'radiotaxi',est.taxiTimeMin,'https://wa.link/n7u2e7');
-    h+=renderProviderRow('remis','Remises Real',est.remisPrice,'remis',est.remisTimeMin,'https://wa.link/rqov56');
-    h+=renderProviderRow('taxiapp','TaxiApp',est.taxiappPrice,'taxiapp',est.taxiappTimeMin,'https://wa.link/vavbcl');
   }
 
   h+='</div>';
@@ -1188,10 +1227,24 @@ function buildDiDiLink(){
 }
 
 function buildMaximLink(){
+  if(!_origin||!_dest||!_origin.lat||!_dest.lat) return 'https://taximaxim.com/ar/';
   var isAndroid=/Android/i.test(navigator.userAgent);
+  var isIOS=/iPhone|iPad/i.test(navigator.userAgent);
   if(isAndroid){
-    return 'intent://passenger/#Intent;scheme=maxim;package=com.taxsee.taxsee;S.browser_fallback_url='+
-      encodeURIComponent('https://play.google.com/store/apps/details?id=com.taxsee.taxsee')+';end';
+    var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';
+    return 'intent://order?'+
+      'startLat='+Number(_origin.lat).toFixed(6)+
+      '&startLon='+Number(_origin.lon).toFixed(6)+
+      '&finishLat='+Number(_dest.lat).toFixed(6)+
+      '&finishLon='+Number(_dest.lon).toFixed(6)+
+      '#Intent'+
+      ';scheme=taxsee'+
+      ';package=com.taxsee.taxsee'+
+      ';S.browser_fallback_url='+encodeURIComponent(playStore)+
+      ';end';
+  }
+  if(isIOS){
+    return 'https://apps.apple.com/app/maxim/id893663029';
   }
   return 'https://taximaxim.com/ar/';
 }
