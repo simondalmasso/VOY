@@ -18,3 +18,27 @@ Stage Summary:
 
 Decision Consistency Score: 52/100 → 77/100 (projected)
 Browser verified: 5 cards render, recommendation block visible, no JS errors, all fix variables initialized correctly.
+
+---
+Task ID: 2
+Agent: Main
+Task: Production Stability Patches — Round 2 (P0-6, P0-7, P1-8)
+
+Work Log:
+- Applied P0-6: `drawBusRoute()` isStyleLoaded guard (L859-862) — same crash class as P1-4 but was missed in first round
+- Applied P0-7: `requestRide()` captures price at FIRST tap instead of second (L1571-1617) — eliminates render lock → state mutation → price mismatch during double-tap
+  - Changed `_confirmState` from `{mode: timestamp}` to `{mode: {time, price}}`
+  - Extracted `_findPriceForMode()` helper function
+  - Price captured before `_renderLocked=true` → immune to _estimations mutation during lock window
+- Applied P1-8: Manual pin mode auto-cancel after 15s (L703-730, L736)
+  - Added `_manualModeTimer`, `MANUAL_MODE_TIMEOUT_MS=15000`, `_clearManualMode()`
+  - `activateMapOrigin()` and `activateMapDest()` now set 15s timeout
+  - `onMapClick()` cancels timer on successful pin placement
+  - Prevents `_manualOriginMode` getting stuck permanently if user cancels without clicking map
+
+Stage Summary:
+- All 3 patches browser-verified with agent-browser
+- P0-7 verified: price $3000 captured at first tap preserved even when _estimations mutated to $12999 during lock
+- P1-8 verified: crosshair cursor + _manualOriginMode correctly reset on timeout
+- No dev server errors
+- Total patches applied across both rounds: 8 (P0-1, P0-2, P0-6, P0-7, P1-3, P1-4, P1-5, P1-8)

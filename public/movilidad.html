@@ -700,11 +700,24 @@ function locateMe(){
 }
 
 // ===================== MAP CLICK / MANUAL PIN =====================
+var _manualModeTimer=null;
+var MANUAL_MODE_TIMEOUT_MS=15000; // PATCH P1-8: auto-cancel pin mode after 15s
+
+function _clearManualMode(){
+  _manualOriginMode=false;
+  _manualDestMode=false;
+  document.getElementById('map').classList.remove('crosshair');
+  clearTimeout(_manualModeTimer);
+  _manualModeTimer=null;
+}
+
 function activateMapOrigin(){
   _manualOriginMode=true;
   _manualDestMode=false;
   document.getElementById('map').classList.add('crosshair');
   showToast('Tocá el mapa para fijar el origen','info');
+  clearTimeout(_manualModeTimer);
+  _manualModeTimer=setTimeout(_clearManualMode,MANUAL_MODE_TIMEOUT_MS);
 }
 
 function activateMapDest(){
@@ -712,12 +725,15 @@ function activateMapDest(){
   _manualOriginMode=false;
   document.getElementById('map').classList.add('crosshair');
   showToast('Tocá el mapa para fijar el destino','info');
+  clearTimeout(_manualModeTimer);
+  _manualModeTimer=setTimeout(_clearManualMode,MANUAL_MODE_TIMEOUT_MS);
 }
 
 function onMapClick(e){
   if(!_manualOriginMode&&!_manualDestMode)return;
   var lat=e.lngLat.lat;
   var lon=e.lngLat.lng;
+  clearTimeout(_manualModeTimer);_manualModeTimer=null; // PATCH P1-8: cancel timeout on success
 
   if(_manualDestMode){
     _manualDestMode=false;
@@ -857,7 +873,9 @@ function refreshDestLabel(){
 
 // ===================== BUS ROUTE OVERLAY =====================
 function drawBusRoute(est){
-  if(!est||!est.stopOrigen||!_origin||!_dest)return;
+  if(!est||!est.stopOrigen||!_origin||!_dest||!_map)return;
+  // PATCH P0-6: defer if style is transitioning (same guard as drawRouteLine)
+  if(!_map.isStyleLoaded()){_map.once('style.load',function(){drawBusRoute(est)});return}
 
   // Remove normal route line first
   if(_map.getSource('route-src')){
@@ -1566,41 +1584,48 @@ function buildBikeLink(){
 }
 
 // ===================== DOUBLE TAP TO CONFIRM =====================
-var _confirmState={};
+var _confirmState={}; // now stores {time, price} instead of just timestamp
 var _renderLocked=false;  // FIX 3: lock renders during active double-tap
 var _renderPending=false; // FIX 3: deferred render flag
 
+function _findPriceForMode(mode){
+  // Extract price the user SAW from current _estimations
+  if(!_estimations)return null;
+  var modeKey=mode.toLowerCase();
+  var ridePrice=null;
+  _estimations.forEach(function(est){
+    if(modeKey==='uber'&&est.uberPrice!=null)ridePrice=est.uberPrice;
+    else if(modeKey==='didi'&&est.didiPrice!=null)ridePrice=est.didiPrice;
+    else if(modeKey==='maxim'&&est.maximPrice!=null)ridePrice=est.maximPrice;
+    else if(modeKey==='taxi'&&est.taxiPrice!=null)ridePrice=est.taxiPrice;
+    else if(modeKey==='remis'&&est.remisPrice!=null)ridePrice=est.remisPrice;
+    else if(modeKey==='taxiapp'&&est.taxiappPrice!=null)ridePrice=est.taxiappPrice;
+    else if(modeKey==='uber_moto'&&est.uberMotoPrice!=null)ridePrice=est.uberMotoPrice;
+    else if(modeKey==='didi_moto'&&est.didiMotoPrice!=null)ridePrice=est.didiMotoPrice;
+    else if(modeKey==='bus'&&est.price!=null)ridePrice=est.price;
+    else if(modeKey==='walk')ridePrice=0;
+    else if(modeKey==='bike')ridePrice=0;
+  });
+  return ridePrice;
+}
+
 function requestRide(mode,url){
   var now=Date.now();
-  var last=_confirmState[mode]||0;
+  var prev=_confirmState[mode];
   var DOUBLE_TAP_MS=2000;
-  if(now-last<DOUBLE_TAP_MS){
-    _confirmState[mode]=0;
-    // TEMPORAL MEMORY: record learning event on confirmed action ONLY
-    var ridePrice=null;
-    // Try to find price from current estimations for this mode
-    if(_estimations){
-      _estimations.forEach(function(est){
-        var modeKey=mode.toLowerCase();
-        if(modeKey==='uber'&&est.uberPrice!=null)ridePrice=est.uberPrice;
-        else if(modeKey==='didi'&&est.didiPrice!=null)ridePrice=est.didiPrice;
-        else if(modeKey==='maxim'&&est.maximPrice!=null)ridePrice=est.maximPrice;
-        else if(modeKey==='taxi'&&est.taxiPrice!=null)ridePrice=est.taxiPrice;
-        else if(modeKey==='remis'&&est.remisPrice!=null)ridePrice=est.remisPrice;
-        else if(modeKey==='taxiapp'&&est.taxiappPrice!=null)ridePrice=est.taxiappPrice;
-        else if(modeKey==='uber_moto'&&est.uberMotoPrice!=null)ridePrice=est.uberMotoPrice;
-        else if(modeKey==='didi_moto'&&est.didiMotoPrice!=null)ridePrice=est.didiMotoPrice;
-        else if(modeKey==='bus'&&est.price!=null)ridePrice=est.price;
-      });
-    }
+  // PATCH P0-7: capture price at FIRST tap (what user sees), not second
+  if(prev&&now-prev.time<DOUBLE_TAP_MS){
+    _confirmState[mode]=null;
+    // Use price captured at first tap — immune to _estimations mutation during lock
+    var ridePrice=prev.price;
     tmLearn(mode,ridePrice);
     window.open(url,'_blank');
   }else{
-    _confirmState[mode]=now;
+    _confirmState[mode]={time:now,price:_findPriceForMode(mode)};
     _renderLocked=true;  // FIX 3: lock renders while double-tap is active
     showToast('Tocá de nuevo para confirmar','info');
     setTimeout(function(){
-      _confirmState[mode]=0;
+      _confirmState[mode]=null;
       _renderLocked=false;  // FIX 3: unlock
       if(_renderPending){
         _renderPending=false;
