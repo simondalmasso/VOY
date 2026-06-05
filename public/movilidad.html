@@ -783,6 +783,8 @@ function reverseGeocodeDest(lat,lon){
 
 // ===================== MAP MARKERS =====================
 function updateMapMarkers(){
+  // PATCH P0-9: defer map updates during double-tap confirmation
+  if(_renderLocked){_renderPending=true;return}
   if(_originMarker){_originMarker.remove();_originMarker=null}
   if(_destMarker){_destMarker.remove();_destMarker=null}
   if(_originPopup){_originPopup.remove();_originPopup=null}
@@ -1630,6 +1632,7 @@ function requestRide(mode,url){
       if(_renderPending){
         _renderPending=false;
         renderCards();  // FIX 3: flush deferred render
+        updateMapMarkers();  // PATCH P0-9: flush deferred map update
       }
     },DOUBLE_TAP_MS+100);
   }
