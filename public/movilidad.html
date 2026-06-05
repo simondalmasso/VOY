@@ -276,14 +276,20 @@ var _TM_SOFT_BIAS_THRESHOLD=0.12; // only bias when score diff < this
 var _TM_BIAS_DOMINANCE_LIMIT=0.80; // >80% toward one mode → rebalance
 
 // --- Memory Store ---
+var _tmCache=null;
+var _tmCacheDirty=true;
+
 function tmLoad(){
+  if(!_tmCacheDirty&&_tmCache)return _tmCache;
   try{
     var raw=localStorage.getItem(_TM_KEY);
-    if(!raw)return[];
+    if(!raw){_tmCache=[];_tmCacheDirty=false;return[]}
     var parsed=JSON.parse(raw);
-    if(!Array.isArray(parsed))return[];
+    if(!Array.isArray(parsed)){_tmCache=[];_tmCacheDirty=false;return[]}
+    _tmCache=parsed;
+    _tmCacheDirty=false;
     return parsed;
-  }catch(e){return[]}
+  }catch(e){_tmCache=[];_tmCacheDirty=false;return[]}
 }
 
 function tmSave(entries){
@@ -293,6 +299,8 @@ function tmSave(entries){
       entries=entries.slice(entries.length-_TM_MAX);
     }
     localStorage.setItem(_TM_KEY,JSON.stringify(entries));
+    _tmCache=entries;
+    _tmCacheDirty=false;
   }catch(e){}
 }
 
@@ -362,6 +370,7 @@ function tmLearn(actionKey,price){
     memory=memory.slice(memory.length-_TM_MAX);
   }
   tmSave(memory);
+  _tmCacheDirty=true; // invalidate cache after write
 }
 
 // --- Temporal Decay ---
@@ -590,19 +599,37 @@ function initDarkMode(){
 var _gpsRetryCount=0;
 var _gpsMaxRetries=3;
 var _gpsRetryTimer=null;
+var _lastGpsOrigin=null;
+var _gpsDebounceTimer=null;
+var GPS_MIN_MOVEMENT_KM=0.03; // 30m minimum to trigger re-estimation
+var GPS_DEBOUNCE_MS=3000; // 3s debounce to prevent GPS jitter cascade
 
 function initGPS(){
   if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
   _gpsWatch=navigator.geolocation.watchPosition(function(pos){
     _gpsRetryCount=0;
     updateGPSStatus(true);
-    cachePosition(pos.coords.latitude,pos.coords.longitude);
-    if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
-      _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
-      updateOriginUI();
-      updateMapMarkers();
-      if(_dest)runEstimations();
+    var newLat=pos.coords.latitude;
+    var newLon=pos.coords.longitude;
+    cachePosition(newLat,newLon);
+
+    // FIX 1: Minimum movement gate — ignore GPS jitter <30m
+    if(_lastGpsOrigin){
+      var dist=haversine(_lastGpsOrigin.lat,_lastGpsOrigin.lon,newLat,newLon);
+      if(dist<GPS_MIN_MOVEMENT_KM)return;
     }
+    _lastGpsOrigin={lat:newLat,lon:newLon};
+
+    // FIX 1: Debounce — only re-estimate after movement settles
+    clearTimeout(_gpsDebounceTimer);
+    _gpsDebounceTimer=setTimeout(function(){
+      if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
+        _origin={lat:newLat,lon:newLon,name:'Mi ubicación',source:'gps'};
+        updateOriginUI();
+        updateMapMarkers();
+        if(_dest)runEstimations();
+      }
+    },GPS_DEBOUNCE_MS);
   },function(err){
     updateGPSStatus(false);
     loadCachedPosition();
@@ -614,9 +641,12 @@ function initGPS(){
         navigator.geolocation.getCurrentPosition(function(pos){
           _gpsRetryCount=0;
           updateGPSStatus(true);
-          cachePosition(pos.coords.latitude,pos.coords.longitude);
+          var retryLat=pos.coords.latitude;
+          var retryLon=pos.coords.longitude;
+          cachePosition(retryLat,retryLon);
+          _lastGpsOrigin={lat:retryLat,lon:retryLon};
           if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
-            _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
+            _origin={lat:retryLat,lon:retryLon,name:'Mi ubicación',source:'gps'};
             updateOriginUI();
             updateMapMarkers();
             if(_dest)runEstimations();
@@ -1149,10 +1179,15 @@ function runEstimations(){
   var walkPri=distKm<=0.8?1:3;
   _estimations.push({mode:'walk',icon:'🚶',title:'Caminando',timeMin:walkMin,distance:distKm,priority:walkPri});
 
-  // 2. Bus
+  // 2. Bus — FIX 2: guard against zero-price/zero-time display
   var busResult=estimateBus(distKm);
-  if(busResult)busResult.timeMin=busResult.totalMin;
-  _estimations.push(Object.assign({mode:'bus',icon:'🚌',title:'Colectivo',priority:2,distance:distKm},busResult||{timeMin:0,totalMin:0,price:0,boletos:1,combination:false}));
+  if(busResult&&busResult.totalMin>0&&busResult.price>0){
+    busResult.timeMin=busResult.totalMin;
+    _estimations.push(Object.assign({mode:'bus',icon:'🚌',title:'Colectivo',priority:2,distance:distKm},busResult));
+  }else{
+    _estimations.push({mode:'bus',icon:'🚌',title:'Colectivo',priority:2,distance:distKm,
+      timeMin:null,totalMin:null,price:null,unavailable:true,unavailableReason:'Sin paradas cercanas'});
+  }
 
   // 3. Bike
   var bikeMin=(distKm/15)*60;
@@ -1330,6 +1365,11 @@ function updateMapHint(){
 
 // ===================== RENDER CARDS =====================
 function renderCards(){
+  // FIX 3: defer renders during active double-tap confirmation
+  if(_renderLocked){
+    _renderPending=true;
+    return;
+  }
   var container=document.getElementById('cardsContainer');
   var html='';
 
@@ -1355,6 +1395,10 @@ function renderCards(){
 }
 
 function renderActiveCard(est,idx){
+  // FIX 2: unavailable modes render as unavailable card
+  if(est.unavailable){
+    return renderUnavailableCard(est.icon,est.title||est.mode,est.unavailableReason||'No disponible');
+  }
   var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'" draggable="true">';
   h+='<span class="drag-handle" title="Arrastrar">⋮⋮</span>';
 
@@ -1518,6 +1562,9 @@ function buildBikeLink(){
 
 // ===================== DOUBLE TAP TO CONFIRM =====================
 var _confirmState={};
+var _renderLocked=false;  // FIX 3: lock renders during active double-tap
+var _renderPending=false; // FIX 3: deferred render flag
+
 function requestRide(mode,url){
   var now=Date.now();
   var last=_confirmState[mode]||0;
@@ -1545,8 +1592,16 @@ function requestRide(mode,url){
     window.open(url,'_blank');
   }else{
     _confirmState[mode]=now;
+    _renderLocked=true;  // FIX 3: lock renders while double-tap is active
     showToast('Tocá de nuevo para confirmar','info');
-    setTimeout(function(){_confirmState[mode]=0},DOUBLE_TAP_MS+100);
+    setTimeout(function(){
+      _confirmState[mode]=0;
+      _renderLocked=false;  // FIX 3: unlock
+      if(_renderPending){
+        _renderPending=false;
+        renderCards();  // FIX 3: flush deferred render
+      }
+    },DOUBLE_TAP_MS+100);
   }
 }
 
@@ -1795,17 +1850,21 @@ function computeRecommendation(){
 
   if(!alternatives.length)return null;
 
-  // Normalize price and time to [0,1] range
-  var prices=alternatives.map(function(a){return a.price});
-  var times=alternatives.map(function(a){return a.time});
-  var minPrice=Math.min.apply(null,prices);
-  var maxPrice=Math.max.apply(null,prices);
-  var minTime=Math.min.apply(null,times);
-  var maxTime=Math.max.apply(null,times);
+  // FIX 5: Absolute score normalization using reference benchmarks
+  // Instead of relative min/max of current alternatives (which shifts when
+  // providers are filtered), use absolute reference values based on distance.
+  // This makes scores STABLE regardless of which providers are in the set.
+  var distKm=(_origin&&_dest)?haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon):5;
+  var refMaxPrice=estimateTaxi(distKm)*1.3; // 30% above taxi = expensive benchmark
+  var refMinPrice=FareRegistry.bus.sube;    // bus SUBE = cheap benchmark
+  var refMaxTime=(distKm/12)*60;            // slow traffic speed
+  var refMinTime=(distKm/35)*60;            // moto speed
 
   alternatives.forEach(function(a){
-    var priceNorm=maxPrice>minPrice?(a.price-minPrice)/(maxPrice-minPrice):0;
-    var timeNorm=maxTime>minTime?(a.time-minTime)/(maxTime-minTime):0;
+    var priceNorm=refMaxPrice>refMinPrice?
+      Math.max(0,Math.min(1,(a.price-refMinPrice)/(refMaxPrice-refMinPrice))):0;
+    var timeNorm=refMaxTime>refMinTime?
+      Math.max(0,Math.min(1,(a.time-refMinTime)/(refMaxTime-refMinTime))):0;
     a.score=priceNorm*priceW+timeNorm*timeW;
 
     // Penalizaciones aditivas (lineales, independientes del score base)
