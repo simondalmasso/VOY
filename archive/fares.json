@@ -1,0 +1,5 @@
+{
+  "uber": { "base": 1000, "km": 500, "min": 65, "minFare": 3000 },
+  "didi": { "base": 900,  "km": 440, "min": 55, "minFare": 2500 },
+  "surge": { "weather": 1.15, "rush": 1.20, "night": 1.30 }
+}

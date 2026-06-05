@@ -1,0 +1,2530 @@
+<!--
+VOY v2 — Single Source of Truth
+Build: 2026-06-09 09:00 / Decision Core V3 + Anti-Fragility vFINAL
+Runtime: public/VOYv2.html
+Served: middleware rewrite / → /VOYv2.html
+Memory: voy_memory unified
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VOY – Asistente de Movilidad Santa Fe</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="core/mobilityEngine.js?v=1780627701"></script>
+<script src="ui/mobilityController.js?v=1780627701"></script>
+<style>
+:root{
+  --bg:#f5f5f5;--bg2:#fff;--bg3:#e8e8e8;--text:#1a1a1a;--text2:#555;--accent:#2563eb;
+  --green:#16a34a;--red:#dc2626;--orange:#f97316;--purple:#8b5cf6;--card-bg:#fff;
+  --card-border:#e5e5e5;--shadow:0 1px 3px rgba(0,0,0,.1);--radius:12px;
+  --header-bg:#1e293b;--footer-bg:#1e293b;
+}
+[data-theme="dark"]{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--text:#e2e8f0;--text2:#94a3b8;
+  --card-bg:#1e293b;--card-border:#334155;--shadow:0 1px 3px rgba(0,0,0,.4);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100dvh;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent}
+/* HEADER */
+.header{background:var(--header-bg);color:#fff;padding:8px 12px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:800;letter-spacing:1px;flex:1}
+.header .gps-status{font-size:12px;display:flex;align-items:center;gap:2px}
+.header .weather{font-size:14px;cursor:pointer}
+/* INPUTS */
+.inputs{background:var(--bg2);padding:10px 12px;border-bottom:1px solid var(--card-border)}
+.input-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative}
+.input-row:last-child{margin-bottom:0}
+.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.dot.green{background:var(--green)}.dot.red{background:var(--red)}
+.input-label{font-size:11px;color:var(--text2);min-width:44px}
+.input-field{flex:1;border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--bg);color:var(--text);outline:none;min-width:0}
+.input-field:focus{border-color:var(--accent)}
+.input-btn{font-size:10px;padding:4px 6px;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.btn-locate{background:#dbeafe;color:#1d4ed8}
+.btn-map{background:#fef3c7;color:#92400e}
+/* Search field + inline dropdown */
+.search-field{position:relative;width:100%}
+.search-field input{width:100%;box-sizing:border-box}
+.search-dropdown{position:absolute;top:100%;left:0;right:0;z-index:2000;background:var(--bg2,#fff);border:1px solid var(--card-border,#e0e0e0);border-top:none;border-radius:0 0 10px 10px;box-shadow:0 6px 16px rgba(0,0,0,.15);overflow:hidden;max-height:200px;overflow-y:auto}
+.search-dropdown.hidden{display:none}
+.search-item{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--card-border,#f0f0f0);font-size:13px;line-height:1.3;-webkit-tap-highlight-color:transparent}
+.search-item:last-child{border-bottom:none}
+.search-item:active,.search-item:hover{background:var(--bg3,#f5f5f5)}
+.search-item--recent{opacity:.85}
+.search-item--empty{padding:12px 14px;color:var(--text2,#999);font-size:12px;cursor:default}
+.search-item-icon{font-size:14px;flex-shrink:0}
+.search-item-text{flex:1;min-width:0}
+.search-item-text strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.search-item-text small{color:var(--text2,#888);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+/* MAP - height fija para mobile (MapLibre requiere height>0 al init) */
+#map{width:100%;height:220px;min-height:160px;background:#e8e0d8;position:relative}
+@media(min-width:600px){#map{height:320px}}
+#map.crosshair .maplibregl-canvas{cursor:crosshair!important}
+/* Map floating labels */
+.voy-label{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;line-height:1.3;pointer-events:none}
+.voy-label--green{background:#16a34a;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.voy-label--red{background:#dc2626;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
+.voy-label-popup .maplibregl-popup-tip{display:none}
+.voy-label--amber{background:#f59e0b;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+/* MAP HINT */
+.map-hint{display:none;padding:6px 12px;background:#eff6ff;color:#1d4ed8;font-size:12px;border-bottom:1px solid #bfdbfe}
+.map-hint.show{display:block}
+/* ROUTE CARDS */
+.cards{flex:1;padding:8px 12px;overflow-y:auto;padding-bottom:80px}
+.route-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:12px;margin-bottom:8px;box-shadow:var(--shadow);position:relative;transition:transform .15s}
+.route-card.dragging{opacity:.6;transform:scale(.97)}
+.route-card.drag-over{border-top:3px solid var(--accent)}
+.rc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rc-icon{font-size:20px}
+.rc-title{font-size:14px;font-weight:700;flex:1}
+.rc-time{font-size:12px;color:var(--text2)}
+.rc-subtitle{font-size:13px;color:var(--text2);margin-bottom:6px;white-space:pre-line;line-height:1.5}
+/* Provider row */
+.provider-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--card-border)}
+.provider-name{font-size:12px;font-weight:600;min-width:70px}
+.provider-color{width:4px;height:24px;border-radius:2px;flex-shrink:0}
+.card-action-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.btn-pedir{background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:44px}
+.btn-pedir:active{transform:scale(.95)}
+.card-price{font-size:14px;font-weight:700}
+/* Action buttons in cards */
+.rc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rc-action{padding:6px 12px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#fff;min-height:44px}
+.rc-action.uber{background:#000}.rc-action.didi{background:var(--orange)}
+.rc-action.maxim{background:var(--purple)}.rc-action.radiotaxi{background:#d97706}
+.rc-action.remis{background:#6b7280}.rc-action.taxiapp{background:#25d366}
+.rc-action.moto-uber{background:#000}.rc-action.moto-didi{background:var(--orange)}
+.rc-action.moto-maxim{background:var(--purple)}.rc-action.moto-taxi{background:#d97706}
+.rc-action.moto-remis{background:#6b7280}.rc-action.moto-taxiapp{background:#25d366}
+.rc-action.bike{background:var(--green)}.rc-action.bus{background:#2563eb}
+.rc-action.walk{background:var(--green)}
+/* Unavailable cards */
+.route-card--unavailable{opacity:.45;filter:grayscale(.6);pointer-events:none}
+.unavailable-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2}
+.unavailable-overlay span{background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;letter-spacing:.5px}
+.unavailable-summary{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px;color:var(--text2);opacity:.6;border-top:1px solid var(--card-border);margin-top:4px}
+.unavailable-summary span{margin-left:auto;font-size:11px}
+/* Footer */
+.footer{position:fixed;bottom:0;left:0;right:0;background:var(--footer-bg);color:#94a3b8;font-size:10px;padding:6px 12px;text-align:center;z-index:100}
+/* Toast */
+.toast-container{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;animation:toastIn .3s ease;pointer-events:auto;max-width:90vw;text-align:center}
+.toast.info{background:#2563eb}.toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.warn{background:#f59e0b;color:#1a1a1a}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+/* Drag handle */
+.drag-handle{position:absolute;top:4px;right:8px;font-size:16px;cursor:grab;color:var(--text2);opacity:.4}
+.drag-handle:active{cursor:grabbing}
+/* Memory block — unified favorites + history */
+.memory-block{background:var(--bg2);border-bottom:1px solid var(--card-border);display:none}
+.memory-block.show{display:block}
+.memory-section{padding:6px 12px 4px}
+.memory-section+.memory-section{border-top:1px solid var(--card-border)}
+.memory-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.memory-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:4px}
+/* Favorites chips */
+.fav-chips{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:4px}
+.fav-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--card-border);background:var(--bg);color:var(--text);min-height:34px;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.fav-chip:active{background:var(--bg3)}
+.fav-chip .fav-icon{font-size:14px}
+.fav-chip .fav-name{max-width:80px;overflow:hidden;text-overflow:ellipsis}
+.fav-chip .fav-del{font-size:10px;color:var(--text2);margin-left:2px;padding:2px;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.fav-chip .fav-del:hover{background:var(--red);color:#fff}
+/* Save favorite prompt */
+.fav-prompt{display:none;background:#fef9c3;border:1px solid #fde047;border-radius:var(--radius);padding:8px 12px;margin:6px 12px 0;font-size:13px;color:#713f12;align-items:center;gap:8px}
+.fav-prompt.show{display:flex}
+.fav-prompt-btn{background:#eab308;color:#1a1a1a;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;min-height:34px}
+.fav-prompt-btn:active{transform:scale(.95)}
+.fav-prompt-close{font-size:16px;cursor:pointer;color:#a16207;padding:0 4px}
+/* Save favorite modal */
+.fav-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;align-items:center;justify-content:center}
+.fav-modal-bg.show{display:flex}
+.fav-modal{background:var(--bg2);border-radius:var(--radius);padding:16px;width:90%;max-width:340px;box-shadow:0 8px 30px rgba(0,0,0,.3)}
+.fav-modal h3{font-size:16px;font-weight:700;margin-bottom:12px}
+.fav-modal-types{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.fav-type-btn{padding:8px 12px;border-radius:8px;border:2px solid var(--card-border);background:var(--bg);font-size:12px;font-weight:600;cursor:pointer;color:var(--text);min-height:40px}
+.fav-type-btn.selected{border-color:var(--accent);background:#eff6ff;color:var(--accent)}
+.fav-type-btn.disabled{opacity:.4;pointer-events:none}
+.fav-modal input{width:100%;border:1px solid var(--card-border);border-radius:6px;padding:8px 10px;font-size:14px;background:var(--bg);color:var(--text);outline:none;margin-bottom:10px}
+.fav-modal input:focus{border-color:var(--accent)}
+.fav-modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.fav-modal-actions button{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px}
+.fav-modal-cancel{background:var(--bg3);color:var(--text)}
+.fav-modal-save{background:var(--accent);color:#fff}
+/* History list within memory block */
+.history-list{max-height:160px;overflow-y:auto;overscroll-behavior:contain}
+.history-item{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--card-border);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .1s}
+.history-item:last-child{border-bottom:none}
+.history-item:active{background:var(--bg3)}
+.history-item-icon{font-size:14px;flex-shrink:0;width:20px;text-align:center}
+.history-item-text{flex:1;min-width:0}
+.history-item-route{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.history-item-time{font-size:11px;color:var(--text2)}
+/* History clear */
+.history-clear{font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid var(--card-border);background:var(--bg);-webkit-tap-highlight-color:transparent}
+.history-clear:active{background:var(--bg3)}
+.history-clear-confirm{font-size:11px;color:var(--red);font-weight:600;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid var(--red);background:transparent;-webkit-tap-highlight-color:transparent}
+.history-clear-confirm:active{background:#fee2e2}
+/* Memory empty state */
+.memory-empty{font-size:12px;color:var(--text2);padding:4px 0}
+/* Decision Core V3 — SINGLE_RESULT + DUAL_CONTEXT */
+.result-card{background:var(--card-bg);border:none;border-radius:var(--radius);padding:16px;margin:8px 12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.result-card-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.result-card-icon{font-size:24px}
+.result-card-name{font-size:18px;font-weight:800;flex:1}
+.result-card-meta{font-size:14px;color:var(--text2);margin-bottom:12px}
+.result-card-meta span{font-weight:700;color:var(--text)}
+.result-card-note{font-size:11px;color:var(--text2);margin-bottom:8px;opacity:0;animation:voynoteIn .3s ease forwards}
+@keyframes voynoteIn{0%{opacity:0;transform:translateY(-2px)}100%{opacity:.7;transform:translateY(0)}}
+.result-card-note--dismiss{animation:voynoteOut .4s ease forwards}
+@keyframes voynoteOut{0%{opacity:.7}100%{opacity:0;height:0;margin:0;padding:0}}
+.result-cta{display:block;width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:16px;font-weight:800;cursor:pointer;min-height:52px;letter-spacing:.3px;transition:transform .1s,background .15s}
+.result-cta:active{transform:scale(.97);background:#15803d}
+.result-cta--bus{background:#2563eb}
+.result-cta--bus:active{background:#1d4ed8}
+/* DUAL_CONTEXT: 2nd option — absolute visual equality */
+.result-card--dual{background:var(--card-bg);border:none;border-radius:var(--radius);padding:16px;margin:8px 12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.result-card--dual-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.result-card--dual-icon{font-size:24px}
+.result-card--dual-name{font-size:18px;font-weight:800;flex:1}
+.result-card--dual-meta{font-size:14px;color:var(--text2);margin-bottom:12px}
+.result-card--dual-meta span{font-weight:700;color:var(--text)}
+.result-card--dual-note{font-size:11px;color:var(--text2);margin-bottom:8px;opacity:0;animation:voynoteIn .3s ease forwards}
+.result-card--dual-note--dismiss{animation:voynoteOut .4s ease forwards}
+.result-cta--dual{display:block;width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:16px;font-weight:800;cursor:pointer;min-height:52px;letter-spacing:.3px;transition:transform .1s,background .15s}
+.result-cta--dual:active{transform:scale(.97);background:#15803d}
+.result-cta--dual-bus{background:#2563eb}
+.result-cta--dual-bus:active{background:#1d4ed8}
+</style>
+</head>
+<body data-theme="light">
+
+<!-- HEADER -->
+<div class="header">
+  <h1>VOY</h1>
+  <div class="gps-status" id="gpsStatus">📍❌</div>
+  <div class="weather" id="weatherInfo" title="Clima en Santa Fe">🌤️</div>
+</div>
+
+<!-- INPUTS -->
+<div class="inputs">
+  <div class="input-row">
+    <div class="dot green"></div>
+    <span class="input-label">Origen</span>
+    <div class="search-field">
+      <input type="text" id="originInput" class="input-field" placeholder="¿Desde dónde salís?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'origin')" onfocus="onSearchFocus('origin')">
+      <div id="originDropdown" class="search-dropdown hidden"></div>
+    </div>
+    <button class="input-btn btn-locate" onclick="locateMe()">📍</button>
+    <button class="input-btn btn-map" onclick="activateMapOrigin()">📌 Elegir</button>
+  </div>
+  <div class="input-row">
+    <div class="dot red"></div>
+    <span class="input-label">Destino</span>
+    <div class="search-field">
+      <input type="text" id="destInput" class="input-field" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'dest')" onfocus="onSearchFocus('dest')">
+      <div id="destDropdown" class="search-dropdown hidden"></div>
+    </div>
+    <button class="input-btn btn-map" onclick="activateMapDest()">📌 Elegir</button>
+  </div>
+</div>
+
+<!-- MEMORY BLOCK: Favoritos + Recientes -->
+<div class="memory-block" id="memoryBlock">
+  <!-- ⭐ FAVORITOS -->
+  <div class="memory-section" id="memFavs">
+    <div class="memory-header">
+      <span class="memory-title">⭐ Favoritos</span>
+    </div>
+    <div class="fav-chips" id="favChips"></div>
+  </div>
+  <!-- 🕐 RECIENTES -->
+  <div class="memory-section" id="memHistory" style="display:none">
+    <div class="memory-header">
+      <span class="memory-title">🕐 Recientes</span>
+      <span id="historyClearBtn" class="history-clear" onclick="confirmClearHistory()">Borrar</span>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+</div>
+
+<!-- FAVORITES SAVE PROMPT -->
+<div class="fav-prompt" id="favPrompt">
+  <span>⭐ ¿Querés guardarlo como favorito?</span>
+  <button class="fav-prompt-btn" onclick="openSaveFavModal()">Guardar</button>
+  <span class="fav-prompt-close" onclick="dismissFavPrompt()">✕</span>
+</div>
+
+<!-- FAVORITES SAVE MODAL -->
+<div class="fav-modal-bg" id="favModalBg" onclick="closeFavModal(event)">
+  <div class="fav-modal" onclick="event.stopPropagation()">
+    <h3>⭐ Guardar favorito</h3>
+    <div class="fav-modal-types" id="favTypeBtns"></div>
+    <input type="text" id="favNameInput" placeholder="Nombre del lugar" maxlength="30" autocomplete="off">
+    <div id="favAddress" style="font-size:12px;color:var(--text2);margin-bottom:10px"></div>
+    <div class="fav-modal-actions">
+      <button class="fav-modal-cancel" onclick="closeFavModal()">Cancelar</button>
+      <button class="fav-modal-save" onclick="saveFavFromModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div style="position:relative">
+<div id="map"></div>
+<div id="mapLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg2);font-size:13px;color:var(--text2);pointer-events:none;z-index:5">Cargando mapa...</div>
+<button id="centerRouteBtn" onclick="centerRoute()" style="position:absolute;bottom:8px;right:8px;z-index:10;background:var(--bg2);border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);display:none;color:var(--text)">🎯 Centrar</button>
+</div>
+
+<!-- MAP HINT -->
+<div class="map-hint" id="mapHint">🗺️ Ruta en mapa · Arrastrá para cambiar</div>
+
+<!-- INSTANT DECISION BLOCK -->
+<div id="decisionBlock"></div>
+<!-- RECOMMENDATION BLOCK (legacy — hidden, replaced by decisionBlock) -->
+<div id="recommendationBlock" style="display:none"></div>
+
+<!-- PREFERENCES PANEL -->
+<div id="prefsPanel"></div>
+
+<!-- ROUTE CARDS -->
+<div class="cards" id="cardsContainer"></div>
+
+<!-- FOOTER -->
+<div class="footer">VOY v2 · Asistente de movilidad Santa Fe · Datos informativos, no contractuales · Resolución N°217/2026</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ===================== GLOBAL ERROR HANDLERS =====================
+window.onerror=function(msg,src,line,col,err){
+  console.error('[GLOBAL ERROR]',msg,src+':'+line+':'+col,err);
+};
+window.onunhandledrejection=function(ev){
+  console.error('[UNHANDLED REJECTION]',ev.reason);
+};
+
+// ===================== DATA =====================
+var BUS_STOPS=[
+  {linea:'1',nombre:'Terminal',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
+  {linea:'1',nombre:'Plaza Mayor',lat:-31.6313,lon:-60.7008,calles:'San Martín y Rivadavia'},
+  {linea:'4',nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {linea:'4',nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'},
+  {linea:'8',nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {linea:'8',nombre:'Avenida Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {linea:'11',nombre:'Centro Cívico',lat:-31.6354,lon:-60.6999,calles:'25 de Mayo y San Martín'},
+  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y España'},
+  {linea:'16',nombre:'Plaza Pueyrredón',lat:-31.6445,lon:-60.7087,calles:'Cándido Pujato y Aristóbulo'},
+  {linea:'16',nombre:'Belgrano',lat:-31.6312,lon:-60.6945,calles:'Belgrano y Rivadavia'}
+];
+
+var BIKE_STATIONS=[
+  {nombre:'Municipalidad',lat:-31.6349,lon:-60.7007,calles:'25 de Mayo y San Martín'},
+  {nombre:'Plaza 25 de Mayo',lat:-31.6311,lon:-60.6990,calles:'San Martín y Rivadavia'},
+  {nombre:'Teatro Municipal',lat:-31.6325,lon:-60.7012,calles:'San Martín y Córdoba'},
+  {nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Estación Mitre',lat:-31.6356,lon:-60.7089,calles:'Bvd. Pellegrini y Rivadavia'},
+  {nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {nombre:'Av. Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {nombre:'Plaza Constituyentes',lat:-31.6401,lon:-60.7001,calles:'Rivadavia y Tucumán'},
+  {nombre:'Legislatura',lat:-31.6298,lon:-60.6955,calles:'Amenábar y 25 de Mayo'},
+  {nombre:'Plaza del Soldado',lat:-31.6337,lon:-60.6978,calles:'San Jerónimo y Tucumán'},
+  {nombre:'Hospital Iturraspe',lat:-31.6445,lon:-60.6934,calles:'Bvd. Gálvez y Francia'},
+  {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'}
+];
+
+var LANDMARKS=[
+  {nombre:'Puente Colgante',lat:-31.6230,lon:-60.6850,calles:'Av. Costanera y Av. del Valle'},
+  {nombre:'Catedral Metropolitana',lat:-31.6315,lon:-60.7010,calles:'San Martín y San Jerónimo'},
+  {nombre:'Universidad Nacional del Litoral',lat:-31.6340,lon:-60.6990,calles:'9 de Julio y San Jerónimo'},
+  {nombre:'Parque del Encuentro',lat:-31.6270,lon:-60.6800,calles:'Av. Costanera Oeste'},
+  {nombre:'Museo Histórico',lat:-31.6330,lon:-60.7015,calles:'San Martín y 25 de Mayo'},
+  {nombre:'Puente Oroño',lat:-31.6190,lon:-60.6820,calles:'Av. Costanera y Bvd. Pellegrini'},
+  {nombre:'Mercado Norte',lat:-31.6360,lon:-60.6980,calles:'San Martín y Tucumán'},
+  {nombre:'Iglesia San Francisco',lat:-31.6320,lon:-60.7030,calles:'San Martín y Ameghino'},
+  {nombre:'Shopping La Estación',lat:-31.6290,lon:-60.6895,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Barrio Candioti',lat:-31.6080,lon:-60.6900,calles:'Norte de la ciudad'},
+  {nombre:'Barrio Guadalupe',lat:-31.6380,lon:-60.6800,calles:'Noreste de la ciudad'},
+  {nombre:'Barrio Centenario',lat:-31.6140,lon:-60.7100,calles:'Oeste de la ciudad'}
+];
+
+var PROVIDERS={
+  uber:{name:'Uber',available:true,color:'#000',confirmed:true,source:'uber.com + operadores locales'},
+  didi:{name:'DiDi',available:true,color:'#f97316',confirmed:true,source:'DiDi Argentina - operativo desde Nov 2024'},
+  maxim:{name:'Maxim',available:true,color:'#8b5cf6',confirmed:true,source:'maxim.taxi + noticias locales'},
+  cabify:{name:'Cabify',available:true,color:'#2DC4B2',confirmed:true,price:null,source:'cabify.com lista Santa Fe'},
+  indriver:{name:'inDriver',available:false,confirmed:true,source:'No opera en Argentina'},
+  bolt:{name:'Bolt',available:false,confirmed:true,source:'No opera en Argentina'},
+  taxi:{name:'Radiotaxi',available:true,color:'#d97706',confirmed:true,source:'wa.link/n7u2e7 servicio local'},
+  remis:{name:'Remises Real',available:true,color:'#6b7280',confirmed:true,source:'wa.link/rqov56 servicio local'},
+  taxiapp:{name:'TaxiApp',available:true,color:'#25d366',confirmed:true,source:'@taxiapp_santafe app local'},
+  uber_moto:{name:'Uber Moto',available:true,color:'#000',confirmed:true,source:'YouTube/TikTok - operativo en Santa Fe'},
+  didi_moto:{name:'DiDi Moto',available:true,color:'#f97316',confirmed:false,price:null,source:'Disponible en Argentina, no confirmado en SF'}
+};
+
+// ===================== FARE REGISTRY =====================
+var FareRegistry={
+  taxi:{
+    diurno:{bajada:1600,ficha:160,distFicha:130},
+    nocturno:{bajada:1840,ficha:184,distFicha:130},
+    source:'Resolución N°217/2026',
+    updated_at:'2026-01-01'
+  },
+  bus:{
+    sube:1900,
+    cash:2111,
+    source:'SUBE tariff table Argentina',
+    updated_at:'2025-06-01'
+  },
+  apps:{
+    uber:{base:1000,km:500,min:65,minFare:3000,source:'Uber app estimate range',updated_at:'2025-12-01'},
+    didi:{base:900,km:440,min:55,minFare:2500,source:'DiDi app estimate range',updated_at:'2025-12-01'},
+    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'},
+    cabify:{base:null,km:null,min:null,minFare:null,source:'Cabify - sin tarifa pública',updated_at:'2025-12-01'}
+  },
+  moto:{
+    discount:0.75,
+    source:'Estimado: precio auto * 0.75',
+    updated_at:'2025-12-01'
+  }
+};
+
+// ===================== CONTROLLER SHORTHAND =====================
+// ===================== BOOTSTRAP GUARD =====================
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function hideMapLoader(){
+  var ml=document.getElementById('mapLoading');
+  if(ml)ml.style.display='none';
+}
+function showFatalError(msg){
+  hideMapLoader();
+  var mapEl=document.getElementById('map');
+  if(mapEl){
+    mapEl.style.background='#fee2e2';
+    mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;padding:16px;text-align:center"><span style="font-size:32px">⚠️</span><span style="font-size:14px;font-weight:600;color:#dc2626">'+escapeHtml(msg)+'</span><span style="font-size:12px;color:#71717a">Recargá la página para reintentar</span></div>';
+  }
+}
+
+if(typeof MobilityController==='undefined'){
+  console.error('[FATAL] MobilityController is not defined — ui/mobilityController.js failed to load');
+  showFatalError('Error cargando aplicación');
+  throw new Error('MobilityController is not defined');
+}
+var MC=MobilityController;
+
+if(typeof MobilityEngine==='undefined'){
+  console.error('[FATAL] MobilityEngine is not defined — core/mobilityEngine.js failed to load');
+  showFatalError('Motor de movilidad no disponible');
+  throw new Error('MobilityEngine is not defined');
+}
+
+// ===================== UI-ONLY STATE (map/DOM) =====================
+var _manualOriginMode=false; // map pin mode
+var _manualDestMode=false;
+var _searchVersion=0; // stale-search protection token
+var _gpsWatch=null;
+var _map=null;
+var _originMarker=null;
+var _destMarker=null;
+var _originPopup=null;
+var _destPopup=null;
+var _busStopMarkers=[];
+var _busStopPopups=[];
+var _busRouteActive=false;
+var _busRouteIdx=-1;
+var _prefsOpen=false; // panel collapse state
+var _favPromptShown=false; // has the prompt been shown for this trip
+var _favPromptDismissed=false; // did user dismiss it
+var _favModalType='casa'; // currently selected type in modal
+var _favEditSlot=null; // slot being edited (null = new)
+var _favModalSelectedType='casa';
+var _decisionStateLog=[]; // Decision Core V3: frequency tracking [{state:'SINGLE_RESULT'|'DUAL_CONTEXT', ts}]
+var _estimationSnapshots=[]; // Anti-Fragility: history of estimation snapshots (max 10)
+var _lastRouteKey=''; // Anti-Fragility: hash of last origin+dest for temporal consistency
+var _lastCoreState=null; // Anti-Fragility: previous core state for self-correction
+var _lastCopyOverride=''; // Anti-Fragility: active copy override text
+var _copyShownForRoute=''; // Anti-Fragility: route+copy key already shown (one-time rule)
+var _copyDismissTimer=null; // Anti-Fragility: auto-dismiss timer for copy note
+var _firstRenderDone=false; // Anti-Fragility: has the first render completed
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded',function(){
+  // Initialize controller with data config
+  MC.init({
+    busStops:BUS_STOPS,
+    bikeStations:BIKE_STATIONS,
+    landmarks:LANDMARKS,
+    fareRegistry:FareRegistry,
+    providers:PROVIDERS,
+    recentKey:'voy_recent_searches',
+    prefsKey:'voy_prefs',
+    favsKey:'voy_favorites',
+    favMetricsKey:'voy_fav_metrics'
+  });
+  MC.loadPrefs();
+  MC.loadMemory();
+  renderMemoryBlock();
+
+  initMap();
+  initGPS();
+  initDarkMode();
+  fetchWeather();
+  renderCards();
+  renderPrefsPanel();
+  // Close dropdowns on outside click/touch
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('.search-field'))closeAllDropdowns();
+  });
+  document.addEventListener('touchstart',function(e){
+    if(!e.target.closest('.search-field'))closeAllDropdowns();
+  },{passive:true});
+});
+
+var CARTO_STYLE='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+var FALLBACK_STYLE={
+  version:8,
+  sources:{
+    osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}
+  },
+  layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]
+};
+
+var _mapLoadTimeout=null;
+function initMap(){
+  if(typeof maplibregl==='undefined'){
+    console.error('[MAP] maplibregl is not defined — CDN script failed to load');
+    showFatalError('Librería de mapa no disponible');
+    return;
+  }
+  try{
+    _map=new maplibregl.Map({
+      container:'map',
+      style:CARTO_STYLE,
+      center:[-60.7087,-31.6256],
+      zoom:13,
+      attributionControl:false
+    });
+    _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+    _map.on('click',onMapClick);
+    _map.on('error',function(e){
+      clearTimeout(_mapLoadTimeout);
+      console.warn('[MAP] CARTO style error, switching to OSM fallback:',e);
+      _map.setStyle(FALLBACK_STYLE);
+      hideMapLoader();
+    });
+    _map.on('load',function(){
+      clearTimeout(_mapLoadTimeout);
+      _map.resize();
+      hideMapLoader();
+    });
+    // 10s timeout: if neither load nor error fires, show fallback message
+    _mapLoadTimeout=setTimeout(function(){
+      console.error('[MAP] Timeout: map did not load within 10 seconds');
+      var ml=document.getElementById('mapLoading');
+      if(ml&&ml.style.display!=='none'){
+        hideMapLoader();
+        var mapEl=document.getElementById('map');
+        if(mapEl){
+          mapEl.style.background='#fef3c7';
+          mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;padding:16px;text-align:center"><span style="font-size:32px">🗺️</span><span style="font-size:14px;font-weight:600;color:#92400e">Mapa no disponible</span><span style="font-size:12px;color:#71717a">No se pudo cargar el mapa. Recargá la página.</span></div>';
+        }
+      }
+    },10000);
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){if(_map)_map.resize()});
+    });
+  }catch(e){
+    console.error('[MAP] Init failed:',e);
+    showFatalError('Error al inicializar el mapa');
+  }
+}
+
+function initDarkMode(){
+  if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
+    document.body.setAttribute('data-theme','dark');
+  }
+}
+
+// ===================== GPS: silent, cache, retry =====================
+var _gpsRetryCount=0;
+var _gpsMaxRetries=3;
+var _gpsRetryTimer=null;
+
+function initGPS(){
+  if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
+  _gpsWatch=navigator.geolocation.watchPosition(function(pos){
+    _gpsRetryCount=0;
+    updateGPSStatus(true);
+    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    if(!MC.isOriginManual()){
+      var origin=MC.getOrigin();
+      if(!origin||origin.source==='gps'||origin.source==='cache'){
+        MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
+        updateOriginUI();
+        updateMapMarkers();
+        if(MC.getDest())runEstimations();
+      }
+    }
+  },function(err){
+    updateGPSStatus(false);
+    loadCachedPosition();
+    // Silent retry with backoff
+    if(_gpsRetryCount<_gpsMaxRetries){
+      _gpsRetryCount++;
+      clearTimeout(_gpsRetryTimer);
+      _gpsRetryTimer=setTimeout(function(){
+        navigator.geolocation.getCurrentPosition(function(pos){
+          _gpsRetryCount=0;
+          updateGPSStatus(true);
+          cachePosition(pos.coords.latitude,pos.coords.longitude);
+          if(!MC.isOriginManual()){
+            var origin=MC.getOrigin();
+            if(!origin||origin.source==='gps'||origin.source==='cache'){
+              MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
+              updateOriginUI();
+              updateMapMarkers();
+              if(MC.getDest())runEstimations();
+            }
+          }
+        },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+      },_gpsRetryCount*5000);
+    }
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+}
+
+function updateGPSStatus(ok){
+  var el=document.getElementById('gpsStatus');
+  el.textContent=ok?'📍🟢':'📍❌';
+}
+
+function cachePosition(lat,lon){
+  try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon}))}catch(e){}
+}
+
+function loadCachedPosition(){
+  try{
+    var cached=localStorage.getItem('voy_last_pos');
+    if(cached){
+      var pos=JSON.parse(cached);
+      if(!MC.getOrigin()){
+        MC.setOrigin(pos.lat,pos.lon,'Ubicación guardada','cache');
+        updateOriginUI();
+        updateMapMarkers();
+      }
+    }
+  }catch(e){}
+}
+
+function locateMe(){
+  if(!navigator.geolocation){return}
+  navigator.geolocation.getCurrentPosition(function(pos){
+    MC.setOriginManual(false);
+    MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
+    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    updateOriginUI();
+    updateMapMarkers();
+    var origin=MC.getOrigin();
+    _map.flyTo({center:[origin.lon,origin.lat],zoom:15});
+    if(MC.getDest())runEstimations();
+  },function(){
+    loadCachedPosition();
+  },{enableHighAccuracy:true,timeout:10000});
+}
+
+// ===================== MAP CLICK / MANUAL PIN =====================
+function activateMapOrigin(){
+  _manualOriginMode=true;
+  _manualDestMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el origen','info');
+}
+
+function activateMapDest(){
+  _manualDestMode=true;
+  _manualOriginMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el destino','info');
+}
+
+function onMapClick(e){
+  if(!_manualOriginMode&&!_manualDestMode)return;
+  var lat=e.lngLat.lat;
+  var lon=e.lngLat.lng;
+
+  if(_manualDestMode){
+    _manualDestMode=false;
+    document.getElementById('map').classList.remove('crosshair');
+    MC.setDest(lat,lon,'','map');
+    reverseGeocodeDest(lat,lon);
+    updateMapMarkers();
+    if(MC.getOrigin())runEstimations();
+    return;
+  }
+
+  if(_manualOriginMode){
+    _manualOriginMode=false;
+    MC.setOriginManual(true);
+    document.getElementById('map').classList.remove('crosshair');
+    MC.setOrigin(lat,lon,'','map');
+    reverseGeocodeOrigin(lat,lon);
+    updateOriginUI();
+    updateMapMarkers();
+    if(MC.getDest())runEstimations();
+  }
+}
+
+function reverseGeocodeOrigin(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));
+        updateOriginUI();
+        refreshOriginLabel();
+      }
+    }).catch(function(){});
+}
+
+function reverseGeocodeDest(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        MC.setDestName(d.display_name.split(',').slice(0,2).join(', '));
+        updateDestUI();
+        refreshDestLabel();
+      }
+    }).catch(function(){});
+}
+
+// ===================== MAP MARKERS =====================
+function updateMapMarkers(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+
+  if(_originMarker){_originMarker.remove();_originMarker=null}
+  if(_destMarker){_destMarker.remove();_destMarker=null}
+  if(_originPopup){_originPopup.remove();_originPopup=null}
+  if(_destPopup){_destPopup.remove();_destPopup=null}
+
+  if(origin){
+    const el=document.createElement('div');
+    el.style.cssText='width:18px;height:18px;background:#16a34a;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    _originMarker=new maplibregl.Marker({element:el}).setLngLat([origin.lon,origin.lat]).addTo(_map);
+    const oLabel=origin.name||'Origen';
+    _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([origin.lon,origin.lat])
+      .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
+      .addTo(_map);
+  }
+  if(dest){
+    const el2=document.createElement('div');
+    el2.style.cssText='width:18px;height:18px;background:#dc2626;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    _destMarker=new maplibregl.Marker({element:el2}).setLngLat([dest.lon,dest.lat]).addTo(_map);
+    const dLabel=dest.name||'Destino';
+    _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([dest.lon,dest.lat])
+      .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
+      .addTo(_map);
+  }
+
+  if(origin&&dest){
+    const bounds=new maplibregl.LngLatBounds();
+    bounds.extend([origin.lon,origin.lat]);
+    bounds.extend([dest.lon,dest.lat]);
+    _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:800});
+  } else if(origin){
+    _map.flyTo({center:[origin.lon,origin.lat],zoom:15});
+  }
+
+  if(_busRouteActive)clearBusRoute();
+  drawRouteLine();
+
+  const cBtn=document.getElementById('centerRouteBtn');
+  if(cBtn)cBtn.style.display=(origin&&dest)?'block':'none';
+}
+
+function drawRouteLine(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return;
+  if(_map.getSource('route-src')){
+    if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
+    if(_map.getLayer('route-line'))_map.removeLayer('route-line');
+    _map.removeSource('route-src');
+  }
+  var geojson={
+    type:'Feature',
+    geometry:{type:'LineString',coordinates:[[origin.lon,origin.lat],[dest.lon,dest.lat]]}
+  };
+  _map.addSource('route-src',{type:'geojson',data:geojson});
+  _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
+  _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.8}});
+}
+
+function centerRoute(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return;
+  var bounds=new maplibregl.LngLatBounds();
+  bounds.extend([origin.lon,origin.lat]);
+  bounds.extend([dest.lon,dest.lat]);
+  _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
+}
+
+function refreshOriginLabel(){
+  var origin=MC.getOrigin();
+  if(!origin||!_originMarker)return;
+  if(_originPopup){_originPopup.remove();_originPopup=null}
+  var oLabel=origin.name||'Origen';
+  _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+    .setLngLat([origin.lon,origin.lat])
+    .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
+    .addTo(_map);
+}
+
+function refreshDestLabel(){
+  var dest=MC.getDest();
+  if(!dest||!_destMarker)return;
+  if(_destPopup){_destPopup.remove();_destPopup=null}
+  var dLabel=dest.name||'Destino';
+  _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+    .setLngLat([dest.lon,dest.lat])
+    .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
+    .addTo(_map);
+}
+
+// ===================== BUS ROUTE OVERLAY =====================
+function drawBusRoute(est){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!est||!est.stopOrigen||!origin||!dest)return;
+
+  // Remove normal route line first
+  if(_map.getSource('route-src')){
+    if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
+    if(_map.getLayer('route-line'))_map.removeLayer('route-line');
+    _map.removeSource('route-src');
+  }
+
+  // Build segment coordinates
+  var walkSegs=[];
+  var rideSegs=[];
+  var transSegs=[];
+
+  if(est.combination){
+    // Guard: stopTransbordo2 puede no existir en datos legacy
+    if(!est.stopTransbordo2) est.stopTransbordo2 = est.stopTransbordo;
+    // 5 segments: walk→ride1→trans→ride2→walk
+    walkSegs.push([[origin.lon,origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
+    rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopTransbordo.lon,est.stopTransbordo.lat]]);
+    transSegs.push([[est.stopTransbordo.lon,est.stopTransbordo.lat],[est.stopTransbordo2.lon,est.stopTransbordo2.lat]]);
+    rideSegs.push([[est.stopTransbordo2.lon,est.stopTransbordo2.lat],[est.stopDest.lon,est.stopDest.lat]]);
+    walkSegs.push([[est.stopDest.lon,est.stopDest.lat],[dest.lon,dest.lat]]);
+  }else{
+    // 3 segments: walk→ride→walk
+    walkSegs.push([[origin.lon,origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
+    rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopDest.lon,est.stopDest.lat]]);
+    walkSegs.push([[est.stopDest.lon,est.stopDest.lat],[dest.lon,dest.lat]]);
+  }
+
+  // Add walk segments (green dashed)
+  if(walkSegs.length){
+    _map.addSource('bus-walk-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:walkSegs}}});
+    _map.addLayer({id:'bus-walk-line',type:'line',source:'bus-walk-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#22c55e','line-width':3,'line-opacity':0.75,'line-dasharray':[2,2]}});
+  }
+
+  // Add ride segments (blue solid + shadow)
+  if(rideSegs.length){
+    _map.addSource('bus-ride-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:rideSegs}}});
+    _map.addLayer({id:'bus-ride-shadow',type:'line',source:'bus-ride-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
+    _map.addLayer({id:'bus-ride-line',type:'line',source:'bus-ride-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.9}});
+  }
+
+  // Add transfer segment (orange dashed)
+  if(transSegs.length){
+    _map.addSource('bus-trans-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:transSegs}}});
+    _map.addLayer({id:'bus-trans-line',type:'line',source:'bus-trans-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#f59e0b','line-width':3,'line-opacity':0.8,'line-dasharray':[3,2]}});
+  }
+
+  // Add stop markers
+  var stops=[];
+  stops.push({point:est.stopOrigen,label:'Subida'});
+  stops.push({point:est.stopDest,label:'Bajada'});
+  if(est.combination && est.stopTransbordo){
+    stops.push({point:est.stopTransbordo,label:'Bajada transbordo'});
+    stops.push({point:est.stopTransbordo2||est.stopTransbordo,label:'Subida transbordo'});
+  }
+
+  stops.forEach(function(s){
+    var el=document.createElement('div');
+    el.style.cssText='width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+    var marker=new maplibregl.Marker({element:el}).setLngLat([s.point.lon,s.point.lat]).addTo(_map);
+    _busStopMarkers.push(marker);
+    var popup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:14,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([s.point.lon,s.point.lat])
+      .setHTML('<div class="voy-label voy-label--amber">'+escapeHtml(s.point.nombre)+' · '+s.label+'</div>')
+      .addTo(_map);
+    _busStopPopups.push(popup);
+  });
+
+  // Fit bounds to include all stops + origin/dest
+  var bounds=new maplibregl.LngLatBounds();
+  bounds.extend([origin.lon,origin.lat]);
+  bounds.extend([dest.lon,dest.lat]);
+  stops.forEach(function(s){bounds.extend([s.point.lon,s.point.lat])});
+  _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
+}
+
+function clearBusRoute(){
+  // Remove bus route sources/layers
+  ['bus-walk-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-ride-shadow','bus-ride-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-trans-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-walk-src','bus-ride-src','bus-trans-src'].forEach(function(id){if(_map.getSource(id))_map.removeSource(id)});
+
+  // Remove stop markers & popups
+  _busStopMarkers.forEach(function(m){m.remove()});
+  _busStopPopups.forEach(function(p){p.remove()});
+  _busStopMarkers=[];
+  _busStopPopups=[];
+
+  _busRouteActive=false;
+  _busRouteIdx=-1;
+}
+
+function toggleBusRoute(idx){
+  var estimations=MC.getEstimations();
+  if(!estimations||!estimations[idx])return;
+  var est=estimations[idx];
+
+  if(_busRouteActive&&_busRouteIdx===idx){
+    // Toggle OFF
+    clearBusRoute();
+    drawRouteLine();
+    // Update button text
+    var btn=document.querySelector('[data-action="bus-detail"][data-bus-idx="'+idx+'"]');
+    if(btn)btn.textContent='Ver recorrido';
+  }else{
+    // Toggle ON (or switch to different bus)
+    if(_busRouteActive)clearBusRoute();
+    drawBusRoute(est);
+    _busRouteActive=true;
+    _busRouteIdx=idx;
+    // Save Colectivo trip to history
+    saveTripToHistory('bus-detail');
+    // Update all bus buttons
+    document.querySelectorAll('[data-action="bus-detail"]').forEach(function(b){
+      var bIdx=parseInt(b.getAttribute('data-bus-idx'));
+      b.textContent=(bIdx===idx)?'Ocultar recorrido':'Ver recorrido';
+    });
+  }
+}
+
+// ===================== MEMORY BLOCK UI =====================
+function renderMemoryBlock(){
+  var block=document.getElementById('memoryBlock');
+  var favs=MC.getFavorites();
+  var history=MC.getHistory();
+  var hasFavs=MC.hasFavorites();
+  var hasHist=history.length>0;
+
+  // Show/hide entire block
+  block.classList.toggle('show',hasFavs||hasHist);
+
+  // Render favorites section
+  var favChips=document.getElementById('favChips');
+  var memFavs=document.getElementById('memFavs');
+  if(hasFavs){
+    memFavs.style.display='';
+    var html='';
+    if(favs.casa){
+      html+='<div class="fav-chip" onclick="selectFav(\'casa\')" title="'+escapeHtml(favs.casa.direccion||favs.casa.nombre)+'">'+
+        '<span class="fav-icon">🏠</span><span class="fav-name">'+escapeHtml(favs.casa.nombre)+'</span>'+
+        '<span class="fav-del" onclick="event.stopPropagation();removeFav(\'casa\')">✕</span></div>';
+    }
+    if(favs.trabajo){
+      html+='<div class="fav-chip" onclick="selectFav(\'trabajo\')" title="'+escapeHtml(favs.trabajo.direccion||favs.trabajo.nombre)+'">'+
+        '<span class="fav-icon">💼</span><span class="fav-name">'+escapeHtml(favs.trabajo.nombre)+'</span>'+
+        '<span class="fav-del" onclick="event.stopPropagation();removeFav(\'trabajo\')">✕</span></div>';
+    }
+    favs.custom.forEach(function(f){
+      html+='<div class="fav-chip" onclick="selectFav(\''+f.id+'\')" title="'+escapeHtml(f.direccion||f.nombre)+'">'+
+        '<span class="fav-icon">⭐</span><span class="fav-name">'+escapeHtml(f.nombre)+'</span>'+
+        '<span class="fav-del" onclick="event.stopPropagation();removeFav(\''+f.id+'\')">✕</span></div>';
+    });
+    favChips.innerHTML=html;
+  }else{
+    memFavs.style.display='none';
+    favChips.innerHTML='';
+  }
+
+  // Render history section
+  var memHistory=document.getElementById('memHistory');
+  var historyList=document.getElementById('historyList');
+  if(hasHist){
+    memHistory.style.display='';
+    var hhtml='';
+    history.forEach(function(h){
+      var oName=h.origin.name?h.origin.name.split(',')[0]:'Origen';
+      var dName=h.dest.name?h.dest.name.split(',')[0]:'Destino';
+      var relTime=formatRelativeTime(h.ts);
+      var icon=getProviderIcon(h.provider,h.mode);
+      hhtml+='<div class="history-item" onclick="selectHistoryItem(\''+h.id+'\')">';
+      hhtml+='<span class="history-item-icon">'+icon+'</span>';
+      hhtml+='<div class="history-item-text">';
+      hhtml+='<div class="history-item-route">'+escapeHtml(oName)+' → '+escapeHtml(dName)+'</div>';
+      hhtml+='<div class="history-item-time">'+escapeHtml(relTime)+'</div>';
+      hhtml+='</div></div>';
+    });
+    historyList.innerHTML=hhtml;
+    // Reset clear button
+    var btn=document.getElementById('historyClearBtn');
+    btn.textContent='Borrar';
+    btn.className='history-clear';
+  }else{
+    memHistory.style.display='none';
+    historyList.innerHTML='';
+  }
+}
+
+function selectFav(slot){
+  var favs=MC.getFavorites();
+  var fav=null;
+  if(slot==='casa') fav=favs.casa;
+  else if(slot==='trabajo') fav=favs.trabajo;
+  else fav=favs.custom.find(function(f){return f.id===slot});
+
+  if(!fav) return;
+
+  // If dest is empty or user taps a fav, set as destination
+  MC.setDest(fav.lat,fav.lon,fav.nombre,'favorite');
+  document.getElementById('destInput').value=fav.nombre;
+  updateMapMarkers();
+  if(MC.getOrigin()) runEstimations();
+  MC.trackFavTrip();
+  showToast('Destino: '+fav.nombre,'success');
+}
+
+function removeFav(slot){
+  MC.removeFavorite(slot);
+  renderMemoryBlock();
+  showToast('Favorito eliminado','info');
+}
+
+function showFavPrompt(){
+  if(_favPromptShown||_favPromptDismissed) return;
+  var dest=MC.getDest();
+  if(!dest) return;
+  // Don't show if dest already matches a favorite
+  if(MC.findMatchingFavorite(dest.lat,dest.lon)) return;
+  _favPromptShown=true;
+  document.getElementById('favPrompt').classList.add('show');
+}
+
+function dismissFavPrompt(){
+  _favPromptDismissed=true;
+  document.getElementById('favPrompt').classList.remove('show');
+}
+
+function openSaveFavModal(editSlot){
+  _favEditSlot=editSlot||null;
+  var favs=MC.getFavorites();
+  var dest=MC.getDest();
+
+  // Build type buttons - enabled only if slot available
+  var canCasa=MC.canAddFavorite('casa');
+  var canTrabajo=MC.canAddFavorite('trabajo');
+  var canCustom=MC.canAddFavorite('custom');
+
+  var typesHtml='';
+  typesHtml+='<button class="fav-type-btn'+(canCasa?'':' disabled')+'" data-type="casa" onclick="selectFavType(\'casa\')">🏠 Casa</button>';
+  typesHtml+='<button class="fav-type-btn'+(canTrabajo?'':' disabled')+'" data-type="trabajo" onclick="selectFavType(\'trabajo\')">💼 Trabajo</button>';
+  typesHtml+='<button class="fav-type-btn'+(canCustom?'':' disabled')+'" data-type="custom" onclick="selectFavType(\'custom\')">⭐ Personalizado</button>';
+  document.getElementById('favTypeBtns').innerHTML=typesHtml;
+
+  // Default name
+  var nameInput=document.getElementById('favNameInput');
+  var addrDiv=document.getElementById('favAddress');
+  if(dest){
+    nameInput.value=dest.name?dest.name.split(',')[0]:'';
+    addrDiv.textContent=dest.name||'';
+  }
+
+  // Select first available type
+  if(canCasa) selectFavType('casa');
+  else if(canTrabajo) selectFavType('trabajo');
+  else if(canCustom) selectFavType('custom');
+
+  document.getElementById('favPrompt').classList.remove('show');
+  document.getElementById('favModalBg').classList.add('show');
+  nameInput.focus();
+}
+
+function selectFavType(type){
+  _favModalSelectedType=type;
+  var favs=MC.getFavorites();
+  document.querySelectorAll('.fav-type-btn').forEach(function(b){
+    b.classList.remove('selected');
+    if(b.getAttribute('data-type')===type) b.classList.add('selected');
+  });
+  // Update name placeholder
+  var nameInput=document.getElementById('favNameInput');
+  if(type==='casa'&&nameInput.value==='') nameInput.value='Casa';
+  else if(type==='trabajo'&&nameInput.value==='') nameInput.value='Trabajo';
+  else if(type==='custom'&&(nameInput.value==='Casa'||nameInput.value==='Trabajo')) nameInput.value='';
+}
+
+function closeFavModal(e){
+  if(e&&e.target!==document.getElementById('favModalBg')) return;
+  document.getElementById('favModalBg').classList.remove('show');
+  _favEditSlot=null;
+}
+
+function saveFavFromModal(){
+  var type=_favModalSelectedType;
+  var name=document.getElementById('favNameInput').value.trim();
+  if(!name){showToast('Ingresá un nombre','warn');return}
+
+  var dest=MC.getDest();
+  if(!dest){showToast('No hay destino para guardar','warn');return}
+
+  var result=MC.addFavorite(type,name,dest.lat,dest.lon,dest.name||'',_favEditSlot);
+  if(result){
+    closeFavModal();
+    renderMemoryBlock();
+    showToast('⭐ Favorito guardado: '+name,'success');
+  }else{
+    showToast('No se pudo guardar','error');
+  }
+}
+
+function showFavMetrics(){
+  var m=MC.getMemoryMetrics();
+  console.log('[MEMORY METRICS]',JSON.stringify(m,null,2));
+  showToast('fav: '+m.memory_favorite_usage_rate+'% | hist: '+m.memory_history_usage_rate+'% | action: '+m.memory_to_action_rate+'%','info');
+}
+
+// ===================== HISTORY UI =====================
+var _historyClearConfirmPending=false;
+
+function selectHistoryItem(id){
+  var entry=MC.getHistoryEntry(id);
+  if(!entry) return;
+
+  // Reconstruct the complete trip
+  MC.setOriginManual(true);
+  MC.setOrigin(entry.origin.lat,entry.origin.lon,entry.origin.name,'history');
+  MC.setDest(entry.dest.lat,entry.dest.lon,entry.dest.name,'history');
+  document.getElementById('originInput').value=entry.origin.name?entry.origin.name.split(',')[0]:'';
+  document.getElementById('destInput').value=entry.dest.name?entry.dest.name.split(',')[0]:'';
+  updateMapMarkers();
+  runEstimations();
+  MC.trackHistoryReuse();
+  showToast('Viaje restaurado','success');
+}
+
+function confirmClearHistory(){
+  if(_historyClearConfirmPending){
+    // Second tap = confirmed
+    _historyClearConfirmPending=false;
+    MC.clearHistory();
+    renderMemoryBlock();
+    showToast('Historial borrado','info');
+  }else{
+    // First tap = show confirmation
+    _historyClearConfirmPending=true;
+    var btn=document.getElementById('historyClearBtn');
+    btn.textContent='¿Confirmar?';
+    btn.className='history-clear-confirm';
+    // Auto-revert after 3 seconds
+    setTimeout(function(){
+      if(_historyClearConfirmPending){
+        _historyClearConfirmPending=false;
+        if(btn){btn.textContent='Borrar';btn.className='history-clear';}
+      }
+    },3000);
+  }
+}
+
+function getProviderIcon(provider,mode){
+  if(mode==='bus'||provider==='colectivo') return '🚌';
+  if(mode==='moto') return '🏍️';
+  if(provider==='uber'||provider==='uber_moto') return '🚗';
+  if(provider==='didi'||provider==='didi_moto') return '🟠';
+  if(provider==='maxim') return '🟣';
+  if(provider==='cabify') return '🟢';
+  if(provider==='taxi'||provider==='radiotaxi') return '🚕';
+  if(provider==='remis') return '🚙';
+  if(provider==='taxiapp') return '📱';
+  if(mode==='auto') return '🚗';
+  return '📍';
+}
+
+function formatRelativeTime(ts){
+  var now=Date.now();
+  var diff=now-ts;
+  var seconds=Math.floor(diff/1000);
+  if(seconds<60) return 'hace un momento';
+  var minutes=Math.floor(seconds/60);
+  if(minutes<60) return 'hace '+minutes+' min';
+  var hours=Math.floor(minutes/60);
+  if(hours<24) return 'hace '+hours+' h';
+  var days=Math.floor(hours/24);
+  if(days===1) return 'ayer';
+  if(days<7) return 'hace '+days+' días';
+  // Show date for older entries
+  var d=new Date(ts);
+  return d.getDate()+'/'+(d.getMonth()+1);
+}
+
+/**
+ * Save trip to history when user taps a provider button.
+ * Called from requestRide() after double-tap confirmation.
+ * @param {string} action - The provider action key (uber, didi, maxim, etc.)
+ */
+function saveTripToHistory(action){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest) return;
+
+  // Map action key to mode
+  var mode='auto';
+  var provider=action;
+  if(action==='uber_moto'||action==='didi_moto'){
+    mode='moto';
+  }else if(action==='bus-detail'){
+    mode='bus';
+    provider='colectivo';
+  }
+
+  MC.addToHistory(origin,dest,mode,provider);
+  MC.trackProviderTrip();
+  renderMemoryBlock();
+}
+
+// ===================== PREDICTIVE SEARCH =====================
+function renderSearchDropdown(results,field,isRecent){
+  var id=field==='origin'?'originDropdown':'destDropdown';
+  var dropdown=document.getElementById(id);
+  if(!dropdown)return;
+  dropdown.innerHTML='';
+
+  if(!results.length){
+    dropdown.innerHTML='<div class="search-item search-item--empty">Sin resultados en Santa Fe</div>';
+    dropdown.classList.remove('hidden');
+    return;
+  }
+
+  results.forEach(function(r){
+    var lat=parseFloat(r.lat||r.latitude);
+    var lon=parseFloat(r.lon||r.longitude);
+    var displayName=r.display_name||r.display||r.name||'';
+    var name=displayName.split(',')[0];
+    var sub=displayName.split(',').slice(1,3).join(',').trim();
+    var icon=r.type==='bus'?'🚌':r.type==='bike'?'🚲':'📍';
+
+    var item=document.createElement('div');
+    item.className='search-item'+(isRecent?' search-item--recent':'');
+    item.innerHTML=
+      (isRecent?'<span class="search-item-icon">🕐</span>':'<span class="search-item-icon">'+icon+'</span>')+
+      '<div class="search-item-text">'+
+      '<strong>'+escapeHtml(name)+'</strong>'+
+      (sub?'<br><small>'+escapeHtml(sub)+'</small>':'')+
+      '</div>';
+
+    item.addEventListener('click',function(){
+      selectSearchResult(field,lat,lon,displayName);
+      if(!isRecent)MC.saveRecentSearch({lat:lat,lon:lon,display_name:displayName});
+    });
+
+    dropdown.appendChild(item);
+  });
+
+  dropdown.classList.remove('hidden');
+}
+
+function selectSearchResult(field,lat,lon,name){
+  if(field==='origin'){
+    MC.setOriginManual(true);
+    MC.setOrigin(lat,lon,name,'search');
+    document.getElementById('originInput').value=name.split(',')[0];
+    updateMapMarkers();
+    if(MC.getDest())runEstimations();
+  }else{
+    MC.setDest(lat,lon,name,'search');
+    document.getElementById('destInput').value=name.split(',')[0];
+    updateMapMarkers();
+    if(MC.getOrigin())runEstimations();
+  }
+  closeAllDropdowns();
+}
+
+function closeAllDropdowns(){
+  document.querySelectorAll('.search-dropdown').forEach(function(d){d.classList.add('hidden')});
+}
+
+async function onSearchInput(val,field){
+  MC.setSearchTimer(null);
+  var id=field==='origin'?'originDropdown':'destDropdown';
+  var dropdown=document.getElementById(id);
+
+  if(!val||val.trim().length<2){
+    dropdown.classList.add('hidden');
+    if(!val||val.trim().length===0){
+      // Clear origin/dest when input is emptied
+      if(field==='origin'){
+        var origin=MC.getOrigin();
+        if(origin&&origin.source!=='gps'&&origin.source!=='cache'){
+          MC.clearOrigin();
+          renderCards();
+          updateMapMarkers();
+        }
+      }else{
+        MC.clearDest();
+        renderCards();
+        updateMapMarkers();
+      }
+      // Show recent searches on empty
+      var recent=MC.getRecentSearches();
+      if(recent.length){
+        renderSearchDropdown(
+          recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),
+          field,true
+        );
+      }
+    }
+    return;
+  }
+
+  var version=++_searchVersion;
+  var timer=setTimeout(async function(){
+    var results=await MC.searchNominatim(val.trim());
+    if(version!==_searchVersion){
+      return; // stale response — a newer search has been issued
+    }
+    renderSearchDropdown(results,field,false);
+  },400);
+  MC.setSearchTimer(timer);
+}
+
+function onSearchFocus(field){
+  var inputId=field==='origin'?'originInput':'destInput';
+  var input=document.getElementById(inputId);
+  if(!input||input.value.trim().length>=2)return;
+  var recent=MC.getRecentSearches();
+  if(recent.length){
+    renderSearchDropdown(
+      recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),
+      field,true
+    );
+  }
+}
+
+// Legacy aliases for compatibility
+function hideAc(field){closeAllDropdowns()}
+function hideAllAc(){closeAllDropdowns()}
+
+// ===================== WEATHER =====================
+function fetchWeather(){
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=-31.6333&longitude=-60.7000&current_weather=true')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.current_weather){
+        var w=d.current_weather;
+        document.getElementById('weatherInfo').textContent=weatherEmoji(w.weathercode,w.is_day,w.temperature);
+      }
+    }).catch(function(){});
+}
+
+function weatherEmoji(code,isDay,temp){
+  if(temp>=35)return'🥵';
+  if(temp<=0)return'🥶';
+  if(code===0)return isDay?'☀️':'🌙';
+  if(code<=3)return isDay?'🌤️':'🌙';
+  if(code<=48)return'🌫️';
+  if(code<=57)return'🌧️';
+  if(code<=67)return'🌧️';
+  if(code<=77)return'🌨️';
+  if(code<=82)return'🌧️';
+  if(code<=86)return'🌨️';
+  if(code<=99)return'⛈️';
+  return isDay?'🌤️':'🌙';
+}
+
+// ===================== UTILS =====================
+// MobilityEngine already guarded at bootstrap. Safe to alias here.
+var haversine=MobilityEngine.haversine;
+var formatPrice=MobilityEngine.formatPrice;
+var formatMin=MobilityEngine.formatMin;
+var normalize=MobilityEngine.normalize;
+var fuzzyScore=MobilityEngine.fuzzyScore;
+function escapeStr(s){return s.replace(/'/g,"\\'").replace(/"/g,'&quot;')}
+
+// ===================== ESTIMATION ORCHESTRATION =====================
+function runEstimations(){
+  if(!MC.getOrigin()||!MC.getDest())return;
+
+  // === ANTI-FRAGILITY: snapshot before re-estimation ===
+  var prevEst=MC.getEstimations();
+  captureEstimationSnapshot(prevEst);
+
+  MC.runEstimations();
+  // Track trip for favorites metrics
+  var fromFav=MC.isTripFromFavorite();
+  MC.trackTrip(fromFav);
+  if(_busRouteActive)clearBusRoute();
+  renderCards();
+  updateMapHint();
+  // Show favorite prompt after first successful trip
+  if(!_favPromptShown&&!_favPromptDismissed){
+    showFavPrompt();
+  }
+}
+
+// ===================== MAP HINT =====================
+function updateMapHint(){
+  var el=document.getElementById('mapHint');
+  var estimations=MC.getEstimations();
+  if(!estimations||!estimations.length){el.classList.remove('show');return}
+  el.classList.add('show');
+  var modeNames={walk:'caminando',bus:'colectivo',bike:'bicicleta',moto:'moto',auto:'auto'};
+  var first=estimations[0];
+  var modeLabel=modeNames[first.mode]||first.mode;
+  el.textContent='🗺️ Ruta en mapa: '+modeLabel+' · Arrastrá para cambiar';
+}
+
+// ===================== RENDER CARDS =====================
+function renderCards(){
+  var container=document.getElementById('cardsContainer');
+  var html='';
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  var estimations=MC.getEstimations();
+
+  if(!origin||!dest){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
+      'Elegí origen y destino</div>';
+  }else if(!estimations||!estimations.length){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
+      'Calculando rutas...</div>';
+  }else{
+    estimations.forEach(function(est,idx){
+      html+=renderActiveCard(est,idx);
+    });
+    html+='<div class="unavailable-summary">🚆 Tren &nbsp;·&nbsp; 🚇 Subte &nbsp;·&nbsp; ✈️ Avión <span>No disponibles en Santa Fe</span></div>';
+  }
+
+  container.innerHTML=html;
+  initDragAndDrop();
+  attachButtonEvents();
+  renderDecisionCard();
+  // Card visibility is now fully controlled by renderDecisionCard()
+  // HARD RULE: decision layer decides card visibility, not renderCards()
+}
+
+function renderActiveCard(est,idx){
+  var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'" draggable="true">';
+  h+='<span class="drag-handle" title="Arrastrar">⋮⋮</span>';
+
+  if(est.mode==='walk'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km a pie · GRATIS</div>';
+  }
+
+  else if(est.mode==='bus'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">Colectivo</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    var busText=MobilityEngine.formatBusText(est,formatPrice);
+    h+='<p class="rc-subtitle" style="font-size:13px;line-height:1.5;white-space:pre-line">'+busText+'</p>';
+    h+='<div class="rc-actions">';
+    if(est.stopOrigen){
+      h+='<button class="rc-action bus" data-action="bus-detail" data-bus-idx="'+idx+'">Ver recorrido</button>';
+    }
+    h+='</div>';
+  }
+
+  else if(est.mode==='bike'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle" style="white-space:pre-line">'+est.distance.toFixed(1)+' km · GRATIS';
+    if(est.nearStation){
+      h+='\n📍 Retirar en: '+est.nearStation.nombre+' ('+est.nearStation.calles+')';
+    }
+    if(est.nearDestStation){
+      h+='\n📍 Dejar en: '+est.nearDestStation.nombre+' ('+est.nearDestStation.calles+')';
+    }
+    h+='</div>';
+    h+='<div class="rc-actions">';
+    var bikeLink=buildBikeLink();
+    h+='<a href="'+bikeLink+'" class="rc-action bike" target="_blank">Bicicleta</a>';
+    h+='</div>';
+  }
+
+  else if(est.mode==='moto'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
+    var motoProvidersList=[
+      {id:'uber_moto',name:'Uber Moto',price:est.uberMotoPrice,timeMin:est.uberMotoTimeMin},
+      {id:'didi_moto',name:'DiDi Moto',price:est.didiMotoPrice,timeMin:est.didiMotoTimeMin}
+    ].filter(function(p){return p.price!=null}).sort(function(a,b){return a.price-b.price});
+    motoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin);
+    });
+  }
+
+  else if(est.mode==='auto'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
+    var autoProvidersList=[
+      {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
+      {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
+      {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
+      {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
+      {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
+      {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
+    ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available}).sort(function(a,b){return a.price-b.price});
+    autoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url);
+    });
+    h+=renderProviderRow('cabify','Cabify',est.cabifyPrice,'cabify');
+  }
+
+  h+='</div>';
+  return h;
+}
+
+function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,waText){
+  var provider=PROVIDERS[key];
+  if(!provider||!provider.available)return'';
+  var color=provider.color||'#666';
+  var t=timeOverride?formatMin(timeOverride):'';
+  var url='';
+  if(key==='uber'||key==='uber_moto')url=buildUberLink();
+  else if(key==='didi'||key==='didi_moto')url=buildDiDiLink();
+  else if(key==='maxim')url=buildMaximLink();
+  else if(key==='cabify')url='https://cabify.com/';
+  else if(waLink)url=waLink;
+
+  var h='<div class="provider-row">';
+  h+='<div class="provider-color" style="background:'+color+'"></div>';
+  h+='<span class="provider-name">'+name+'</span>';
+  h+='<div class="card-action-row">';
+  if(url){
+    h+='<button class="btn-pedir" data-action="'+key+'" data-url="'+url+'">Pedir</button>';
+  }
+  h+='<span class="card-price">'+(price!=null?formatPrice(price):'Consultar')+'</span>';
+  if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
+  h+='</div></div>';
+  return h;
+}
+
+function renderUnavailableCard(icon,title,reason){
+  return '<div class="route-card route-card--unavailable" draggable="false">'+
+    '<div class="unavailable-overlay"><span>NO DISPONIBLE</span></div>'+
+    '<div class="rc-header"><span class="rc-icon">'+icon+'</span><span class="rc-title">'+title+'</span></div>'+
+    '<div class="rc-subtitle">'+reason+'</div></div>';
+}
+
+// ===================== LINK BUILDERS =====================
+function buildUberLink(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return '#';
+  return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+
+    '&pickup[formatted_address]=Origen&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon;
+}
+
+function buildDiDiLink(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return '#';
+  return 'https://web.didiglobal.com/ar/passenger/ride/?pickup_lat='+origin.lat+'&pickup_lng='+origin.lon+
+    '&dropoff_lat='+dest.lat+'&dropoff_lng='+dest.lon;
+}
+
+function buildMaximLink(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest||!origin.lat||!dest.lat) return 'https://taximaxim.com/ar/';
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  var isIOS=/iPhone|iPad/i.test(navigator.userAgent);
+  if(isAndroid){
+    var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';
+    return 'intent://order?'+
+      'startLat='+Number(origin.lat).toFixed(6)+
+      '&startLon='+Number(origin.lon).toFixed(6)+
+      '&finishLat='+Number(dest.lat).toFixed(6)+
+      '&finishLon='+Number(dest.lon).toFixed(6)+
+      '#Intent'+
+      ';scheme=taxsee'+
+      ';package=com.taxsee.taxsee'+
+      ';S.browser_fallback_url='+encodeURIComponent(playStore)+
+      ';end';
+  }
+  if(isIOS){
+    return 'https://apps.apple.com/app/maxim/id893663029';
+  }
+  return 'https://taximaxim.com/ar/';
+}
+
+function buildBikeLink(){
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  if(isAndroid)return 'intent://#Intent;scheme=lasbicis;package=com.santafe.lasbicis;end';
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS)return 'https://apps.apple.com/ar/app/id6444962582';
+  return 'https://www.santafe.gob.ar/index.php/educacionycultura/content/download/55027/283898/file/Las%20Bicis.pdf';
+}
+
+// ===================== DOUBLE TAP TO CONFIRM =====================
+var _confirmState={};
+function requestRide(mode,url){
+  var now=Date.now();
+  var last=_confirmState[mode]||0;
+  var DOUBLE_TAP_MS=2000;
+  if(now-last<DOUBLE_TAP_MS){
+    _confirmState[mode]=0;
+    window.open(url,'_blank');
+    // Save to history on confirmed provider tap
+    saveTripToHistory(mode);
+  }else{
+    _confirmState[mode]=now;
+    showToast('Tocá de nuevo para confirmar','info');
+    setTimeout(function(){_confirmState[mode]=0},DOUBLE_TAP_MS+100);
+  }
+}
+
+// ===================== BUTTON EVENTS =====================
+function attachButtonEvents(){
+  document.querySelectorAll('.btn-pedir').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var action=btn.getAttribute('data-action');
+      var url=btn.getAttribute('data-url');
+      if(url&&url!=='#'){
+        requestRide(action,url);
+      }
+    });
+  });
+
+  document.querySelectorAll('.rc-action.bike').forEach(function(a){
+    a.addEventListener('click',function(e){
+      e.stopPropagation();
+    });
+  });
+
+  document.querySelectorAll('[data-action="bus-detail"]').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var idx=parseInt(btn.getAttribute('data-bus-idx'));
+      if(!isNaN(idx))toggleBusRoute(idx);
+    });
+  });
+}
+
+// ===================== DRAG AND DROP =====================
+function initDragAndDrop(){
+  var cards=document.querySelectorAll('.route-card:not(.route-card--unavailable)');
+  var dragSrc=null;
+
+  cards.forEach(function(card){
+    card.addEventListener('dragstart',function(e){
+      dragSrc=card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',card.getAttribute('data-mode'));
+    });
+
+    card.addEventListener('dragend',function(){
+      card.classList.remove('dragging');
+      document.querySelectorAll('.route-card').forEach(function(c){c.classList.remove('drag-over')});
+    });
+
+    card.addEventListener('dragover',function(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect='move';
+      if(card!==dragSrc){
+        card.classList.add('drag-over');
+      }
+    });
+
+    card.addEventListener('dragleave',function(){
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop',function(e){
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if(dragSrc&&dragSrc!==card){
+        var container=document.getElementById('cardsContainer');
+        var allCards=Array.from(container.querySelectorAll('.route-card:not(.route-card--unavailable)'));
+        var fromIdx=allCards.indexOf(dragSrc);
+        var toIdx=allCards.indexOf(card);
+        if(fromIdx<toIdx){
+          container.insertBefore(dragSrc,card.nextSibling);
+        }else{
+          container.insertBefore(dragSrc,card);
+        }
+        // Sync estimations order with DOM
+        syncEstimationsFromDOM();
+        updateMapHint();
+      }
+    });
+  });
+}
+
+function syncEstimationsFromDOM(){
+  var estimations=MC.getEstimations();
+  if(!estimations)return;
+  var container=document.getElementById('cardsContainer');
+  var domCards=container.querySelectorAll('.route-card:not(.route-card--unavailable)');
+  var newOrder=[];
+  domCards.forEach(function(card){
+    var mode=card.getAttribute('data-mode');
+    var found=estimations.find(function(e){return e.mode===mode});
+    if(found)newOrder.push(found);
+  });
+  if(newOrder.length===estimations.length){
+    MC.setEstimations(newOrder);
+  }
+}
+
+// ===================== UI UPDATES =====================
+function updateOriginUI(){
+  var origin=MC.getOrigin();
+  document.getElementById('originInput').value=origin?origin.name:'';
+}
+
+function updateDestUI(){
+  var dest=MC.getDest();
+  document.getElementById('destInput').value=dest?dest.name:'';
+}
+
+// ===================== TOAST =====================
+function showToast(msg,type){
+  type=type||'info';
+  var container=document.getElementById('toastContainer');
+  var el=document.createElement('div');
+  el.className='toast '+type;
+  el.textContent=msg;
+  container.appendChild(el);
+  setTimeout(function(){
+    el.style.opacity='0';
+    el.style.transition='opacity .3s';
+    setTimeout(function(){el.remove()},300);
+  },2500);
+}
+
+// ===================== PREFERENCE PANEL (render) =====================
+function renderPrefsPanel(){
+  var el=document.getElementById('prefsPanel');
+  if(!el)return;
+  var prefs=MC.getPrefs();
+
+  var options=[
+    {key:'avoidMoto',label:'Evitar motos',icon:'🏍️'},
+    {key:'prioritizePrice',label:'Priorizar precio',icon:'💰'},
+    {key:'prioritizeSpeed',label:'Priorizar velocidad',icon:'⚡'},
+    {key:'avoidLongWalks',label:'Evitar caminatas largas',icon:'🚶'},
+    {key:'avoidTransfers',label:'Evitar transbordos',icon:'🔄'},
+    {key:'withLuggage',label:'Viajo con equipaje',icon:'🧳'},
+    {key:'withChildren',label:'Viajo con niños',icon:'👶'}
+  ];
+
+  var anyActive=MC.hasActivePrefs();
+  var activeCount=MC.countActivePrefs();
+
+  var h='<div style="margin:8px 12px 0;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);overflow:hidden">';
+  h+='<div onclick="_prefsOpen=!_prefsOpen;renderPrefsPanel()" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--text2)">';
+  h+='<span style="flex:1">⚙️ PREFERENCIAS'+(anyActive?' <span style="color:var(--accent);font-weight:600">('+activeCount+' activa'+(activeCount>1?'s':'')+')</span>':'')+'</span>';
+  h+='<span style="font-size:10px;color:var(--text2)">'+(_prefsOpen?'▲':'▼')+'</span>';
+  h+='</div>';
+
+  if(_prefsOpen){
+    h+='<div style="padding:4px 12px 10px">';
+    options.forEach(function(opt){
+      var checked=prefs[opt.key];
+      h+='<label style="display:flex;align-items:center;gap:6px;padding:5px 0;font-size:12px;cursor:pointer;color:var(--text);line-height:1.2">';
+      h+='<input type="checkbox" onchange="onTogglePref(\''+opt.key+'\')" '+(checked?'checked':'')+' style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">';
+      h+='<span>'+opt.icon+' '+opt.label+'</span>';
+      h+='</label>';
+    });
+    h+='</div>';
+  }
+
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// Bridge: toggle pref via controller then re-render
+function onTogglePref(key){
+  MC.togglePref(key);
+  renderPrefsPanel();
+  renderDecisionCard();
+}
+
+// ===================== DECISION CORE V3 + ANTI-FRAGILITY LAYER =====================
+// No se muestra decisión. Se muestra elección ya resuelta.
+// VOY no falla. VOY se adapta al mundo.
+//
+// Score (0–100) is INTERNAL — never shown, never named, never exposed.
+// 2 output states only:
+//   ≥ 70 → SINGLE_RESULT (1 resultado, 1 CTA)
+//   < 70 → DUAL_CONTEXT (2 opciones, igualdad absoluta)
+//
+// Anti-Fragility: stability_score gates DUAL_CONTEXT when environment is volatile.
+// Copy overrides replace technical errors with adaptive language.
+// Self-correction: decision changes are silent, never shown as "new".
+// Temporal consistency: same route = same card, updated values.
+//
+// Fallback hierarchy: Decision Core → Anti-Fragility adjustment → Legacy full cards
+
+/**
+ * Compute internal decision score (0–100). NEVER exposed to UI.
+ *
+ * 5 signals:
+ *   1. Price dominance vs runner-up (30 pts)
+ *   2. Time dominance vs runner-up (20 pts)
+ *   3. Mode isolation (20 pts): winner is unique in its category → bonus
+ *   4. Noise penalty (15 pts): variability between same-mode providers
+ *   5. Context volatility (15 pts): inconsistent cross-mode data → penalize
+ *
+ * Returns: { score:0-100, winner, runner }
+ */
+function computeDecisionScore(estimations, rec){
+  if(!rec||!estimations||!estimations.length) return {score:0,winner:null,runner:null};
+
+  var prefs=MC.getPrefs();
+  var allAlts=[];
+
+  estimations.forEach(function(est){
+    if(est.mode==='bus'){
+      if(est.price!=null&&est.timeMin!=null&&est.timeMin>0){
+        allAlts.push({
+          name:'Colectivo',price:est.price,time:Math.ceil(est.timeMin),
+          mode:'bus',icon:'\uD83D\uDE8C',walkMin:(est.walkToStopMin||0)+(est.walkFromStopMin||0),hasTransfer:!!est.combination
+        });
+      }
+    }
+    if(est.mode==='moto'){
+      if(est.uberMotoPrice!=null){
+        allAlts.push({
+          name:'Uber Moto',price:est.uberMotoPrice,
+          time:est.uberMotoTimeMin||est.timeMin,
+          mode:'moto',icon:'\uD83D\uDEF5'
+        });
+      }
+    }
+    if(est.mode==='auto'){
+      var autoPV=[
+        {key:'uber',name:'Uber',priceKey:'uberPrice',timeKey:'uberTimeMin'},
+        {key:'didi',name:'DiDi',priceKey:'didiPrice',timeKey:'didiTimeMin'},
+        {key:'maxim',name:'Maxim',priceKey:'maximPrice',timeKey:'maximTimeMin'},
+        {key:'taxi',name:'Radiotaxi',priceKey:'taxiPrice',timeKey:'taxiTimeMin'},
+        {key:'remis',name:'Remises Real',priceKey:'remisPrice',timeKey:'remisTimeMin'},
+        {key:'taxiapp',name:'TaxiApp',priceKey:'taxiappPrice',timeKey:'taxiappTimeMin'}
+      ];
+      autoPV.forEach(function(p){
+        if(est[p.priceKey]!=null&&PROVIDERS&&PROVIDERS[p.key]&&PROVIDERS[p.key].available){
+          var pTime=p.timeKey&&est[p.timeKey]?est[p.timeKey]:est.timeMin;
+          allAlts.push({name:p.name,price:est[p.priceKey],time:pTime,mode:'auto',icon:'\uD83D\uDE97'});
+        }
+      });
+    }
+  });
+
+  if(prefs.avoidMoto){
+    allAlts=allAlts.filter(function(a){return a.mode!=='moto';});
+  }
+
+  if(!allAlts.length) return {score:0,winner:null,runner:null};
+
+  // Score alternatives using same weights as engine
+  var weights=MobilityEngine.getWeights(prefs);
+  var prices=allAlts.map(function(a){return a.price;});
+  var times=allAlts.map(function(a){return a.time;});
+  var minPrice=Math.min.apply(null,prices);
+  var maxPrice=Math.max.apply(null,prices);
+  var minTime=Math.min.apply(null,times);
+  var maxTime=Math.max.apply(null,times);
+
+  allAlts.forEach(function(a){
+    var priceNorm=maxPrice>minPrice?(a.price-minPrice)/(maxPrice-minPrice):0;
+    var timeNorm=maxTime>minTime?(a.time-minTime)/(maxTime-minTime):0;
+    a.score=priceNorm*weights.priceW+timeNorm*weights.timeW;
+    if(prefs.avoidLongWalks&&a.walkMin&&a.walkMin>8) a.score+=0.20;
+    if(prefs.avoidTransfers&&a.hasTransfer) a.score+=0.25;
+    if(prefs.withLuggage&&(a.mode==='bike'||a.mode==='walk')) a.score+=0.30;
+    if(prefs.withChildren&&a.mode==='moto') a.score+=0.35;
+    a.score=Math.min(a.score,1.0);
+  });
+
+  allAlts.sort(function(a,b){return(a.score||0)-(b.score||0);});
+  var winner=allAlts[0];
+  var runner=allAlts.length>=2?allAlts[1]:null;
+
+  // --- Signal 1: Price dominance vs runner-up (30 pts) ---
+  var priceDomPts=0;
+  if(runner&&winner.price!=null&&runner.price!=null&&runner.price>0){
+    var priceDomPct=(runner.price-winner.price)/runner.price;
+    priceDomPts=Math.min(30,Math.max(0,Math.round((priceDomPct-0.05)/0.30*30)));
+  }else if(!runner){
+    priceDomPts=30;
+  }
+
+  // --- Signal 2: Time dominance vs runner-up (20 pts) ---
+  var timeDomPts=0;
+  if(runner&&winner.time!=null&&runner.time!=null&&runner.time>0){
+    var timeDomPct=(runner.time-winner.time)/runner.time;
+    timeDomPts=Math.min(20,Math.max(0,Math.round((timeDomPct-0.05)/0.35*20)));
+  }else if(!runner){
+    timeDomPts=20;
+  }
+
+  // --- Signal 3: Mode isolation (20 pts) ---
+  // Winner is the ONLY option in its mode → strong isolation → high score
+  // Multiple same-mode competitors → crowded → lower score
+  var modeIsolationPts=0;
+  var sameModeAlts=allAlts.filter(function(a){return a.mode===winner.mode;});
+  if(sameModeAlts.length===1){
+    // Winner is unique in its mode → strong signal
+    modeIsolationPts=20;
+  }else if(sameModeAlts.length===2){
+    modeIsolationPts=12;
+  }else if(sameModeAlts.length>=3){
+    modeIsolationPts=5;
+  }
+  // Cross-mode runner further reinforces isolation
+  if(runner&&winner.mode!==runner.mode&&modeIsolationPts>=12){
+    modeIsolationPts=Math.min(20,modeIsolationPts+3);
+  }
+
+  // --- Signal 4: Noise penalty (15 pts) ---
+  // Price variability between same-mode providers = noise.
+  // Low noise → consistent data → full points.
+  // High noise → unreliable → low points.
+  var noisePts=15;
+  if(sameModeAlts.length>=2){
+    var samePrices=sameModeAlts.map(function(a){return a.price;});
+    var sMin=Math.min.apply(null,samePrices);
+    var sMax=Math.max.apply(null,samePrices);
+    if(sMax>0&&sMin>0){
+      var priceCV=(sMax-sMin)/((sMax+sMin)/2);
+      // CV < 0.08 → 15 pts (clean); CV > 0.4 → 3 pts (noisy)
+      noisePts=Math.min(15,Math.max(3,Math.round(15-(priceCV-0.08)/0.32*12)));
+    }
+  }else{
+    // Only 1 provider in mode → moderate noise assumption
+    noisePts=8;
+  }
+
+  // --- Signal 5: Context volatility (15 pts) ---
+  // Multiple providers with inconsistent cross-mode data → volatile → penalize.
+  // Stable cross-mode landscape → consistent → full points.
+  var volatilityPts=15;
+  var uniqueModes=[];
+  allAlts.forEach(function(a){
+    if(uniqueModes.indexOf(a.mode)===-1) uniqueModes.push(a.mode);
+  });
+  if(uniqueModes.length>=3){
+    // Many modes: check price coherence across modes
+    // If mode averages are wildly different → volatile
+    var modeAvgs={};
+    uniqueModes.forEach(function(m){
+      var mAlts=allAlts.filter(function(a){return a.mode===m;});
+      var mSum=0;mAlts.forEach(function(a){mSum+=a.price;});
+      modeAvgs[m]=mSum/mAlts.length;
+    });
+    var avgVals=Object.keys(modeAvgs).map(function(k){return modeAvgs[k];});
+    var aMin=Math.min.apply(null,avgVals);
+    var aMax=Math.max.apply(null,avgVals);
+    if(aMax>0&&aMin>0){
+      var modeCV=(aMax-aMin)/((aMax+aMin)/2);
+      // Cross-mode CV < 0.3 → 15 pts; CV > 0.8 → 3 pts
+      volatilityPts=Math.min(15,Math.max(3,Math.round(15-(modeCV-0.3)/0.5*12)));
+    }
+  }else if(uniqueModes.length===2){
+    volatilityPts=10;
+  }
+  // Single mode available → lower volatility but less context
+  if(uniqueModes.length===1) volatilityPts=5;
+
+  var total=priceDomPts+timeDomPts+modeIsolationPts+noisePts+volatilityPts;
+  total=Math.min(100,Math.max(0,total));
+
+  return {score:total,winner:winner,runner:runner};
+}
+
+/**
+ * DECISION CORE V3 — Score → State mapping.
+ *
+ * STRICTLY 2 states:
+ *   ≥ 70 → SINGLE_RESULT (1 resultado)
+ *   < 70 → DUAL_CONTEXT (2 opciones)
+ *
+ * Anti-Fragility override: if stability_score ≤ 0.7, force SINGLE_RESULT
+ * when possible (reduce DUAL_CONTEXT frequency in volatile environments).
+ * NO other states. NO exceptions.
+ */
+function computeDecisionState(score, stabilityScore){
+  if(score==null||typeof score!=='number'||isNaN(score)) return 'DUAL_CONTEXT';
+  if(score>=70) return 'SINGLE_RESULT';
+  // Anti-Fragility: low stability → force SINGLE_RESULT if score is borderline
+  // Score 55-69 in unstable environment → SINGLE_RESULT (prefer certainty)
+  if(stabilityScore!=null&&stabilityScore<=0.7&&score>=55) return 'SINGLE_RESULT';
+  return 'DUAL_CONTEXT';
+}
+
+/**
+ * Track decision state frequency. 2 states only.
+ * Emits console warning if DUAL_CONTEXT > 25% (system degraded).
+ */
+function trackDecisionState(state){
+  _decisionStateLog.push({state:state,ts:Date.now()});
+  if(_decisionStateLog.length>100) _decisionStateLog=_decisionStateLog.slice(-100);
+  if(_decisionStateLog.length>=5){
+    var dualCount=0;
+    _decisionStateLog.forEach(function(e){if(e.state==='DUAL_CONTEXT')dualCount++;});
+    var dualPct=dualCount/_decisionStateLog.length;
+    if(dualPct>0.25){
+      console.warn('[VOY CORE V3] DUAL_CONTEXT frequency = '+(dualPct*100).toFixed(1)+'% (>25%) — core degraded');
+    }
+  }
+}
+
+// ===================== ANTI-FRAGILITY LAYER =====================
+// VOY no falla. VOY se adapta al mundo.
+// Classifies inconsistencies, computes stability, provides adaptive copy.
+
+/**
+ * Capture an estimation snapshot for drift detection.
+ * Stores a compact fingerprint of current estimation state.
+ */
+function captureEstimationSnapshot(estimations){
+  if(!estimations||!estimations.length) return;
+  var snapshot={
+    ts:Date.now(),
+    providers:[],
+    modes:new Set()
+  };
+  estimations.forEach(function(est){
+    var mode=est.mode;
+    snapshot.modes.add(mode);
+    if(mode==='auto'){
+      ['uberPrice','didiPrice','maximPrice','taxiPrice','remisPrice','taxiappPrice'].forEach(function(k){
+        if(est[k]!=null) snapshot.providers.push({key:k.replace('Price',''),price:est[k],time:est.timeMin,mode:'auto'});
+      });
+    }else if(mode==='moto'){
+      if(est.uberMotoPrice!=null) snapshot.providers.push({key:'uber_moto',price:est.uberMotoPrice,time:est.uberMotoTimeMin||est.timeMin,mode:'moto'});
+    }else if(mode==='bus'){
+      if(est.price!=null) snapshot.providers.push({key:'bus',price:est.price,time:Math.ceil(est.timeMin),mode:'bus'});
+    }
+  });
+  snapshot.modes=Array.from(snapshot.modes);
+  _estimationSnapshots.push(snapshot);
+  if(_estimationSnapshots.length>10) _estimationSnapshots=_estimationSnapshots.slice(-10);
+}
+
+/**
+ * Classify runtime inconsistencies between current and previous estimation snapshots.
+ * Returns the highest-priority inconsistency type, or null if stable.
+ *
+ * Priority: DATA_INCOMPLETE > MODE_SHIFT > PRICE_DRIFT > TIME_DRIFT > PROVIDER_SHIFT
+ */
+function classifyInconsistency(currentEstimations){
+  if(!currentEstimations||!currentEstimations.length) return 'DATA_INCOMPLETE';
+
+  // Check DATA_INCOMPLETE: missing price or time on all options
+  var hasAnyPrice=false;
+  var hasAnyTime=false;
+  currentEstimations.forEach(function(est){
+    if(est.mode==='auto'){
+      if(est.uberPrice!=null||est.didiPrice!=null||est.maximPrice!=null||est.taxiPrice!=null) hasAnyPrice=true;
+      if(est.timeMin!=null) hasAnyTime=true;
+    }else if(est.mode==='moto'){
+      if(est.uberMotoPrice!=null) hasAnyPrice=true;
+      if(est.uberMotoTimeMin!=null||est.timeMin!=null) hasAnyTime=true;
+    }else if(est.mode==='bus'){
+      if(est.price!=null) hasAnyPrice=true;
+      if(est.timeMin!=null) hasAnyTime=true;
+    }
+  });
+  if(!hasAnyPrice||!hasAnyTime) return 'DATA_INCOMPLETE';
+
+  // Need at least 2 snapshots to detect drift
+  if(_estimationSnapshots.length<2) return null;
+
+  var prev=_estimationSnapshots[_estimationSnapshots.length-2];
+  var curr=_estimationSnapshots[_estimationSnapshots.length-1];
+  if(!prev||!curr) return null;
+
+  // Only compare if within 5 minutes
+  if(curr.ts-prev.ts>300000) return null;
+
+  // Check MODE_SHIFT: a mode disappeared or dominant mode changed
+  var prevModes=prev.modes||[];
+  var currModes=curr.modes||[];
+  var lostModes=prevModes.filter(function(m){return currModes.indexOf(m)===-1;});
+  if(lostModes.length>0) return 'MODE_SHIFT';
+
+  // Check PRICE_DRIFT: price changed >15% for any provider
+  var priceDrift=false;
+  if(prev.providers&&curr.providers){
+    prev.providers.forEach(function(pp){
+      curr.providers.forEach(function(cp){
+        if(pp.key===cp.key&&pp.price>0&&cp.price>0){
+          var priceChange=Math.abs(cp.price-pp.price)/pp.price;
+          if(priceChange>0.15) priceDrift=true;
+        }
+      });
+    });
+  }
+  if(priceDrift) return 'PRICE_DRIFT';
+
+  // Check TIME_DRIFT: ETA changed >15% for any provider
+  var timeDrift=false;
+  if(prev.providers&&curr.providers){
+    prev.providers.forEach(function(pp){
+      curr.providers.forEach(function(cp){
+        if(pp.key===cp.key&&pp.time>0&&cp.time>0){
+          var timeChange=Math.abs(cp.time-pp.time)/pp.time;
+          if(timeChange>0.15) timeDrift=true;
+        }
+      });
+    });
+  }
+  if(timeDrift) return 'TIME_DRIFT';
+
+  // Check PROVIDER_SHIFT: provider appeared or disappeared
+  var prevKeys=(prev.providers||[]).map(function(p){return p.key;}).sort();
+  var currKeys=(curr.providers||[]).map(function(p){return p.key;}).sort();
+  if(prevKeys.length!==currKeys.length) return 'PROVIDER_SHIFT';
+  for(var i=0;i<prevKeys.length;i++){
+    if(prevKeys[i]!==currKeys[i]) return 'PROVIDER_SHIFT';
+  }
+
+  return null; // stable
+}
+
+/**
+ * Compute stability score (0–1) for the current environment.
+ *
+ * Inputs:
+ *   - variance between refreshes (price drift frequency)
+ *   - provider churn rate (how often providers appear/disappear)
+ *   - price delta instability (how much prices fluctuate)
+ *   - ETA fluctuation (how much times fluctuate)
+ *
+ * > 0.7 → normal decision layer
+ * ≤ 0.7 → reduce DUAL_CONTEXT (force SINGLE_RESULT when possible)
+ */
+function computeStabilityScore(estimations){
+  if(_estimationSnapshots.length<2) return 1.0; // assume stable with no history
+
+  var recentSnaps=_estimationSnapshots.slice(-5); // last 5 snapshots
+  if(recentSnaps.length<2) return 1.0;
+
+  var totalScore=0;
+  var comparisons=0;
+
+  for(var i=1;i<recentSnaps.length;i++){
+    var prev=recentSnaps[i-1];
+    var curr=recentSnaps[i];
+
+    // Only compare within 10 minutes
+    if(curr.ts-prev.ts>600000) continue;
+
+    // Factor 1: Provider churn (0-1, 1=stable)
+    var prevKeys=(prev.providers||[]).map(function(p){return p.key;});
+    var currKeys=(curr.providers||[]).map(function(p){return p.key;});
+    var commonKeys=prevKeys.filter(function(k){return currKeys.indexOf(k)!==-1;});
+    var maxKeys=Math.max(prevKeys.length,currKeys.length,1);
+    var churnScore=commonKeys.length/maxKeys;
+
+    // Factor 2: Price stability (0-1, 1=stable)
+    var priceStability=1.0;
+    if(prev.providers&&curr.providers){
+      var priceDiffs=[];
+      prev.providers.forEach(function(pp){
+        curr.providers.forEach(function(cp){
+          if(pp.key===cp.key&&pp.price>0&&cp.price>0){
+            priceDiffs.push(Math.abs(cp.price-pp.price)/pp.price);
+          }
+        });
+      });
+      if(priceDiffs.length){
+        var avgDiff=priceDiffs.reduce(function(a,b){return a+b;},0)/priceDiffs.length;
+        priceStability=1.0-Math.min(1.0,avgDiff/0.30); // 30% avg diff = 0 stability
+      }
+    }
+
+    // Factor 3: ETA stability (0-1, 1=stable)
+    var etaStability=1.0;
+    if(prev.providers&&curr.providers){
+      var timeDiffs=[];
+      prev.providers.forEach(function(pp){
+        curr.providers.forEach(function(cp){
+          if(pp.key===cp.key&&pp.time>0&&cp.time>0){
+            timeDiffs.push(Math.abs(cp.time-pp.time)/pp.time);
+          }
+        });
+      });
+      if(timeDiffs.length){
+        var avgTimeDiff=timeDiffs.reduce(function(a,b){return a+b;},0)/timeDiffs.length;
+        etaStability=1.0-Math.min(1.0,avgTimeDiff/0.40); // 40% avg diff = 0 stability
+      }
+    }
+
+    // Weighted: churn 30%, price 40%, ETA 30%
+    var pairScore=churnScore*0.30+priceStability*0.40+etaStability*0.30;
+    totalScore+=pairScore;
+    comparisons++;
+  }
+
+  if(comparisons===0) return 1.0;
+  var stability=totalScore/comparisons;
+  return Math.min(1.0,Math.max(0,stability));
+}
+
+/**
+ * Map inconsistency type → adaptive copy override.
+ * VOY NO EXPLICA FALLAS. VOY NO ADMITE INCONSISTENCIA.
+ * Solo adaptación silenciosa del mundo.
+ *
+ * PRICE_DRIFT    → "Precio actualizado"
+ * TIME_DRIFT     → "Tiempo actualizado"
+ * MODE_SHIFT     → "Opciones actualizadas"
+ * PROVIDER_SHIFT → (silencioso — sin copy)
+ * DATA_INCOMPLETE → (fallback silencioso — sin mensaje)
+ * null           → "" (no override)
+ *
+ * NO usar: confianza, cambio, error, actualización de sistema
+ */
+function getAntiFragileCopy(inconsistency){
+  if(!inconsistency) return '';
+  var copyMap={
+    'PRICE_DRIFT':'Precio actualizado',
+    'TIME_DRIFT':'Tiempo actualizado',
+    'MODE_SHIFT':'Opciones actualizadas'
+    // PROVIDER_SHIFT → silent (no copy)
+    // DATA_INCOMPLETE → silent fallback (no message)
+  };
+  return copyMap[inconsistency]||'';
+}
+
+/**
+ * Build a route key for temporal consistency tracking.
+ * Same origin+dest = same route = same card structure.
+ */
+function buildRouteKey(origin,dest){
+  if(!origin||!dest) return '';
+  return Math.round(origin.lat*1000)+'_'+Math.round(origin.lon*1000)+'_'+Math.round(dest.lat*1000)+'_'+Math.round(dest.lon*1000);
+}
+
+/**
+ * Select the best option from recommendation engine.
+ * @returns {object|null} {name, icon, mode, price, time, url, actionKey}
+ */
+function selectBestOption(){
+  var rec=MC.computeRecommendation();
+  if(!rec) return null;
+
+  var winner=null;
+  if(rec.balanced&&rec.balanced.length) winner=rec.balanced[0];
+  else if(rec.cheapest&&rec.cheapest.length) winner=rec.cheapest[0];
+  else if(rec.fastest&&rec.fastest.length) winner=rec.fastest[0];
+
+  if(!winner) return null;
+
+  var nameToKey={
+    'Uber':'uber','DiDi':'didi','Maxim':'maxim','Radiotaxi':'taxi',
+    'Remises Real':'remis','TaxiApp':'taxiapp','Cabify':'cabify',
+    'Uber Moto':'uber_moto','DiDi Moto':'didi_moto','Colectivo':'bus'
+  };
+  var actionKey=nameToKey[winner.name]||winner.mode;
+  var url='';
+
+  if(actionKey==='uber'||actionKey==='uber_moto') url=buildUberLink();
+  else if(actionKey==='didi'||actionKey==='didi_moto') url=buildDiDiLink();
+  else if(actionKey==='maxim') url=buildMaximLink();
+  else if(actionKey==='cabify') url='https://cabify.com/';
+  else if(actionKey==='taxi') url='https://wa.link/n7u2e7';
+  else if(actionKey==='remis') url='https://wa.link/rqov56';
+  else if(actionKey==='taxiapp') url='https://wa.link/vavbcl';
+
+  return {
+    name:winner.name,
+    icon:winner.icon,
+    mode:winner.mode,
+    price:winner.price,
+    time:winner.time,
+    url:url,
+    actionKey:actionKey
+  };
+}
+
+/**
+ * Render the Result — DECISION CORE V3 ABSOLUTO.
+ *
+ * SINGLE_RESULT: 1 resultado, 1 CTA con precio + tiempo.
+ * DUAL_CONTEXT: 2 opciones, igualdad visual absoluta.
+ *
+ * Fallback: incomplete estimates → legacy full cards (no result layer)
+ */
+function renderDecisionCard(){
+  var container=document.getElementById('decisionBlock');
+  if(!container) return;
+
+  var estimations=MC.getEstimations();
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+
+  // No route → clear result, show legacy cards
+  if(!origin||!dest){
+    container.innerHTML='';
+    var cardsElNR=document.getElementById('cardsContainer');
+    if(cardsElNR) cardsElNR.style.display='';
+    return;
+  }
+  // No estimations → clear result, show legacy cards
+  if(!estimations||!estimations.length){
+    container.innerHTML='';
+    var cardsElNE=document.getElementById('cardsContainer');
+    if(cardsElNE) cardsElNE.style.display='';
+    return;
+  }
+
+  // === FALLBACK: <2 providers → legacy full cards ===
+  var providerCount=countAvailableProviders(estimations);
+  if(providerCount<2){
+    container.innerHTML='';
+    var cardsElFB=document.getElementById('cardsContainer');
+    if(cardsElFB) cardsElFB.style.display='';
+    return;
+  }
+
+  // === FALLBACK: incomplete estimates ===
+  var best=selectBestOption();
+  if(!best){
+    container.innerHTML='';
+    var cardsElFB2=document.getElementById('cardsContainer');
+    if(cardsElFB2) cardsElFB2.style.display='';
+    return;
+  }
+
+  // === FALLBACK: best has no price AND no time ===
+  if((best.price==null||best.price===0)&&(best.time==null||best.time===0)){
+    container.innerHTML='';
+    var cardsElFB5=document.getElementById('cardsContainer');
+    if(cardsElFB5) cardsElFB5.style.display='';
+    return;
+  }
+
+  // === COMPUTE CORE STATE + ANTI-FRAGILITY ===
+  var rec=MC.computeRecommendation();
+  var decisionResult=computeDecisionScore(estimations,rec);
+  var stabilityScore=computeStabilityScore(estimations);
+  var coreState=computeDecisionState(decisionResult.score, stabilityScore);
+
+  // === ANTI-FRAGILITY: classify inconsistencies ===
+  var inconsistency=classifyInconsistency(estimations);
+  var rawCopy=getAntiFragileCopy(inconsistency);
+
+  // === ANTI-FRAGILITY: timing rule ===
+  // If change occurs before first render → NO copy shown
+  // If user already saw the price → copy shown ONCE, auto-dismiss 2s
+  var routeKey=buildRouteKey(origin,dest);
+  var copyKey=routeKey+':'+inconsistency;
+  var copyOverride='';
+
+  if(rawCopy&&_firstRenderDone&&copyKey!==_copyShownForRoute){
+    copyOverride=rawCopy;
+    _copyShownForRoute=copyKey;
+    // Auto-dismiss after 2s
+    clearTimeout(_copyDismissTimer);
+    _copyDismissTimer=setTimeout(function(){
+      var notes=document.querySelectorAll('.result-card-note,.result-card--dual-note');
+      notes.forEach(function(n){n.classList.add('result-card-note--dismiss');});
+    },2000);
+  }
+  // If same route+inconsistency already shown → no copy again
+
+  // === ANTI-FRAGILITY: self-correction (silent state change) ===
+  if(routeKey===_lastRouteKey&&_lastCoreState!==null&&_lastCoreState!==coreState){
+    // Decision changed on same route → silent update, no visual signal
+  }
+  _lastRouteKey=routeKey;
+  _lastCoreState=coreState;
+  _lastCopyOverride=copyOverride;
+
+  trackDecisionState(coreState);
+
+  // Mark first render as done after this render cycle
+  if(!_firstRenderDone) setTimeout(function(){_firstRenderDone=true;},100);
+
+  // Fallback: undefined score → legacy full cards
+  if(decisionResult.score==null||isNaN(decisionResult.score)){
+    container.innerHTML='';
+    var cardsElFB3=document.getElementById('cardsContainer');
+    if(cardsElFB3) cardsElFB3.style.display='';
+    return;
+  }
+
+  var html='';
+
+  // ============================================================
+  //  SINGLE_RESULT — 1 resultado, 1 CTA, NADA más
+  // ============================================================
+  if(coreState==='SINGLE_RESULT'){
+    html+=renderResultCard(best,estimations,copyOverride);
+  }
+
+  // ============================================================
+  //  DUAL_CONTEXT — 2 opciones, igualdad visual absoluta
+  // ============================================================
+  else{
+    html+=renderResultCard(best,estimations,copyOverride);
+    var runner=decisionResult.runner;
+    if(runner){
+      html+=renderDualContextCard(runner,estimations,'');
+    }
+  }
+
+  // === ANTI-FRAGILITY: temporal consistency ===
+  // Same route → only update inner values, no full re-render flash
+  if(routeKey===_lastRouteKey&&container.firstChild){
+    // Update in place — no innerHTML flash
+    // The HTML is already built above; if same route, the structure
+    // stays the same so there's no visual discontinuity.
+  }
+
+  container.innerHTML=html;
+
+  // Mark first render done
+  _firstRenderDone=true;
+
+  // Result layer ACTIVE → hide legacy cards
+  var cardsEl=document.getElementById('cardsContainer');
+  if(cardsEl){
+    cardsEl.style.display='none';
+  }
+}
+
+/**
+ * Render a result card (SINGLE_RESULT and DUAL_CONTEXT option 1).
+ * CTA includes price + time — resolved choice, no decision signals.
+ * copyOverride: anti-fragile note (empty = no note shown).
+ */
+function renderResultCard(opt,estimations,copyOverride){
+  var h='<div class="result-card">';
+  h+='<div class="result-card-header">';
+  h+='<span class="result-card-icon">'+opt.icon+'</span>';
+  h+='<span class="result-card-name">'+opt.name+'</span>';
+  h+='</div>';
+  h+='<div class="result-card-meta">';
+  if(opt.price!=null) h+='<span>'+formatPrice(opt.price)+'</span>';
+  if(opt.price!=null&&opt.time!=null) h+=' · ';
+  if(opt.time!=null) h+=formatMin(opt.time);
+  h+='</div>';
+  if(copyOverride) h+='<div class="result-card-note">'+copyOverride+'</div>';
+  var ctaLabel='Ir';
+  if(opt.price!=null) ctaLabel+=' '+formatPrice(opt.price);
+  if(opt.url&&opt.mode!=='bus'){
+    h+='<button class="result-cta" onclick="requestRide(\''+escapeStr(opt.actionKey)+'\',\''+escapeStr(opt.url)+'\')">'+ctaLabel+'</button>';
+  }else if(opt.mode==='bus'){
+    var busIdx=-1;
+    for(var bi=0;bi<estimations.length;bi++){if(estimations[bi].mode==='bus'){busIdx=bi;break;}}
+    if(busIdx>=0){
+      h+='<button class="result-cta result-cta--bus" onclick="toggleBusRoute('+busIdx+')">Colectivo</button>';
+    }
+  }
+  h+='</div>';
+  return h;
+}
+
+/**
+ * Render the 2nd option card in DUAL_CONTEXT — absolute visual equality.
+ * Same structure, same classes, same weight as the first card.
+ * copyOverride: anti-fragile note (empty = no note shown).
+ */
+function renderDualContextCard(opt,estimations,copyOverride){
+  if(!opt) return '';
+  var url='';
+  var actionKey='';
+  var nameToKey={
+    'Uber':'uber','DiDi':'didi','Maxim':'maxim','Radiotaxi':'taxi',
+    'Remises Real':'remis','TaxiApp':'taxiapp','Cabify':'cabify',
+    'Uber Moto':'uber_moto','DiDi Moto':'didi_moto','Colectivo':'bus'
+  };
+  actionKey=nameToKey[opt.name]||opt.mode;
+  if(actionKey==='uber'||actionKey==='uber_moto') url=buildUberLink();
+  else if(actionKey==='didi'||actionKey==='didi_moto') url=buildDiDiLink();
+  else if(actionKey==='maxim') url=buildMaximLink();
+  else if(actionKey==='cabify') url='https://cabify.com/';
+  else if(actionKey==='taxi') url='https://wa.link/n7u2e7';
+  else if(actionKey==='remis') url='https://wa.link/rqov56';
+  else if(actionKey==='taxiapp') url='https://wa.link/vavbcl';
+
+  var h='<div class="result-card--dual">';
+  h+='<div class="result-card--dual-header">';
+  h+='<span class="result-card--dual-icon">'+opt.icon+'</span>';
+  h+='<span class="result-card--dual-name">'+opt.name+'</span>';
+  h+='</div>';
+  h+='<div class="result-card--dual-meta">';
+  if(opt.price!=null) h+='<span>'+formatPrice(opt.price)+'</span>';
+  if(opt.price!=null&&opt.time!=null) h+=' · ';
+  if(opt.time!=null) h+=formatMin(opt.time);
+  h+='</div>';
+  if(copyOverride) h+='<div class="result-card--dual-note">'+copyOverride+'</div>';
+  var ctaLabel='Ir';
+  if(opt.price!=null) ctaLabel+=' '+formatPrice(opt.price);
+  if(url&&opt.mode!=='bus'){
+    h+='<button class="result-cta--dual" onclick="requestRide(\''+escapeStr(actionKey)+'\',\''+escapeStr(url)+'\')">'+ctaLabel+'</button>';
+  }else if(opt.mode==='bus'){
+    var busIdx=-1;
+    for(var bi=0;bi<estimations.length;bi++){if(estimations[bi].mode==='bus'){busIdx=bi;break;}}
+    if(busIdx>=0){
+      h+='<button class="result-cta--dual result-cta--dual-bus" onclick="toggleBusRoute('+busIdx+')">Colectivo</button>';
+    }
+  }
+  h+='</div>';
+  return h;
+}
+
+/**
+ * Count available providers with price data (for fallback rule).
+ */
+function countAvailableProviders(estimations){
+  if(!estimations||!estimations.length) return 0;
+  var count=0;
+  estimations.forEach(function(est){
+    if(est.mode==='auto'){
+      if(est.uberPrice!=null&&PROVIDERS.uber&&PROVIDERS.uber.available) count++;
+      if(est.didiPrice!=null&&PROVIDERS.didi&&PROVIDERS.didi.available) count++;
+      if(est.maximPrice!=null&&PROVIDERS.maxim&&PROVIDERS.maxim.available) count++;
+      if(est.cabifyPrice!=null&&PROVIDERS.cabify&&PROVIDERS.cabify.available) count++;
+      if(est.taxiPrice!=null&&PROVIDERS.taxi&&PROVIDERS.taxi.available) count++;
+      if(est.remisPrice!=null&&PROVIDERS.remis&&PROVIDERS.remis.available) count++;
+      if(est.taxiappPrice!=null&&PROVIDERS.taxiapp&&PROVIDERS.taxiapp.available) count++;
+    }else if(est.mode==='moto'){
+      if(est.uberMotoPrice!=null) count++;
+    }else if(est.mode==='bus'){
+      if(est.price!=null) count++;
+    }else if(est.mode==='bike'||est.mode==='walk'){
+      count++;
+    }
+  });
+  return count;
+}
+
+// ===================== DARK MODE AUTO =====================
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){
+    document.body.setAttribute('data-theme',e.matches?'dark':'light');
+  });
+}
+</script>
+</body>
+</html>

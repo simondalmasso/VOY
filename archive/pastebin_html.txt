@@ -1,0 +1,2648 @@
+<html><head><meta name="color-scheme" content="light dark"></head><body><pre style="word-wrap: break-word; white-space: pre-wrap;">═══════════════════════════════════════════════════════════════
+ARCHIVO: prisma/schema.prisma
+═══════════════════════════════════════════════════════════════
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Ride {
+  id          Int      @id @default(autoincrement())
+  originLat   Float
+  originLon   Float
+  originName  String   @default("")
+  destLat     Float
+  destLon     Float
+  destName    String
+  priceUber   Float?
+  priceDidi   Float?
+  distanceKm  Float?
+  durationMin Float?
+  transport   String   @default("uber")
+  createdAt   DateTime @default(now())
+
+  @@index([destLat, destLon])
+  @@index([createdAt])
+  @@index([transport])
+  @@index([originLat, originLon])
+}
+
+model TransportLog {
+  id         Int      @id @default(autoincrement())
+  originLat  Float
+  originLon  Float
+  originName String   @default("")
+  destLat    Float
+  destLon    Float
+  destName   String
+  transport  String   @default("bus")
+  price      Float?
+  createdAt  DateTime @default(now())
+
+  @@index([destLat, destLon])
+  @@index([createdAt])
+  @@index([transport])
+  @@index([originLat, originLon])
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/lib/db.ts
+═══════════════════════════════════════════════════════════════
+import { PrismaClient } from '@prisma/client'
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+export const db =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: ['query'],
+  })
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/lib/estimate-helpers.ts
+═══════════════════════════════════════════════════════════════
+/**
+ * Estimate Helpers — Haversine, pricing, duration, and factor utilities
+ * for the mobility assistant price estimation system.
+ */
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface PriceBreakdown {
+  low: number;
+  high: number;
+  estimate: number;
+}
+
+export interface EstimateFactors {
+  weather: boolean;
+  rushHour: boolean;
+  weekendNight: boolean;
+}
+
+export interface EstimateResult {
+  uber: PriceBreakdown;
+  didi: PriceBreakdown;
+  distanceKm: number;
+  durationMin: number;
+  confidence: "high" | "medium" | "low";
+  factors: EstimateFactors;
+  cheaper: "uber" | "didi" | "similar";
+  deepLinks: {
+    uber: string;
+    didi: string;
+  };
+  advice: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Approximate Santa Fe, Argentina rates */
+export const UBER_BASE = 150;
+export const UBER_PER_KM = 120;
+export const UBER_PER_MIN = 15;
+
+export const DIDI_BASE = 130;
+export const DIDI_PER_KM = 110;
+export const DIDI_PER_MIN = 13;
+
+/** Average city speed in km/h */
+export const AVG_CITY_SPEED_KMH = 25;
+
+/** Proximity threshold in km for matching historical rides */
+export const PROXIMITY_KM = 0.5; // 500 m
+
+/** Surge multipliers */
+export const WEATHER_SURGE = 1.15;
+export const RUSH_HOUR_SURGE = 1.2;
+export const WEEKEND_NIGHT_SURGE = 1.3;
+
+/** Range multipliers */
+export const RANGE_LOW = 0.85;
+export const RANGE_HIGH = 1.25;
+
+/** Confidence thresholds */
+export const CONFIDENCE_HIGH_THRESHOLD = 3;
+
+// ─── Haversine ────────────────────────────────────────────────────────────────
+
+export function haversine(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── Duration ─────────────────────────────────────────────────────────────────
+
+export function estimateDuration(distanceKm: number): number {
+  if (distanceKm <= 0) return 0;
+  return (distanceKm / AVG_CITY_SPEED_KMH) * 60;
+}
+
+// ─── Base Price Calculation ──────────────────────────────────────────────────
+
+export function calculateUberBasePrice(
+  distanceKm: number,
+  durationMin: number
+): number {
+  return UBER_BASE + UBER_PER_KM * distanceKm + UBER_PER_MIN * durationMin;
+}
+
+export function calculateDidiBasePrice(
+  distanceKm: number,
+  durationMin: number
+): number {
+  return DIDI_BASE + DIDI_PER_KM * distanceKm + DIDI_PER_MIN * durationMin;
+}
+
+// ─── Factor Detection ────────────────────────────────────────────────────────
+
+export function detectFactors(
+  now: Date = new Date(),
+  precipMm: number = 0
+): EstimateFactors {
+  const timezone = 'America/Argentina/Buenos_Aires';
+  const hourStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+  }).format(now);
+  const hour = parseInt(hourStr, 10);
+  if (isNaN(hour)) {
+    const utcHour = now.getUTCHours();
+    return detectFactorsFromHourDay((utcHour - 3 + 24) % 24, now.getUTCDay(), precipMm);
+  }
+
+  const dayName = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+  }).format(now);
+  const dayMap: Record<string, number> = {
+    Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+    Thursday: 4, Friday: 5, Saturday: 6,
+  };
+  const day = dayMap[dayName] ?? now.getDay();
+  return detectFactorsFromHourDay(hour, day, precipMm);
+}
+
+function detectFactorsFromHourDay(
+  hour: number,
+  day: number,
+  precipMm: number
+): EstimateFactors {
+  const weather = precipMm > 0;
+  const rushHour =
+    (hour >= 7 && hour < 9) || (hour >= 17 && hour < 19);
+  const weekendNight =
+    ((day === 5 || day === 6) && hour >= 22) ||
+    ((day === 6 || day === 0) && hour < 2);
+  return { weather, rushHour, weekendNight };
+}
+
+// ─── Composite Surge Multiplier ──────────────────────────────────────────────
+
+export function applySurge(
+  basePrice: number,
+  factors: EstimateFactors
+): number {
+  let price = basePrice;
+  if (factors.weather) price *= WEATHER_SURGE;
+  if (factors.rushHour) price *= RUSH_HOUR_SURGE;
+  if (factors.weekendNight) price *= WEEKEND_NIGHT_SURGE;
+  return price;
+}
+
+// ─── Price Breakdown ─────────────────────────────────────────────────────────
+
+export function buildPriceBreakdown(estimate: number): PriceBreakdown {
+  return {
+    low: Math.round(estimate * RANGE_LOW * 100) / 100,
+    high: Math.round(estimate * RANGE_HIGH * 100) / 100,
+    estimate: Math.round(estimate * 100) / 100,
+  };
+}
+
+// ─── Which Is Cheaper? ───────────────────────────────────────────────────────
+
+export function determineCheaper(
+  uberEstimate: number,
+  didiEstimate: number
+): "uber" | "didi" | "similar" {
+  const diff = Math.abs(uberEstimate - didiEstimate);
+  const avg = (uberEstimate + didiEstimate) / 2;
+  if (avg > 0 && diff / avg < 0.05) return "similar";
+  return uberEstimate < didiEstimate ? "uber" : "didi";
+}
+
+// ─── Advice ──────────────────────────────────────────────────────────────────
+
+export function generateAdvice(factors: EstimateFactors): string {
+  if (factors.weekendNight) return "Precios normales para el horario";
+  if (factors.rushHour && !factors.weather) return "Conviene esperar";
+  if (!factors.rushHour && factors.weather) return "Pedí ahora";
+  return "Precios normales";
+}
+
+// ─── Deep Links ──────────────────────────────────────────────────────────────
+
+export function buildDeepLinks(
+  originLat: number,
+  originLon: number,
+  originName: string,
+  destLat: number,
+  destLon: number,
+  destName: string
+): { uber: string; didi: string } {
+  const uberLink =
+    `https://m.uber.com/ul/?action=setPickup` +
+    `&pickup[latitude]=${originLat}` +
+    `&pickup[longitude]=${originLon}` +
+    `&pickup[formatted_address]=${encodeURIComponent(originName)}` +
+    `&dropoff[latitude]=${destLat}` +
+    `&dropoff[longitude]=${destLon}` +
+    `&dropoff[formatted_address]=${encodeURIComponent(destName)}`;
+
+  const didiLink =
+    `https://web.didiglobal.com/rider/?action=setPickup` +
+    `&pickupLat=${originLat}` +
+    `&pickupLng=${originLon}` +
+    `&dropoffLat=${destLat}` +
+    `&dropoffLng=${destLon}`;
+
+  return { uber: uberLink, didi: didiLink };
+}
+
+// ─── Confidence Level ────────────────────────────────────────────────────────
+
+export function determineConfidence(
+  historicalCount: number
+): "high" | "medium" | "low" {
+  if (historicalCount >= CONFIDENCE_HIGH_THRESHOLD) return "high";
+  if (historicalCount >= 1) return "medium";
+  return "low";
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/layout.tsx
+═══════════════════════════════════════════════════════════════
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Movilidad — Asistente de transporte",
+  description: "Compará precios de Uber y DiDi, recibí predicciones de destino y registrá tus viajes. Asistente de movilidad para Sofía.",
+  keywords: ["movilidad", "Uber", "DiDi", "transporte", "Santa Fe", "Argentina"],
+  authors: [{ name: "Movilidad App" }],
+  icons: {
+    icon: "🧭",
+  },
+  openGraph: {
+    title: "Movilidad — Asistente de transporte",
+    description: "Compará precios de Uber y DiDi, recibí predicciones de destino",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Movilidad — Asistente de transporte",
+    description: "Compará precios de Uber y DiDi",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+      >
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  );
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/globals.css
+═══════════════════════════════════════════════════════════════
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/page.tsx
+═══════════════════════════════════════════════════════════════
+'use client'
+
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface GeoResult {
+  place_id: number
+  display_name: string
+  lat: string
+  lon: string
+}
+
+interface Prediction {
+  destLat: number
+  destLon: number
+  destName: string
+  score: number
+  confidence: 'low' | 'medium' | 'high'
+}
+
+interface PriceBreakdown {
+  low: number
+  high: number
+  estimate: number
+}
+
+interface EstimateData {
+  uber: PriceBreakdown
+  didi: PriceBreakdown
+  distanceKm: number
+  durationMin: number
+  confidence: 'high' | 'medium' | 'low'
+  factors: { weather: boolean; rushHour: boolean; weekendNight: boolean }
+  cheaper: 'uber' | 'didi' | 'similar'
+  deepLinks: { uber: string; didi: string }
+  advice: string
+}
+
+interface WeatherData {
+  temperature: number | null
+  humidity: number | null
+  precipitation: number | null
+  weatherCode: number
+  description: string
+}
+
+interface LocationState {
+  lat: number | null
+  lon: number | null
+  name: string
+  loading: boolean
+  error: string | null
+}
+
+// ─── Dynamic Map Import (avoids SSR issues with Leaflet) ──────────────────────
+
+const MapContainer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.MapContainer),
+  { ssr: false }
+)
+const TileLayer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.TileLayer),
+  { ssr: false }
+)
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
+  { ssr: false }
+)
+const Popup = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+)
+const Polyline = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Polyline),
+  { ssr: false }
+)
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
+
+const SANTA_FE_CENTER: [number, number] = [-31.6256, -60.7087]
+const VALID_TRANSPORTS = ['uber', 'didi', 'bus', 'walk', 'taxi', 'other'] as const
+const TRANSPORT_LABELS: Record<string, string> = {
+  uber: '🚗 Uber',
+  didi: '🚙 DiDi',
+  bus: '🚌 Colectivo',
+  walk: '🚶 Caminando',
+  taxi: '🚕 Taxi',
+  other: '📦 Otro',
+}
+
+// ─── Helper: format price ──────────────────────────────────────────────────────
+
+function formatPrice(val: number | null | undefined): string {
+  if (val == null || Number.isNaN(val)) return '—'
+  return `$${Math.round(val).toLocaleString('es-AR')}`
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
+export default function Home() {
+  // ── State ────────────────────────────────────────────────────────────────
+
+  const [origin, setOrigin] = useState<LocationState>({
+    lat: null, lon: null, name: '', loading: false, error: null,
+  })
+  const [destInput, setDestInput] = useState('')
+  const [destCoords, setDestCoords] = useState<{ lat: number; lon: number; name: string } | null>(null)
+  const [searchResults, setSearchResults] = useState<GeoResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [predictions, setPredictions] = useState<Prediction[]>([])
+  const [estimate, setEstimate] = useState<EstimateData | null>(null)
+  const [estimateLoading, setEstimateLoading] = useState(false)
+  const [estimateError, setEstimateError] = useState<string | null>(null)
+  const [weather, setWeather] = useState<WeatherData | null>(null)
+  const [isOnline, setIsOnline] = useState(true)
+  const [showTransportLog, setShowTransportLog] = useState(false)
+  const [selectedTransport, setSelectedTransport] = useState<string>('uber')
+  const [logPrice, setLogPrice] = useState('')
+  const [logLoading, setLogLoading] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [mapReady, setMapReady] = useState(false)
+  const [leafletIcon, setLeafletIcon] = useState<unknown>(null)
+
+  // Refs for preventing duplicate operations
+  const gpsWatchIdRef = useRef<number | null>(null)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const speechRef = useRef<unknown>(null)
+  const isEstimatingRef = useRef(false)
+
+  // ── Online/Offline Detection ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    setIsOnline(navigator.onLine)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // ── Load Leaflet CSS & Icons ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+    link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='
+    link.crossOrigin = ''
+    document.head.appendChild(link)
+
+    import('leaflet').then((L) => {
+      delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      })
+      setLeafletIcon(true)
+      setMapReady(true)
+    })
+
+    return () => {
+      document.head.removeChild(link)
+    }
+  }, [])
+
+  // ── GPS Location ─────────────────────────────────────────────────────────
+
+  const getGPS = useCallback(() => {
+    if (!navigator.geolocation) {
+      setOrigin((prev) => ({ ...prev, error: 'Tu navegador no soporta geolocalización', loading: false }))
+      return
+    }
+
+    setOrigin((prev) => ({ ...prev, loading: true, error: null }))
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude
+        const lon = position.coords.longitude
+
+        if (Number.isNaN(lat) || Number.isNaN(lon)) {
+          setOrigin((prev) => ({ ...prev, error: 'Coordenadas inválidas recibidas', loading: false }))
+          return
+        }
+
+        setOrigin((prev) => ({ ...prev, lat, lon, loading: false, error: null }))
+
+        try {
+          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`)
+          if (res.ok) {
+            const data = await res.json()
+            setOrigin((prev) => ({ ...prev, name: data.displayName || `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
+          } else {
+            setOrigin((prev) => ({ ...prev, name: `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
+          }
+        } catch {
+          setOrigin((prev) => ({ ...prev, name: `${lat.toFixed(4)}, ${lon.toFixed(4)}` }))
+        }
+      },
+      (error) => {
+        let msg = 'Error al obtener ubicación'
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            msg = 'Permiso de ubicación denegado. Habilitá el GPS en tu dispositivo.'
+            break
+          case error.POSITION_UNAVAILABLE:
+            msg = 'Ubicación no disponible. Intentá de nuevo.'
+            break
+          case error.TIMEOUT:
+            msg = 'Tiempo de espera agotado. El GPS está lento.'
+            break
+        }
+        setOrigin((prev) => ({ ...prev, error: msg, loading: false }))
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    )
+  }, [])
+
+  // Auto-detect GPS on mount
+  useEffect(() => {
+    getGPS()
+    return () => {
+      if (gpsWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(gpsWatchIdRef.current)
+      }
+    }
+  }, [getGPS])
+
+  // ── Weather ──────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (origin.lat == null || origin.lon == null) return
+    fetch(`/api/weather?lat=${origin.lat}&lon=${origin.lon}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.weather) setWeather(data.weather)
+      })
+      .catch(() => { /* weather failure is non-critical */ })
+  }, [origin.lat, origin.lon])
+
+  // ── Predictions ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (origin.lat == null || origin.lon == null) return
+    fetch(`/api/predict?lat=${origin.lat}&lon=${origin.lon}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.predictions && data.predictions.length > 0) {
+          setPredictions(data.predictions)
+        }
+      })
+      .catch(() => { /* prediction failure is non-critical */ })
+  }, [origin.lat, origin.lon])
+
+  // ── Destination Search (debounced) ───────────────────────────────────────
+
+  const searchDestination = useCallback((query: string) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    if (!query || query.trim().length < 3) {
+      setSearchResults([])
+      return
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      setSearchLoading(true)
+      try {
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(query.trim())}&limit=5`)
+        if (res.ok) {
+          const data = await res.json()
+          setSearchResults(data.results || [])
+        } else {
+          setSearchResults([])
+        }
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 500)
+  }, [])
+
+  const handleDestInputChange = useCallback((value: string) => {
+    setDestInput(value)
+    setDestCoords(null)
+    setEstimate(null)
+    setEstimateError(null)
+    searchDestination(value)
+  }, [searchDestination])
+
+  const selectDestination = useCallback((result: GeoResult) => {
+    const lat = parseFloat(result.lat)
+    const lon = parseFloat(result.lon)
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return
+    setDestCoords({ lat, lon, name: result.display_name })
+    setDestInput(result.display_name.split(',')[0])
+    setSearchResults([])
+  }, [])
+
+  const selectPrediction = useCallback((pred: Prediction) => {
+    setDestCoords({ lat: pred.destLat, lon: pred.destLon, name: pred.destName })
+    setDestInput(pred.destName)
+    setSearchResults([])
+  }, [])
+
+  // ── Voice Input ──────────────────────────────────────────────────────────
+
+  const startVoiceInput = useCallback(() => {
+    const SpeechRecognition = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      showToast('El reconocimiento de voz no está disponible en este navegador', 'error')
+      return
+    }
+
+    if (speechRef.current && typeof (speechRef.current as { stop: () => void }).stop === 'function') {
+      (speechRef.current as { stop: () => void }).stop()
+    }
+
+    const recognition = new (SpeechRecognition as new () => {
+      lang: string
+      interimResults: boolean
+      maxAlternatives: number
+      onresult: (event: { results: { transcript: string }[][] }) => void
+      onerror: (event: { error: string }) => void
+      onend: () => void
+      start: () => void
+      stop: () => void
+    })()
+    recognition.lang = 'es-AR'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+
+    recognition.onresult = (event: { results: { transcript: string }[][] }) => {
+      const transcript = event.results[0][0].transcript
+      if (transcript) {
+        handleDestInputChange(transcript)
+      }
+    }
+
+    recognition.onerror = (event: { error: string }) => {
+      if (event.error !== 'aborted') {
+        showToast(`Error de voz: ${event.error}`, 'error')
+      }
+    }
+
+    recognition.onend = () => {
+      speechRef.current = null
+    }
+
+    speechRef.current = recognition
+    recognition.start()
+    showToast('Escuchando... Decí tu destino', 'info')
+  }, [handleDestInputChange])
+
+  // ── Get Estimate ─────────────────────────────────────────────────────────
+
+  const runEstimate = useCallback(async () => {
+    if (origin.lat == null || origin.lon == null) {
+      showToast('Necesitás tu ubicación para estimar', 'error')
+      return
+    }
+    if (!destCoords) {
+      showToast('Ingresá un destino para estimar', 'error')
+      return
+    }
+    if (isEstimatingRef.current) return
+    isEstimatingRef.current = true
+    setEstimateLoading(true)
+    setEstimateError(null)
+
+    try {
+      const res = await fetch('/api/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originLat: origin.lat,
+          originLon: origin.lon,
+          originName: origin.name,
+          destLat: destCoords.lat,
+          destLon: destCoords.lon,
+          destName: destCoords.name,
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Error del servidor' }))
+        setEstimateError(errData.error || 'Error al estimar')
+        return
+      }
+
+      const data: EstimateData = await res.json()
+      setEstimate(data)
+    } catch (err) {
+      if (!navigator.onLine) {
+        setEstimateError('Sin conexión. Verificá tu internet.')
+      } else {
+        setEstimateError('Error de red. Intentá de nuevo.')
+      }
+    } finally {
+      setEstimateLoading(false)
+      isEstimatingRef.current = false
+    }
+  }, [origin, destCoords])
+
+  // Auto-estimate when both origin and destination are set
+  useEffect(() => {
+    if (origin.lat != null && destCoords) {
+      runEstimate()
+    }
+  }, [origin.lat, destCoords, runEstimate])
+
+  // ── Record Ride ──────────────────────────────────────────────────────────
+
+  const recordRide = useCallback(async (transport: string) => {
+    if (origin.lat == null || origin.lon == null || !destCoords) return
+
+    try {
+      const res = await fetch('/api/rides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originLat: origin.lat,
+          originLon: origin.lon,
+          originName: origin.name,
+          destLat: destCoords.lat,
+          destLon: destCoords.lon,
+          destName: destCoords.name,
+          priceUber: estimate?.uber.estimate ?? null,
+          priceDidi: estimate?.didi.estimate ?? null,
+          distanceKm: estimate?.distanceKm ?? null,
+          durationMin: estimate?.durationMin ?? null,
+          transport,
+        }),
+      })
+      if (!res.ok) {
+        console.warn('Ride recording failed:', res.status)
+      }
+    } catch (err) {
+      console.warn('Ride recording error:', err)
+    }
+  }, [origin, destCoords, estimate])
+
+  // ── Log Transport ────────────────────────────────────────────────────────
+
+  const logTransport = useCallback(async () => {
+    if (origin.lat == null || origin.lon == null || !destCoords) {
+      showToast('Faltan datos para registrar el viaje', 'error')
+      return
+    }
+
+    setLogLoading(true)
+    try {
+      const price = logPrice ? parseFloat(logPrice) : null
+      if (price !== null && (Number.isNaN(price) || price < 0)) {
+        showToast('Precio inválido', 'error')
+        return
+      }
+
+      const res = await fetch('/api/transport-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originLat: origin.lat,
+          originLon: origin.lon,
+          originName: origin.name,
+          destLat: destCoords.lat,
+          destLon: destCoords.lon,
+          destName: destCoords.name,
+          transport: selectedTransport,
+          price,
+        }),
+      })
+
+      if (res.ok) {
+        showToast('Viaje registrado ✓', 'success')
+        setShowTransportLog(false)
+        setLogPrice('')
+      } else {
+        const errData = await res.json().catch(() => ({ error: 'Error' }))
+        if (res.status === 409) {
+          showToast('Este viaje ya fue registrado', 'info')
+        } else {
+          showToast(errData.error || 'Error al registrar', 'error')
+        }
+      }
+    } catch {
+      showToast('Error de conexión al registrar', 'error')
+    } finally {
+      setLogLoading(false)
+    }
+  }, [origin, destCoords, selectedTransport, logPrice])
+
+  // ── Open Deep Link ───────────────────────────────────────────────────────
+
+  const openDeepLink = useCallback((url: string, transport: string) => {
+    recordRide(transport)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    link.click()
+  }, [recordRide])
+
+  // ── Toast ────────────────────────────────────────────────────────────────
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 4000)
+  }, [])
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  const mapCenter: [number, number] = origin.lat != null && origin.lon != null
+    ? [origin.lat, origin.lon]
+    : SANTA_FE_CENTER
+
+  const routeCoords: [number, number][] = origin.lat != null && origin.lon != null && destCoords
+    ? [[origin.lat, origin.lon], [destCoords.lat, destCoords.lon]]
+    : []
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 bg-card border-b border-border px-4 py-3 shadow-sm">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🧭</span>
+            <h1 className="text-lg font-bold">Movilidad</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-xs text-muted-foreground">
+              {isOnline ? 'Online' : 'Sin conexión'}
+            </span>
+            {origin.loading ? (
+              <span className="text-xs text-amber-500 animate-pulse">📍 Obteniendo...</span>
+            ) : origin.error ? (
+              <button
+                onClick={getGPS}
+                className="text-xs text-red-500 underline"
+                aria-label="Reintentar GPS"
+              >
+                📍 Sin GPS
+              </button>
+            ) : origin.lat != null ? (
+              <span className="text-xs text-green-600">📍 GPS</span>
+            ) : (
+              <button
+                onClick={getGPS}
+                className="text-xs text-muted-foreground underline"
+                aria-label="Obtener ubicación GPS"
+              >
+                📍 Activar GPS
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* ── Main Content ─────────────────────────────────────────────────── */}
+      <main className="flex-1 max-w-lg mx-auto w-full px-4 py-4 space-y-4">
+        {/* Weather strip */}
+        {weather && weather.temperature != null && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+            <span>{weather.precipitation != null && weather.precipitation > 0 ? '🌧️' : '☀️'}</span>
+            <span>{Math.round(weather.temperature)}°C</span>
+            <span>·</span>
+            <span>{weather.description}</span>
+            {weather.precipitation != null && weather.precipitation > 0 && (
+              <>
+                <span>·</span>
+                <span className="text-amber-600">Lluvia: {weather.precipitation}mm</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Origin display */}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-green-600 text-lg">●</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Tu ubicación</p>
+              <p className="text-sm font-medium truncate">
+                {origin.loading ? 'Obteniendo ubicación...' : origin.name || 'Tocá "Activar GPS"'}
+              </p>
+            </div>
+            <button
+              onClick={getGPS}
+              disabled={origin.loading}
+              className="text-xs bg-muted hover:bg-muted/80 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+              aria-label="Actualizar ubicación GPS"
+            >
+              {origin.loading ? '⏳' : '📍'} GPS
+            </button>
+          </div>
+
+          {origin.error && (
+            <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+              {origin.error}
+            </p>
+          )}
+        </div>
+
+        {/* Destination input */}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-red-500 text-lg">●</span>
+            <div className="flex-1 flex items-center gap-2">
+              <input
+                type="text"
+                value={destInput}
+                onChange={(e) => handleDestInputChange(e.target.value)}
+                placeholder="¿A dónde vas?"
+                className="flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+                aria-label="Destino"
+              />
+              <button
+                onClick={startVoiceInput}
+                className="text-lg hover:scale-110 transition-transform p-1"
+                aria-label="Búsqueda por voz"
+                title="Búsqueda por voz"
+              >
+                🎤
+              </button>
+            </div>
+          </div>
+
+          {searchLoading && (
+            <p className="text-xs text-muted-foreground animate-pulse">Buscando direcciones...</p>
+          )}
+          {searchResults.length > 0 && (
+            <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border">
+              {searchResults.map((result) => (
+                <button
+                  key={result.place_id}
+                  onClick={() => selectDestination(result)}
+                  className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors text-sm"
+                >
+                  <p className="font-medium truncate">{result.display_name.split(',')[0]}</p>
+                  <p className="text-xs text-muted-foreground truncate">{result.display_name}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Predictions */}
+        {predictions.length > 0 && !destCoords && (
+          <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+            <p className="text-xs text-muted-foreground font-medium">📍 Destinos frecuentes</p>
+            <div className="space-y-1">
+              {predictions.map((pred, idx) => (
+                <button
+                  key={`pred-${idx}-${pred.destLat}-${pred.destLon}`}
+                  onClick={() => selectPrediction(pred)}
+                  className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-muted/50 rounded-lg transition-colors"
+                >
+                  <span className="text-lg">
+                    {pred.confidence === 'high' ? '🟢' : pred.confidence === 'medium' ? '🟡' : '🔴'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{pred.destName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Confianza: {pred.confidence === 'high' ? 'alta' : pred.confidence === 'medium' ? 'media' : 'baja'}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {Math.round(pred.score * 10) / 10}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Estimate Results */}
+        {estimateLoading && (
+          <div className="bg-card rounded-xl border border-border p-6 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <div className="animate-spin text-2xl">⏳</div>
+              <p className="text-sm text-muted-foreground">Calculando estimación...</p>
+            </div>
+          </div>
+        )}
+
+        {estimateError && (
+          <div className="bg-destructive/10 rounded-xl border border-destructive/20 p-4">
+            <p className="text-sm text-destructive">{estimateError}</p>
+            <button
+              onClick={runEstimate}
+              className="mt-2 text-xs text-destructive underline"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {estimate && !estimateLoading && (
+          <div className="space-y-3">
+            {/* Advice banner */}
+            <div className={`rounded-xl p-3 text-center text-sm font-medium ${
+              estimate.advice === 'Pedí ahora' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+              estimate.advice === 'Conviene esperar' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
+              'bg-muted text-muted-foreground'
+            }`}>
+              {estimate.advice === 'Pedí ahora' && '💡 '}
+              {estimate.advice === 'Conviene esperar' && '⏰ '}
+              {estimate.advice === 'Precios normales' && 'ℹ️ '}
+              {estimate.advice === 'Precios normales para el horario' ? '🌙 Precios normales para el horario' : estimate.advice}
+            </div>
+
+            {/* Distance & Duration */}
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              <span>📏 {estimate.distanceKm.toFixed(1)} km</span>
+              <span>⏱️ ~{Math.round(estimate.durationMin)} min</span>
+              <span>🎯 {estimate.confidence === 'high' ? 'Alta' : estimate.confidence === 'medium' ? 'Media' : 'Baja'}</span>
+            </div>
+
+            {/* Price comparison cards */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Uber card */}
+              <div className={`bg-card rounded-xl border p-4 space-y-2 ${
+                estimate.cheaper === 'uber' ? 'border-green-500 ring-1 ring-green-500/30' : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm">Uber</span>
+                  {estimate.cheaper === 'uber' && (
+                    <span className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full px-2 py-0.5">
+                      Más barato
+                    </span>
+                  )}
+                </div>
+                <p className="text-2xl font-bold">{formatPrice(estimate.uber.estimate)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatPrice(estimate.uber.low)} — {formatPrice(estimate.uber.high)}
+                </p>
+                <button
+                  onClick={() => openDeepLink(estimate.deepLinks.uber, 'uber')}
+                  className="w-full bg-black text-white rounded-lg py-2.5 text-sm font-medium hover:bg-gray-800 active:scale-[0.98] transition-all"
+                >
+                  Ver en Uber →
+                </button>
+              </div>
+
+              {/* DiDi card */}
+              <div className={`bg-card rounded-xl border p-4 space-y-2 ${
+                estimate.cheaper === 'didi' ? 'border-green-500 ring-1 ring-green-500/30' : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm">DiDi</span>
+                  {estimate.cheaper === 'didi' && (
+                    <span className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full px-2 py-0.5">
+                      Más barato
+                    </span>
+                  )}
+                </div>
+                <p className="text-2xl font-bold">{formatPrice(estimate.didi.estimate)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatPrice(estimate.didi.low)} — {formatPrice(estimate.didi.high)}
+                </p>
+                <button
+                  onClick={() => openDeepLink(estimate.deepLinks.didi, 'didi')}
+                  className="w-full bg-orange-500 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-orange-600 active:scale-[0.98] transition-all"
+                >
+                  Ver en DiDi →
+                </button>
+              </div>
+            </div>
+
+            {/* Factors info */}
+            {(estimate.factors.weather || estimate.factors.rushHour || estimate.factors.weekendNight) && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {estimate.factors.weather && (
+                  <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full px-3 py-1">
+                    🌧️ Demanda por lluvia +15%
+                  </span>
+                )}
+                {estimate.factors.rushHour && (
+                  <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full px-3 py-1">
+                    🏙️ Hora pico +20%
+                  </span>
+                )}
+                {estimate.factors.weekendNight && (
+                  <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full px-3 py-1">
+                    🌙 Noche de finde +30%
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Transport log button */}
+            <div className="text-center">
+              <button
+                onClick={() => setShowTransportLog(!showTransportLog)}
+                className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
+              >
+                {showTransportLog ? 'Ocultar registro' : 'Registrá cómo viajaste'}
+              </button>
+            </div>
+
+            {/* Transport log form */}
+            {showTransportLog && (
+              <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+                <p className="text-sm font-medium">¿Cómo viajaste?</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {VALID_TRANSPORTS.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSelectedTransport(t)}
+                      className={`rounded-lg py-2 px-3 text-xs font-medium transition-all ${
+                        selectedTransport === t
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted hover:bg-muted/80'
+                      }`}
+                    >
+                      {TRANSPORT_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={logPrice}
+                    onChange={(e) => setLogPrice(e.target.value)}
+                    placeholder="Precio (opcional)"
+                    className="flex-1 bg-muted rounded-lg px-3 py-2 text-sm outline-none"
+                    min="0"
+                    step="0.01"
+                  />
+                  <button
+                    onClick={logTransport}
+                    disabled={logLoading}
+                    className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  >
+                    {logLoading ? '⏳' : '✓ Guardar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Map */}
+        {mapReady && (
+          <div className="rounded-xl overflow-hidden border border-border" style={{ height: '280px' }}>
+            <MapContainer
+              center={mapCenter}
+              zoom={14}
+              scrollWheelZoom={false}
+              style={{ height: '100%', width: '100%' }}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {origin.lat != null && origin.lon != null && leafletIcon && (
+                <Marker position={[origin.lat, origin.lon]}>
+                  <Popup>Tu ubicación{origin.name ? `: ${origin.name.split(',')[0]}` : ''}</Popup>
+                </Marker>
+              )}
+              {destCoords && leafletIcon && (
+                <Marker position={[destCoords.lat, destCoords.lon]}>
+                  <Popup>Destino: {destCoords.name.split(',')[0]}</Popup>
+                </Marker>
+              )}
+              {routeCoords.length === 2 && (
+                <Polyline positions={routeCoords} color="#3b82f6" weight={3} opacity={0.7} />
+              )}
+            </MapContainer>
+          </div>
+        )}
+
+        {/* Offline notice */}
+        {!isOnline && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 p-3 text-center">
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              📡 Sin conexión. Los deep links siguen funcionando si tenés Uber/DiDi instalados.
+            </p>
+          </div>
+        )}
+      </main>
+
+      {/* ── Footer ────────────────────────────────────────────────────────── */}
+      <footer className="mt-auto bg-card border-t border-border px-4 py-3">
+        <div className="max-w-lg mx-auto text-center">
+          <p className="text-xs text-muted-foreground">
+            Asistente de movilidad para Sofía · Estimaciones basadas en datos históricos
+          </p>
+          <p className="text-[10px] text-muted-foreground/60 mt-1">
+            Los precios son estimaciones, no precios en tiempo real. Abrí la app para ver el precio real.
+          </p>
+        </div>
+      </footer>
+
+      {/* ── Toast ─────────────────────────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-lg text-sm font-medium transition-all animate-in fade-in slide-in-from-bottom-4 ${
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          toast.type === 'error' ? 'bg-destructive text-destructive-foreground' :
+          'bg-foreground text-background'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+    </div>
+  )
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/rides/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+const VALID_TRANSPORTS = ['uber', 'didi', 'bus', 'walk', 'taxi', 'other']
+
+// Approximate degree delta for 50 meters
+const METERS_TO_DEGREES = 50 / 111320
+
+function isValidCoordinate(lat: unknown, lon: unknown): boolean {
+  if (typeof lat !== 'number' || typeof lon !== 'number') return false
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return false
+  if (lat < -90 || lat > 90) return false
+  if (lon < -180 || lon > 180) return false
+  return true
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+
+    const { originLat, originLon, originName, destLat, destLon, destName, priceUber, priceDidi, distanceKm, durationMin, transport } = body
+
+    // Validate required fields
+    if (originLat === undefined || originLat === null) {
+      return NextResponse.json({ error: 'originLat is required' }, { status: 400 })
+    }
+    if (originLon === undefined || originLon === null) {
+      return NextResponse.json({ error: 'originLon is required' }, { status: 400 })
+    }
+    if (destLat === undefined || destLat === null) {
+      return NextResponse.json({ error: 'destLat is required' }, { status: 400 })
+    }
+    if (destLon === undefined || destLon === null) {
+      return NextResponse.json({ error: 'destLon is required' }, { status: 400 })
+    }
+    if (!destName || typeof destName !== 'string' || destName.trim() === '') {
+      return NextResponse.json({ error: 'destName is required' }, { status: 400 })
+    }
+
+    // Validate coordinates
+    if (!isValidCoordinate(Number(originLat), Number(originLon))) {
+      return NextResponse.json(
+        { error: 'Invalid origin coordinates. Lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+    if (!isValidCoordinate(Number(destLat), Number(destLon))) {
+      return NextResponse.json(
+        { error: 'Invalid destination coordinates. Lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+
+    // Coerce to numbers
+    const oLat = Number(originLat)
+    const oLon = Number(originLon)
+    const dLat = Number(destLat)
+    const dLon = Number(destLon)
+
+    // Validate transport type
+    const resolvedTransport = transport || 'uber'
+    if (typeof resolvedTransport !== 'string' || !VALID_TRANSPORTS.includes(resolvedTransport)) {
+      return NextResponse.json(
+        { error: `Invalid transport type. Must be one of: ${VALID_TRANSPORTS.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    // Validate optional numeric fields
+    if (priceUber !== undefined && priceUber !== null) {
+      const p = Number(priceUber)
+      if (Number.isNaN(p) || p < 0) {
+        return NextResponse.json({ error: 'priceUber must be a valid non-negative number' }, { status: 400 })
+      }
+    }
+    if (priceDidi !== undefined && priceDidi !== null) {
+      const p = Number(priceDidi)
+      if (Number.isNaN(p) || p < 0) {
+        return NextResponse.json({ error: 'priceDidi must be a valid non-negative number' }, { status: 400 })
+      }
+    }
+    if (distanceKm !== undefined && distanceKm !== null) {
+      const d = Number(distanceKm)
+      if (Number.isNaN(d) || d < 0) {
+        return NextResponse.json({ error: 'distanceKm must be a valid non-negative number' }, { status: 400 })
+      }
+    }
+    if (durationMin !== undefined && durationMin !== null) {
+      const d = Number(durationMin)
+      if (Number.isNaN(d) || d < 0) {
+        return NextResponse.json({ error: 'durationMin must be a valid non-negative number' }, { status: 400 })
+      }
+    }
+
+    // Duplicate prevention: same origin (within 50m), same destination (within 50m), created in last 60s
+    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000)
+
+    const originLatDelta = METERS_TO_DEGREES
+    const originLonDelta = METERS_TO_DEGREES / Math.cos((oLat * Math.PI) / 180)
+    const destLatDelta = METERS_TO_DEGREES
+    const destLonDelta = METERS_TO_DEGREES / Math.cos((dLat * Math.PI) / 180)
+
+    const duplicate = await db.ride.findFirst({
+      where: {
+        createdAt: { gte: sixtySecondsAgo },
+        originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
+        originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
+        destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
+        destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
+      },
+    })
+
+    if (duplicate) {
+      return NextResponse.json(duplicate, { status: 200 })
+    }
+
+    // Create the ride
+    const ride = await db.ride.create({
+      data: {
+        originLat: oLat,
+        originLon: oLon,
+        originName: originName || '',
+        destLat: dLat,
+        destLon: dLon,
+        destName: destName.trim(),
+        priceUber: priceUber != null ? Number(priceUber) : null,
+        priceDidi: priceDidi != null ? Number(priceDidi) : null,
+        distanceKm: distanceKm != null ? Number(distanceKm) : null,
+        durationMin: durationMin != null ? Number(durationMin) : null,
+        transport: resolvedTransport,
+      },
+    })
+
+    return NextResponse.json(ride, { status: 201 })
+  } catch (error) {
+    console.error('Error creating ride:', error)
+    return NextResponse.json({ error: 'Failed to create ride' }, { status: 500 })
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl
+
+    let limit = 50
+    const limitParam = searchParams.get('limit')
+    if (limitParam !== null) {
+      const parsed = Number(limitParam)
+      if (Number.isNaN(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+        return NextResponse.json({ error: 'Limit must be a positive integer' }, { status: 400 })
+      }
+      limit = Math.min(parsed, 200)
+    }
+
+    let offset = 0
+    const offsetParam = searchParams.get('offset')
+    if (offsetParam !== null) {
+      const parsed = Number(offsetParam)
+      if (Number.isNaN(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+        return NextResponse.json({ error: 'Offset must be a non-negative integer' }, { status: 400 })
+      }
+      offset = parsed
+    }
+
+    const where: Record<string, string> = {}
+    const transportParam = searchParams.get('transport')
+    if (transportParam) {
+      if (!VALID_TRANSPORTS.includes(transportParam)) {
+        return NextResponse.json(
+          { error: `Invalid transport filter. Must be one of: ${VALID_TRANSPORTS.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      where.transport = transportParam
+    }
+
+    const [total, rides] = await Promise.all([
+      db.ride.count({ where }),
+      db.ride.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ])
+
+    return NextResponse.json({ total, rides })
+  } catch (error) {
+    console.error('Error fetching rides:', error)
+    return NextResponse.json({ error: 'Failed to fetch rides' }, { status: 500 })
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/transport-log/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+const VALID_TRANSPORTS = ['uber', 'didi', 'bus', 'walk', 'taxi', 'other']
+
+// Approximate degree delta for 50 meters
+const METERS_TO_DEGREES = 50 / 111320
+
+function isValidCoordinate(lat: unknown, lon: unknown): boolean {
+  if (typeof lat !== 'number' || typeof lon !== 'number') return false
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return false
+  if (lat < -90 || lat > 90) return false
+  if (lon < -180 || lon > 180) return false
+  return true
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+
+    const { originLat, originLon, originName, destLat, destLon, destName, transport, price } = body
+
+    if (originLat === undefined || originLat === null) {
+      return NextResponse.json({ error: 'originLat is required' }, { status: 400 })
+    }
+    if (originLon === undefined || originLon === null) {
+      return NextResponse.json({ error: 'originLon is required' }, { status: 400 })
+    }
+    if (destLat === undefined || destLat === null) {
+      return NextResponse.json({ error: 'destLat is required' }, { status: 400 })
+    }
+    if (destLon === undefined || destLon === null) {
+      return NextResponse.json({ error: 'destLon is required' }, { status: 400 })
+    }
+    if (!destName || typeof destName !== 'string' || destName.trim() === '') {
+      return NextResponse.json({ error: 'destName is required' }, { status: 400 })
+    }
+
+    if (!isValidCoordinate(Number(originLat), Number(originLon))) {
+      return NextResponse.json(
+        { error: 'Invalid origin coordinates. Lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+    if (!isValidCoordinate(Number(destLat), Number(destLon))) {
+      return NextResponse.json(
+        { error: 'Invalid destination coordinates. Lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+
+    const oLat = Number(originLat)
+    const oLon = Number(originLon)
+    const dLat = Number(destLat)
+    const dLon = Number(destLon)
+
+    const resolvedTransport = transport || 'bus'
+    if (typeof resolvedTransport !== 'string' || !VALID_TRANSPORTS.includes(resolvedTransport)) {
+      return NextResponse.json(
+        { error: `Invalid transport type. Must be one of: ${VALID_TRANSPORTS.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    if (price !== undefined && price !== null) {
+      if (typeof price !== 'number' || Number.isNaN(price) || price < 0) {
+        return NextResponse.json({ error: 'Price must be a valid non-negative number' }, { status: 400 })
+      }
+    }
+
+    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000)
+
+    const originLatDelta = METERS_TO_DEGREES
+    const originLonDelta = METERS_TO_DEGREES / Math.cos((oLat * Math.PI) / 180)
+    const destLatDelta = METERS_TO_DEGREES
+    const destLonDelta = METERS_TO_DEGREES / Math.cos((dLat * Math.PI) / 180)
+
+    const duplicate = await db.transportLog.findFirst({
+      where: {
+        transport: resolvedTransport,
+        createdAt: { gte: sixtySecondsAgo },
+        originLat: { gte: oLat - originLatDelta, lte: oLat + originLatDelta },
+        originLon: { gte: oLon - originLonDelta, lte: oLon + originLonDelta },
+        destLat: { gte: dLat - destLatDelta, lte: dLat + destLatDelta },
+        destLon: { gte: dLon - destLonDelta, lte: dLon + destLonDelta },
+      },
+    })
+
+    if (duplicate) {
+      return NextResponse.json(
+        { error: 'Duplicate entry: a similar transport log was created within the last 60 seconds' },
+        { status: 409 }
+      )
+    }
+
+    const transportLog = await db.transportLog.create({
+      data: {
+        originLat: oLat,
+        originLon: oLon,
+        originName: originName || '',
+        destLat: dLat,
+        destLon: dLon,
+        destName: destName.trim(),
+        transport: resolvedTransport,
+        price: price != null ? Number(price) : null,
+      },
+    })
+
+    return NextResponse.json(transportLog, { status: 201 })
+  } catch (error) {
+    console.error('Error creating transport log:', error)
+    return NextResponse.json({ error: 'Failed to create transport log' }, { status: 500 })
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl
+
+    let limit = 50
+    const limitParam = searchParams.get('limit')
+    if (limitParam !== null) {
+      const parsed = Number(limitParam)
+      if (Number.isNaN(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+        return NextResponse.json({ error: 'Limit must be a positive integer' }, { status: 400 })
+      }
+      limit = Math.min(parsed, 200)
+    }
+
+    let offset = 0
+    const offsetParam = searchParams.get('offset')
+    if (offsetParam !== null) {
+      const parsed = Number(offsetParam)
+      if (Number.isNaN(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+        return NextResponse.json({ error: 'Offset must be a non-negative integer' }, { status: 400 })
+      }
+      offset = parsed
+    }
+
+    const where: Record<string, string> = {}
+    const transportParam = searchParams.get('transport')
+    if (transportParam) {
+      if (!VALID_TRANSPORTS.includes(transportParam)) {
+        return NextResponse.json(
+          { error: `Invalid transport filter. Must be one of: ${VALID_TRANSPORTS.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      where.transport = transportParam
+    }
+
+    const [total, entries] = await Promise.all([
+      db.transportLog.count({ where }),
+      db.transportLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ])
+
+    return NextResponse.json({ total, entries })
+  } catch (error) {
+    console.error('Error fetching transport logs:', error)
+    return NextResponse.json({ error: 'Failed to fetch transport logs' }, { status: 500 })
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/predict/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+interface RawTrip {
+  destLat: number
+  destLon: number
+  destName: string
+  createdAt: Date
+}
+
+interface Prediction {
+  destLat: number
+  destLon: number
+  destName: string
+  score: number
+  confidence: 'low' | 'medium' | 'high'
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl
+    const latParam = searchParams.get('lat')
+    const lonParam = searchParams.get('lon')
+
+    if (!latParam || !lonParam) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: lat and lon' },
+        { status: 400 }
+      )
+    }
+
+    const lat = parseFloat(latParam)
+    const lon = parseFloat(lonParam)
+
+    if (isNaN(lat) || isNaN(lon)) {
+      return NextResponse.json(
+        { error: 'Invalid coordinates: lat and lon must be valid numbers' },
+        { status: 400 }
+      )
+    }
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return NextResponse.json(
+        { error: 'Coordinates out of range: lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+
+    // Get current hour and day of week in user's timezone
+    const timezone = 'America/Argentina/Buenos_Aires'
+    const now = new Date()
+
+    const hourFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false,
+    })
+    const currentHour = parseInt(hourFormatter.format(now), 10)
+    if (isNaN(currentHour)) {
+      return NextResponse.json({
+        predictions: [],
+        message: 'Timezone detection failed',
+        totalRecords: 0,
+      })
+    }
+
+    const dayFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'long',
+    })
+    const dayName = dayFormatter.format(now)
+    const dayMap: Record<string, number> = {
+      Sunday: 0,
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+    }
+    const currentDayOfWeek = dayMap[dayName]
+    if (currentDayOfWeek === undefined) {
+      return NextResponse.json({
+        predictions: [],
+        message: 'Day detection failed',
+        totalRecords: 0,
+      })
+    }
+
+    // Query rides and transport_log using raw SQL with UNION ALL
+    // IMPORTANT: Prisma with SQLite uses camelCase column names and PascalCase table names
+    const results: RawTrip[] = await db.$queryRaw`
+      SELECT destLat, destLon, destName, createdAt FROM Ride
+      WHERE ABS(originLat - ${lat}) < 0.01 AND ABS(originLon - ${lon}) < 0.01
+      UNION ALL
+      SELECT destLat, destLon, destName, createdAt FROM TransportLog
+      WHERE ABS(originLat - ${lat}) < 0.01 AND ABS(originLon - ${lon}) < 0.01
+    `
+
+    if (results.length < 3) {
+      return NextResponse.json({
+        predictions: [],
+        message: 'Insufficient data',
+        totalRecords: results.length,
+      })
+    }
+
+    // Group by rounded destination (3 decimal places ≈ 111m)
+    const groups: Map<
+      string,
+      {
+        lat: number
+        lon: number
+        names: string[]
+        trips: { hour: number; dayOfWeek: number }[]
+      }
+    > = new Map()
+
+    for (const trip of results) {
+      const roundedLat = Math.round(trip.destLat * 1000) / 1000
+      const roundedLon = Math.round(trip.destLon * 1000) / 1000
+      const key = `${roundedLat},${roundedLon}`
+
+      if (!groups.has(key)) {
+        groups.set(key, { lat: roundedLat, lon: roundedLon, names: [], trips: [] })
+      }
+
+      const group = groups.get(key)!
+      group.names.push(trip.destName)
+
+      const tripDate = new Date(trip.createdAt)
+      if (isNaN(tripDate.getTime())) continue
+
+      const tripHour = parseInt(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          hour: 'numeric',
+          hour12: false,
+        }).format(tripDate),
+        10
+      )
+      if (isNaN(tripHour)) continue
+
+      const tripDayName = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+      }).format(tripDate)
+      const tripDayOfWeek = dayMap[tripDayName]
+      if (tripDayOfWeek === undefined) continue
+
+      group.trips.push({ hour: tripHour, dayOfWeek: tripDayOfWeek })
+    }
+
+    // Calculate scores for each group
+    const predictions: Prediction[] = []
+
+    for (const [, group] of groups) {
+      const totalCount = group.trips.length
+
+      const hourMatch = group.trips.filter((t) => {
+        const diff = Math.abs(t.hour - currentHour)
+        return diff <= 2 || diff >= 22
+      }).length
+
+      const dayMatch = group.trips.filter((t) => t.dayOfWeek === currentDayOfWeek).length
+
+      const score = totalCount * 0.3 + hourMatch * 0.4 + dayMatch * 0.3
+
+      const nameCounts: Map<string, number> = new Map()
+      for (const name of group.names) {
+        nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1)
+      }
+      const destName = [...nameCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+
+      let confidence: 'low' | 'medium' | 'high'
+      if (score < 1) {
+        confidence = 'low'
+      } else if (score < 3) {
+        confidence = 'medium'
+      } else {
+        confidence = 'high'
+      }
+
+      predictions.push({
+        destLat: group.lat,
+        destLon: group.lon,
+        destName,
+        score: Math.round(score * 100) / 100,
+        confidence,
+      })
+    }
+
+    predictions.sort((a, b) => b.score - a.score)
+    const top3 = predictions.slice(0, 3)
+
+    return NextResponse.json({
+      predictions: top3,
+      totalRecords: results.length,
+      currentHour,
+      currentDayOfWeek,
+    })
+  } catch (error) {
+    console.error('Prediction error:', error)
+    return NextResponse.json(
+      { error: 'Failed to generate predictions', predictions: [] },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/geocode/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl
+    const q = searchParams.get('q')
+    const limitParam = searchParams.get('limit')
+    const limit = parseInt(limitParam ?? '5', 10)
+
+    if (!q || q.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Missing required parameter: q (search query)' },
+        { status: 400 }
+      )
+    }
+
+    if (isNaN(limit) || limit < 1 || limit > 20) {
+      return NextResponse.json(
+        { error: 'Invalid limit: must be a number between 1 and 20' },
+        { status: 400 }
+      )
+    }
+
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q.trim())}&format=json&limit=${limit}&accept-language=es`
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': 'MovilidadAsistente/1.0',
+        },
+        signal: controller.signal,
+      })
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+        return NextResponse.json(
+          { error: 'Geocoding request timed out', results: [] },
+          { status: 504 }
+        )
+      }
+      return NextResponse.json(
+        { error: 'Failed to connect to geocoding service', results: [] },
+        { status: 502 }
+      )
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: `Geocoding service returned status ${response.status}`, results: [] },
+        { status: 502 }
+      )
+    }
+
+    const data = await response.json()
+
+    if (!Array.isArray(data)) {
+      return NextResponse.json(
+        { error: 'Unexpected response from geocoding service', results: [] },
+        { status: 502 }
+      )
+    }
+
+    return NextResponse.json({ results: data })
+  } catch (error) {
+    console.error('Geocode error:', error)
+    return NextResponse.json(
+      { error: 'Failed to geocode address', results: [] },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/reverse-geocode/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl
+    const latParam = searchParams.get('lat')
+    const lonParam = searchParams.get('lon')
+
+    if (!latParam || !lonParam) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: lat and lon' },
+        { status: 400 }
+      )
+    }
+
+    const lat = parseFloat(latParam)
+    const lon = parseFloat(lonParam)
+
+    if (isNaN(lat) || isNaN(lon)) {
+      return NextResponse.json(
+        { error: 'Invalid coordinates: lat and lon must be valid numbers' },
+        { status: 400 }
+      )
+    }
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return NextResponse.json(
+        { error: 'Coordinates out of range: lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=es`
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': 'MovilidadAsistente/1.0',
+        },
+        signal: controller.signal,
+      })
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      return NextResponse.json({
+        displayName: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+        city: null,
+        road: null,
+        neighborhood: null,
+        lat,
+        lon,
+        fallback: true,
+        error: fetchError instanceof DOMException && fetchError.name === 'AbortError'
+          ? 'Reverse geocoding request timed out'
+          : 'Failed to connect to reverse geocoding service',
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (!response.ok) {
+      return NextResponse.json({
+        displayName: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+        city: null,
+        road: null,
+        neighborhood: null,
+        lat,
+        lon,
+        fallback: true,
+        error: `Reverse geocoding service returned status ${response.status}`,
+      })
+    }
+
+    const data = await response.json()
+
+    if (data.error) {
+      return NextResponse.json({
+        displayName: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+        city: null,
+        road: null,
+        neighborhood: null,
+        lat,
+        lon,
+        fallback: true,
+        error: data.error,
+      })
+    }
+
+    const address = data.address ?? {}
+
+    return NextResponse.json({
+      displayName: data.display_name ?? `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+      city: address.city ?? address.town ?? address.village ?? address.hamlet ?? null,
+      road: address.road ?? address.street ?? address.pedestrian ?? null,
+      neighborhood: address.neighbourhood ?? address.suburb ?? address.quarter ?? null,
+      lat,
+      lon,
+    })
+  } catch (error) {
+    console.error('Reverse geocode error:', error)
+    return NextResponse.json(
+      { error: 'Failed to reverse geocode coordinates' },
+      { status: 500 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/weather/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+
+// WMO Weather interpretation codes mapped to Spanish descriptions
+const weatherDescriptions: Record<number, string> = {
+  0: 'Despejado',
+  1: 'Mayormente despejado',
+  2: 'Parcialmente nublado',
+  3: 'Nublado',
+  45: 'Niebla',
+  48: 'Niebla con escarcha',
+  51: 'Llovizna ligera',
+  53: 'Llovizna moderada',
+  55: 'Llovizna intensa',
+  56: 'Llovizna helada ligera',
+  57: 'Llovizna helada intensa',
+  61: 'Lluvia ligera',
+  63: 'Lluvia moderada',
+  65: 'Lluvia intensa',
+  66: 'Lluvia helada ligera',
+  67: 'Lluvia helada intensa',
+  71: 'Nevada ligera',
+  73: 'Nevada moderada',
+  75: 'Nevada intensa',
+  77: 'Granizo',
+  80: 'Chubasco ligero',
+  81: 'Chubasco moderado',
+  82: 'Chubasco violento',
+  85: 'Chubasco de nieve ligero',
+  86: 'Chubasco de nieve intenso',
+  95: 'Tormenta',
+  96: 'Tormenta con granizo leve',
+  99: 'Tormenta con granizo fuerte',
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = request.nextUrl
+    const latParam = searchParams.get('lat')
+    const lonParam = searchParams.get('lon')
+
+    if (!latParam || !lonParam) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: lat and lon' },
+        { status: 400 }
+      )
+    }
+
+    const lat = parseFloat(latParam)
+    const lon = parseFloat(lonParam)
+
+    if (isNaN(lat) || isNaN(lon)) {
+      return NextResponse.json(
+        { error: 'Invalid coordinates: lat and lon must be valid numbers' },
+        { status: 400 }
+      )
+    }
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return NextResponse.json(
+        { error: 'Coordinates out of range: lat must be -90 to 90, lon must be -180 to 180' },
+        { status: 400 }
+      )
+    }
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code&timezone=America%2FBuenos_Aires`
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+      })
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+        return NextResponse.json(
+          { error: 'Weather service request timed out', weather: null },
+          { status: 200 }
+        )
+      }
+      return NextResponse.json(
+        { error: 'Failed to connect to weather service', weather: null },
+        { status: 200 }
+      )
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: `Weather service returned status ${response.status}`, weather: null },
+        { status: 200 }
+      )
+    }
+
+    const data = await response.json()
+
+    if (!data.current) {
+      return NextResponse.json(
+        { error: 'No current weather data available', weather: null },
+        { status: 200 }
+      )
+    }
+
+    const current = data.current
+    const weatherCode = current.weather_code ?? 0
+
+    return NextResponse.json({
+      weather: {
+        temperature: current.temperature_2m ?? null,
+        humidity: current.relative_humidity_2m ?? null,
+        precipitation: current.precipitation ?? null,
+        weatherCode,
+        description: weatherDescriptions[weatherCode] ?? 'Desconocido',
+      },
+    })
+  } catch (error) {
+    console.error('Weather error:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch weather data', weather: null },
+      { status: 200 }
+    )
+  }
+}
+
+═══════════════════════════════════════════════════════════════
+ARCHIVO: src/app/api/estimate/route.ts
+═══════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import {
+  haversine,
+  estimateDuration,
+  calculateUberBasePrice,
+  calculateDidiBasePrice,
+  detectFactors,
+  applySurge,
+  buildPriceBreakdown,
+  determineCheaper,
+  generateAdvice,
+  buildDeepLinks,
+  determineConfidence,
+  PROXIMITY_KM,
+  type EstimateResult,
+} from "@/lib/estimate-helpers";
+
+// ─── Input Validation ────────────────────────────────────────────────────────
+
+interface EstimateInput {
+  originLat: number;
+  originLon: number;
+  originName?: string;
+  destLat: number;
+  destLon: number;
+  destName?: string;
+}
+
+function validateInput(body: unknown): {
+  ok: true;
+  data: EstimateInput;
+} | {
+  ok: false;
+  error: string;
+} {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "Request body must be a JSON object" };
+  }
+
+  const raw = body as Record<string, unknown>;
+
+  const numFields: (keyof EstimateInput)[] = [
+    "originLat",
+    "originLon",
+    "destLat",
+    "destLon",
+  ];
+
+  for (const field of numFields) {
+    const val = raw[field];
+    if (val === undefined || val === null) {
+      return { ok: false, error: `Missing required field: ${field}` };
+    }
+    const num = Number(val);
+    if (isNaN(num)) {
+      return { ok: false, error: `Field "${field}" must be a valid number` };
+    }
+  }
+
+  const originLat = Number(raw.originLat);
+  const originLon = Number(raw.originLon);
+  const destLat = Number(raw.destLat);
+  const destLon = Number(raw.destLon);
+
+  if (originLat < -90 || originLat > 90) {
+    return { ok: false, error: "originLat must be between -90 and 90" };
+  }
+  if (destLat < -90 || destLat > 90) {
+    return { ok: false, error: "destLat must be between -90 and 90" };
+  }
+  if (originLon < -180 || originLon > 180) {
+    return { ok: false, error: "originLon must be between -180 and 180" };
+  }
+  if (destLon < -180 || destLon > 180) {
+    return { ok: false, error: "destLon must be between -180 and 180" };
+  }
+
+  return {
+    ok: true,
+    data: {
+      originLat,
+      originLon,
+      originName: typeof raw.originName === "string" ? raw.originName : "",
+      destLat,
+      destLon,
+      destName: typeof raw.destName === "string" ? raw.destName : "",
+    },
+  };
+}
+
+// ─── Weather Fetch (Open-Meteo) ──────────────────────────────────────────────
+
+async function fetchPrecipitation(
+  lat: number,
+  lon: number
+): Promise<number> {
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=precipitation&timezone=auto`;
+
+    const res = await fetch(url, { next: { revalidate: 600 } });
+
+    if (!res.ok) return 0;
+
+    const data = await res.json();
+    const precip = data?.current?.precipitation;
+    return typeof precip === "number" && precip > 0 ? precip : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ─── Historical Data Lookup ───────────────────────────────────────────────────
+
+interface HistoricalAggregate {
+  avgUber: number | null;
+  avgDidi: number | null;
+  avgDistance: number | null;
+  count: number;
+}
+
+async function findHistoricalData(
+  originLat: number,
+  originLon: number,
+  destLat: number,
+  destLon: number
+): Promise<HistoricalAggregate> {
+  try {
+    const latDelta = PROXIMITY_KM / 111;
+    const lonDelta = PROXIMITY_KM / (111 * Math.cos((originLat * Math.PI) / 180));
+
+    const rides = await db.ride.findMany({
+      where: {
+        originLat: {
+          gte: originLat - latDelta,
+          lte: originLat + latDelta,
+        },
+        originLon: {
+          gte: originLon - lonDelta,
+          lte: originLon + lonDelta,
+        },
+        destLat: {
+          gte: destLat - latDelta,
+          lte: destLat + latDelta,
+        },
+        destLon: {
+          gte: destLon - lonDelta,
+          lte: destLon + lonDelta,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    const nearby = rides.filter((r) => {
+      const originDist = haversine(originLat, originLon, r.originLat, r.originLon);
+      const destDist = haversine(destLat, destLon, r.destLat, r.destLon);
+      return originDist <= PROXIMITY_KM && destDist <= PROXIMITY_KM;
+    });
+
+    if (nearby.length === 0) {
+      return { avgUber: null, avgDidi: null, avgDistance: null, count: 0 };
+    }
+
+    const uberPrices = nearby
+      .map((r) => r.priceUber)
+      .filter((p): p is number => p !== null);
+    const didiPrices = nearby
+      .map((r) => r.priceDidi)
+      .filter((p): p is number => p !== null);
+    const distances = nearby
+      .map((r) => r.distanceKm)
+      .filter((d): d is number => d !== null);
+
+    const avg = (arr: number[]) =>
+      arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+    return {
+      avgUber: avg(uberPrices),
+      avgDidi: avg(didiPrices),
+      avgDistance: avg(distances),
+      count: nearby.length,
+    };
+  } catch {
+    return { avgUber: null, avgDidi: null, avgDistance: null, count: 0 };
+  }
+}
+
+// ─── POST Handler ─────────────────────────────────────────────────────────────
+
+export async function POST(request: NextRequest) {
+  try {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
+
+    const validation = validateInput(body);
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { originLat, originLon, originName, destLat, destLon, destName } =
+      validation.data;
+
+    const distanceKm = haversine(originLat, originLon, destLat, destLon);
+
+    if (distanceKm <= 0) {
+      return NextResponse.json(
+        {
+          uber: { low: 0, high: 0, estimate: 0 },
+          didi: { low: 0, high: 0, estimate: 0 },
+          distanceKm: 0,
+          durationMin: 0,
+          confidence: "low" as const,
+          factors: { weather: false, rushHour: false, weekendNight: false },
+          cheaper: "similar" as const,
+          deepLinks: buildDeepLinks(
+            originLat,
+            originLon,
+            originName || "",
+            destLat,
+            destLon,
+            destName || ""
+          ),
+          advice: "Precios normales",
+        } satisfies EstimateResult
+      );
+    }
+
+    const durationMin = estimateDuration(distanceKm);
+
+    const precipMm = await fetchPrecipitation(
+      (originLat + destLat) / 2,
+      (originLon + destLon) / 2
+    );
+    const factors = detectFactors(new Date(), precipMm);
+
+    const historical = await findHistoricalData(
+      originLat,
+      originLon,
+      destLat,
+      destLon
+    );
+
+    let uberEstimate: number;
+    let didiEstimate: number;
+    let effectiveDistance = distanceKm;
+    let effectiveDuration = durationMin;
+
+    if (historical.avgUber !== null && historical.avgDidi !== null) {
+      uberEstimate = historical.avgUber;
+      didiEstimate = historical.avgDidi;
+
+      if (historical.avgDistance !== null) {
+        effectiveDistance = historical.avgDistance;
+        effectiveDuration = estimateDuration(effectiveDistance);
+      }
+
+      uberEstimate = applySurge(uberEstimate, factors);
+      didiEstimate = applySurge(didiEstimate, factors);
+    } else if (historical.avgUber !== null) {
+      uberEstimate = applySurge(historical.avgUber, factors);
+      didiEstimate = applySurge(
+        calculateDidiBasePrice(distanceKm, durationMin),
+        factors
+      );
+
+      if (historical.avgDistance !== null) {
+        effectiveDistance = historical.avgDistance;
+        effectiveDuration = estimateDuration(effectiveDistance);
+      }
+    } else if (historical.avgDidi !== null) {
+      uberEstimate = applySurge(
+        calculateUberBasePrice(distanceKm, durationMin),
+        factors
+      );
+      didiEstimate = applySurge(historical.avgDidi, factors);
+
+      if (historical.avgDistance !== null) {
+        effectiveDistance = historical.avgDistance;
+        effectiveDuration = estimateDuration(effectiveDistance);
+      }
+    } else {
+      uberEstimate = applySurge(
+        calculateUberBasePrice(distanceKm, durationMin),
+        factors
+      );
+      didiEstimate = applySurge(
+        calculateDidiBasePrice(distanceKm, durationMin),
+        factors
+      );
+    }
+
+    const confidence = determineConfidence(historical.count);
+    const cheaper = determineCheaper(uberEstimate, didiEstimate);
+    const advice = generateAdvice(factors);
+    const deepLinks = buildDeepLinks(
+      originLat,
+      originLon,
+      originName || "",
+      destLat,
+      destLon,
+      destName || ""
+    );
+
+    const result: EstimateResult = {
+      uber: buildPriceBreakdown(uberEstimate),
+      didi: buildPriceBreakdown(didiEstimate),
+      distanceKm: Math.round(effectiveDistance * 100) / 100,
+      durationMin: Math.round(effectiveDuration * 10) / 10,
+      confidence,
+      factors,
+      cheaper,
+      deepLinks,
+      advice,
+    };
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("[estimate] Unhandled error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+</pre></body></html>
