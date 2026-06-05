@@ -42,3 +42,29 @@ Stage Summary:
 - P1-8 verified: crosshair cursor + _manualOriginMode correctly reset on timeout
 - No dev server errors
 - Total patches applied across both rounds: 8 (P0-1, P0-2, P0-6, P0-7, P1-3, P1-4, P1-5, P1-8)
+
+---
+Task ID: 3
+Agent: Main (Staff Product Strategist)
+Task: Strategic analysis of VOY as startup — distribution, virality, adoption, retention, network effects, moat
+
+Work Log:
+- Read movilidad.html (full file, ~1900 lines) to ground analysis in actual product capabilities
+- Read worklog.md to understand all previous patches and context
+- Analyzed 6 strategic dimensions: distribution, virality, adoption, retention, network effects, moat
+- Answered 5 strategic questions with evidence from the codebase
+- Proposed 3 roadmaps (30d, 90d, 12mo) focused on competitive advantages, not features
+- Defined North Star Metric: Weekly Savings Events
+
+Stage Summary:
+- **Distribution**: VOY's advantage is being a URL (zero install friction), but current distribution is zero. Channels: QR at points of need, WhatsApp groups, university seeding, fintech embedding
+- **Virality**: Current coefficient ~0. The savings story is the viral payload but no share mechanism exists. WhatsApp screenshot is the natural vector in Argentina
+- **Adoption**: Time-to-value ~20s (good), but discovery is the broken link. 60% churn by Day 14 due to "training wheels problem" (routes get solved)
+- **Retention**: Inversely proportional to price predictability. Commute routes = solved in 2-3 uses. Return driven by: new destinations, surge pricing, price changes
+- **Network Effects**: Currently zero. Only viable path: data network effects (more users → more price observations → better surge prediction → more value)
+- **Moat**: Currently zero. 4 potential moats identified: (1) cross-provider price arbitrage data, (2) geographic coverage, (3) multi-provider identity, (4) B2B integrations
+- **North Star**: Weekly Savings Events = sessions where user saw ≥2 options, chose via CTA, and did NOT choose the most expensive option
+- **30-day roadmap**: Distribution advantage (QR, WhatsApp, university, fintech)
+- **90-day roadmap**: Data advantage (spread map, surge prediction, reliability signals, expansion playbook)
+- **12-month roadmap**: Structural advantage (multi-provider identity, B2B embedding, multi-city, price guarantee)
+- **Critical risk**: Window of 12-18 months before market consolidation reduces need for comparison
