@@ -1015,7 +1015,13 @@ function onFieldInput(field){
     }
     return;
   }
-  if(field==='origin')_originManual=true;
+  if(field==='origin'){
+    _originManual=true;
+    // PATCH M-1: clear stale origin when input diverges from _origin.name
+    if(_origin&&q!==_origin.name){
+      _origin=null;_estimations=null;renderCards();updateMapMarkers();
+    }
+  }
   if(_acTimeout)clearTimeout(_acTimeout);
   _acTimeout=setTimeout(function(){searchPlaces(q,field)},400);
 }
