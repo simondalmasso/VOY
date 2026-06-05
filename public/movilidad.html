@@ -262,6 +262,7 @@ var _busRouteIdx=-1;
 var _estimations=null; // array of {mode,...}
 var _lastSearchTime=0;
 var _acTimeout=null; // autocomplete debounce
+var _acReqId=0; // PATCH P1-3: stale response guard
 var _prefs={avoidMoto:false,prioritizePrice:false,prioritizeSpeed:false,avoidLongWalks:false,avoidTransfers:false,withLuggage:false,withChildren:false};
 var _prefsOpen=false; // panel collapse state
 
@@ -623,7 +624,8 @@ function initGPS(){
     // FIX 1: Debounce — only re-estimate after movement settles
     clearTimeout(_gpsDebounceTimer);
     _gpsDebounceTimer=setTimeout(function(){
-      if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
+      // PATCH P1-5: also guard against _manualOriginMode (pin-in-progress)
+      if(!_originManual&&!_manualOriginMode&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
         _origin={lat:newLat,lon:newLon,name:'Mi ubicación',source:'gps'};
         updateOriginUI();
         updateMapMarkers();
@@ -645,7 +647,8 @@ function initGPS(){
           var retryLon=pos.coords.longitude;
           cachePosition(retryLat,retryLon);
           _lastGpsOrigin={lat:retryLat,lon:retryLon};
-          if(!_originManual&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
+          // PATCH P1-5: also guard against _manualOriginMode (pin-in-progress)
+          if(!_originManual&&!_manualOriginMode&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
             _origin={lat:retryLat,lon:retryLon,name:'Mi ubicación',source:'gps'};
             updateOriginUI();
             updateMapMarkers();
@@ -807,7 +810,9 @@ function updateMapMarkers(){
 }
 
 function drawRouteLine(){
-  if(!_origin||!_dest)return;
+  if(!_origin||!_dest||!_map)return;
+  // PATCH P1-4: defer if style is transitioning (e.g. CARTO→OSM fallback)
+  if(!_map.isStyleLoaded()){_map.once('style.load',function(){drawRouteLine()});return}
   if(_map.getSource('route-src')){
     if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
     if(_map.getLayer('route-line'))_map.removeLayer('route-line');
@@ -979,10 +984,9 @@ function onFieldInput(field){
   if(q.length<2){
     hideAc(field);
     if(q.length===0){
+      // PATCH P0-1+P0-2: always clear origin when input empty, reset _originManual
       if(field==='origin'){
-        if(_origin&&_origin.source!=='gps'&&_origin.source!=='cache'){
-          _origin=null;_estimations=null;renderCards();updateMapMarkers();
-        }
+        _origin=null;_originManual=false;_estimations=null;renderCards();updateMapMarkers();
       }else{
         _dest=null;_estimations=null;renderCards();updateMapMarkers();
       }
@@ -1002,6 +1006,7 @@ function searchPlaces(q,field){
   var now=Date.now();
   if(now-_lastSearchTime<1100)return;
   _lastSearchTime=now;
+  var reqId=++_acReqId; // PATCH P1-3: invalidate stale responses
 
   // FIX 6: fuzzy search local data
   var localResults=[];
@@ -1042,21 +1047,21 @@ function searchPlaces(q,field){
   // Nominatim remote search
   var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Santa Fe, Argentina')+'&format=json&limit=5&accept-language=es&viewbox=-60.75,-31.58,-60.63,-31.69&bounded=1';
   fetch(url).then(function(r){return r.json()}).then(function(data){
+    if(reqId!==_acReqId)return; // PATCH P1-3: discard stale
     var remoteResults=(data||[]).map(function(d,i){
       return {type:'place',name:d.display_name.split(',').slice(0,2).join(', '),sub:d.display_name,lat:parseFloat(d.lat),lon:parseFloat(d.lon),score:70-i*5};
     });
     var all=localResults.concat(remoteResults);
     all.sort(function(a,b){return b.score-a.score});
-    // FIX 5: dedup same name
     var seen={};
     var deduped=[];
     all.forEach(function(r){
       var key=normalize(r.name);
       if(!seen[key]){seen[key]=true;deduped.push(r)}
     });
-    // FIX 5: max 3 results
     renderAc(field,deduped.slice(0,3));
   }).catch(function(){
+    if(reqId!==_acReqId)return; // PATCH P1-3: discard stale
     localResults.sort(function(a,b){return b.score-a.score});
     var seen={};
     var deduped=[];
