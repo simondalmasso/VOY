@@ -762,6 +762,7 @@ function reverseGeocodeOrigin(lat,lon){
     .then(function(r){return r.json()})
     .then(function(d){
       if(d&&d.display_name){
+        if(!_origin||_origin.lat!==lat||_origin.lon!==lon)return; // PATCH C-2: stale callback guard
         _origin.name=d.display_name.split(',').slice(0,2).join(', ');
         updateOriginUI();
         refreshOriginLabel();
@@ -774,6 +775,7 @@ function reverseGeocodeDest(lat,lon){
     .then(function(r){return r.json()})
     .then(function(d){
       if(d&&d.display_name){
+        if(!_dest||_dest.lat!==lat||_dest.lon!==lon)return; // PATCH C-3: stale callback guard
         _dest.name=d.display_name.split(',').slice(0,2).join(', ');
         updateDestUI();
         refreshDestLabel();
@@ -1589,6 +1591,7 @@ function buildBikeLink(){
 var _confirmState={}; // now stores {time, price} instead of just timestamp
 var _renderLocked=false;  // FIX 3: lock renders during active double-tap
 var _renderPending=false; // FIX 3: deferred render flag
+function _anyConfirmActive(){for(var k in _confirmState){if(_confirmState[k])return true}return false}
 
 function _findPriceForMode(mode){
   // Extract price the user SAW from current _estimations
@@ -1618,6 +1621,8 @@ function requestRide(mode,url){
   // PATCH P0-7: capture price at FIRST tap (what user sees), not second
   if(prev&&now-prev.time<DOUBLE_TAP_MS){
     _confirmState[mode]=null;
+    // PATCH C-1: unlock if no other confirms active (fixes overlapping double-taps)
+    if(!_anyConfirmActive()){_renderLocked=false;if(_renderPending){_renderPending=false;renderCards();updateMapMarkers()}}
     // Use price captured at first tap — immune to _estimations mutation during lock
     var ridePrice=prev.price;
     tmLearn(mode,ridePrice);
@@ -1628,12 +1633,8 @@ function requestRide(mode,url){
     showToast('Tocá de nuevo para confirmar','info');
     setTimeout(function(){
       _confirmState[mode]=null;
-      _renderLocked=false;  // FIX 3: unlock
-      if(_renderPending){
-        _renderPending=false;
-        renderCards();  // FIX 3: flush deferred render
-        updateMapMarkers();  // PATCH P0-9: flush deferred map update
-      }
+      // PATCH C-1: only unlock if no other confirm windows still active
+      if(!_anyConfirmActive()){_renderLocked=false;if(_renderPending){_renderPending=false;renderCards();updateMapMarkers()}}
     },DOUBLE_TAP_MS+100);
   }
 }
