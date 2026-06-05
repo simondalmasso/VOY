@@ -265,6 +265,265 @@ var _acTimeout=null; // autocomplete debounce
 var _prefs={avoidMoto:false,prioritizePrice:false,prioritizeSpeed:false,avoidLongWalks:false,avoidTransfers:false,withLuggage:false,withChildren:false};
 var _prefsOpen=false; // panel collapse state
 
+// ===================== TEMPORAL MEMORY LAYER v1 =====================
+// VOY aprende preferencias implícitas SIN mostrarlo nunca.
+// No es personalización visible. No es recomendación explícita. Es sesgo invisible.
+
+var _TM_KEY='voy_temporal_memory';
+var _TM_MAX=200; // FIFO max entries
+var _TM_MIN_INTERACTIONS=5; // minimum before bias activates
+var _TM_SOFT_BIAS_THRESHOLD=0.12; // only bias when score diff < this
+var _TM_BIAS_DOMINANCE_LIMIT=0.80; // >80% toward one mode → rebalance
+
+// --- Memory Store ---
+function tmLoad(){
+  try{
+    var raw=localStorage.getItem(_TM_KEY);
+    if(!raw)return[];
+    var parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed))return[];
+    return parsed;
+  }catch(e){return[]}
+}
+
+function tmSave(entries){
+  try{
+    // Always enforce FIFO max
+    if(entries.length>_TM_MAX){
+      entries=entries.slice(entries.length-_TM_MAX);
+    }
+    localStorage.setItem(_TM_KEY,JSON.stringify(entries));
+  }catch(e){}
+}
+
+// Normalize provider action key to a canonical mode for memory
+function tmNormalizeMode(actionKey){
+  if(!actionKey)return'unknown';
+  var k=actionKey.toLowerCase();
+  if(k==='uber'||k==='uber_moto')return'uber';
+  if(k==='didi'||k==='didi_moto')return'didi';
+  if(k==='maxim')return'maxim';
+  if(k==='taxi'||k==='radiotaxi')return'taxi';
+  if(k==='remis')return'remis';
+  if(k==='taxiapp')return'taxiapp';
+  if(k==='cabify')return'cabify';
+  if(k.indexOf('moto')>=0)return'moto';
+  if(k==='bus')return'bus';
+  if(k==='walk')return'walk';
+  if(k==='bike')return'bike';
+  return'auto'; // default for car providers
+}
+
+// --- Context Clustering ---
+// Simple grid-based geo clustering: ~800m cells
+function tmClusterGeo(lat,lon){
+  if(lat==null||lon==null)return'__';
+  // Round to ~0.0072 degrees ≈ 800m at this latitude
+  var gridLat=Math.round(lat/0.0072)*0.0072;
+  var gridLon=Math.round(lon/0.0072)*0.0072;
+  return gridLat.toFixed(4)+'_'+gridLon.toFixed(4);
+}
+
+function tmTimeOfDay(){
+  var h=new Date().getHours();
+  if(h>=6&&h<12)return'morning';
+  if(h>=12&&h<20)return'afternoon';
+  return'night';
+}
+
+function tmWeekday(){
+  return new Date().getDay(); // 0=Sun, 6=Sat
+}
+
+function tmPriceRange(price){
+  if(price==null)return'mid';
+  if(price<=2500)return'low';
+  if(price<=5000)return'mid';
+  return'high';
+}
+
+// --- Record a learning event (ONLY on confirmed ride action) ---
+function tmLearn(actionKey,price){
+  if(!_origin||!_dest)return; // need context
+  var mode=tmNormalizeMode(actionKey);
+  var entry={
+    mode:mode,
+    originCluster:tmClusterGeo(_origin.lat,_origin.lon),
+    destCluster:tmClusterGeo(_dest.lat,_dest.lon),
+    timeOfDay:tmTimeOfDay(),
+    weekday:tmWeekday(),
+    priceRange:tmPriceRange(price),
+    timestamp:Date.now()
+  };
+  var memory=tmLoad();
+  memory.push(entry);
+  // FIFO: keep max _TM_MAX entries
+  if(memory.length>_TM_MAX){
+    memory=memory.slice(memory.length-_TM_MAX);
+  }
+  tmSave(memory);
+}
+
+// --- Temporal Decay ---
+// Returns weight 0-1 based on entry age
+function tmDecayWeight(timestamp){
+  var now=Date.now();
+  var ageMs=now-timestamp;
+  var ageDays=ageMs/(1000*60*60*24);
+  if(ageDays<=7)return 1.0;     // last 7 days → 100%
+  if(ageDays<=30)return 0.6;    // 7-30 days → 60%
+  if(ageDays<=90)return 0.3;    // 30-90 days → 30%
+  return 0;                      // >90 days → ignore
+}
+
+// --- Compute User Preference Score ---
+// Returns 0-1 score for how well an option matches user's implicit preferences
+function computeUserPreferenceScore(optionMode,optionPrice,context){
+  var memory=tmLoad();
+  if(memory.length<_TM_MIN_INTERACTIONS)return 0; // not enough data
+
+  // Apply temporal decay
+  var weighted=memory.map(function(entry){
+    return Object.assign({},entry,{_w:tmDecayWeight(entry.timestamp)});
+  }).filter(function(entry){
+    return entry._w>0; // discard >90 day old entries
+  });
+
+  if(weighted.length<_TM_MIN_INTERACTIONS)return 0;
+
+  // Anti-overfitting: check if one mode dominates >80%
+  var modeCounts={};
+  weighted.forEach(function(e){
+    if(!modeCounts[e.mode])modeCounts[e.mode]=0;
+    modeCounts[e.mode]+=e._w;
+  });
+  var totalWeight=weighted.reduce(function(s,e){return s+e._w},0);
+  if(totalWeight===0)return 0;
+
+  // Find dominant mode
+  var dominantMode=null;
+  var dominantRatio=0;
+  Object.keys(modeCounts).forEach(function(m){
+    var ratio=modeCounts[m]/totalWeight;
+    if(ratio>dominantRatio){dominantRatio=ratio;dominantMode=m}
+  });
+
+  // Safety clause: if >80% bias toward one mode, cap its weight
+  var rebalancedWeighted=weighted;
+  if(dominantRatio>_TM_BIAS_DOMINANCE_LIMIT){
+    // Reduce weight of dominant mode entries by 50%
+    rebalancedWeighted=weighted.map(function(e){
+      if(e.mode===dominantMode){
+        return Object.assign({},e,{_w:e._w*0.5});
+      }
+      return e;
+    });
+    // Recalculate total weight
+    totalWeight=rebalancedWeighted.reduce(function(s,e){return s+e._w},0);
+    if(totalWeight===0)return 0;
+  }
+
+  // A) MODE BIAS (40%) - frequency of this mode in history
+  var modeWeight=0;
+  rebalancedWeighted.forEach(function(e){
+    if(e.mode===optionMode)modeWeight+=e._w;
+  });
+  var modeScore=totalWeight>0?modeWeight/totalWeight:0; // 0-1
+
+  // B) TIME CONTEXT BIAS (20%) - does user prefer this mode at this time?
+  var currentTime=tmTimeOfDay();
+  var currentWeekday=tmWeekday();
+  var timeMatchWeight=0;
+  var timeTotalWeight=0;
+  rebalancedWeighted.forEach(function(e){
+    if(e.timeOfDay===currentTime&&e.weekday===currentWeekday){
+      timeTotalWeight+=e._w;
+      if(e.mode===optionMode)timeMatchWeight+=e._w;
+    }
+  });
+  var timeScore=timeTotalWeight>0?timeMatchWeight/timeTotalWeight:modeScore; // fallback to modeScore
+
+  // C) DISTANCE BIAS (15%) - does user prefer this mode for this distance?
+  var distKm=context&&context.distance?context.distance:0;
+  var distCategory=distKm<=3?'short':distKm<=8?'medium':'long';
+  var distMatchWeight=0;
+  var distTotalWeight=0;
+  rebalancedWeighted.forEach(function(e){
+    // Infer distance category from origin/dest clusters
+    // We approximate: use price range as a proxy for distance category
+    // Low price ≈ short, mid ≈ medium, high ≈ long
+    var eDistCategory=e.priceRange==='low'?'short':e.priceRange==='high'?'long':'medium';
+    if(eDistCategory===distCategory){
+      distTotalWeight+=e._w;
+      if(e.mode===optionMode)distMatchWeight+=e._w;
+    }
+  });
+  var distScore=distTotalWeight>0?distMatchWeight/distTotalWeight:modeScore;
+
+  // D) PRICE SENSITIVITY (25%) - does user tend to choose cheaper options?
+  // If user always picks low-price options, penalize expensive ones
+  var lowPriceCount=0;
+  var highPriceCount=0;
+  rebalancedWeighted.forEach(function(e){
+    if(e.priceRange==='low')lowPriceCount+=e._w;
+    if(e.priceRange==='high')highPriceCount+=e._w;
+  });
+  var priceSensitivity=totalWeight>0?(lowPriceCount-highPriceCount)/totalWeight:0;
+  // priceSensitivity: -1 (always expensive) to +1 (always cheap)
+  var priceScore=0.5; // neutral
+  if(optionPrice!=null){
+    var optionPriceRange=tmPriceRange(optionPrice);
+    if(priceSensitivity>0.3){
+      // User prefers cheap → boost low price, penalize high
+      priceScore=optionPriceRange==='low'?0.9:optionPriceRange==='mid'?0.5:0.2;
+    }else if(priceSensitivity<-0.3){
+      // User prefers expensive → slight inverse
+      priceScore=optionPriceRange==='high'?0.7:optionPriceRange==='mid'?0.5:0.4;
+    }
+  }
+
+  // Combine with specified weights
+  var finalPrefScore=modeScore*0.40+timeScore*0.20+distScore*0.15+priceScore*0.25;
+  // Clamp to 0-1
+  return Math.max(0,Math.min(1,finalPrefScore));
+}
+
+// --- Decision Injection ---
+// Adjusts alternative scores with user preference (soft bias only)
+function tmInjectPreference(alternatives){
+  if(!alternatives||alternatives.length<2)return; // need at least 2 to bias
+  var memory=tmLoad();
+  if(memory.length<_TM_MIN_INTERACTIONS)return; // not enough data yet
+
+  var distKm=(_origin&&_dest)?haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon):0;
+
+  // Compute preference score for each alternative
+  alternatives.forEach(function(a){
+    var context={distance:distKm};
+    a._prefScore=computeUserPreferenceScore(a.mode,a.price,context);
+  });
+
+  // SOFT BIAS RULE: Only apply if top 2 scores are within _TM_SOFT_BIAS_THRESHOLD
+  var sorted=alternatives.slice().sort(function(a,b){return a.score-b.score});
+  var best=sorted[0];
+  var second=sorted.length>1?sorted[1]:null;
+
+  if(second&&Math.abs(best.score-second.score)>=_TM_SOFT_BIAS_THRESHOLD){
+    // Clear winner → memory does NOT intervene
+    return;
+  }
+
+  // Inject: finalScore = baseScore * 0.7 + prefScore * 0.3
+  // But only for alternatives that have a meaningful preference score
+  alternatives.forEach(function(a){
+    if(a._prefScore!=null&&a._prefScore>0){
+      a.score=a.score*0.70+a._prefScore*0.30;
+    }
+  });
+}
+
+// ===================== END TEMPORAL MEMORY LAYER =====================
+
 // ===================== INIT =====================
 document.addEventListener('DOMContentLoaded',function(){
   initMap();
@@ -1265,6 +1524,24 @@ function requestRide(mode,url){
   var DOUBLE_TAP_MS=2000;
   if(now-last<DOUBLE_TAP_MS){
     _confirmState[mode]=0;
+    // TEMPORAL MEMORY: record learning event on confirmed action ONLY
+    var ridePrice=null;
+    // Try to find price from current estimations for this mode
+    if(_estimations){
+      _estimations.forEach(function(est){
+        var modeKey=mode.toLowerCase();
+        if(modeKey==='uber'&&est.uberPrice!=null)ridePrice=est.uberPrice;
+        else if(modeKey==='didi'&&est.didiPrice!=null)ridePrice=est.didiPrice;
+        else if(modeKey==='maxim'&&est.maximPrice!=null)ridePrice=est.maximPrice;
+        else if(modeKey==='taxi'&&est.taxiPrice!=null)ridePrice=est.taxiPrice;
+        else if(modeKey==='remis'&&est.remisPrice!=null)ridePrice=est.remisPrice;
+        else if(modeKey==='taxiapp'&&est.taxiappPrice!=null)ridePrice=est.taxiappPrice;
+        else if(modeKey==='uber_moto'&&est.uberMotoPrice!=null)ridePrice=est.uberMotoPrice;
+        else if(modeKey==='didi_moto'&&est.didiMotoPrice!=null)ridePrice=est.didiMotoPrice;
+        else if(modeKey==='bus'&&est.price!=null)ridePrice=est.price;
+      });
+    }
+    tmLearn(mode,ridePrice);
     window.open(url,'_blank');
   }else{
     _confirmState[mode]=now;
@@ -1547,6 +1824,9 @@ function computeRecommendation(){
     // Clamp score to max 1.0
     a.score=Math.min(a.score,1.0);
   });
+
+  // TEMPORAL MEMORY: inject implicit preference bias (invisible, soft only)
+  tmInjectPreference(alternatives);
 
   // Sort by each criterion
   var byPrice=alternatives.slice().sort(function(a,b){return a.price-b.price});

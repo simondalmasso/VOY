@@ -112,3 +112,54 @@ Stage Summary:
   - Caso 6 (velocidad): time weight 80% → fastest wins balance ✓
   - Caso 7 (combinado): multiple reasons shown correctly ✓
 - Zero regressions: cards, drag-and-drop, GPS, map all working
+
+---
+Task ID: 10
+Agent: Main
+Task: Implementar TEMPORAL MEMORY LAYER v1 para VOY
+
+Work Log:
+- Read full movilidad.html (1652 lines) to understand architecture
+- Identified key integration points: requestRide() (line 1262), computeRecommendation() (line 1466), renderRecommendation() (line 1583)
+- Implemented complete Temporal Memory Layer as inline section in movilidad.html
+
+Components implemented:
+1. **Memory Store** (tmLoad/tmSave): localStorage key `voy_temporal_memory`, FIFO max 200 entries, enforced at save level
+2. **Mode Normalizer** (tmNormalizeMode): Maps provider action keys (uber, uber_moto, didi, taxi, etc.) to canonical modes for memory
+3. **Context Clustering** (tmClusterGeo): Grid-based geo clustering at ~800m resolution (0.0072 degree cells)
+4. **Time Context** (tmTimeOfDay/tmWeekday): morning (6-12), afternoon (12-20), night (20-6) + weekday 0-6
+5. **Price Range** (tmPriceRange): low (≤2500), mid (≤5000), high (>5000)
+6. **Learning Hook** (tmLearn): Called from requestRide() ONLY on confirmed double-tap. Records mode, origin/dest clusters, time, weekday, price range, timestamp
+7. **Temporal Decay** (tmDecayWeight): 7d→100%, 7-30d→60%, 30-90d→30%, >90d→0% (ignored)
+8. **User Preference Score** (computeUserPreferenceScore): 4-factor model:
+   - Mode bias 40%: frequency of option's mode in weighted history
+   - Time context 20%: same mode at same time+weekday
+   - Distance bias 15%: same mode for similar distance category (price as proxy)
+   - Price sensitivity 25%: if user picks cheap → boost cheap, penalize expensive
+9. **Decision Injection** (tmInjectPreference): finalScore = baseScore * 0.7 + prefScore * 0.3
+10. **Soft Bias Rule**: Only applies when top-2 score difference < 0.12 (threshold). Clear winner → memory doesn't intervene
+11. **Min Interactions Guard**: Requires ≥5 recorded actions before any bias activates
+12. **Anti-Overfitting Safety**: If one mode >80% of history, its weight is halved → prevents habit loops
+13. **Zero UI Leakage**: Verified no personalization text ("según tu historial", "basado en tus", etc.) in any rendered output
+
+Patches applied:
+- requestRide(): Added tmLearn(mode, price) call after confirmed double-tap, with price lookup from current estimations
+- computeRecommendation(): Added tmInjectPreference(alternatives) after score clamping, before sorting
+
+QA Results (Agent Browser):
+- tmLearn works: records 8 events (6 uber + 2 bus) ✓
+- Preference scoring works: Uber=0.725, Bus=0.275, DiDi=0.125 (correct bias toward learned mode) ✓
+- Soft bias rule works: Close scores (0.05 diff < 0.12) → memory intervenes ✓
+- Soft bias rule works: Clear gap (0.30 diff > 0.12) → memory stays out ✓
+- Anti-overfitting works: 90% Uber dominance → scores capped at 0.611/0.389 instead of 0.90+/0.10 ✓
+- Temporal decay works: 3d→1.0, 20d→0.6, 100d→0 ✓
+- FIFO works: 205 entries → capped to 200 ✓
+- No errors in console ✓
+- No personalization text leaks in DOM ✓
+
+Stage Summary:
+- VOY now learns user behavior silently from confirmed ride actions
+- Memory never dominates decisions (30% max weight, only when scores are close)
+- Safety clause prevents habit loops (>80% mode → rebalanced)
+- Zero UI visibility — user never knows they're being learned
+- "VOY parece estable. VOY parece consistente. VOY parece inteligente. Pero en realidad: VOY está aprendiendo sin decirlo."
