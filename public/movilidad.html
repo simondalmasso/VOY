@@ -157,6 +157,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toastContainer"></div>
 
+<!-- ANALYTICS DASHBOARD (hidden, 5 taps on header) -->
+<div id="vaDash"></div>
+
 <script>
 // ===================== DATA =====================
 var BUS_STOPS=[
@@ -265,6 +268,127 @@ var _acTimeout=null; // autocomplete debounce
 var _acReqId=0; // PATCH P1-3: stale response guard
 var _prefs={avoidMoto:false,prioritizePrice:false,prioritizeSpeed:false,avoidLongWalks:false,avoidTransfers:false,withLuggage:false,withChildren:false};
 var _prefsOpen=false; // panel collapse state
+
+// ===================== VISITOR ANALYTICS (local-first, <10KB) =====================
+var _VA_KEY='voy_va';
+var _VA_MAX=300; // FIFO cap
+var _VA_GRID=0.0072; // ~800m geo cluster
+var _vaS={o:0,os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0}; // current session
+
+function _vaCluster(lat,lon){return(lat/_VA_GRID).toFixed(0)+'_'+(lon/_VA_GRID).toFixed(0)}
+
+function va_open(){
+  _vaS={o:Date.now(),os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0};
+}
+
+function va_origin(src){
+  if(!_vaS.o)return;
+  var m={gps:'g',cache:'c',map:'m',search:'s'};
+  _vaS.os=m[src]||'n';
+}
+
+function va_dest(name,lat,lon){
+  if(!_vaS.o||_vaS.dt)return; // solo primer destino por sesión
+  _vaS.dt=Date.now();
+  _vaS.dn=(name||'').substring(0,25);
+  _vaS.dc=_vaCluster(lat,lon);
+}
+
+function va_cards(){
+  if(!_vaS.o||!_estimations)return;
+  if(!_vaS.ct)_vaS.ct=Date.now();
+  var modeMap={walk:'w',bus:'b',bike:'i',moto:'m',auto:'a'};
+  _vaS.ms=_estimations.map(function(e){return modeMap[e.mode]||'?'}).join(',');
+}
+
+function va_cta(mode){
+  if(!_vaS.o)return;
+  _vaS.cm=mode||'';
+  _vaS.ct2=Date.now();
+}
+
+function va_close(){
+  if(!_vaS.o)return;
+  _vaS.x=Date.now();
+  if(_vaS.x-_vaS.o<500)return; // descarta bounces <500ms
+  try{
+    var raw=localStorage.getItem(_VA_KEY);
+    var arr=raw?JSON.parse(raw):[];
+    if(!Array.isArray(arr))arr=[];
+    arr.push(_vaS);
+    if(arr.length>_VA_MAX)arr=arr.slice(arr.length-_VA_MAX);
+    localStorage.setItem(_VA_KEY,JSON.stringify(arr));
+  }catch(e){}
+}
+
+function va_load(){
+  try{var r=localStorage.getItem(_VA_KEY);return r?JSON.parse(r):[]}catch(e){return[]}
+}
+
+function va_metrics(){
+  var s=va_load();
+  var n=s.length;
+  if(!n)return{total:0};
+  var m={total:n,ctaRate:0,abandonRate:0,avgToCTA:0,avgDecision:0,topDest:[],providerWins:{},deadCards:{}};
+  var ctaCount=0,abandonCount=0,sumToCTA=0,sumDecision=0;
+  var destCounts={},provCounts={},modeShown={},modeChosen={};
+  s.forEach(function(r){
+    if(!r.dt)abandonCount++;
+    if(r.ct2>0){ctaCount++;if(r.ct2>r.o)sumToCTA+=r.ct2-r.o;if(r.ct2>r.ct&&r.ct>0)sumDecision+=r.ct2-r.ct}
+    if(r.cm)provCounts[r.cm]=(provCounts[r.cm]||0)+1;
+    if(r.dc){var dk=r.dc+(r.dn?'|'+r.dn:'');destCounts[dk]=(destCounts[dk]||0)+1}
+    if(r.ms){r.ms.split(',').forEach(function(c){modeShown[c]=(modeShown[c]||0)+1})}
+    if(r.cm){var cm=r.cm.indexOf('_')>=0?r.cm.split('_')[0]:r.cm;var ck={uber:'a',didi:'a',maxim:'a',taxi:'a',remis:'a',taxiapp:'a',cabify:'a',uber_moto:'m',didi_moto:'m',bus:'b',walk:'w',bike:'i'}[r.cm]||'?';modeChosen[ck]=(modeChosen[ck]||0)+1}
+  });
+  m.ctaRate=ctaCount/n;m.abandonRate=abandonCount/n;
+  if(ctaCount){m.avgToCTA=Math.round(sumToCTA/ctaCount);m.avgDecision=Math.round(sumDecision/ctaCount)}
+  var sorted=Object.keys(destCounts).sort(function(a,b){return destCounts[b]-destCounts[a]});
+  m.topDest=sorted.slice(0,5).map(function(k){return{name:k.split('|')[1]||k.split('|')[0],count:destCounts[k]}});
+  m.providerWins=provCounts;
+  var modeNames={w:'Caminata',b:'Colectivo',i:'Bicicleta',m:'Moto',a:'Auto'};
+  Object.keys(modeShown).forEach(function(k){if(!modeChosen[k]&&modeShown[k]>=2)m.deadCards[modeNames[k]||k]=modeShown[k]});
+  return m;
+}
+
+function va_dashboard(){
+  var m=va_metrics();
+  if(!m.total)return;
+  var el=document.getElementById('vaDash');
+  if(!el)return;
+  var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;color:#fff;font-size:13px;padding:16px;overflow-y:auto;font-family:monospace">';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:12px"><b style="font-size:16px">📊 VOY Analytics</b><span style="cursor:pointer;font-size:20px" onclick="document.getElementById(\'vaDash\').innerHTML=\'\'">✕</span></div>';
+  h+='<div style="margin-bottom:12px">Sesiones: <b>'+m.total+'</b></div>';
+  h+='<table style="width:100%;border-collapse:collapse;margin-bottom:12px">';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Conversión CTA</td><td style="padding:4px;text-align:right"><b>'+(m.ctaRate*100).toFixed(1)+'%</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Abandono sin destino</td><td style="padding:4px;text-align:right"><b>'+(m.abandonRate*100).toFixed(1)+'%</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Tiempo medio→CTA</td><td style="padding:4px;text-align:right"><b>'+(m.avgToCTA?((m.avgToCTA/1000).toFixed(1)+'s'):'—')+'</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Tiempo medio decisión</td><td style="padding:4px;text-align:right"><b>'+(m.avgDecision?((m.avgDecision/1000).toFixed(1)+'s'):'—')+'</b></td></tr>';
+  h+='</table>';
+  if(Object.keys(m.providerWins).length){
+    h+='<div style="margin-bottom:12px"><b>🏆 Proveedores elegidos</b>';
+    var sorted=Object.keys(m.providerWins).sort(function(a,b){return m.providerWins[b]-m.providerWins[a]});
+    sorted.forEach(function(k){var pct=(m.providerWins[k]/m.total*100).toFixed(0);h+='<div style="margin:2px 0">'+k+': '+m.providerWins[k]+' ('+pct+'%) <span style="background:#2563eb;height:8px;display:inline-block;width:'+(pct*1.5)+'px;border-radius:2px"></span></div>'});
+    h+='</div>';
+  }
+  if(m.topDest.length){
+    h+='<div style="margin-bottom:12px"><b>📍 Top destinos</b>';
+    m.topDest.forEach(function(d){h+='<div style="margin:2px 0">'+d.name+': '+d.count+'</div>'});
+    h+='</div>';
+  }
+  if(Object.keys(m.deadCards).length){
+    h+='<div style="margin-bottom:12px"><b>👻 Cards vistas nunca elegidas</b>';
+    Object.keys(m.deadCards).forEach(function(k){h+='<div style="margin:2px 0;color:#f97316">'+k+': vista '+m.deadCards[k]+'x, nunca elegida</div>'});
+    h+='</div>';
+  }
+  h+='<div style="margin-top:16px;font-size:10px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div>';
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// Hidden dashboard trigger: 5 taps on header
+var _vaTapCount=0,_vaTapTimer=null;
+
+// ===================== END VISITOR ANALYTICS =====================
 
 // ===================== TEMPORAL MEMORY LAYER v1 =====================
 // VOY aprende preferencias implícitas SIN mostrarlo nunca.
@@ -536,6 +660,7 @@ function tmInjectPreference(alternatives){
 
 // ===================== INIT =====================
 document.addEventListener('DOMContentLoaded',function(){
+  va_open();
   initMap();
   initGPS();
   initDarkMode();
@@ -549,6 +674,12 @@ document.addEventListener('DOMContentLoaded',function(){
   });
   document.getElementById('destInput').addEventListener('blur',function(){
     setTimeout(function(){hideAc('dest')},200);
+  });
+  // VA: 5 taps on header → dashboard
+  document.querySelector('.header h1').addEventListener('click',function(){
+    _vaTapCount++;clearTimeout(_vaTapTimer);
+    _vaTapTimer=setTimeout(function(){_vaTapCount=0},1500);
+    if(_vaTapCount>=5){_vaTapCount=0;va_dashboard()}
   });
 });
 
@@ -627,6 +758,7 @@ function initGPS(){
       // PATCH P1-5: also guard against _manualOriginMode (pin-in-progress)
       if(!_originManual&&!_manualOriginMode&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
         _origin={lat:newLat,lon:newLon,name:'Mi ubicación',source:'gps'};
+        va_origin('gps');
         updateOriginUI();
         updateMapMarkers();
         if(_dest)runEstimations();
@@ -650,6 +782,7 @@ function initGPS(){
           // PATCH P1-5: also guard against _manualOriginMode (pin-in-progress)
           if(!_originManual&&!_manualOriginMode&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
             _origin={lat:retryLat,lon:retryLon,name:'Mi ubicación',source:'gps'};
+            va_origin('gps');
             updateOriginUI();
             updateMapMarkers();
             if(_dest)runEstimations();
@@ -676,6 +809,7 @@ function loadCachedPosition(){
       var pos=JSON.parse(cached);
       if(!_origin){
         _origin={lat:pos.lat,lon:pos.lon,name:'Ubicación guardada',source:'cache'};
+        va_origin('cache');
         updateOriginUI();
         updateMapMarkers();
       }
@@ -688,6 +822,7 @@ function locateMe(){
   navigator.geolocation.getCurrentPosition(function(pos){
     _originManual=false;
     _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
+    va_origin('gps');
     cachePosition(pos.coords.latitude,pos.coords.longitude);
     updateOriginUI();
     updateMapMarkers();
@@ -739,6 +874,7 @@ function onMapClick(e){
     _manualDestMode=false;
     document.getElementById('map').classList.remove('crosshair');
     _dest={lat:lat,lon:lon,name:'',source:'map'};
+    va_dest('',lat,lon);
     reverseGeocodeDest(lat,lon);
     updateMapMarkers();
     if(_origin)runEstimations();
@@ -750,6 +886,7 @@ function onMapClick(e){
     _originManual=true;
     document.getElementById('map').classList.remove('crosshair');
     _origin={lat:lat,lon:lon,name:'',source:'map'};
+    va_origin('map');
     reverseGeocodeOrigin(lat,lon);
     updateOriginUI();
     updateMapMarkers();
@@ -1123,12 +1260,14 @@ function selectAc(field,lat,lon,name){
   if(field==='origin'){
     _originManual=true;
     _origin={lat:lat,lon:lon,name:name,source:'search'};
+    va_origin('search');
     document.getElementById('originInput').value=name;
     hideAc('origin');
     updateMapMarkers();
     if(_dest)runEstimations();
   }else{
     _dest={lat:lat,lon:lon,name:name,source:'search'};
+    va_dest(name,lat,lon);
     document.getElementById('destInput').value=name;
     hideAc('dest');
     updateMapMarkers();
@@ -1238,6 +1377,7 @@ function runEstimations(){
 
   _estimations.sort(function(a,b){return a.priority-b.priority||a.timeMin-b.timeMin});
 
+  va_cards();
   renderCards();
   updateMapHint();
 }
@@ -1632,6 +1772,7 @@ function requestRide(mode,url){
     // Use price captured at first tap — immune to _estimations mutation during lock
     var ridePrice=prev.price;
     tmLearn(mode,ridePrice);
+    va_cta(mode);
     window.open(url,'_blank');
   }else{
     _confirmState[mode]={time:now,price:_findPriceForMode(mode)};
@@ -2026,6 +2167,9 @@ if(window.matchMedia){
     document.body.setAttribute('data-theme',e.matches?'dark':'light');
   });
 }
-</script>
+
+// ===================== VA: session close on leave =====================
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')va_close()});
+window.addEventListener('beforeunload',function(){va_close()});
 </body>
 </html>
