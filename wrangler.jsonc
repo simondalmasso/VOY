@@ -41,13 +41,16 @@
   },
 
   // Cloudflare Analytics Engine — event_spec v1.4 transport.
-  // Dataset "voy_metrics". Provision in dashboard: Analytics & Logs →
-  // Analytics Engine → create dataset "voy_metrics", then bind here.
-  // If the binding is absent at runtime, worker.js acknowledges events
-  // with 202 (fire-and-forget) so the app never breaks.
-  "analytics_engine_datasets": [
-    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
-  ],
+  // V7.1: TEMPORARILY DISABLED. Deploy failed with code 10089 — Analytics Engine
+  // must be enabled in the CF dashboard first:
+  //   https://dash.cloudflare.com/<account>/workers/analytics-engine
+  // The worker.js code handles a missing VOY_METRICS binding gracefully (returns
+  // 202 "analytics_unavailable" — app works, events just aren't persisted).
+  // TO RE-ENABLE: (1) enable Analytics Engine in dashboard, (2) uncomment the
+  // block below, (3) ./scripts/deploy.sh
+  // "analytics_engine_datasets": [
+  //   { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
+  // ],
 
   "observability": {
     "enabled": true,

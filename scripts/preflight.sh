@@ -23,6 +23,7 @@ cd "$(dirname "$0")/.."
 PASS=0; FAIL=0
 ok()  { printf "  ✅ %s\n" "$1"; PASS=$((PASS+1)); }
 bad() { printf "  ❌ %s\n" "$1"; FAIL=$((FAIL+1)); }
+warn() { printf "  ⚠️  %s\n" "$1"; }
 hdr() { printf "\n── %s ──\n" "$1"; }
 
 printf "VOY V7 preflight — proving local bundle is deploy-ready\n"
@@ -74,7 +75,7 @@ done
 hdr "5. wrangler.jsonc config"
 if grep -q '"voy-app"' wrangler.jsonc; then ok "worker name = voy-app"; else bad "worker name not voy-app"; fi
 if grep -q '"ASSETS"' wrangler.jsonc; then ok "ASSETS binding present"; else bad "ASSETS binding missing"; fi
-if grep -q '"VOY_METRICS"' wrangler.jsonc; then ok "VOY_METRICS binding present"; else bad "VOY_METRICS binding missing"; fi
+if grep -q '"VOY_METRICS"' wrangler.jsonc; then ok "VOY_METRICS binding present"; else warn "VOY_METRICS binding disabled (enable Analytics Engine in CF dashboard to re-add)"; fi
 if grep -q '"not_found_handling": "none"' wrangler.jsonc; then ok "not_found_handling = none (no directory listing)"; else bad "not_found_handling not set"; fi
 
 # ── 6. Lint ─────────────────────────────────────────────────
