@@ -1062,6 +1062,53 @@
     };
   }
 
+  // ---- V6 Fare Engine: per-provider confidence + surge logic ----
+  // fare_engine_v2.json: uber 0.85 (dynamic), didi 0.88 (semi_dynamic), maxim 0.75 (fixed_or_scheduled)
+  var V6_PROVIDER_CONFIDENCE = {
+    uber: 0.85,
+    didi: 0.88,
+    maxim: 0.75,
+    taxi: 0.82,
+    remis: 0.78
+  };
+  function v6FareConfidence(provider, distanceKm, timeMin) {
+    var base = V6_PROVIDER_CONFIDENCE[provider] || 0.80;
+    // Distance decay: longer routes = slightly less predictable
+    var distFactor = Math.max(0.92, 1 - distanceKm / 60);
+    // Time decay
+    var timeFactor = Math.max(0.94, 1 - timeMin / 120);
+    var conf = base * distFactor * timeFactor;
+    return Math.round(Math.min(0.95, Math.max(0.55, conf)) * 100) / 100;
+  }
+  // Surge: night hours (22-06) trigger multiplier. Conservative range (1.0-1.3).
+  // Full 2.5x requires rain/demand data we don't have; night is the reliable signal.
+  function v6SurgeMultiplier(provider) {
+    var hour = new Date().getHours();
+    var isNight = hour >= 22 || hour < 6;
+    if (!isNight) return 1.0;
+    // Dynamic providers surge more; fixed/scheduled less
+    if (provider === 'uber') return 1.3;
+    if (provider === 'didi') return 1.2;
+    if (provider === 'maxim') return 1.1;
+    if (provider === 'taxi') return 1.25; // nocturno tariff
+    if (provider === 'remis') return 1.15;
+    return 1.0;
+  }
+  function v6SurgeLabel(provider) {
+    var m = v6SurgeMultiplier(provider);
+    if (m > 1.0) return 'Hora pico';
+    return '';
+  }
+  // V6 fare range with surge-aware spread
+  function v6FareRange(price, confidence, surgeMultiplier) {
+    var baseSpread = (1 - confidence) * 0.25;
+    var surge = surgeMultiplier || 1.0;
+    return {
+      low: Math.round(price * (1 - baseSpread)),
+      high: Math.round(price * surge * (1 + baseSpread))
+    };
+  }
+
   // ---- Ranked search: favorites → recents → home/work → local → (remote by caller) ----
   async function v5SearchLocalRanked(query, gpsOrigin) {
     var q = MobilityEngine.normalize(query || '').trim();
@@ -1214,6 +1261,10 @@
     v5EraseAll: v5EraseAll,
     v5FareConfidence: v5FareConfidence,
     v5FareRange: v5FareRange,
+    v6FareConfidence: v6FareConfidence,
+    v6SurgeMultiplier: v6SurgeMultiplier,
+    v6SurgeLabel: v6SurgeLabel,
+    v6FareRange: v6FareRange,
     v5SearchLocalRanked: v5SearchLocalRanked,
     v5NewSessionToken: v5NewSessionToken,
     v5GetSessionToken: v5GetSessionToken

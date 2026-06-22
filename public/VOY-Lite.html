@@ -20,57 +20,56 @@ Constraints honored:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover">
-<meta name="theme-color" content="#F5F5F7">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="description" content="VOY — Asistente de movilidad urbana para Santa Fe. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="core/mobilityEngine.js?v=6"></script>
-<script src="ui/mobilityController.js?v=6"></script>
+<script src="core/mobilityEngine.js?v=7"></script>
+<script src="ui/mobilityController.js?v=7"></script>
 <style>
 /* ============================================================
-   VOY V5 — PREMIUM MINIMAL (no glass)
+   VOY V6 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
+   Typography: Inter
+   No shadows — borders + spacing only
    Map: ambient full-bleed, opacity 1, native gestures
    Search: floating centered persistent
    Sheet: bottom spring slide-up
    Icons: SVG only (no emojis)
    ============================================================ */
 :root{
-  --bg:#F5F5F7;--surface:#FFFFFF;--surface2:#FFFFFF;--bg3:#E5E5EA;
-  --text:#111111;--text2:#6E6E73;--text3:#8E8E93;
-  --primary:#007AFF;--success:#34C759;--red:#FF3B30;--orange:#FF9500;--yellow:#FFCC00;
-  --border:rgba(0,0,0,0.08);--border-subtle:rgba(0,0,0,0.05);
+  --bg:#FFFFFF;--surface:#FFFFFF;--surface2:#F5F5F5;--bg3:#F5F5F5;
+  --text:#0B0B0B;--text2:#6B6B6B;--text3:#9B9B9B;
+  --accent:#000000;--primary:#007AFF;--success:#34C759;--red:#FF3B30;--orange:#FF9500;--yellow:#FFCC00;
+  --border:rgba(0,0,0,0.08);--border-subtle:rgba(0,0,0,0.05);--border-strong:rgba(0,0,0,0.12);
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:32px;
-  --radius-card:20px;--radius-button:16px;--radius-input:14px;--radius-sm:10px;--radius-xs:8px;
+  --radius-card:20px;--radius-button:14px;--radius-input:14px;--radius-sm:10px;--radius-xs:8px;
   --font-display:30px;--font-title:17px;--font-body:15px;--font-caption:13px;--font-micro:11px;
   --fw-display:800;--fw-title:700;--fw-body:500;--fw-bold:600;
-  --shadow-sm:0 1px 2px rgba(0,0,0,0.04),0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md:0 4px 16px rgba(0,0,0,0.08),0 1px 4px rgba(0,0,0,0.04);
-  --shadow-lg:0 12px 40px rgba(0,0,0,0.12),0 4px 12px rgba(0,0,0,0.06);
-  --shadow-sheet:0 -8px 32px rgba(0,0,0,0.10),0 -2px 8px rgba(0,0,0,0.04);
-  --header-bg:rgba(245,245,247,0.92);
-  --footer-bg:rgba(245,245,247,0.96);
-  --top-scrim:linear-gradient(180deg,rgba(245,245,247,0.92) 0%,rgba(245,245,247,0.55) 60%,rgba(245,245,247,0) 100%);
+  --header-bg:rgba(255,255,255,0.92);
+  --footer-bg:rgba(255,255,255,0.96);
+  --top-scrim:linear-gradient(180deg,rgba(255,255,255,0.92) 0%,rgba(255,255,255,0.55) 60%,rgba(255,255,255,0) 100%);
   --ease-spring:320ms cubic-bezier(0.22,1.2,0.36,1);
   --ease-out:200ms cubic-bezier(0.22,0.61,0.36,1);
   --ease-sheet:380ms cubic-bezier(0.22,1.1,0.36,1);
 }
 [data-theme="dark"]{
-  --bg:#000000;--surface:#1C1C1E;--surface2:#2C2C2E;--bg3:#2C2C2E;
-  --text:#F2F2F7;--text2:#98989F;--text3:#636366;
-  --border:rgba(255,255,255,0.10);--border-subtle:rgba(255,255,255,0.06);
+  --bg:#000000;--surface:#0A0A0A;--surface2:#1A1A1A;--bg3:#1A1A1A;
+  --text:#F5F5F5;--text2:#999999;--text3:#666666;
+  --accent:#FFFFFF;--primary:#0A84FF;--success:#30D158;--red:#FF453A;--orange:#FF9F0A;
+  --border:rgba(255,255,255,0.10);--border-subtle:rgba(255,255,255,0.06);--border-strong:rgba(255,255,255,0.15);
   --header-bg:rgba(0,0,0,0.92);--footer-bg:rgba(0,0,0,0.96);
   --top-scrim:linear-gradient(180deg,rgba(0,0,0,0.92) 0%,rgba(0,0,0,0.55) 60%,rgba(0,0,0,0) 100%);
-  --shadow-sm:0 1px 2px rgba(0,0,0,0.3),0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md:0 4px 16px rgba(0,0,0,0.5),0 1px 4px rgba(0,0,0,0.3);
-  --shadow-lg:0 12px 40px rgba(0,0,0,0.65),0 4px 12px rgba(0,0,0,0.4);
-  --shadow-sheet:0 -8px 32px rgba(0,0,0,0.6),0 -2px 8px rgba(0,0,0,0.35);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;height:100%}
 body{
-  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Helvetica,Arial,'Segoe UI',Roboto,sans-serif;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Helvetica,Arial,'Segoe UI',Roboto,sans-serif;
   background:var(--bg);color:var(--text);font-size:var(--font-body);
   min-height:100dvh;display:flex;flex-direction:column;
   -webkit-tap-highlight-color:transparent;letter-spacing:-0.01em;
@@ -103,8 +102,8 @@ button{font-family:inherit;letter-spacing:inherit}
 }
 .search-bar{
   position:relative;display:flex;align-items:center;gap:var(--sp-2);
-  background:var(--surface);border:0.5px solid var(--border);
-  border-radius:var(--radius-card);box-shadow:var(--shadow-md);
+  background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:var(--radius-card);
   padding:var(--sp-2) var(--sp-3);min-height:56px;
 }
 .search-bar .sb-icon{color:var(--text3);flex-shrink:0;display:flex;align-items:center}
@@ -127,8 +126,8 @@ button{font-family:inherit;letter-spacing:inherit}
 /* Origin pill — shows GPS origin, tap to recenter */
 .origin-pill{
   display:none;align-items:center;gap:var(--sp-2);margin:var(--sp-2) var(--sp-4) 0;
-  padding:8px 12px;background:var(--surface);border:0.5px solid var(--border-subtle);
-  border-radius:999px;box-shadow:var(--shadow-sm);width:fit-content;max-width:calc(100% - 32px);
+  padding:8px 12px;background:var(--surface);border:1px solid var(--border);
+  border-radius:999px;width:fit-content;max-width:calc(100% - 32px);
   cursor:pointer;transition:transform var(--ease-out);min-height:36px;
 }
 .origin-pill.show{display:flex}
@@ -140,8 +139,8 @@ button{font-family:inherit;letter-spacing:inherit}
 /* === SEARCH DROPDOWN === */
 .search-dropdown{
   position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:30;
-  background:var(--surface);border:0.5px solid var(--border);
-  border-radius:var(--radius-card);box-shadow:var(--shadow-lg);overflow:hidden;
+  background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:var(--radius-card);overflow:hidden;
   max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
 }
 .search-dropdown.hidden{display:none}
@@ -172,7 +171,7 @@ button{font-family:inherit;letter-spacing:inherit}
 .chip{
   display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
   padding:8px 14px;border-radius:999px;background:var(--surface);
-  border:0.5px solid var(--border-subtle);box-shadow:var(--shadow-sm);
+  border:1px solid var(--border);
   font-size:var(--font-caption);font-weight:var(--fw-bold);color:var(--text);
   cursor:pointer;min-height:36px;transition:transform var(--ease-out);
   -webkit-tap-highlight-color:transparent;white-space:nowrap;
@@ -190,7 +189,8 @@ button{font-family:inherit;letter-spacing:inherit}
 .sheet-wrap{padding:0 var(--sp-4);padding-bottom:var(--sp-3)}
 .sheet{
   background:var(--surface);border-radius:var(--radius-card) var(--radius-card) 0 0;
-  box-shadow:var(--shadow-sheet);padding:var(--sp-4);
+  border:1px solid var(--border-strong);border-bottom:none;
+  padding:var(--sp-4);
   padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
   animation:sheetIn var(--ease-sheet) both;
 }
@@ -230,18 +230,17 @@ button{font-family:inherit;letter-spacing:inherit}
 .conf-badge.high{color:var(--success);background:rgba(52,199,89,0.12)}
 .conf-badge.mid{color:var(--orange);background:rgba(255,149,0,0.12)}
 
-/* Primary CTA */
+/* Primary CTA — corporate minimal black (Uber/Linear) */
 .cta-primary{
   display:flex;align-items:center;justify-content:center;gap:8px;
-  width:100%;background:var(--success);color:#fff;border:none;border-radius:var(--radius-button);
+  width:100%;background:var(--accent);color:var(--bg);border:none;border-radius:var(--radius-button);
   padding:0 24px;height:52px;min-height:52px;font-size:var(--font-body);
   font-weight:var(--fw-title);cursor:pointer;letter-spacing:-0.01em;
-  box-shadow:0 4px 14px rgba(52,199,89,0.32);
-  transition:transform var(--ease-out),box-shadow var(--ease-out);
+  transition:transform var(--ease-out),opacity var(--ease-out);
   margin-top:var(--sp-3);
 }
-.cta-primary:active{transform:scale(0.97);box-shadow:0 2px 8px rgba(52,199,89,0.28)}
-.cta-primary[disabled]{background:var(--bg3);color:var(--text3);box-shadow:none;cursor:not-allowed}
+.cta-primary:active{transform:scale(0.97);opacity:0.85}
+.cta-primary[disabled]{background:var(--bg3);color:var(--text3);cursor:not-allowed}
 
 /* More options accordion */
 .more-opts{margin-top:var(--sp-4);border-top:0.5px solid var(--border-subtle);padding-top:var(--sp-3)}
@@ -329,9 +328,11 @@ button{cursor:pointer}
   padding:var(--sp-2) var(--sp-4);
   padding-bottom:calc(var(--sp-2) + env(safe-area-inset-bottom,0px));
   text-align:center;letter-spacing:-0.01em;
-  border-top:0.5px solid var(--border-subtle);
+  border-top:1px solid var(--border-subtle);
   margin-top:auto;
+  display:flex;align-items:center;justify-content:center;gap:5px;
 }
+.footer-mark{display:inline-flex;align-items:center;color:var(--text2)}
 
 /* === DEEP-LINK CONFIRMATION DIALOG === */
 .dialog-overlay{
@@ -342,9 +343,10 @@ button{cursor:pointer}
 .dialog-overlay.show{opacity:1;pointer-events:auto}
 .dialog{
   background:var(--surface);border-radius:var(--radius-card) var(--radius-card) 0 0;
+  border:1px solid var(--border-strong);border-bottom:none;
   width:100%;max-width:560px;padding:var(--sp-5);
   padding-bottom:calc(var(--sp-5) + env(safe-area-inset-bottom,0px));
-  box-shadow:var(--shadow-lg);transform:translateY(100%);
+  transform:translateY(100%);
   transition:transform var(--ease-spring);
 }
 .dialog-overlay.show .dialog{transform:translateY(0)}
@@ -360,15 +362,15 @@ button{cursor:pointer}
 }
 .dg-cancel:active{transform:scale(0.97)}
 .dg-confirm{
-  flex:1;background:var(--success);color:#fff;border:none;border-radius:var(--radius-button);
+  flex:1;background:var(--accent);color:var(--bg);border:none;border-radius:var(--radius-button);
   height:48px;min-height:48px;font-size:var(--font-body);font-weight:var(--fw-title);cursor:pointer;
-  transition:transform var(--ease-out);
+  transition:transform var(--ease-out),opacity var(--ease-out);
 }
-.dg-confirm:active{transform:scale(0.97)}
+.dg-confirm:active{transform:scale(0.97);opacity:0.85}
 
 /* === TOAST === */
 .toast-container{position:fixed;top:calc(76px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:9500;display:flex;flex-direction:column;gap:var(--sp-2);pointer-events:none;width:calc(100vw - 32px);max-width:440px}
-.toast{padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-button);font-size:var(--font-body);font-weight:var(--fw-bold);color:#fff;animation:toastIn 280ms cubic-bezier(0.22,1.2,0.36,1);pointer-events:auto;text-align:center;letter-spacing:-0.01em;box-shadow:var(--shadow-lg)}
+.toast{padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-button);font-size:var(--font-body);font-weight:var(--fw-bold);color:#fff;animation:toastIn 280ms cubic-bezier(0.22,1.2,0.36,1);pointer-events:auto;text-align:center;letter-spacing:-0.01em;border:1px solid rgba(255,255,255,0.15)}
 .toast.info{background:rgba(0,122,255,0.96)}
 .toast.success{background:rgba(52,199,89,0.96)}
 .toast.error{background:rgba(255,59,48,0.96)}
@@ -430,7 +432,7 @@ button{cursor:pointer}
 </div>
 
 <!-- FOOTER (sticky bottom) -->
-<footer class="footer">VOY · Movilidad Santa Fe · Datos informativos</footer>
+<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos</footer>
 
 <!-- DEEP-LINK CONFIRMATION DIALOG -->
 <div class="dialog-overlay" id="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="dgTitle">
@@ -438,7 +440,7 @@ button{cursor:pointer}
     <div class="dg-icon" id="dgIcon"></div>
     <div class="dg-title" id="dgTitle">Abrir aplicación externa</div>
     <div class="dg-provider" id="dgProvider"></div>
-    <div class="dg-msg">Salís de VOY y abrís una app externa. El precio y el servicio los define el proveedor, no VOY.</div>
+    <div class="dg-msg">Vas a salir de VOY. El servicio y el precio final dependen del proveedor externo, no de VOY.</div>
     <div class="dg-actions">
       <button class="dg-cancel" id="dgCancel">Cancelar</button>
       <button class="dg-confirm" id="dgConfirm">Continuar</button>
@@ -672,6 +674,9 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('sbMapBtn').innerHTML=svg('mapPin',22);
   document.getElementById('sbLocateBtn').innerHTML=svg('locate',22);
   document.getElementById('dgIcon').innerHTML=svg('external',32);
+  // VOY chevron brand mark in footer
+  var fm=document.querySelector('.footer-mark');
+  if(fm)fm.innerHTML='<svg width="12" height="12" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 24 32 L 60 92 L 96 32 L 60 56 Z"/></svg>';
 
   MC.init({busStops:BUS_STOPS,bikeStations:BIKE_STATIONS,landmarks:LANDMARKS,fareRegistry:FareRegistry,providers:PROVIDERS,recentKey:'voy_recent_searches',favsKey:'voy_favorites',favMetricsKey:'voy_fav_metrics'});
   MC.loadMemory();
@@ -1076,9 +1081,13 @@ function renderSheet(){
   if(!hero&&alts.length)hero=alts.shift();
 
   var distKm=autoEst.distance||0;
-  var confidence=MC.v5FareConfidence(distKm,hero?hero.timeMin:0);
+  // V6: per-provider confidence (uber 0.85, didi 0.88, maxim 0.75) + surge label
+  var heroProvider=hero?hero.id:'didi';
+  var confidence=MC.v6FareConfidence(heroProvider,distKm,hero?hero.timeMin:0);
   var confClass=confidence>=0.8?'high':confidence>=0.65?'mid':'';
-  var fareRange=hero?MC.v5FareRange(hero.price,confidence):{low:0,high:0};
+  var surgeLabel=MC.v6SurgeLabel(heroProvider);
+  var surgeMult=MC.v6SurgeMultiplier(heroProvider);
+  var fareRange=hero?MC.v6FareRange(hero.price,confidence,surgeMult):{low:0,high:0};
 
   var h='';
   // Sheet head: route summary + save favorite
@@ -1098,7 +1107,7 @@ function renderSheet(){
     h+='<div class="hero-color" style="background:'+(PROVIDERS[hero.id]?PROVIDERS[hero.id].color:'#666')+'"></div>';
     h+='<div class="hero-info">';
     h+='<div class="hero-name">'+escapeHtml(hero.name)+'</div>';
-    h+='<div class="hero-meta">'+formatMin(hero.timeMin)+' · '+distKm.toFixed(1)+' km · <span class="conf-badge '+confClass+'">Confianza '+Math.round(confidence*100)+'%</span></div>';
+    h+='<div class="hero-meta">'+formatMin(hero.timeMin)+' · '+distKm.toFixed(1)+' km · <span class="conf-badge '+confClass+'">Confianza '+Math.round(confidence*100)+'%</span>'+(surgeLabel?' <span class="conf-badge mid">'+escapeHtml(surgeLabel)+'</span>':'')+'</div>';
     h+='</div>';
     h+='<div class="hero-price-block">';
     h+='<div class="hero-price">'+formatPrice(hero.price)+'</div>';
@@ -1122,8 +1131,9 @@ function renderSheet(){
 
   // Taxi + Remis accordions
   var taxiFare=computeTaxiFare(distKm,autoEst.timeMin||0);
-  var taxiConf=MC.v5FareConfidence(distKm,autoEst.timeMin||0);
-  var taxiRange=MC.v5FareRange(taxiFare,taxiConf);
+  var taxiConf=MC.v6FareConfidence('taxi',distKm,autoEst.timeMin||0);
+  var taxiSurge=MC.v6SurgeMultiplier('taxi');
+  var taxiRange=MC.v6FareRange(taxiFare,taxiConf,taxiSurge);
   // Taxi accordion
   h+='<div class="more-opts"><div class="accordion">';
   h+='<button class="acc-head'+(_sheetAccordions.taxi?' expanded':'')+'" id="accTaxiHead" aria-expanded="'+_sheetAccordions.taxi+'">';
@@ -1166,7 +1176,7 @@ function renderSheet(){
   if(!rankedBus.length&&busEst)rankedBus=[busEst];
   if(rankedBus.length){
     var mainBus=rankedBus[0],otherBus=rankedBus.slice(1);
-    var busConf=MC.v5FareConfidence(distKm,mainBus.totalMin||0);
+    var busConf=MC.v6FareConfidence('taxi',distKm,mainBus.totalMin||0);
     h+='<div class="bus-block">';
     h+='<div class="block-title"><span class="bt-ic">'+svg('bus',15)+'</span> Colectivo <span class="est-badge">Estimado · '+Math.round(busConf*100)+'%</span></div>';
     var busText='Lin. '+escapeHtml(mainBus.linea)+' por '+escapeHtml(shortenStop(mainBus.stopOrigenCalles));

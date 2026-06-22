@@ -671,3 +671,67 @@ Stage Summary:
 - bun run lint: 0 errors (1 pre-existing warning in worker.js — untouched)
 - wrangler deploy --dry-run: SUCCESS (8 assets, ASSETS binding, 0.37 KiB worker)
 - NOT deployed (user deploys with safe credentials after revoking leaked tokens)
+
+---
+Task ID: 16
+Agent: Main (Lead System Architect — VOY V6.1)
+Task: VOY V6.1 — LOGO_SYSTEM_V1 + FARE_ENGINE_V2 + CORPORATE_MINIMAL_REDESIGN (Uber Design Systems 2026: #FFF/#0B0B0B/#000, Inter font, no shadows, per-provider fare confidence, surge logic, VOY chevron logo)
+
+Work Log:
+- Read user specs: voy_domain_strategy.json (domain — already in deliverables), voy_architecture_patch_glm_v6.json (architecture — already implemented in V5/V6), fare_engine_v2.json (NEW: per-provider confidence + surge), ux_simplification_v2.json (already implemented), logo_system_v1.json (NEW: corporate minimal brand system)
+- Identified NEW work: (1) logo/brand system, (2) fare engine v2 per-provider confidence + surge, (3) corporate minimal CSS overhaul, (4) updated deep-link dialog text
+- Replaced /public/logo.svg: old breathing animation logo → VOY chevron app_icon (black rounded square + white V chevron path from spec)
+- Enhanced /public/ui/mobilityController.js (additive, backward compatible):
+  * V6_PROVIDER_CONFIDENCE map: uber 0.85, didi 0.88, maxim 0.75, taxi 0.82, remis 0.78 (per fare_engine_v2.json)
+  * v6FareConfidence(provider, distanceKm, timeMin): provider base * distance factor * time factor, clamped 0.55-0.95
+  * v6SurgeMultiplier(provider): night hours (22-06) → 1.1-1.3x per provider type (conservative, not full 2.5x — no rain/demand data)
+  * v6SurgeLabel(provider): returns "Hora pico" when surge active, empty otherwise
+  * v6FareRange(price, confidence, surgeMult): surge-aware spread (high end includes surge)
+  * All 4 v6 functions exported alongside v5 (backward compatible — v5FareConfidence/v5FareRange preserved)
+- Overhauled /public/VOY-Lite.html CSS to CORPORATE MINIMAL (logo_system_v1.json):
+  * Colors: --bg #FFFFFF (was #F5F5F7), --text #0B0B0B (was #111111), --accent #000000 (new, replaces green for CTAs)
+  * Dark mode: --bg #000000, --text #F5F5F5, --accent #FFFFFF
+  * Semantic colors preserved: --success #34C759 (GPS dots), --primary #007AFF (links), --red (dest marker), --orange (bus)
+  * Typography: added Inter via Google Fonts (preconnect + display=swap), font-family now 'Inter' first
+  * REMOVED ALL SHADOWS: --shadow-sm/md/lg/sheet variables deleted; all box-shadow usages → 1px borders (var(--border-strong))
+  * Search bar: shadow-md → 1px border
+  * Search dropdown: shadow-lg → 1px border
+  * Origin pill: shadow-sm → 1px border
+  * Memory chips: shadow-sm → 1px border
+  * Sheet: shadow-sheet → 1px border-top + border-bottom:none
+  * Dialog: shadow-lg → 1px border
+  * Toast: shadow-lg → 1px border rgba(255,255,255,0.15)
+  * CTA primary: green #34C759 → black #000000 (var(--accent)), white text (Uber/Linear style), green box-shadow removed
+  * Dialog confirm: green → black (var(--accent))
+  * Footer: 0.5px border → 1px border, added flex centering for chevron mark
+  * VOY chevron brand mark injected into footer via JS (12px SVG, stroke-based)
+  * theme-color meta: #F5F5F7 → #FFFFFF
+  * Updated deep-link dialog message: "Vas a salir de VOY. El servicio y el precio final dependen del proveedor externo, no de VOY." (matches fare_engine_v2.json spec)
+  * Hero meta: now shows surge badge ("Hora pico") when night surge active
+  * View uses v6FareConfidence (per-provider) for hero + taxi + bus confidence badges; v6FareRange for price ranges
+  * Bumped script cache versions ?v=6 → ?v=7
+- Constraints honored: worker.js UNTOUCHED, mobilityEngine.js UNTOUCHED, wrangler.jsonc UNTOUCHED, all existing APIs preserved, atomic commits
+
+Browser Verification (agent-browser, 360px + 1280px):
+- Initial load: title "VOY — Movilidad Santa Fe", bg rgb(255,255,255)=#FFFFFF, text rgb(11,11,11)=#0B0B0B, Inter font loaded, footer has SVG chevron, placeholder "¿A dónde vas?", map opacity 1 filter none, emojis:0, scrollW=clientW=360 ✅
+- Select dest + GPS: hero DiDi $2.500, confidence badge "Confianza 81%" (didi base 0.88 × factors), CTA bg rgb(0,0,0)=#000000, CTA color rgb(255,255,255)=#FFFFFF, CTA text "Pedir DiDi" ✅
+- No shadows: search-bar box-shadow=none, sheet box-shadow=none ✅
+- V6 fare engine: v6FareConfidence=function, v6SurgeMultiplier=function; didiConf=0.79, uberConf=0.76, maximConf=0.67, taxiConf=0.73 (per-provider differentiation verified) ✅
+- Surge label: empty during day (not night), "Hora pico" shows at night ✅
+- Deep-link dialog: message "Vas a salir de VOY. El servicio y el precio final dependen del proveedor externo, no de VOY.", confirm bg #000000 color #FFFFFF, dialog no shadow ✅
+- Taxi accordion: expands with 2 companies ✅
+- Desktop 1280px: app max-width 560px centered, footer naturally pushed by long content ✅
+- Zero console errors, zero page errors ✅
+- bun run lint: 0 errors (1 pre-existing warning in worker.js) ✅
+
+Stage Summary:
+- logo_system_v1: COMPLETE — VOY chevron logo (favicon + footer mark), corporate minimal colors (#FFF/#0B0B0B/#000), Inter font, no gradients, no shadows, no emoji branding, SVG-only
+- fare_engine_v2: COMPLETE — per-provider confidence (uber 0.85/didi 0.88/maxim 0.75/taxi 0.82/remis 0.78), surge logic (night 1.1-1.3x), surge-aware fare range, "Hora pico" badge in UI, backward compatible (v5 functions preserved)
+- corporate_minimal: COMPLETE — all shadows removed (borders + spacing only), black CTAs (Uber/Linear aesthetic), white bg, Inter font, VOY chevron in footer
+- deep_link_confirmation: text updated to fare_engine_v2 spec ("Vas a salir de VOY. El servicio y el precio final dependen del proveedor externo, no de VOY.")
+- domain_strategy: already documented in v6-deliverables.md (voy.is-a.dev preferred, voyapp.is-a.dev fallback)
+- architecture_patch_glm_v6: already implemented (floating search, ambient map, idle drift, local-first search pipeline, taxi/remis accordions, bus route overlay, IndexedDB memory)
+- ux_simplification_v2: already implemented (zero emojis, SVG icons, no hand pointer, floating centered search)
+- bus_system: already implemented (rankBusLines, route geometry overlay, ETA estimation model "distance/avg_speed + wait_time")
+- Files changed: public/logo.svg (replaced), public/VOY-Lite.html (CSS overhaul + v6 fare view + brand mark), public/ui/mobilityController.js (v6 fare engine). worker.js, mobilityEngine.js, wrangler.jsonc UNTOUCHED.
+- NOT deployed (user deploys with safe credentials after revoking leaked tokens from prior session)
