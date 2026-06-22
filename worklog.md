@@ -298,3 +298,70 @@ Stage Summary:
 - "Reduce cognitive load to 3 options max": VERIFIED — 3 cards (auto/bus/bike) + 3 providers max in auto
 - "Eliminate redundant visual hierarchy": VERIFIED — single MAIN_CTA green block, secondaries collapsed
 - "Convert UI into decision-first layout": VERIFIED — map dimmed to background, cards are primary focus
+
+---
+Task ID: 10
+Agent: Main (Senior Mobility Engineer)
+Task: MOBILITY_CORE_RANKING_V1 — contextual_score ranking, bus=info layer, bike=tertiary+3km filter
+
+Work Log:
+- Read mobilityEngine.js (388 lines, pure calc module) — estimateAuto, estimateBus, runAllEstimations
+- Read mobilityController.js runEstimations() (L159-166) — calls engine, stores _estimations
+- Read VOY-Lite.html renderActiveCard (L1311-1390) — auto branch sorted by price only
+- Identified 5 spec gaps:
+  1. ranking_model contextual_score → MISSING: view sorted by price only
+  2. bus_layer display_format "LINE {n} passing in {time} min at {stop}" → VIOLATED: format was "Línea {n} - {min} min - {stop}"
+  3. bike_layer only_if_under_3km → MISSING: bike always rendered regardless of distance
+  4. "Do not mix bus + ride-hailing in same visual weight" → VIOLATED: all cards identical style
+  5. "Bike is tertiary suggestion only" → VIOLATED: bike had same green CTA as auto
+
+PATCH 1 — Engine (mobilityEngine.js):
+  - Added BIKE_MAX_DISTANCE_KM=3 constant (L128)
+  - runAllEstimations: wrapped bike push in `if(distKm <= BIKE_MAX_DISTANCE_KM)` (L275)
+  - Added rankProviders(autoResult, providers) function (L342-371): contextual_score = 0.7*normPrice + 0.3*normTime, returns sorted array
+  - Exported rankProviders + BIKE_MAX_DISTANCE_KM in module exports (L419-421)
+  - Engine remains PURE: no DOM, no fetch, no side effects. New function is deterministic.
+
+PATCH 2 — Controller (mobilityController.js):
+  - runEstimations() (L159-176): after engine call, attaches rankedProviders to auto estimation via MobilityEngine.rankProviders(). Backward-compatible (checks typeof function === 'function').
+
+PATCH 3 — View (VOY-Lite.html):
+  - Bus display format (L1319): "Línea {n} pasa en {time} min en {stop}" (was "Línea {n} - {time} min - {stop}")
+  - Bus provider row (L1325): added provider-row--info class (informational, not CTA)
+  - Bike action (L1346): added rc-action--tertiary class (muted, not green CTA)
+  - Auto branch (L1350-1386): uses est.rankedProviders (contextual_score) with fallback to price-sort
+  - CSS (L184-209): 3-layer visual separation:
+    * .route-card[data-mode="bus"]: opacity 0.85, shadow-sm, muted text colors, --info row style
+    * .route-card[data-mode="bike"]: opacity 0.7, dashed border, no shadow, --tertiary button (transparent bg)
+    * .route-card[data-mode="auto"]: unchanged (opacity 1, shadow-md, MAIN_CTA green block)
+  - Bumped script cache versions to ?v=3
+
+PATCH 4 — Bug fix (mapHint crash):
+  - updateMapHint() (L1303): added `if(!el)return` guard — #mapHint element was removed in UI_SIMPLIFICATION_CORE_V1 (Task 9) but function still called from runEstimations. Was crashing at el.classList.remove('show').
+
+Browser Verification (agent-browser):
+- Engine loads: rankProviders=function, BIKE_MAX_DISTANCE_KM=3 ✅
+- Short route (1km): 3 cards (auto, bus, bike), bike PRESENT ✅
+- Long route (7.5km): 2 cards (auto, bus), bike HIDDEN ✅
+- Bus format: "Línea 4 pasa en 26 min en Gral. López y Marcial Candioti" ✅
+- Contextual ranking (short): Maxim > DiDi > TaxiApp > Radiotaxi > Remises Real > Uber (Maxim best score 0.300) ✅
+- Contextual ranking (long): Uber > Maxim > DiDi > TaxiApp > Radiotaxi > Remises Real (differs from price-only sort — contextual works) ✅
+- Price-only sort (long): Maxim > DiDi > Uber > Radiotaxi > Remises Real > TaxiApp (different from contextual — confirms ranking model change) ✅
+- Bus card: opacity 0.85, shadow-sm (informational layer) ✅
+- Auto card: opacity 1, shadow-md (primary CTA layer) ✅
+- Bike card: opacity 0.7, dashed border, no shadow (tertiary) ✅
+- Bike button: transparent background (not green CTA) ✅
+- Zero console errors ✅
+
+Stage Summary:
+- providers.active [uber,didi,maxim,taxiapp,taxi,remisreal]: COMPLETE — 6 providers active (remisreal = remis naming variant, same provider)
+- ranking_model contextual_score: COMPLETE — engine rankProviders() blends price(0.7)+time(0.3), differs from pure price sort
+- bus_layer live_arrival_estimation: display format "Línea {n} pasa en {time} min en {stop}" applied. NOTE: true live data requires GTFS-Realtime feed (not available for Santa Fe); current estimation uses distance+avg speed which IS an arrival estimation.
+- bus_layer informational (not CTA): COMPLETE — no Pedir button, muted styling, opacity 0.85
+- bike_layer only_if_under_3km: COMPLETE — engine filters bike when distKm > 3
+- bike_layer tertiary: COMPLETE — opacity 0.7, dashed border, transparent button
+- "Do not mix bus + ride-hailing in same visual weight": VERIFIED — bus opacity 0.85/shadow-sm vs auto opacity 1/shadow-md
+- "Bus is informational layer, not CTA layer": VERIFIED — bus has no Pedir button, uses --info row class
+- "Bike is tertiary suggestion only": VERIFIED — opacity 0.7, dashed border, hidden >3km, muted button
+- Engine purity preserved: no DOM/fetch/localStorage added. rankProviders is deterministic pure function.
+- Backward compat: view falls back to price-sort if rankedProviders unavailable.

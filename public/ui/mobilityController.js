@@ -162,6 +162,16 @@
       _origin, _dest,
       { busStops: _config.busStops, bikeStations: _config.bikeStations, fareRegistry: _config.fareRegistry }
     );
+    // MOBILITY_CORE_RANKING_V1: attach contextual_score ranked providers to auto estimation.
+    // The view layer reads est.rankedProviders instead of re-sorting by price.
+    if (_estimations && typeof MobilityEngine.rankProviders === 'function' && _config.providers) {
+      for (var i = 0; i < _estimations.length; i++) {
+        if (_estimations[i].mode === 'auto') {
+          _estimations[i].rankedProviders = MobilityEngine.rankProviders(_estimations[i], _config.providers);
+          break;
+        }
+      }
+    }
     return _estimations;
   }
 

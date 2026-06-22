@@ -124,6 +124,9 @@
   //  3. ESTIMATION FUNCTIONS (pure, no DOM, no map)
   // =====================================================================
 
+  // MOBILITY_CORE_RANKING_V1: bike is tertiary suggestion, only viable under 3km.
+  var BIKE_MAX_DISTANCE_KM = 3;
+
   /**
    * Estimate auto ride with all providers.
    * @param {number} distKm - Distance in km
@@ -265,11 +268,13 @@
       ));
     }
 
-    // 3. Bike — last priority
+    // 3. Bike — MOBILITY_CORE_RANKING_V1: only_if_under_3km (tertiary suggestion only)
     var bikeMin = (distKm / 15) * 60;
     var nearBike = findNearestBikeStation(origin, config.bikeStations);
     var nearDestBike = dest ? findNearestBikeStation(dest, config.bikeStations) : null;
-    estimations.push({ mode: 'bike', icon: '\uD83D\uDEF2', title: 'Bicicleta', timeMin: bikeMin, distance: distKm, priority: 9, nearStation: nearBike, nearDestStation: nearDestBike });
+    if (distKm <= BIKE_MAX_DISTANCE_KM) {
+      estimations.push({ mode: 'bike', icon: '\uD83D\uDEF2', title: 'Bicicleta', timeMin: bikeMin, distance: distKm, priority: 9, nearStation: nearBike, nearDestStation: nearDestBike });
+    }
 
     // Sort by priority, then by time
     estimations.sort(function (a, b) { return a.priority - b.priority || a.timeMin - b.timeMin; });
@@ -322,7 +327,51 @@
   }
 
   // =====================================================================
-  //  7. FORMAT HELPERS
+  //  7. CONTEXTUAL RANKING (MOBILITY_CORE_RANKING_V1)
+  // =====================================================================
+
+  /**
+   * Rank ride-hailing providers by contextual_score: weighted blend of
+   * price (70%) and time (30%). Lower score = better rank.
+   * Pure function: same inputs → same outputs. No DOM, no fetch.
+   *
+   * @param {object} autoResult - estimateAuto() output with per-provider prices/times
+   * @param {object} providers - PROVIDERS registry (availability filter)
+   * @returns {Array} Sorted provider objects: [{id,name,price,timeMin,score}, ...]
+   */
+  function rankProviders(autoResult, providers) {
+    if (!autoResult) return [];
+    var list = [
+      { id: 'uber', name: 'Uber', price: autoResult.uberPrice, timeMin: autoResult.uberTimeMin },
+      { id: 'didi', name: 'DiDi', price: autoResult.didiPrice, timeMin: autoResult.didiTimeMin },
+      { id: 'maxim', name: 'Maxim', price: autoResult.maximPrice, timeMin: autoResult.maximTimeMin },
+      { id: 'taxiapp', name: 'TaxiApp', price: autoResult.taxiappPrice, timeMin: autoResult.taxiappTimeMin },
+      { id: 'taxi', name: 'Radiotaxi', price: autoResult.taxiPrice, timeMin: autoResult.taxiTimeMin },
+      { id: 'remis', name: 'Remises Real', price: autoResult.remisPrice, timeMin: autoResult.remisTimeMin }
+    ].filter(function (p) {
+      return p.price != null && providers && providers[p.id] && providers[p.id].available;
+    });
+    if (list.length === 0) return [];
+
+    // Normalize price and time to 0-1 range for cross-factor comparison.
+    var prices = list.map(function (p) { return p.price; });
+    var times = list.map(function (p) { return p.timeMin; });
+    var minPrice = Math.min.apply(null, prices), maxPrice = Math.max.apply(null, prices);
+    var minTime = Math.min.apply(null, times), maxTime = Math.max.apply(null, times);
+
+    list.forEach(function (p) {
+      var normPrice = maxPrice > minPrice ? (p.price - minPrice) / (maxPrice - minPrice) : 0;
+      var normTime = maxTime > minTime ? (p.timeMin - minTime) / (maxTime - minTime) : 0;
+      // contextual_score: 0.7 price + 0.3 time (lower = better)
+      p.score = 0.7 * normPrice + 0.3 * normTime;
+    });
+
+    list.sort(function (a, b) { return a.score - b.score; });
+    return list;
+  }
+
+  // =====================================================================
+  //  8. FORMAT HELPERS
   // =====================================================================
 
   /**
@@ -366,6 +415,10 @@
     estimateAuto: estimateAuto,
     findNearestBikeStation: findNearestBikeStation,
     runAllEstimations: runAllEstimations,
+
+    // MOBILITY_CORE_RANKING_V1: contextual_score ranking
+    rankProviders: rankProviders,
+    BIKE_MAX_DISTANCE_KM: BIKE_MAX_DISTANCE_KM,
 
     // Search utilities (pure, no fetch)
     searchLocal: searchLocal,

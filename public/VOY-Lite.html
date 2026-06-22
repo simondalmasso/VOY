@@ -14,8 +14,8 @@ Controller: ui/mobilityController.js (refactored — no prefs, no recommendation
 <title>VOY Lite – Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="core/mobilityEngine.js?v=2"></script>
-<script src="ui/mobilityController.js?v=2"></script>
+<script src="core/mobilityEngine.js?v=3"></script>
+<script src="ui/mobilityController.js?v=3"></script>
 <style>
 /* ============================================================
    VOY Lite — Apple Maps / iOS 18 visual language (UI-only patch)
@@ -181,6 +181,32 @@ body{
 .provider-row.provider-row--secondary .btn-pedir{height:44px;min-height:44px;min-width:90px;font-size:15px;font-weight:700;padding:0 16px;box-shadow:0 2px 8px rgba(52,199,89,0.22)}
 .provider-row.provider-row--secondary .btn-pedir:active{transform:scale(0.95);box-shadow:0 1px 4px rgba(52,199,89,0.18)}
 .provider-row.provider-row--secondary .rc-time{font-size:13px;padding:4px 8px}
+/* MOBILITY_CORE_RANKING_V1: layer separation — bus=informational, bike=tertiary.
+   Do NOT mix bus + ride-hailing in same visual weight. */
+.route-card[data-mode="bus"]{
+  background:var(--bg2);border:0.5px solid var(--card-border);border-radius:22px;
+  padding:16px 20px;margin-bottom:12px;box-shadow:var(--shadow-sm);opacity:0.85;
+}
+.route-card[data-mode="bus"] .rc-title{font-size:17px;font-weight:600;color:var(--text2)}
+.route-card[data-mode="bus"] .rc-time{font-size:13px;padding:4px 10px;background:transparent;color:var(--text2)}
+.route-card[data-mode="bus"] .rc-subtitle{font-size:14px;color:var(--text3);margin-bottom:10px}
+.provider-row--info{padding:8px 0;border-top:none;gap:10px}
+.provider-row--info .provider-name{font-size:14px;font-weight:500;color:var(--text2);min-width:64px}
+.provider-row--info .provider-color{height:20px;width:4px;opacity:0.6}
+.provider-row--info .card-price{font-size:14px;font-weight:600;color:var(--text2)}
+.route-card[data-mode="bike"]{
+  background:transparent;border:1px dashed var(--card-border);border-radius:18px;
+  padding:14px 18px;margin-bottom:8px;box-shadow:none;opacity:0.7;
+}
+.route-card[data-mode="bike"] .rc-title{font-size:15px;font-weight:600;color:var(--text2)}
+.route-card[data-mode="bike"] .rc-time{font-size:12px;padding:3px 8px;background:transparent;color:var(--text3)}
+.route-card[data-mode="bike"] .rc-subtitle{font-size:13px;color:var(--text3);margin-bottom:10px}
+.rc-action--tertiary{
+  background:transparent!important;color:var(--text2)!important;border:1px solid var(--card-border)!important;
+  height:44px!important;min-height:44px!important;font-size:15px!important;font-weight:600!important;
+  box-shadow:none!important;flex:0 1 auto;padding:0 18px!important;
+}
+.rc-action--tertiary:active{transform:scale(0.97);background:var(--bg3)!important}
 .route-card[data-mode="auto"] .provider-row:not(.provider-row ~ .provider-row){
   background:linear-gradient(135deg,#34C759 0%,#2BB24C 100%);
   margin:14px -20px -20px;padding:20px 20px 22px;
@@ -1273,8 +1299,10 @@ function runEstimations(){
 }
 
 // ===================== MAP HINT =====================
+// UI_SIMPLIFICATION_CORE_V1: map-hint element removed. Function kept as no-op for backward compat.
 function updateMapHint(){
   var el=document.getElementById('mapHint');
+  if(!el)return; // element removed in UI_SIMPLIFICATION_CORE_V1 — graceful no-op
   var estimations=MC.getEstimations();
   if(!estimations||!estimations.length){el.classList.remove('show');return}
   el.classList.add('show');
@@ -1313,15 +1341,16 @@ function renderActiveCard(est,idx){
   var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'">';
 
   if(est.mode==='bus'){
-    // Bus card — spec format: "Línea {linea} - {totalMin} min - {stopOrigenCalles}"
+    // MOBILITY_CORE_RANKING_V1: bus = informational layer (not CTA).
+    // display_format: "Línea {n} pasa en {time} min en {stop}" (live_arrival_estimation).
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">Colectivo</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
-    var busLine='Línea '+est.linea+' - '+est.totalMin+' min - '+(est.stopOrigenCalles||'');
+    var busLine='Línea '+est.linea+' pasa en '+est.totalMin+' min en '+(est.stopOrigenCalles||'');
     if(est.walkToStopMin<2){
       busLine+='<span class="apurate-badge">¡Apurate!</span>';
     }
     h+='<div class="rc-subtitle">'+busLine+'</div>';
-    // Price row (SUBE fare, no Pedir button — no deep link for bus)
-    h+='<div class="provider-row">';
+    // Price row (SUBE fare, no Pedir button — bus is informational, not CTA layer)
+    h+='<div class="provider-row provider-row--info">';
     h+='<div class="provider-color" style="background:#2563eb"></div>';
     h+='<span class="provider-name">SUBE</span>';
     h+='<div class="card-action-row">';
@@ -1330,7 +1359,7 @@ function renderActiveCard(est,idx){
   }
 
   else if(est.mode==='bike'){
-    // Bike card — last priority
+    // MOBILITY_CORE_RANKING_V1: bike = tertiary suggestion only (low_visibility).
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle" style="white-space:pre-line">'+est.distance.toFixed(1)+' km · GRATIS';
     if(est.nearStation){
@@ -1342,27 +1371,44 @@ function renderActiveCard(est,idx){
     h+='</div>';
     h+='<div class="rc-actions">';
     var bikeLink=buildBikeLink();
-    h+='<a href="'+bikeLink+'" class="rc-action bike" target="_blank">Bicicleta</a>';
+    h+='<a href="'+bikeLink+'" class="rc-action bike rc-action--tertiary" target="_blank">Bicicleta</a>';
     h+='</div>';
   }
 
   else if(est.mode==='auto'){
-    // Rideshare card — UI_SIMPLIFICATION_CORE_V1: max 3 visible modes (cheapest).
-    // collapse_secondary: rows 2-3 get --secondary class (compact, lower visual weight).
+    // MOBILITY_CORE_RANKING_V1: use contextual_score ranking from engine (price 0.7 + time 0.3).
+    // Fallback to price-sort if rankedProviders unavailable (backward compat).
+    // UI_SIMPLIFICATION_CORE_V1: max 3 visible, collapse_secondary.
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    var autoProvidersList=[
-      {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
-      {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
-      {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
-      {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
-      {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
-      {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
-    ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available})
-     .sort(function(a,b){return a.price-b.price})
-     .slice(0,3); // UI_SIMPLIFICATION_CORE_V1: max_visible_modes 3
+    var autoProvidersList;
+    if(est.rankedProviders&&est.rankedProviders.length){
+      // Use engine's contextual_score ranking (already sorted by score asc)
+      autoProvidersList=est.rankedProviders.map(function(p){
+        var url=null;
+        if(p.id==='uber')url=buildUberLink();
+        else if(p.id==='didi')url=buildDiDiLink();
+        else if(p.id==='maxim')url=buildMaximLink();
+        else if(p.id==='taxi')url='https://wa.link/n7u2e7';
+        else if(p.id==='remis')url='https://wa.link/rqov56';
+        else if(p.id==='taxiapp')url='https://wa.link/vavbcl';
+        return {id:p.id,name:p.name,price:p.price,timeMin:p.timeMin,url:url};
+      }).slice(0,3);
+    }else{
+      // Fallback: price-sort (legacy behavior)
+      autoProvidersList=[
+        {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
+        {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
+        {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
+        {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
+        {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
+        {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
+      ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available})
+       .sort(function(a,b){return a.price-b.price})
+       .slice(0,3);
+    }
     autoProvidersList.forEach(function(p,rowIdx){
-      var isSecondary=rowIdx>0; // first row = cheapest (MAIN_CTA), rest = secondary
+      var isSecondary=rowIdx>0; // first row = best contextual_score (MAIN_CTA), rest = secondary
       h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url,isSecondary);
     });
   }
