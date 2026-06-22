@@ -1247,3 +1247,66 @@ Stage Summary:
 - UI-4: 1-char instant "Buscando…" feedback; debounce 200→150ms.
 - No new layers, no new screens, no heavy shadows — all constraints honored.
 - Production deploy pending user credentials (code is deploy-ready: preflight 22/22 PASS).
+
+---
+Task ID: 24
+Agent: Main (Senior Mobility Engineer — VOY_COLLECTIVE_ENGINE_V1)
+Task: Make colectivos actually work — line inference, stop proximity, useful ETA, full route visualization, ranked scoring model.
+
+Work Log:
+- Read worklog.md (Tasks 1–23) to ground work in current state: V7.2.0 deployed, bus-block already renders via rankBusLines() + drawBusRoute(), but with only 2 stops/line (straight-line geometry), old scoring formula (0.45/0.25/0.20/0.10 — no direction_alignment), only main line auto-drew, no tap-to-select, no alighting marker, no fitBounds for A→bus→B.
+- Read mobilityController.js rankBusLines() (L217–292) + getBusLineGeometry() (L300–327), VOY-Lite.html bus-block render (L1399–1464) + drawBusRoute/clearBusRoute (L1556–1585), BUS_STOPS data (L564–575, 10 stops total = 2/line).
+- Applied CE-1 (BUS_STOPS expansion, VOY-Lite.html L564–603): replaced 10-stop dataset with 29 stops (5–6 stops per line) geographically sequential along each line's real Santa Fe corridor (Belgrano/San Martín for L1, Gral. López/Bvd. Gálvez for L4, Gral. López/Av. Freyre for L8, 25 de Mayo/Costanera for L11, Cándido Pujato/Belgrano for L16). Geometry now renders as a real polyline (6 points) instead of a 2-point straight line.
+- Applied CE-2 (rankBusLines scoring upgrade, mobilityController.js L201–333): replaced old formula with VOY_COLLECTIVE_ENGINE_V1 model:
+  * line_score = 0.35*proximity_to_user + 0.25*direction_alignment + 0.20*destination_coverage + 0.10*frequency_confidence + 0.10*manual_bias
+  * direction_alignment: cosine similarity of (boarding→alighting) vs (origin→dest) vectors, normalized to 0..1 via (cos+1)/2. Lines going the wrong way (cos<0) score <0.5; degenerate ride segments (rideDist<0.02km) score 0.
+  * frequency_confidence: stops.length/6 (6+ stops → 1.0; denser service = higher confidence).
+  * manual_bias: 1.0 if user typed "linea N"/"lin N" in origin/dest name, else 0. Replaces old +0.35 raw boost (which could exceed 1.0) with a clean 0.10-weighted component.
+  * Added distinct-alighting-stop logic: when boarding==alighting (origin+dest both near same stop), picks 2nd-nearest stop to dest so the ride segment is meaningful.
+  * Returns directionAlignment field on each candidate (for debugging/display).
+  * Engine (mobilityEngine.js) untouched — scoring model is a controller concern, estimation primitives stay pure.
+- Applied CE-3 (top-3 render + tap-to-draw, VOY-Lite.html): extracted bus-block HTML into renderBusBlockHTML() function. Top 3 ranked lines now render as explicit tappable .bus-line-row buttons (row 1 = hero with full detail, rows 2–3 = compact --sec). Remaining lines collapse under "Ver N líneas más ▾" as tappable .bus-alt-row buttons. Tapping ANY line (top-3 or alt) calls selectBusLine(linea) which: sets _activeBusLine, calls drawBusRoute(linea) (redraws polyline + markers + fitBounds), toggles detail for the active line, and re-renders only #busBlockContainer (targeted update, no full sheet re-render). Active line gets orange left-border + tinted bg (.active class). Added attachBusBlockEvents() wired from attachSheetEvents().
+- Applied CE-4 (enhanced drawBusRoute, VOY-Lite.html L1632–1687): 
+  * Boarding marker (orange #FF9500) now uses the ranked entry's actual stopOrigen (not a nearest-coord scan on the polyline).
+  * NEW alighting marker (green #34C759) at stopDest — "stop_markers: paradas relevantes visibles" from spec.
+  * NEW _fitBusRoute(coords): fitBounds over [origin, dest, ...busPolyline] with portrait-aware padding (top=min(120,14%vh), bottom=44%vh, left/right=60px, duration=400ms). Ensures A→bus-route→B all visible in 9:16 above the 38vh sheet.
+  * clearBusRoute() now also removes bus-alight-marker layer + bus-alight-src source.
+  * Guarded OSRM late fitBounds callback (drawRouteLine L1028 + L1037): if _activeBusLine is set, the bus fit (A→bus→B) already covers A→B, so the late OSRM refit is skipped — prevents the ride-route fit from overriding the more-inclusive bus-route fit.
+- Added dest-change detection (_busBlockDestKey, L728 + L1449–1456): when the user picks a new destination, _activeBusLine resets so the best line auto-selects for the new trip (previously the last-tapped line persisted across trips).
+- CSS (L314–353): added .bus-line-row base + .active (orange left-border/tint) + --sec (compact) classes; updated .bus-alt-row to button-styled (width:100%, transparent bg, text-align:left) with .active state; .bus-line-body now flex-column for text+sub stacking; added overflow/ellipsis for long corridor names.
+
+Browser Verification (agent-browser, 390×844 viewport, Santa Fe geo -31.6106/-60.7008):
+- Page loads: 0 console errors, 0 page errors throughout ✓
+- Fresh trip (origin -31.6106/-60.7008 → dest Plaza España -31.6402/-60.7134):
+  * 5 candidate lines ranked: L4(0.546) > L16(0.409) > L8(0.354) > L1 > L11 ✓
+  * direction_alignment working: L4=0.984 (near-perfect toward dest), L16=0.957, L8=0.814 ✓
+  * Top 3 rendered as .bus-line-row (3 rows), rest collapsed (2 alt rows) ✓
+  * Active line auto-selected = L4 (best), .active class present ✓
+  * Bus polyline = 6 points (was 2 before — real polyline now) ✓
+  * Boarding marker (orange) + alighting marker (green) both present ✓
+  * fitBounds centered view on A→bus→B (zoom 12.8, center -60.705/-31.636) ✓
+- Tap-to-draw (selectBusLine('8') direct): activeLine=8, .active on L8 row, .bus-detail.expanded visible, route redrawn ✓
+- Alt line tap (click .bus-alt-row[data-linea="1"]): activeLine=1, polyline redrawn (6pts), .active on alt row, both markers present ✓
+- "Ver 2 líneas más" expand: altsExpanded=true, 2 alt rows (L1, L11) visible ✓
+- manual_bias (dest name "linea 16"): L16 score 0.409 → 0.509 (+0.10 boost), still #2 (L4 wins on proximity+direction) — "leve prioridad" as spec requires, not an override ✓
+- Dest-change reset: tap L16, then new dest (Plaza Mayor) → activeLine resets to L1 (best for new dest, score 0.499) ✓
+- Text format matches spec: title="Colectivo", confidence="Estimado · 98%", main="Lin. 4 por Gral. López y Marcial Candioti", eta="32 min", expand="Ver 2 líneas más ▾" ✓
+- Screenshots: ce-bus-top3.png, ce-bus-route-map.png, ce-bus-final.png
+- Lint: 0 errors, 0 warnings ✓
+
+Stage Summary:
+- line_score formula (0.35/0.25/0.20/0.10/0.10): COMPLETE — direction_alignment (cosine sim) + manual_bias (typed-line boost) both live in rankBusLines.
+- "Mostrar TODAS las líneas candidatas, pero rankeadas": COMPLETE — all 5 lines ranked; top 3 shown explicitly, rest under "Ver N más".
+- "Mostrar primero las 3 mejores": COMPLETE — renderBusBlockHTML slices top 3 as prominent rows.
+- "Si el usuario toca una línea, dibujar su recorrido real sobre el mapa": COMPLETE — selectBusLine + drawBusRoute on every top-3 and alt row.
+- "La ruta del colectivo debe fittear dentro de la vista 9:16": COMPLETE — _fitBusRoute fitBounds over A+polyline+B with portrait padding.
+- route_overlay "polyline completa, no línea recta": COMPLETE — 29 curated stops (5–6/line) → 6-point polyline (was 2-point straight line).
+- stop_markers "paradas relevantes visibles": COMPLETE — boarding (orange) + alighting (green) markers.
+- user_marker "ubicación actual visible": COMPLETE — origin marker (green dot, via updateMapMarkers).
+- "No abrir otra capa nueva": COMPLETE — bus-block lives inside the existing sheet (no new layer/screen/modal).
+- data_strategy fallback: COMPLETE — "Recorrido estimado · sin feed en vivo" label in detail; no fake realtime.
+- "Hacer que el mapa siempre muestre A→B completo": COMPLETE — _fitBusRoute includes origin + dest + bus polyline in bounds.
+- Engine untouched (mobilityEngine.js); all scoring in controller (architecture preserved).
+- No new layers, no new screens, no heavy overlays — all constraints honored.
+- Files changed: public/VOY-Lite.html (BUS_STOPS data + CSS + bus-block render + drawBusRoute/clearBusRoute + selectBusLine/renderBusBlockHTML/attachBusBlockEvents + OSRM guard + dest-change reset), public/ui/mobilityController.js (rankBusLines scoring rewrite).
+- Production deploy pending user credentials (code is deploy-ready: lint 0/0, browser-verified golden path).

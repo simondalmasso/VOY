@@ -311,31 +311,42 @@ button{font-family:inherit;letter-spacing:inherit}
 .co-action.wa{color:var(--success);border-color:rgba(52,199,89,0.3)}
 .co-action.call{color:var(--primary);border-color:rgba(0,122,255,0.3)}
 
-/* Bus block */
+/* Bus block — VOY_COLLECTIVE_ENGINE_V1 */
 .bus-block{margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:0.5px solid var(--border-subtle)}
 .block-title{font-size:var(--font-micro);font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--sp-2);display:flex;align-items:center;gap:6px}
 .block-title .bt-ic{display:flex;align-items:center}
-.bus-line-main{
-  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3);background:var(--bg3);
-  border-radius:var(--radius-sm);cursor:pointer;min-height:52px;
-  transition:transform var(--ease-out),background var(--ease-out);width:100%;border:none;color:var(--text);text-align:left;
-}
 button{cursor:pointer}
-.bus-line-main:active{transform:scale(0.99);background:var(--bg)}
+/* .bus-line-row is the tappable line (top 3 shown explicitly). Each tap draws
+   that line's real route on the map and reveals its detail. */
+.bus-line-row{
+  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3);background:var(--bg3);
+  border-radius:var(--radius-sm);cursor:pointer;min-height:52px;width:100%;border:none;
+  color:var(--text);text-align:left;
+  transition:transform var(--ease-out),background var(--ease-out),box-shadow var(--ease-out);
+  border-left:3px solid transparent;
+}
+.bus-line-row:active{transform:scale(0.99);background:var(--bg)}
+.bus-line-row.active{background:rgba(255,149,0,0.10);border-left-color:var(--orange)}
+.bus-line-row--sec{min-height:46px;padding:10px var(--sp-3)}
+.bus-line-row--sec .bus-line-text{font-size:var(--font-caption);font-weight:var(--fw-bold)}
+.bus-line-row--sec .bus-line-sub{font-size:var(--font-micro)}
 .bus-line-icon{color:var(--orange);flex-shrink:0;display:flex;align-items:center}
-.bus-line-body{flex:1;min-width:0;line-height:1.35}
-.bus-line-text{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);letter-spacing:-0.01em}
-.bus-line-sub{font-size:var(--font-caption);color:var(--text2);margin-top:2px}
-.bus-line-eta{font-size:var(--font-caption);font-weight:var(--fw-title);color:var(--text);flex-shrink:0;text-align:right;min-width:48px}
+.bus-line-body{flex:1;min-width:0;line-height:1.35;display:flex;flex-direction:column}
+.bus-line-text{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bus-line-sub{font-size:var(--font-caption);color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bus-line-eta{font-size:var(--font-caption);font-weight:var(--fw-title);color:var(--text);flex-shrink:0;text-align:right;min-width:48px;display:flex;flex-direction:column;align-items:flex-end}
 .bus-urgent{color:var(--red);font-weight:var(--fw-title);font-size:var(--font-micro);margin-top:2px}
 .est-badge{font-size:10px;font-weight:700;color:var(--text3);background:var(--surface2);padding:2px 6px;border-radius:var(--radius-xs);text-transform:uppercase;letter-spacing:0.02em}
 .bus-detail{max-height:0;overflow:hidden;font-size:var(--font-caption);color:var(--text2);transition:max-height var(--ease-sheet);line-height:1.55}
-.bus-detail.expanded{max-height:200px;padding-top:var(--sp-2)}
+.bus-detail.expanded{max-height:220px;padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
 .bus-detail .bd-row{display:flex;gap:8px;padding:3px 0;align-items:flex-start}
 .bus-detail .bd-ic{color:var(--text3);flex-shrink:0;display:flex;align-items:center;margin-top:1px}
 .bus-alts{max-height:0;overflow:hidden;transition:max-height var(--ease-sheet)}
 .bus-alts.expanded{max-height:400px}
-.bus-alt-row{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border-top:0.5px solid var(--border-subtle);font-size:var(--font-caption);color:var(--text2)}
+/* .bus-alt-row is now a button (tappable to draw that line's route on the map) */
+.bus-alt-row{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);border-top:0.5px solid var(--border-subtle);font-size:var(--font-caption);color:var(--text2);width:100%;background:transparent;border-left:3px solid transparent;text-align:left}
+.bus-alt-row:active{background:var(--bg3)}
+.bus-alt-row.active{background:rgba(255,149,0,0.08);border-left-color:var(--orange)}
 .bus-alt-row .ba-line{font-weight:var(--fw-title);color:var(--text);min-width:52px}
 .bus-alt-row .ba-stop{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bus-alt-row .ba-eta{flex-shrink:0;font-weight:var(--fw-bold);color:var(--text2)}
@@ -561,16 +572,44 @@ window.onerror=function(msg,src,line,col,err){console.error('[GLOBAL]',msg,src+'
 window.onunhandledrejection=function(ev){console.error('[REJECTION]',ev.reason)};
 
 // ===================== DATA (Santa Fe) =====================
+// VOY_COLLECTIVE_ENGINE_V1: expanded stops per line so route geometry is a real
+// polyline (not a 2-point straight line). Stops are geographically sequential
+// along each line's real corridor so nearest-neighbor chaining yields a coherent
+// path. Coordinates approximate the actual Santa Fe street grid.
 var BUS_STOPS=[
+  // Línea 1 — Terminal → Centro → Norte (Belgrano / San Martín corridor)
   {linea:'1',nombre:'Terminal',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
+  {linea:'1',nombre:'Belgrano y Tucumán',lat:-31.6410,lon:-60.7015,calles:'Belgrano y Tucumán'},
+  {linea:'1',nombre:'Belgrano y Salta',lat:-31.6386,lon:-60.7019,calles:'Belgrano y Salta'},
+  {linea:'1',nombre:'San Martín y 25 de Mayo',lat:-31.6354,lon:-60.7002,calles:'San Martín y 25 de Mayo'},
+  {linea:'1',nombre:'San Martín y San Jerónimo',lat:-31.6328,lon:-60.7000,calles:'San Martín y San Jerónimo'},
   {linea:'1',nombre:'Plaza Mayor',lat:-31.6313,lon:-60.7008,calles:'San Martín y Rivadavia'},
+  // Línea 4 — Hospital Cullen → Centro → Sur (Gral. López / Bvd. Gálvez corridor)
   {linea:'4',nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {linea:'4',nombre:'Gral. López y Javier de la Rosa',lat:-31.6225,lon:-60.6975,calles:'Gral. López y Javier de la Rosa'},
+  {linea:'4',nombre:'Gral. López y Mendoza',lat:-31.6260,lon:-60.6981,calles:'Gral. López y Mendoza'},
+  {linea:'4',nombre:'Gral. López y 25 de Mayo',lat:-31.6295,lon:-60.6989,calles:'Gral. López y 25 de Mayo'},
+  {linea:'4',nombre:'Bvd. Gálvez y Tucumán',lat:-31.6368,lon:-60.7012,calles:'Bvd. Gálvez y Tucumán'},
   {linea:'4',nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'},
+  // Línea 8 — Estación Belgrano → Norte (Gral. López / Av. Freyre corridor)
   {linea:'8',nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
-  {linea:'8',nombre:'Avenida Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {linea:'8',nombre:'Gral. López y Amenábar',lat:-31.6255,lon:-60.6935,calles:'Gral. López y Amenábar'},
+  {linea:'8',nombre:'Av. Freyre y Salvia',lat:-31.6210,lon:-60.7050,calles:'Av. Freyre y Salvia'},
+  {linea:'8',nombre:'Av. Freyre y Aristóbulo del Valle',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {linea:'8',nombre:'Av. Freyre y Gorriti',lat:-31.6150,lon:-60.7082,calles:'Av. Freyre y Gorriti'},
+  {linea:'8',nombre:'Av. Freyre y Salvador del Carril',lat:-31.6122,lon:-60.7102,calles:'Av. Freyre y Salvador del Carril'},
+  // Línea 11 — Centro Cívico → Costanera (25 de Mayo / Av. Costanera corridor)
   {linea:'11',nombre:'Centro Cívico',lat:-31.6354,lon:-60.6999,calles:'25 de Mayo y San Martín'},
-  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y España'},
+  {linea:'11',nombre:'25 de Mayo y Tucumán',lat:-31.6372,lon:-60.6993,calles:'25 de Mayo y Tucumán'},
+  {linea:'11',nombre:'25 de Mayo y Balcarce',lat:-31.6320,lon:-60.6920,calles:'25 de Mayo y Balcarce'},
+  {linea:'11',nombre:'Av. Costanera y España',lat:-31.6255,lon:-60.6852,calles:'Av. Costanera y España'},
+  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y Av. del Valle'},
+  // Línea 16 — Plaza Pueyrredón → Belgrano (Cándido Pujato / Belgrano corridor)
   {linea:'16',nombre:'Plaza Pueyrredón',lat:-31.6445,lon:-60.7087,calles:'Cándido Pujato y Aristóbulo'},
+  {linea:'16',nombre:'Cándido Pujato y Rivadavia',lat:-31.6428,lon:-60.7062,calles:'Cándido Pujato y Rivadavia'},
+  {linea:'16',nombre:'Belgrano y Salta',lat:-31.6386,lon:-60.7019,calles:'Belgrano y Salta'},
+  {linea:'16',nombre:'Belgrano y Tucumán',lat:-31.6362,lon:-60.6978,calles:'Belgrano y Tucumán'},
+  {linea:'16',nombre:'Belgrano y San Martín',lat:-31.6338,lon:-60.6955,calles:'Belgrano y San Martín'},
   {linea:'16',nombre:'Belgrano',lat:-31.6312,lon:-60.6945,calles:'Belgrano y Rivadavia'}
 ];
 var BIKE_STATIONS=[
@@ -685,6 +724,8 @@ var _searchVersion=0,_searchRemoteTimer=null,_searchEnterPending=false;
 var _sheetAccordions={taxi:false,remis:false};
 var _busDetailExpanded=false,_busAltsExpanded=false,_bikeDetailExpanded=false;
 var _activeBusLine=null;
+var _rankedBus=[]; // VOY_COLLECTIVE_ENGINE_V1: cached ranked bus lines for tap-to-select re-render
+var _busBlockDestKey=''; // detects dest change → auto-select best line on a new trip
 var _pickDestMode=false;
 var _favActive=false; // current dest is a saved favorite
 var _driftEnabled=true; // idle cinematic drift (stops on first char, never resumes)
@@ -985,14 +1026,16 @@ function drawRouteLine(){
   var ck='osrm_'+profile+'_'+origin.lat.toFixed(4)+'_'+origin.lon.toFixed(4)+'_'+dest.lat.toFixed(4)+'_'+dest.lon.toFixed(4);
   try{
     var cached=sessionStorage.getItem(ck);
-    if(cached){var cc=JSON.parse(cached);if(cc&&cc.length>2){_setCoords(cc);_fitRoute(cc);return}}
+    if(cached){var cc=JSON.parse(cached);if(cc&&cc.length>2){_setCoords(cc);if(!_activeBusLine)_fitRoute(cc);return}}
     var osrmUrl='https://router.project-osrm.org/route/v1/'+profile+'/'+origin.lon+','+origin.lat+';'+dest.lon+','+dest.lat+'?overview=full&geometries=geojson';
     fetch(osrmUrl).then(function(r){return r.json()}).then(function(d){
       if(d&&d.routes&&d.routes[0]&&d.routes[0].geometry&&d.routes[0].geometry.coordinates&&d.routes[0].geometry.coordinates.length>1){
         var coords=d.routes[0].geometry.coordinates;
         try{sessionStorage.setItem(ck,JSON.stringify(coords))}catch(e){}
         _setCoords(coords);
-        _fitRoute(coords);
+        // VOY_COLLECTIVE_ENGINE_V1: if a bus route is active, the bus fit (A→bus→B)
+        // already covers A→B — don't let the late OSRM callback override it.
+        if(!_activeBusLine)_fitRoute(coords);
       }
     }).catch(function(){});
   }catch(e){}
@@ -1396,43 +1439,27 @@ function renderSheet(){
   });
   h+='</div></div></div>'; // close more-opts
 
-  // Bus block (all candidate lines ranked)
+  // Bus block — VOY_COLLECTIVE_ENGINE_V1: top 3 ranked lines shown explicitly,
+  // each tappable to draw its real route on the map. Remaining lines collapsed.
   var rankedBus=[];
   if(typeof MC.rankBusLines==='function'){try{rankedBus=MC.rankBusLines()||[]}catch(e){rankedBus=[]}}
   if(!rankedBus.length&&busEst)rankedBus=[busEst];
+  _rankedBus=rankedBus;
   if(rankedBus.length){
-    var mainBus=rankedBus[0],otherBus=rankedBus.slice(1);
-    var busConf=0.98; // V7.1 (Gemini AC-3): bus fare is fixed/public (SUBE) — bypass Bayesian variance.
-    h+='<div class="bus-block">';
-    h+='<div class="block-title"><span class="bt-ic">'+svg('bus',15)+'</span> Colectivo <span class="est-badge">Estimado · '+Math.round(busConf*100)+'%</span></div>';
-    var busText='Lin. '+escapeHtml(mainBus.linea)+' por '+escapeHtml(shortenStop(mainBus.stopOrigenCalles));
-    h+='<button class="bus-line-main" id="busMainBtn">';
-    h+='<span class="bus-line-icon">'+svg('bus',20)+'</span>';
-    h+='<div class="bus-line-body">';
-    h+='<div class="bus-line-text">'+busText+'</div>';
-    h+='<div class="bus-line-sub">Subir en '+escapeHtml(shortenStop(mainBus.stopOrigenCalles))+' · '+formatMin(mainBus.walkToStopMin||0)+' caminando</div>';
-    h+='</div>';
-    h+='<div class="bus-line-eta">'+(mainBus.totalMin||0)+' min';
-    if(mainBus.walkToStopMin<2)h+='<div class="bus-urgent">¡apurate!</div>';
-    h+='</div></button>';
-    h+='<div class="bus-detail'+(_busDetailExpanded?' expanded':'')+'" id="busDetail">';
-    h+='<div class="bd-row"><span class="bd-ic">'+svg('pin',14)+'</span><span>Parada origen: '+escapeHtml(mainBus.stopOrigenCalles||'')+'</span></div>';
-    h+='<div class="bd-row"><span class="bd-ic">'+svg('flag',14)+'</span><span>Bajada: '+escapeHtml(mainBus.stopDestCalles||'')+'</span></div>';
-    h+='<div class="bd-row"><span class="bd-ic">'+svg('gauge',14)+'</span><span>SUBE: '+(mainBus.price!=null?formatPrice(mainBus.price):'—')+'</span></div>';
-    h+='<div class="bd-row"><span class="bd-ic">'+svg('clock',14)+'</span><span>Caminata al subir: '+formatMin(mainBus.walkToStopMin||0)+'</span></div>';
-    h+='<div class="bd-row"><span class="bd-ic">'+svg('clock',14)+'</span><span>Caminata al bajar: '+formatMin(mainBus.walkFromStopMin||0)+'</span></div>';
-    h+='<div class="bd-row" style="color:var(--text3);font-size:11px;margin-top:4px">Horario estimado (sin feed en vivo)</div>';
-    h+='</div>';
-    if(otherBus.length){
-      h+='<div class="bus-alts'+(_busAltsExpanded?' expanded':'')+'" id="busAlts">';
-      otherBus.forEach(function(b){
-        h+='<div class="bus-alt-row"><span class="ba-line">Lin. '+escapeHtml(b.linea)+'</span><span class="ba-stop">'+escapeHtml(shortenStop(b.stopOrigenCalles))+'</span><span class="ba-eta">'+(b.totalMin||0)+' min</span></div>';
-      });
-      h+='</div>';
-      h+='<button class="expand-hint" id="busAltsHint">'+(_busAltsExpanded?'Cerrar ▴':('Ver '+otherBus.length+' líneas más ▾'))+'</button>';
+    // On a NEW trip (dest changed), reset selection so the best line auto-selects.
+    var destKey=(MC.getDest()?MC.getDest().lat.toFixed(4)+'_'+MC.getDest().lon.toFixed(4):'');
+    if(destKey!==_busBlockDestKey){
+      _busBlockDestKey=destKey;
+      _activeBusLine=null;
+      _busDetailExpanded=false;
+      _busAltsExpanded=false;
     }
-    h+='</div>';
-    drawBusRoute(mainBus.linea);
+    // Auto-select the best line if none active or the active one is no longer a candidate.
+    if(!_activeBusLine||!rankedBus.some(function(b){return String(b.linea)===String(_activeBusLine)})){
+      _activeBusLine=rankedBus[0].linea;
+    }
+    h+='<div id="busBlockContainer">'+renderBusBlockHTML()+'</div>';
+    drawBusRoute(_activeBusLine);
   }else{clearBusRoute()}
 
   // Bike tertiary (only if under 3km — engine filters)
@@ -1505,11 +1532,8 @@ function attachSheetEvents(){
   if(taxiHead)taxiHead.addEventListener('click',function(){_sheetAccordions.taxi=!_sheetAccordions.taxi;var b=document.getElementById('accTaxiBody');if(b)b.classList.toggle('expanded',_sheetAccordions.taxi);this.classList.toggle('expanded',_sheetAccordions.taxi);this.setAttribute('aria-expanded',_sheetAccordions.taxi)});
   var remisHead=document.getElementById('accRemisHead');
   if(remisHead)remisHead.addEventListener('click',function(){_sheetAccordions.remis=!_sheetAccordions.remis;var b=document.getElementById('accRemisBody');if(b)b.classList.toggle('expanded',_sheetAccordions.remis);this.classList.toggle('expanded',_sheetAccordions.remis);this.setAttribute('aria-expanded',_sheetAccordions.remis)});
-  // Bus main toggle
-  var busMain=document.getElementById('busMainBtn');
-  if(busMain)busMain.addEventListener('click',function(){_busDetailExpanded=!_busDetailExpanded;var d=document.getElementById('busDetail');if(d)d.classList.toggle('expanded',_busDetailExpanded)});
-  var busAltsHint=document.getElementById('busAltsHint');
-  if(busAltsHint)busAltsHint.addEventListener('click',function(){_busAltsExpanded=!_busAltsExpanded;var a=document.getElementById('busAlts');if(a)a.classList.toggle('expanded',_busAltsExpanded);this.textContent=_busAltsExpanded?'Cerrar ▴':('Ver '+(a?a.querySelectorAll('.bus-alt-row').length:0)+' líneas más ▾')});
+  // Bus block — VOY_COLLECTIVE_ENGINE_V1: tap any line to draw its route
+  attachBusBlockEvents();
   // Bike toggle
   var bikeBtn=document.getElementById('bikeLineBtn');
   if(bikeBtn)bikeBtn.addEventListener('click',function(){_bikeDetailExpanded=!_bikeDetailExpanded;var d=document.getElementById('bikeDetail');if(d)d.classList.toggle('expanded',_bikeDetailExpanded)});
@@ -1552,7 +1576,82 @@ function closeDeepLinkDialog(){
   _pendingDeepLink=null;
 }
 
+// ===================== BUS BLOCK RENDER (VOY_COLLECTIVE_ENGINE_V1) =====================
+// Top 3 ranked lines shown explicitly; each tappable to draw its real route on
+// the map and reveal its detail (boarding/alighting/SUBE/walk times). Remaining
+// lines collapse under "Ver N líneas más". Lives inside the main sheet surface
+// (no new layer).
+function renderBusBlockHTML(){
+  var rankedBus=_rankedBus||[];if(!rankedBus.length)return'';
+  var busConf=0.98;
+  var top=rankedBus.slice(0,3),rest=rankedBus.slice(3);
+  var h='';
+  h+='<div class="bus-block">';
+  h+='<div class="block-title"><span class="bt-ic">'+svg('bus',15)+'</span> Colectivo <span class="est-badge">Estimado · '+Math.round(busConf*100)+'%</span></div>';
+  top.forEach(function(b,idx){
+    var isActive=String(b.linea)===String(_activeBusLine);
+    var isSec=idx>0;
+    var cls='bus-line-row'+(isSec?' bus-line-row--sec':'')+(isActive?' active':'');
+    h+='<button type="button" class="'+cls+'" data-linea="'+escapeAttr(b.linea)+'">';
+    h+='<span class="bus-line-icon">'+svg('bus',isSec?17:20)+'</span>';
+    h+='<span class="bus-line-body">';
+    h+='<span class="bus-line-text">Lin. '+escapeHtml(b.linea)+' por '+escapeHtml(shortenStop(b.stopOrigenCalles))+'</span>';
+    h+='<span class="bus-line-sub">Subir en '+escapeHtml(shortenStop(b.stopOrigenCalles))+' · '+formatMin(b.walkToStopMin||0)+' caminando</span>';
+    h+='</span>';
+    h+='<span class="bus-line-eta">'+(b.totalMin||0)+' min';
+    if(b.walkToStopMin<2)h+='<span class="bus-urgent">¡apurate!</span>';
+    h+='</span></button>';
+    if(isActive&&_busDetailExpanded){
+      h+='<div class="bus-detail expanded" style="padding-left:var(--sp-3)">';
+      h+='<div class="bd-row"><span class="bd-ic">'+svg('pin',14)+'</span><span>Parada origen: '+escapeHtml(b.stopOrigenCalles||'')+'</span></div>';
+      h+='<div class="bd-row"><span class="bd-ic">'+svg('flag',14)+'</span><span>Bajada: '+escapeHtml(b.stopDestCalles||'')+'</span></div>';
+      h+='<div class="bd-row"><span class="bd-ic">'+svg('gauge',14)+'</span><span>SUBE: '+(b.price!=null?formatPrice(b.price):'—')+'</span></div>';
+      h+='<div class="bd-row"><span class="bd-ic">'+svg('clock',14)+'</span><span>Caminata al subir: '+formatMin(b.walkToStopMin||0)+'</span></div>';
+      h+='<div class="bd-row"><span class="bd-ic">'+svg('clock',14)+'</span><span>Caminata al bajar: '+formatMin(b.walkFromStopMin||0)+'</span></div>';
+      h+='<div class="bd-row" style="color:var(--text3);font-size:11px;margin-top:4px">Recorrido estimado · sin feed en vivo</div>';
+      h+='</div>';
+    }
+  });
+  if(rest.length){
+    h+='<div class="bus-alts'+(_busAltsExpanded?' expanded':'')+'" id="busAlts">';
+    rest.forEach(function(b){
+      var isActive=String(b.linea)===String(_activeBusLine);
+      h+='<button type="button" class="bus-alt-row'+(isActive?' active':'')+'" data-linea="'+escapeAttr(b.linea)+'"><span class="ba-line">Lin. '+escapeHtml(b.linea)+'</span><span class="ba-stop">'+escapeHtml(shortenStop(b.stopOrigenCalles))+'</span><span class="ba-eta">'+(b.totalMin||0)+' min</span></button>';
+    });
+    h+='</div>';
+    h+='<button type="button" class="expand-hint" id="busAltsHint">'+(_busAltsExpanded?'Cerrar ▴':('Ver '+rest.length+' líneas más ▾'))+'</button>';
+  }
+  h+='</div>';
+  return h;
+}
+function selectBusLine(linea){
+  if(!linea)return;
+  if(String(_activeBusLine)===String(linea)){
+    _busDetailExpanded=!_busDetailExpanded;
+  }else{
+    _activeBusLine=linea;
+    _busDetailExpanded=true;
+    drawBusRoute(linea);
+  }
+  var c=document.getElementById('busBlockContainer');
+  if(c){c.innerHTML=renderBusBlockHTML();attachBusBlockEvents()}
+}
+function attachBusBlockEvents(){
+  var rows=document.querySelectorAll('#busBlockContainer .bus-line-row, #busBlockContainer .bus-alt-row');
+  for(var i=0;i<rows.length;i++){rows[i].addEventListener('click',function(ev){ev.preventDefault();selectBusLine(this.getAttribute('data-linea'))})}
+  var hint=document.getElementById('busAltsHint');
+  if(hint)hint.addEventListener('click',function(){
+    _busAltsExpanded=!_busAltsExpanded;
+    var a=document.getElementById('busAlts');if(a)a.classList.toggle('expanded',_busAltsExpanded);
+    var rest=(_rankedBus||[]).slice(3);
+    hint.textContent=_busAltsExpanded?'Cerrar ▴':('Ver '+rest.length+' líneas más ▾');
+  });
+}
+
 // ===================== BUS ROUTE OVERLAY (estimated) =====================
+// Draws the selected line's full polyline (not a straight line), the boarding
+// stop marker, the alighting stop marker, then fits A→bus-route→B into the 9:16
+// viewport with portrait-aware padding so the whole trip stays visible.
 function drawBusRoute(linea){
   if(!_map)return;clearBusRoute();if(!linea)return;
   if(typeof _map.isStyleLoaded==='function'&&!_map.isStyleLoaded()){requestAnimationFrame(function(){drawBusRoute(linea)});return}
@@ -1560,20 +1659,47 @@ function drawBusRoute(linea){
   var coords=MC.getBusLineGeometry(linea);if(!coords||coords.length<2)return;
   try{_map.addSource('bus-route-src',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:coords}}})}catch(e){}
   try{_map.addLayer({id:'bus-route-shadow',type:'line',source:'bus-route-src',layout:{'line-cap':'round'},paint:{'line-color':'#FF9500','line-width':8,'line-opacity':0.12}})}catch(e){}
-  try{_map.addLayer({id:'bus-route-line',type:'line',source:'bus-route-src',layout:{'line-cap':'round'},paint:{'line-color':'#FF9500','line-width':3,'line-opacity':0.75,'line-dasharray':[2,1.5]}})}catch(e){}
-  var origin=MC.getOrigin();
-  if(origin&&coords.length){
-    var boardStop=coords[0],minD=Infinity;
-    coords.forEach(function(c){var d=Math.abs(c[1]-origin.lat)+Math.abs(c[0]-origin.lon);if(d<minD){minD=d;boardStop=c}});
-    try{_map.addSource('bus-board-src',{type:'geojson',data:{type:'Feature',geometry:{type:'Point',coordinates:boardStop}}});_map.addLayer({id:'bus-board-marker',type:'circle',source:'bus-board-src',paint:{'circle-radius':6,'circle-color':'#FF9500','circle-stroke-width':2,'circle-stroke-color':'#fff'}})}catch(e){}
-  }
+  try{_map.addLayer({id:'bus-route-line',type:'line',source:'bus-route-src',layout:{'line-cap':'round'},paint:{'line-color':'#FF9500','line-width':3,'line-opacity':0.8,'line-dasharray':[2,1.5]}})}catch(e){}
+  // Boarding + alighting stops from the ranked entry (uses the actual nearest
+  // stop to origin/dest, more accurate than a nearest-coord scan on the polyline).
+  var entry=(_rankedBus||[]).filter(function(b){return String(b.linea)===String(linea)})[0];
+  var boardCoord=coords[0],alightCoord=coords[coords.length-1];
+  if(entry&&entry.stopOrigen){boardCoord=[entry.stopOrigen.lon,entry.stopOrigen.lat]}
+  if(entry&&entry.stopDest){alightCoord=[entry.stopDest.lon,entry.stopDest.lat]}
+  try{_map.addSource('bus-board-src',{type:'geojson',data:{type:'Feature',geometry:{type:'Point',coordinates:boardCoord}}});_map.addLayer({id:'bus-board-marker',type:'circle',source:'bus-board-src',paint:{'circle-radius':6,'circle-color':'#FF9500','circle-stroke-width':2,'circle-stroke-color':'#fff'}})}catch(e){}
+  try{_map.addSource('bus-alight-src',{type:'geojson',data:{type:'Feature',geometry:{type:'Point',coordinates:alightCoord}}});_map.addLayer({id:'bus-alight-marker',type:'circle',source:'bus-alight-src',paint:{'circle-radius':6,'circle-color':'#34C759','circle-stroke-width':2,'circle-stroke-color':'#fff'}})}catch(e){}
   _activeBusLine=linea;
+  _fitBusRoute(coords);
+}
+// Fit A (origin) → bus polyline → B (dest) into the 9:16 viewport. Bottom padding
+// reserves room for the ~38vh sheet + footer; top for the floating search bar.
+function _fitBusRoute(busCoords){
+  if(!_map||!busCoords||!busCoords.length)return;
+  var origin=MC.getOrigin(),dest=MC.getDest();
+  var pts=[];
+  if(origin)pts.push([origin.lon,origin.lat]);
+  if(dest)pts.push([dest.lon,dest.lat]);
+  for(var i=0;i<busCoords.length;i++)pts.push(busCoords[i]);
+  if(pts.length<2)return;
+  var minLon=Infinity,minLat=Infinity,maxLon=-Infinity,maxLat=-Infinity;
+  for(var j=0;j<pts.length;j++){
+    if(pts[j][0]<minLon)minLon=pts[j][0];
+    if(pts[j][0]>maxLon)maxLon=pts[j][0];
+    if(pts[j][1]<minLat)minLat=pts[j][1];
+    if(pts[j][1]>maxLat)maxLat=pts[j][1];
+  }
+  var vh=window.innerHeight||document.documentElement.clientHeight||844;
+  var topPad=Math.round(Math.min(120,vh*0.14));
+  var botPad=Math.round(vh*0.44);
+  try{_map.fitBounds([[minLon,minLat],[maxLon,maxLat]],{padding:{top:topPad,bottom:botPad,left:60,right:60},duration:400})}catch(e){}
 }
 function clearBusRoute(){
   if(!_map)return;
+  try{if(_map.getLayer('bus-alight-marker'))_map.removeLayer('bus-alight-marker')}catch(e){}
   try{if(_map.getLayer('bus-board-marker'))_map.removeLayer('bus-board-marker')}catch(e){}
   try{if(_map.getLayer('bus-route-line'))_map.removeLayer('bus-route-line')}catch(e){}
   try{if(_map.getLayer('bus-route-shadow'))_map.removeLayer('bus-route-shadow')}catch(e){}
+  try{if(_map.getSource('bus-alight-src'))_map.removeSource('bus-alight-src')}catch(e){}
   try{if(_map.getSource('bus-board-src'))_map.removeSource('bus-board-src')}catch(e){}
   try{if(_map.getSource('bus-route-src'))_map.removeSource('bus-route-src')}catch(e){}
   _activeBusLine=null;

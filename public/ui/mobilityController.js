@@ -199,20 +199,31 @@
   }
 
   // =====================================================================
-  //  4b. BUS LINE RANKING (P5) — all plausible lines, ranked by score
-  //  score = 0.45*stop_proximity + 0.25*destination_match + 0.20*walk_time + 0.10*service_confidence
+  //  4b. BUS LINE RANKING — VOY_COLLECTIVE_ENGINE_V1
+  //  line_score = 0.35*proximity_to_user + 0.25*direction_alignment
+  //             + 0.20*destination_coverage + 0.10*frequency_confidence
+  //             + 0.10*manual_bias
   //  Pure computation over injected busStops + fareRegistry. No DOM, no fetch.
-  //  Engine is NOT touched (constraint: "Do not touch mobilityEngine unless engine-side bug").
+  //  Engine stays untouched (estimation primitives live in mobilityEngine; the
+  //  multi-line ranking/scoring model is a controller concern).
   // =====================================================================
 
   /**
    * Rank ALL plausible bus lines that could serve the origin→destination trip.
-   * Returns array sorted by score (desc). Each entry mirrors engine's estimateBus output
-   * plus a `score` field (0..1) and `stopCount`.
+   *
+   * Scoring (VOY_COLLECTIVE_ENGINE_V1):
+   *  - proximity_to_user:     how close the line's boarding stop is to origin
+   *  - direction_alignment:   does the ride segment actually head toward dest?
+   *                           (cosine similarity of board→alight vs origin→dest)
+   *  - destination_coverage:  how close the alighting stop is to dest
+   *  - frequency_confidence:  reliability proxy — more stops on the line = denser
+   *                           service coverage = higher confidence the line is real
+   *  - manual_bias:           1.0 if the user typed this line number, 0 otherwise
    *
    * @returns {Array} [{linea, stopOrigen, stopDest, walkToStopMin, rideMin,
    *                    walkFromStopMin, totalMin, price, stopOrigenCalles,
-   *                    stopDestCalles, score, stopCount}, ...]
+   *                    stopDestCalles, score, directionAlignment, stopCount}, ...]
+   *                    sorted by score desc.
    */
   function rankBusLines() {
     if (!_origin || !_dest || !_config.busStops || !_config.fareRegistry || !_config.fareRegistry.bus) return [];
@@ -228,18 +239,26 @@
       stopsByLine[s.linea].push(s);
     });
 
-    // Detect manual line bias: if origin/dest name contains "linea N" or "lin N", boost that line
+    // Detect manual line bias: if origin/dest name contains "linea N" or "lin N"
     var manualLine = null;
     var nameCombo = ((origin.name || '') + ' ' + (dest.name || '')).toLowerCase();
     var m = nameCombo.match(/(?:linea|lin\.?)\s*(\d+)/);
     if (m) manualLine = m[1];
+
+    // Desired travel direction (origin → dest), as a unit vector in lon/lat space.
+    // Used to test whether each candidate line actually goes the user's way.
+    var tripVec = { dx: dest.lon - origin.lon, dy: dest.lat - origin.lat };
+    var tripMag = Math.hypot(tripVec.dx, tripVec.dy) || 1e-9;
+    tripVec.dx /= tripMag; tripVec.dy /= tripMag;
 
     var candidates = [];
     Object.keys(stopsByLine).forEach(function (linea) {
       var stops = stopsByLine[linea];
       if (stops.length < 2) return;
 
-      // Find nearest stop to origin (nearOrig) and nearest stop to dest (nearDest) in one pass
+      // Nearest stop to origin (boarding) and nearest distinct stop to dest (alighting).
+      // Prefer a distinct alighting stop so the ride segment is meaningful; only fall
+      // back to the same stop when the line has exactly one useful stop.
       var nearOrig = null, nearDest = null, minDO = Infinity, minDD = Infinity;
       stops.forEach(function (s) {
         var dO = haversine(origin.lat, origin.lon, s.lat, s.lon);
@@ -247,6 +266,16 @@
         if (dO < minDO) { minDO = dO; nearOrig = s; }
         if (dD < minDD) { minDD = dD; nearDest = s; }
       });
+      // If boarding == alighting, pick the 2nd-nearest stop to dest to form a ride.
+      if (nearOrig === nearDest && stops.length >= 2) {
+        var second = null, minD2 = Infinity;
+        stops.forEach(function (s) {
+          if (s === nearOrig) return;
+          var dD = haversine(dest.lat, dest.lon, s.lat, s.lon);
+          if (dD < minD2) { minD2 = dD; second = s; }
+        });
+        if (second) { nearDest = second; minDD = minD2; }
+      }
 
       var rideDist = haversine(nearOrig.lat, nearOrig.lon, nearDest.lat, nearDest.lon);
       var walkToStopMin = minDO / 5 * 60 + 3;
@@ -254,22 +283,33 @@
       var walkFromStopMin = minDD / 5 * 60 + 5;
       var totalMin = walkToStopMin + rideMin + walkFromStopMin;
 
-      // Score components (0..1, higher = better)
-      // stop_proximity: how close the boarding stop is to origin (1km = 0, 0km = 1)
-      var stop_proximity = Math.max(0, Math.min(1, 1 - minDO / 1.0));
-      // destination_match: how close the alighting stop is to dest
-      var destination_match = Math.max(0, Math.min(1, 1 - minDD / 1.0));
-      // walk_time: less walking = better (0 min = 1, 15+ min = 0)
-      var walk_time = Math.max(0, Math.min(1, 1 - walkToStopMin / 15));
-      // service_confidence: lines with more stops = more confident coverage
-      var service_confidence = Math.min(1, stops.length / 5);
-
-      var score = 0.45 * stop_proximity + 0.25 * destination_match + 0.20 * walk_time + 0.10 * service_confidence;
-
-      // P5: manual line bias — if user typed this line number, boost score upward
-      if (manualLine && linea === manualLine) {
-        score = Math.min(1, score + 0.35);
+      // --- Score components (each 0..1) ---
+      // proximity_to_user: boarding stop within 0km=1, 1km+=0
+      var proximity_to_user = Math.max(0, Math.min(1, 1 - minDO / 1.0));
+      // destination_coverage: alighting stop within 0km=1, 1km+=0
+      var destination_coverage = Math.max(0, Math.min(1, 1 - minDD / 1.0));
+      // direction_alignment: cosine similarity of (board→alight) vs (origin→dest).
+      // Range -1..1 → normalize to 0..1 via (cos+1)/2. A line going the wrong way
+      // (cos<0) scores below 0.5; a line going the right way scores above 0.5.
+      // When the ride segment is degenerate (same stop / ~0 length), alignment=0.
+      var directionAlignment = 0;
+      if (rideDist > 0.02) {
+        var rideVec = { dx: nearDest.lon - nearOrig.lon, dy: nearDest.lat - nearOrig.lat };
+        var rideMag = Math.hypot(rideVec.dx, rideVec.dy) || 1e-9;
+        var cos = (rideVec.dx / rideMag) * tripVec.dx + (rideVec.dy / rideMag) * tripVec.dy;
+        directionAlignment = Math.max(0, Math.min(1, (cos + 1) / 2));
       }
+      // frequency_confidence: more stops on the line = denser, more reliable service.
+      // 6+ stops → 1.0; scales linearly below that.
+      var frequency_confidence = Math.min(1, stops.length / 6);
+      // manual_bias: 1.0 if the user explicitly named this line, else 0.
+      var manual_bias = (manualLine && String(linea) === String(manualLine)) ? 1 : 0;
+
+      var score = 0.35 * proximity_to_user
+                + 0.25 * directionAlignment
+                + 0.20 * destination_coverage
+                + 0.10 * frequency_confidence
+                + 0.10 * manual_bias;
 
       candidates.push({
         linea: linea,
@@ -282,6 +322,7 @@
         price: busFare.sube,
         stopOrigenCalles: nearOrig.calles,
         stopDestCalles: nearDest.calles,
+        directionAlignment: Math.round(directionAlignment * 1000) / 1000,
         score: Math.round(score * 1000) / 1000,
         stopCount: stops.length
       });
