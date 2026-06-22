@@ -178,3 +178,33 @@ Stage Summary:
 - ANDROID_BEHAVIOR (P1): COMPLETE — matches Google Maps: open → immediately knows location → origin filled → marker visible
 - NO_NEW_FEATURES: respected — only initGPS() and _handleGpsPosition() modified; no UI/screens/onboarding added
 - Validation flow verified: Open → prompt → accept → origin auto-filled → green marker → cards → zero taps ✅
+
+---
+Task ID: 7
+Agent: Main (Senior Cloudflare Workers Engineer)
+Task: DOMAIN_CANONICALIZATION_V1 — routing strategy patch (custom domain prod, route-alias staging, disable workers.dev)
+
+Work Log:
+- Read current wrangler.jsonc (19 lines, no routes, no workers_dev field)
+- Analyzed patch spec:
+  * primary_production_domain: voy.app (custom_domain mode) — VALID
+  * staging_domain: voy-app.test (workers_route_alias mode) — BLOCKED (see below)
+  * disable_workers_dev_public: true → workers_dev: false — VALID
+- Researched .test TLD: RFC 2606 reserves .test/.example/.invalid/.localhost for documentation/testing; cannot be registered in public DNS; cannot be added as a Cloudflare zone. A route pattern for voy-app.test would cause `wrangler deploy` to fail with "Could not find zone for voy-app.test".
+- Applied to wrangler.jsonc:
+  * Added "workers_dev": false (disables {worker}.{account}.workers.dev public URL)
+  * Added "routes" array with { "pattern": "voy.app", "custom_domain": true } (production)
+  * Documented staging issue inline with commented alternatives (staging.voy.app/*, test.voy.app/*)
+  * Preserved all existing config: name, compatibility_date, main, assets binding, observability
+- Did NOT add voy-app.test as an active route (would break wrangler deploy)
+- Did NOT modify worker.js, public/*, or any other file (atomic patch, config-only)
+
+Validation:
+- `wrangler deploy --dry-run` → SUCCESS (0.37 KiB worker, 8 asset files, ASSETS binding present, no config errors)
+- Config syntax valid; routes field accepted by wrangler 4.103.0
+
+Stage Summary:
+- workers_dev: false — APPLIED (workers.dev URL disabled for this Worker)
+- voy.app custom domain — APPLIED to config (will provision at first real deploy once voy.app zone is added to CF account; Cloudflare auto-creates DNS record + Universal TLS cert)
+- voy-app.test staging — BLOCKED & DOCUMENTED (.test is RFC 2606 reserved, cannot be a CF zone). Proposed valid alternatives in wrangler.jsonc comments: staging.voy.app/* or test.voy.app/* (route-based, same worker, require voy.app zone). Awaiting user confirmation on which substitution to activate.
+- No deploy executed (no CF credentials cached; voy.app zone not confirmed in account). Code is deploy-ready.

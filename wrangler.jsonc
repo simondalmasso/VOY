@@ -2,10 +2,44 @@
   // ============================================================
   //  VOY Lite — Cloudflare Workers config
   //  Sirve public/ como assets estáticos + rewrite / → /VOY-Lite.html
+  //
+  //  DOMAIN_CANONICALIZATION_V1
+  //  - Production: voy.app (custom domain, auto-provisions DNS + TLS)
+  //  - Staging: route-based alias (see STAGING note below)
+  //  - workers.dev public access: DISABLED
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-06-22",
   "main": "./worker.js",
+
+  // Disable the default {worker}.{account}.workers.dev URL.
+  // Public access is via voy.app only. The workers.dev subdomain still
+  // exists at the account level (cannot be renamed) but is not routable
+  // for this Worker.
+  "workers_dev": false,
+
+  "routes": [
+    // Production custom domain.
+    // Cloudflare auto-provisions the DNS record + Universal TLS cert.
+    // Prerequisite: zone "voy.app" must be added to this CF account.
+    { "pattern": "voy.app", "custom_domain": true }
+    //
+    // STAGING note (DOMAIN_CANONICALIZATION_V1 → staging_domain: "voy-app.test"):
+    // The .test TLD is reserved by RFC 2606 and CANNOT be registered or
+    // added as a Cloudflare zone. A route pattern for voy-app.test would
+    // cause `wrangler deploy` to fail ("Could not find zone").
+    //
+    // Valid route-based alias alternatives (uncomment ONE after adding
+    // the voy.app zone to Cloudflare):
+    //
+    //   { "pattern": "staging.voy.app/*", "custom_domain": false }
+    //   { "pattern": "test.voy.app/*",   "custom_domain": false }
+    //
+    // These work because they are subdomains of the voy.app zone, which
+    // Cloudflare can route via Workers Routes (no separate DNS record
+    // needed beyond the zone's NS delegation).
+  ],
+
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
