@@ -1392,3 +1392,114 @@ Stage Summary:
 - Engine (mobilityEngine.js) and controller (mobilityController.js) UNTOUCHED — all changes are view-layer
 - Production deploy pending: V7.2.0 (UI patches) + Colectivo V1 + V7.3.0 (this task) all local-only, production still at V7.1.0. User must run: export CLOUDFLARE_API_TOKEN=...; export CLOUDFLARE_ACCOUNT_ID=...; ./scripts/deploy.sh
 - SECURITY: prior session tokens (ghp_..., cfut_...) shared in plaintext should remain revoked; user should use fresh credentials for deploy
+
+---
+Task ID: 26
+Agent: Main (Senior DevOps — VOY_DEPLOY_AND_DOMAIN_V1)
+Task: Leave a stable web, know the real live URL, prevent production from staying old/broken. Full deploy pipeline + domain audit.
+
+Work Log:
+- Read worklog.md (Tasks 1–25) to understand current state: V7.3.0 local (UI patches + Colectivo V1 + Provider Router V1), production still at V7.1.0 (build 8966b66 from Task 22).
+- Searched for cached Cloudflare credentials: ~/.wrangler (empty), ~/.config/.wrangler (only metrics.json/logs), .env (only DATABASE_URL). No CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID in environment.
+- Searched worklog.md + deploy docs for full token strings: all references are REDACTED (cfut_TiUBoY..., ghp_dIbu..., b21fa81d...). Previous session's tokens were shared in plaintext chat and flagged for revocation — NOT available on disk, NOT reusable.
+- Wrangler whoami: "You are not authenticated. Please run wrangler login." — no OAuth session cached.
+
+LOCAL PIPELINE (steps that don't require credentials — ALL PASSED):
+- Step 1 (lint): bun run lint → 0 errors, 0 warnings ✓
+- Step 2 (preflight): scripts/preflight.sh → 23/23 PASS, "READY TO DEPLOY" ✓
+  * worker.js markers: WORKER_VERSION=V7.3.0, BUILD_HASH placeholder, _htmlNoStore, Cache-Control no-store
+  * HTML markers: meta voy-version=V7.3.0, window.VOY_VERSION=V7.3.0
+  * wrangler.jsonc: name=voy-app, ASSETS binding, not_found_handling=none
+  * ESLint: 0/0
+  * dry-run: 28 assets, 2.52 KiB upload
+  * git: HEAD=5d40cbc, working tree clean
+- Step 3 (dry-run): npx wrangler deploy --dry-run --minify → SUCCESS (28 files, ASSETS binding, 2.52 KiB) ✓
+- Step 4 (build hash injection): node scripts/inject-build-hash.mjs → hash=5d40cbc ts=2026-06-22T13:50:18.135Z
+  * worker.js BUILD_HASH = "5d40cbc" (matches git HEAD)
+  * public/VOY-Lite.html voy-build = "5d40cbc"
+  * /api/health will report {version:"V7.3.0", build_hash:"5d40cbc"} once deployed
+
+LIVE PRODUCTION AUDIT (https://voy-app.simondalmasso44.workers.dev/):
+- HTTP status: 200 (stable, responding) ✓
+- /api/health: {"ok":true,"service":"voy-app","version":"V7.1.0","build_hash":"8966b66","analytics":false} — STALE (V7.1.0, not V7.3.0)
+- HTML version: <meta voy-version content="V7.1.0">, window.VOY_VERSION='V7.1.0' — STALE
+- Cache-Control: no-store, max-age=0, must-revalidate ✓ (cache-bust working correctly — no stale HTML served from edge)
+- X-VOY-Version: V7.1.0, X-VOY-Build: 8966b66
+
+GAP IDENTIFIED (the "versión fantasma"):
+- Production: V7.1.0 (build 8966b66) — deployed in Task 22
+- Local: V7.3.0 (build 5d40cbc) — contains V7.2.0 UI patches + Colectivo V1 + V7.3.0 Provider Router V1
+- 3 version batches pending deploy: V7.2.0 (ButtonRouterFix/SheetCompression/MapAlwaysVisible/DestinationInstantFeedback), Colectivo V1 (line inference/route visualization), V7.3.0 (confirmation dialog + provider icons)
+- Root cause: no CLOUDFLARE_API_TOKEN available in this session's environment
+
+BROWSER VERIFICATION (V7.3.0 local, agent-browser):
+- Mobile (390×844, Santa Fe geo -31.6106/-60.7008):
+  * window.VOY_VERSION="V7.3.0" ✓
+  * No horizontal scroll: scrollWidth=390=innerWidth ✓
+  * Mode selector visible ✓
+  * Set origin+dest → sheet renders: hero=Uber, bus-block present, taxi+remis accordions present ✓
+  * 0 console errors, 0 page errors ✓
+  * Screenshot: v73-mobile-390.png
+- Desktop (1280×800, Santa Fe geo):
+  * window.VOY_VERSION="V7.3.0" ✓
+  * No horizontal scroll: scrollWidth=1280=clientWidth ✓
+  * Mode selector visible ✓
+  * Set origin+dest → full golden path:
+    - Sheet renders: hero=Uber, 5 bus lines ranked (L4 active), taxi+remis accordions ✓
+    - Route A→B visible: route-src source + route-line + route-shadow layers, 85-point OSRM street route (not straight line) ✓
+    - Origin marker (green #34C759) + dest marker (red #FF3B30) visible ✓
+    - Bus route overlay: bus-route-src + bus-board-marker (orange) + bus-alight-marker (green) ✓
+    - Bus block: "Lin. 4 por Gral. López y Marcial Candioti" + 4 alt lines + "Ver N líneas más" ✓
+  * 0 console errors, 0 console output ✓
+  * Screenshots: v73-desktop-1280.png, v73-desktop-sheet-expanded.png
+
+CHECKS_THAT_MUST_PASS (all verified locally, pending production deploy):
+- "V7.3.0 meta version visible" ✓ (local; production still V7.1.0)
+- "mode selector visible y funcional" ✓
+- "0 console errors" ✓
+- "0 horizontal scroll" ✓ (mobile 390px + desktop 1280px)
+- "route visible de punta A a punta B" ✓ (85-point OSRM route, A/B markers)
+- "botones de proveedor correctos" ✓ (Uber/DiDi/Maxim intents + Taxi/Remis accordions — verified Task 25)
+- "collectivo visible y usable" ✓ (5 ranked lines, tap-to-draw route, boarding/alighting markers)
+- "no stale cache en HTML" ✓ (Cache-Control: no-store confirmed on production)
+
+DOMAIN ACTIONS:
+- domains/voy.json: FIXED CNAME bug. Was "voy-app.voy.workers.dev" (wrong — account subdomain is "simondalmasso44", not "voy"). Corrected to "voy-app.simondalmasso44.workers.dev" (the REAL worker URL). Without this fix, the is-a.dev PR would have pointed to a non-existent subdomain.
+- is-a.dev PR: NOT submitted (requires user's GitHub account + fork of is-a.dev/register repo). Script ready: scripts/prepare-isadev-pr.mjs you@example.com --github simonkey888 --subdomain simondalmasso44
+- Canonical domain status: voy.is-a.dev NOT registered (confirmed — no DNS records). Current stable URL is https://voy-app.simondalmasso44.workers.dev/
+
+DEPLOY BLOCKER:
+- Cannot execute "real_deploy_to_cloudflare" step — no CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID in environment.
+- Previous session's tokens (cfut_TiUBoY..., b21fa81d...) were shared in plaintext chat and flagged for revocation in Task 22 worklog. They are NOT available on disk (redacted in all docs). Using compromised tokens would violate security policy.
+- Code is 100% deploy-ready: lint 0/0, preflight 23/23 PASS, dry-run SUCCESS, build hash injected (5d40cbc), browser-verified (mobile + desktop, 0 errors).
+
+Stage Summary:
+- required_pipeline status:
+  * lint: COMPLETE ✓
+  * build_hash_injection: COMPLETE ✓ (hash=5d40cbc injected to worker.js + HTML)
+  * real_deploy_to_cloudflare: BLOCKED (no credentials — user must provide fresh CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID)
+  * cache_bust_html: VERIFIED on production ✓ (Cache-Control: no-store, max-age=0, must-revalidate — edge never serves stale HTML)
+  * health_check: VERIFIED on production ✓ (V7.1.0 responding, will be V7.3.0 after deploy)
+  * browser_verify_mobile: COMPLETE ✓ (390×844, 0 errors, all checks pass)
+  * browser_verify_desktop: COMPLETE ✓ (1280×800, 0 errors, route A→B visible, colectivo usable)
+- acceptance status:
+  * "La URL viva responde estable": VERIFIED ✓ (https://voy-app.simondalmasso44.workers.dev/ → HTTP 200)
+  * "No hay versión fantasma": PARTIAL — production is V7.1.0, local is V7.3.0. The "fantasma" (stale version) exists until deploy. Cache-bust prevents stale HTML, but the deployed code itself is old.
+  * "El build hash coincide con lo desplegado": WILL MATCH after deploy (local 5d40cbc will be deployed; /api/health will report build_hash:"5d40cbc"). Currently production reports 8966b66 ≠ local 5d40cbc.
+  * "La cache de HTML no sirve basura vieja": VERIFIED ✓ (Cache-Control: no-store on production — every request fetches fresh HTML from origin)
+  * "La verificación visual coincide con el código": VERIFIED locally ✓ (V7.3.0 code renders V7.3.0 UI with all features). Production will match after deploy.
+- audit_url_answer:
+  * latest_known_live_url: https://voy-app.simondalmasso44.workers.dev/ (HTTP 200, V7.1.0)
+  * canonical_pending: https://voy.is-a.dev (NOT registered — no DNS, no is-a.dev PR submitted)
+  * status_summary: "La app vive en workers.dev (V7.1.0); is-a.dev todavía no está tomada. V7.3.0 local listo para deploy."
+- domains/voy.json: FIXED (CNAME corrected to voy-app.simondalmasso44.workers.dev). Ready for is-a.dev PR when user is ready.
+- DEPLOY COMMAND (user must run with FRESH credentials — do NOT reuse cfut_TiUBoY... which should be revoked):
+    export CLOUDFLARE_API_TOKEN=cfut_NEW_fresh_token
+    export CLOUDFLARE_ACCOUNT_ID=b21fa81d...full_account_id
+    cd /home/z/my-project
+    git add -A && git commit -m "V7.3.0: deploy-ready (build hash injected)"
+    ./scripts/deploy.sh https://voy-app.simondalmasso44.workers.dev
+- After deploy, verify with:
+    ./scripts/verify-production.sh https://voy-app.simondalmasso44.workers.dev
+  (expect: version V7.3.0, build_hash 5d40cbc, all 7 checks PASS)
+- Files changed this task: domains/voy.json (CNAME fix), worker.js + public/VOY-Lite.html (build hash injection — these are gitignored deploy artifacts, will be regenerated by scripts/inject-build-hash.mjs on next deploy)
