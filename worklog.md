@@ -486,3 +486,61 @@ Stage Summary:
 - github: https://github.com/simonkey888/VOY/commit/33014a48714e98d8d727d0f811914a3d6f4ead62
 - live: https://voy-app.simondalmasso44.workers.dev (V4 active)
 - SECURITY: user shared GitHub PAT + CF API token in plaintext — both should be rotated after this session
+
+---
+Task ID: 13
+Agent: Main (Senior Mobile UX + Mobility Engineer)
+Task: VOY V4.1 ATOMIC PATCHES P1–P7 — fix destination search, CTA visibility, map shadowing, bus mini-block (local-only, no deploy)
+
+Work Log:
+- Read worklog.md (Tasks 1–12) to ground patches in prior state (V4 ambient-map + decision-sheet rebuild, deployed to workers.dev)
+- Read public/VOY-Lite.html (1362 lines), public/ui/mobilityController.js (727 lines), public/core/mobilityEngine.js (441 lines — UNTOUCHED per constraint)
+- Root-caused 4 critical bugs (F1–F4):
+  * F1/F4: `.input-card{overflow:hidden}` was clipping `.search-dropdown` (position:absolute inside input-row) → dropdown rendered but invisible. PLUS `searchNominatim` had a 1100ms blocking rate-limiter returning [] on rapid typing. PLUS 400ms debounce too slow for mobile.
+  * F2: hero CTA could be pushed off-screen when sheet content overflowed (keyboard, expanded alts). No blur on select → keyboard stayed up covering CTA.
+  * F3: map opacity 0.35 + blur(3px) + heavy scrim (35%→95% white gradient) = map effectively invisible behind decision flow.
+  * F4: same root cause as F1 (clipped dropdown) — mobile typing appeared to do nothing.
+- Applied P1 (VOY-Lite.html CSS+JS): removed `overflow:hidden` from `.input-card`; rewrote `onSearchInput` to LOCAL-FIRST (instant `MC.searchLocal()` → render → debounced 250ms remote `searchNominatim` → merge+dedup); added `onSearchKeydown` for Enter/Go; added `fallbackGeocode` for manual text → Nominatim → select; bumped dropdown z-index to 3000.
+- Applied P2 (VOY-Lite.html CSS+JS): `.sheet-wrap` now `overflow-y:auto` (scrollable when content overflows); `selectSearchResult` now `inp.blur()` (dismiss keyboard) + `scrollIntoView({block:'center'})` on hero CTA after dest selection.
+- Applied P3 (VOY-Lite.html CSS): map `opacity:0.35→0.9`, `filter:blur(3px)→none`; scrim reduced from full-veil (35%→95%) to LIGHT top+bottom fade only (55%→8%→8%→88%) — map clearly readable in the middle; dark mode scrim likewise lightened.
+- Applied P4 (VOY-Lite.html JS): `onkeydown` wired on both inputs → `onSearchKeydown` → Enter/Go selects first dropdown result OR runs `fallbackGeocode`; "Buscando…" hint shown while remote resolves.
+- Applied P5 (mobilityController.js + VOY-Lite.html view): added `rankBusLines()` to controller — groups stops by line, finds nearest origin/dest stops per line, scores each via `0.45*stop_proximity + 0.25*destination_match + 0.20*walk_time + 0.10*service_confidence`, boosts manually-typed line numbers (+0.35), returns sorted array. View renders compact bus mini-block (own block, not inline): main line card "Lin. {n} por {calles}" + "≈ estimado" badge + ETA + "¡apurate!" if walkToStopMin<2; expandable detail (parada, bajada, SUBE, caminatas); expandable alts ("Ver N líneas más ▾"). Bike separated as tertiary one-liner (LAST).
+- Applied P6 (mobilityController.js + VOY-Lite.html): added `getBusLineGeometry(linea)` to controller (returns ordered [lon,lat] coords, sorted west→east as rough path — no GTFS shapes). View `drawBusRoute(linea)` adds dashed orange polyline (line-dasharray in PAINT not LAYOUT — fixed maplibre validation error) + boarding stop circle marker; `clearBusRoute()` removes all layers/sources with per-step try/catch. Made map error handler less aggressive (`_mapStyleLoaded` guard) so runtime layer errors don't trigger full OSM fallback. All bus info labeled "≈ estimado" (no live feed faked).
+- Applied P7 (VOY-Lite.html CSS): verified map stays visible as context (opacity 0.9, no blur, light scrim); sheet has solid `--surface` bg so decision surface is legible over map; map never obscures sheet (z-index hierarchy: map z-0 < scrim z-1 < app z-2).
+- Fixed bug found during verification: `line-dasharray` was in `layout` (invalid) → triggered map error → OSM fallback. Moved to `paint`. Map now stays on CARTO Positron (98 layers).
+- Controller `searchNominatim`: removed 1100ms blocking rate-limiter (returned [] on rapid typing — broke mobile); normalized cache key via `MobilityEngine.normalize()` (accent-insensitive); added `!r.ok` guard.
+- Bumped script cache versions `?v=4` → `?v=5` so browsers fetch new controller.
+- Did NOT touch: mobilityEngine.js (constraint respected), worker.js, wrangler.jsonc (domain policy: keep workers.dev, don't touch CF routing).
+
+Browser Verification (agent-browser, 360×640 mobile + 1280×800 desktop):
+- F1/F4 dest search: typed "Belgrano" → dropdown visible (was clipped), 3 local suggestions instantly ✓
+- F1/F4 dest search: typed "Hospital" → 3 local suggestions (bus stop + 2 bike stations) ✓
+- F2 CTA: hero pedir visible, 52px × 288px on 360px viewport, fully in viewport (ctaFullyVisible:true) ✓
+- F2 keyboard: selectSearchResult blurs input → keyboard dismisses → CTA reachable ✓
+- F2 scroll: sheet-wrap scrollable, scrollIntoView on hero CTA after dest select ✓
+- F3 map: opacity 0.9 (was 0.35), filter none (was blur 3px), scrim light top+bottom fade only ✓
+- F3 post-selection: map opacity stays 0.9 after origin+dest selected (no post-selection shadow) ✓
+- P5 bus mini-block: "Lin. 1 por San Martín y Rivadavia" + "≈ estimado" badge + "VER 4 LÍNEAS MÁS ▾" ✓
+- P5 ranked: 5 plausible bus lines ranked by score ✓
+- P5 expand: toggleBusAlts → 4 alt rows; toggleBusDetail → 6 detail rows ✓
+- P5 bike tertiary: "🚲 1.4 km · gratis" one-liner, LAST, separated from bus ✓
+- P6 route overlay: bus-route-line + bus-route-shadow + bus-board-marker all drawn on CARTO Positron ✓
+- P6 estimated: "≈ estimado" badge in UI + "Horario estimado (sin feed en vivo)" in detail ✓
+- P7 map as context: map visible behind sheet, sheet solid bg, no obscuring ✓
+- Map style: CARTO Positron stays (98 layers) — no OSM fallback after line-dasharray fix ✓
+- No horizontal scroll on 360px (scrollWidth===clientWidth===360) ✓
+- bun run lint: 0 errors (1 pre-existing warning in worker.js, untouched) ✓
+- Zero console errors, zero console warnings ✓
+
+Stage Summary:
+- F1 (dest search): COMPLETE — overflow:hidden removed, local-first pipeline, 250ms debounce, accent-normalized cache, no blocking rate-limiter
+- F2 (CTA visible): COMPLETE — sheet-wrap scrollable, blur on select, scrollIntoView, 52px hit area
+- F3 (map not shadowed): COMPLETE — opacity 0.9, no blur, light scrim (top+bottom fade only)
+- F4 (mobile typing): COMPLETE — suggestions on each input event, Enter/Go fallback geocode, "Buscando…" hint
+- P5 (bus mini-block): COMPLETE — rankBusLines() with spec score formula, manual-line bias, own block, all lines ranked, expandable
+- P6 (route overlay + estimated): COMPLETE — getBusLineGeometry(), dashed orange polyline, boarding marker, "≈ estimado" labeling, no live feed faked
+- P7 (map as context): COMPLETE — map visible (0.9 opacity), sheet solid bg, z-index hierarchy correct
+- Non-negotiables respected: one home screen, small/visible map, no shadow after selection, no extra pages, no recommendation explainer, bus informational own block, bike tertiary last, dest typing works on mobile, CTA visible/tappable, engine untouched
+- Domain policy respected: worker.js + wrangler.jsonc UNTOUCHED, workers.dev deployment unchanged
+- Files changed: public/VOY-Lite.html (P1–P4, P7 view, P5/P6 view), public/ui/mobilityController.js (P5 rankBusLines, P6 getBusLineGeometry, searchNominatim fix). mobilityEngine.js UNTOUCHED.
+- Local-only patches — NOT deployed. User can deploy to workers.dev when ready (no credentials handled).

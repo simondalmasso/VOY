@@ -176,6 +176,120 @@
   }
 
   // =====================================================================
+  //  4b. BUS LINE RANKING (P5) — all plausible lines, ranked by score
+  //  score = 0.45*stop_proximity + 0.25*destination_match + 0.20*walk_time + 0.10*service_confidence
+  //  Pure computation over injected busStops + fareRegistry. No DOM, no fetch.
+  //  Engine is NOT touched (constraint: "Do not touch mobilityEngine unless engine-side bug").
+  // =====================================================================
+
+  /**
+   * Rank ALL plausible bus lines that could serve the origin→destination trip.
+   * Returns array sorted by score (desc). Each entry mirrors engine's estimateBus output
+   * plus a `score` field (0..1) and `stopCount`.
+   *
+   * @returns {Array} [{linea, stopOrigen, stopDest, walkToStopMin, rideMin,
+   *                    walkFromStopMin, totalMin, price, stopOrigenCalles,
+   *                    stopDestCalles, score, stopCount}, ...]
+   */
+  function rankBusLines() {
+    if (!_origin || !_dest || !_config.busStops || !_config.fareRegistry || !_config.fareRegistry.bus) return [];
+    var origin = _origin, dest = _dest;
+    var busStops = _config.busStops;
+    var busFare = _config.fareRegistry.bus;
+    var haversine = MobilityEngine.haversine;
+
+    // Group stops by line
+    var stopsByLine = {};
+    busStops.forEach(function (s) {
+      if (!stopsByLine[s.linea]) stopsByLine[s.linea] = [];
+      stopsByLine[s.linea].push(s);
+    });
+
+    // Detect manual line bias: if origin/dest name contains "linea N" or "lin N", boost that line
+    var manualLine = null;
+    var nameCombo = ((origin.name || '') + ' ' + (dest.name || '')).toLowerCase();
+    var m = nameCombo.match(/(?:linea|lin\.?)\s*(\d+)/);
+    if (m) manualLine = m[1];
+
+    var candidates = [];
+    Object.keys(stopsByLine).forEach(function (linea) {
+      var stops = stopsByLine[linea];
+      if (stops.length < 2) return;
+
+      // Find nearest stop to origin (nearOrig) and nearest stop to dest (nearDest) in one pass
+      var nearOrig = null, nearDest = null, minDO = Infinity, minDD = Infinity;
+      stops.forEach(function (s) {
+        var dO = haversine(origin.lat, origin.lon, s.lat, s.lon);
+        var dD = haversine(dest.lat, dest.lon, s.lat, s.lon);
+        if (dO < minDO) { minDO = dO; nearOrig = s; }
+        if (dD < minDD) { minDD = dD; nearDest = s; }
+      });
+
+      var rideDist = haversine(nearOrig.lat, nearOrig.lon, nearDest.lat, nearDest.lon);
+      var walkToStopMin = minDO / 5 * 60 + 3;
+      var rideMin = rideDist / 15 * 60;
+      var walkFromStopMin = minDD / 5 * 60 + 5;
+      var totalMin = walkToStopMin + rideMin + walkFromStopMin;
+
+      // Score components (0..1, higher = better)
+      // stop_proximity: how close the boarding stop is to origin (1km = 0, 0km = 1)
+      var stop_proximity = Math.max(0, Math.min(1, 1 - minDO / 1.0));
+      // destination_match: how close the alighting stop is to dest
+      var destination_match = Math.max(0, Math.min(1, 1 - minDD / 1.0));
+      // walk_time: less walking = better (0 min = 1, 15+ min = 0)
+      var walk_time = Math.max(0, Math.min(1, 1 - walkToStopMin / 15));
+      // service_confidence: lines with more stops = more confident coverage
+      var service_confidence = Math.min(1, stops.length / 5);
+
+      var score = 0.45 * stop_proximity + 0.25 * destination_match + 0.20 * walk_time + 0.10 * service_confidence;
+
+      // P5: manual line bias — if user typed this line number, boost score upward
+      if (manualLine && linea === manualLine) {
+        score = Math.min(1, score + 0.35);
+      }
+
+      candidates.push({
+        linea: linea,
+        stopOrigen: nearOrig,
+        stopDest: nearDest,
+        walkToStopMin: Math.ceil(walkToStopMin),
+        rideMin: Math.ceil(rideMin),
+        walkFromStopMin: Math.ceil(walkFromStopMin),
+        totalMin: Math.ceil(totalMin),
+        price: busFare.sube,
+        stopOrigenCalles: nearOrig.calles,
+        stopDestCalles: nearDest.calles,
+        score: Math.round(score * 1000) / 1000,
+        stopCount: stops.length
+      });
+    });
+
+    candidates.sort(function (a, b) { return b.score - a.score; });
+    return candidates;
+  }
+
+  // =====================================================================
+  //  4c. BUS LINE GEOMETRY (P6) — ordered stop coordinates for route overlay
+  //  Returns [lon,lat] array sorted to approximate a path (no GTFS shapes).
+  //  Clearly "estimated" — the view labels it as such.
+  // =====================================================================
+
+  function getBusLineGeometry(linea) {
+    if (!_config.busStops) return [];
+    var stops = _config.busStops.filter(function (s) { return String(s.linea) === String(linea); });
+    if (stops.length < 2) return [];
+    // Sort by lon (west→east) then lat (south→north) to form a rough path.
+    // This is an approximation — real route shapes require GTFS data we don't have.
+    stops.sort(function (a, b) { return a.lon - b.lon || a.lat - b.lat; });
+    return stops.map(function (s) { return [s.lon, s.lat]; });
+  }
+
+  function getBusLineStops(linea) {
+    if (!_config.busStops) return [];
+    return _config.busStops.filter(function (s) { return String(s.linea) === String(linea); });
+  }
+
+  // =====================================================================
   //  5. SEARCH COORDINATION
   // =====================================================================
 
@@ -188,12 +302,16 @@
   }
 
   async function searchNominatim(q) {
-    var key = q.toLowerCase().trim();
+    // P1/F1: normalize cache key (lowercase + strip accents) so "Belgrano" and "Bélgrano" share cache
+    var key = MobilityEngine.normalize(q).trim();
+    if (!key) return [];
     if (_searchCache[key]) return _searchCache[key];
 
-    var now = Date.now();
-    if (now - _lastSearchTime < 1100) return [];
-    _lastSearchTime = now;
+    // P1/F1: removed the 1100ms blocking rate-limiter — it returned [] on rapid typing,
+    // which broke mobile destination search. The 250ms debounce in the view + aggressive
+    // per-query caching is sufficient to respect Nominatim's usage policy for low-traffic demo use.
+    // If Nominatim returns 429, the catch returns [] and local results still render.
+    _lastSearchTime = Date.now();
 
     try {
       var url = 'https://nominatim.openstreetmap.org/search?' +
@@ -201,6 +319,7 @@
         '&format=json&limit=10&accept-language=es' +
         '&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=1&addressdetails=1';
       var r = await fetch(url, { headers: { 'User-Agent': 'MovilidadAsistente/1.0' } });
+      if (!r.ok) return [];
       var data = await r.json();
 
       var localResults = searchLocal(q);
@@ -663,6 +782,11 @@
 
     // Estimation orchestration
     runEstimations: runEstimations,
+
+    // P5/P6: Bus line ranking + geometry (view calls these for the bus mini-block)
+    rankBusLines: rankBusLines,
+    getBusLineGeometry: getBusLineGeometry,
+    getBusLineStops: getBusLineStops,
 
     // Search coordination
     searchLocal: searchLocal,

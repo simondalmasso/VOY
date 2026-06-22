@@ -1,9 +1,17 @@
 <!--
-VOY V4 — Ambient map wallpaper + bottom decision sheet
-Build: 2026-06-22 V4
+VOY V4.1 — Ambient map wallpaper + bottom decision sheet
+Build: 2026-06-22 V4.1 (P1–P7 patches)
 Architecture: hybrid_command_layer (ambient map + decision sheet)
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
-Controller: ui/mobilityController.js (UNTOUCHED — memory/search/estimation)
+Controller: ui/mobilityController.js (P5/P6 — rankBusLines, getBusLineGeometry added)
+Patches applied:
+  P1/F1/F4: destination search pipeline — overflow:hidden removed, local-first, 250ms debounce
+  P2/F2:    CTA visible — sheet-wrap scrollable, blur on select, scrollIntoView, hit area
+  P3/F3:    map NOT shadowed — opacity 0.9, no blur, light top+bottom scrim only
+  P4/F4:    mobile dest input — suggestions on each input event, Enter fallback geocode
+  P5:       bus mini-block — all plausible lines ranked by score
+  P6:       bus route overlay + clearly estimated state
+  P7:       map visible as context, never obscures decision surface
 -->
 <!DOCTYPE html>
 <html lang="es">
@@ -13,8 +21,8 @@ Controller: ui/mobilityController.js (UNTOUCHED — memory/search/estimation)
 <title>VOY – Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="core/mobilityEngine.js?v=4"></script>
-<script src="ui/mobilityController.js?v=4"></script>
+<script src="core/mobilityEngine.js?v=5"></script>
+<script src="ui/mobilityController.js?v=5"></script>
 <style>
 /* ============================================================
    VOY V4 — AMBIENT_MAP_DECISION_SHEET
@@ -62,9 +70,10 @@ Controller: ui/mobilityController.js (UNTOUCHED — memory/search/estimation)
   --shadow-lg:0 12px 40px rgba(0,0,0,0.10),0 4px 12px rgba(0,0,0,0.05);
   --shadow-sheet:0 -4px 24px rgba(0,0,0,0.08),0 -1px 6px rgba(0,0,0,0.04);
   /* SOLID BACKGROUNDS (no backdrop-filter — perf) */
-  --header-bg:rgba(245,245,247,0.92);
-  --footer-bg:rgba(245,245,247,0.95);
-  --scrim-bg:linear-gradient(180deg,rgba(245,245,247,0.35) 0%,rgba(245,245,247,0.72) 40%,rgba(245,245,247,0.95) 100%);
+  --header-bg:rgba(245,245,247,0.94);
+  --footer-bg:rgba(245,245,247,0.96);
+  /* P3/P7: scrim is now a LIGHT top+bottom fade only — map stays clearly readable in the middle */
+  --scrim-bg:linear-gradient(180deg,rgba(245,245,247,0.55) 0%,rgba(245,245,247,0.08) 22%,rgba(245,245,247,0.08) 58%,rgba(245,245,247,0.88) 100%);
   /* MOTION */
   --ease:180ms ease-out;
   --ease-sheet:220ms cubic-bezier(0.22,0.61,0.36,1);
@@ -72,8 +81,8 @@ Controller: ui/mobilityController.js (UNTOUCHED — memory/search/estimation)
 [data-theme="dark"]{
   --bg:#000000;--surface:#1C1C1E;--bg3:#2C2C2E;--text:#F2F2F7;--text2:#98989F;
   --text3:#636366;--border-subtle:rgba(255,255,255,0.08);
-  --header-bg:rgba(0,0,0,0.92);--footer-bg:rgba(0,0,0,0.95);
-  --scrim-bg:linear-gradient(180deg,rgba(0,0,0,0.4) 0%,rgba(0,0,0,0.72) 40%,rgba(0,0,0,0.95) 100%);
+  --header-bg:rgba(0,0,0,0.94);--footer-bg:rgba(0,0,0,0.96);
+  --scrim-bg:linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.12) 22%,rgba(0,0,0,0.12) 58%,rgba(0,0,0,0.92) 100%);
   --shadow-sm:0 1px 2px rgba(0,0,0,0.3),0 1px 3px rgba(0,0,0,0.4);
   --shadow-md:0 4px 16px rgba(0,0,0,0.4),0 1px 4px rgba(0,0,0,0.3);
   --shadow-lg:0 12px 40px rgba(0,0,0,0.55),0 4px 12px rgba(0,0,0,0.35);
@@ -89,14 +98,15 @@ body{
   overflow-x:hidden;
 }
 
-/* === AMBIENT MAP (z-0) — full-bleed background, dim, blurred, non-interactive === */
+/* === AMBIENT MAP (z-0) — full-bleed background, CLEARLY VISIBLE, non-interactive === */
+/* P3/P7: map must NOT be shadowed/dimmed after selection. Opacity 0.9, no blur. */
 #ambientMap{
   position:fixed;inset:0;z-index:0;
   background:var(--bg3);
 }
 #ambientMap #map{
   position:absolute;inset:0;width:100%;height:100%;
-  opacity:0.35;filter:blur(3px) saturate(120%);
+  opacity:0.9;filter:none;
   pointer-events:none;
 }
 /* MAP EXPAND MODAL — toggled by .map-expanded on body */
@@ -160,10 +170,11 @@ body.map-expanded #scrim{display:none}
 
 /* === INPUTS — single compact card === */
 .inputs{padding:var(--sp-2) var(--sp-4) var(--sp-1)}
+/* P1/F4: overflow:hidden REMOVED — was clipping the .search-dropdown inside .input-row.
+   Rounded corners preserved by the card's own border-radius + transparent row backgrounds. */
 .input-card{
   background:var(--surface);border:0.5px solid var(--border-subtle);
   border-radius:var(--radius-card);box-shadow:var(--shadow-md);
-  overflow:hidden;
 }
 .input-row{
   display:flex;align-items:center;gap:var(--sp-3);
@@ -190,13 +201,13 @@ body.map-expanded #scrim{display:none}
 .input-btn:active{transform:scale(0.9);background:var(--bg3)}
 .btn-locate{color:var(--primary)}
 .btn-map{color:var(--text2);font-size:16px}
-/* Search dropdown */
+/* Search dropdown — P1/F4: high z-index, generous max-height, renders ABOVE sheet/footer within .app stacking context */
 .search-field{position:relative;flex:1;min-width:0}
 .search-dropdown{
-  position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:2000;
+  position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:3000;
   background:var(--surface);border:0.5px solid var(--border-subtle);
   border-radius:var(--radius-card);box-shadow:var(--shadow-lg);overflow:hidden;
-  max-height:280px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch;
 }
 .search-dropdown.hidden{display:none}
 .search-item{
@@ -236,7 +247,8 @@ body.map-expanded #scrim{display:none}
 .chip.chip-clear-confirm{color:#fff;background:var(--red);border-color:transparent}
 
 /* === DECISION SHEET — single bottom-anchored surface === */
-.sheet-wrap{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 var(--sp-4)}
+/* P2: sheet-wrap is scrollable so the hero CTA is always reachable even when content overflows (keyboard, expanded alts). */
+.sheet-wrap{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 var(--sp-4);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .sheet{
   background:var(--surface);border-radius:var(--radius-card) var(--radius-card) 0 0;
   box-shadow:var(--shadow-sheet);padding:var(--sheet-padding);
@@ -317,7 +329,57 @@ body.map-expanded #scrim{display:none}
   padding:var(--sp-2) 0 0;cursor:pointer;
 }
 
-/* === TAMBIÉN line — bus + bike inline === */
+/* === BUS MINI-BLOCK (P5) — informational, own block, all plausible lines ranked === */
+.bus-block{
+  margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:0.5px solid var(--border-subtle);
+}
+.bus-block-title{
+  font-size:var(--font-micro);font-weight:700;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--sp-2);
+  display:flex;align-items:center;gap:var(--sp-1);
+}
+.bus-line-main{
+  display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);
+  background:var(--bg);border-radius:var(--radius-sm);cursor:pointer;
+  transition:background var(--ease);-webkit-tap-highlight-color:transparent;
+  min-height:48px;
+}
+.bus-line-main:active{background:var(--bg3);transform:scale(0.99)}
+.bus-line-icon{font-size:18px;flex-shrink:0}
+.bus-line-body{flex:1;min-width:0;line-height:1.35}
+.bus-line-text{font-size:var(--font-body);font-weight:600;color:var(--text);letter-spacing:-0.01em}
+.bus-line-sub{font-size:var(--font-caption);color:var(--text2);margin-top:1px}
+.bus-line-eta{font-size:var(--font-caption);font-weight:700;color:var(--text);flex-shrink:0;text-align:right;min-width:44px}
+.bus-urgent{color:var(--red);font-weight:700;margin-left:var(--sp-1)}
+.bus-estimated-badge{
+  font-size:10px;font-weight:700;color:var(--text3);
+  background:var(--bg3);padding:2px 6px;border-radius:var(--radius-xs);
+  text-transform:uppercase;letter-spacing:0.02em;
+}
+.bus-alts{
+  max-height:0;overflow:hidden;transition:max-height var(--ease-sheet);
+}
+.bus-alts.expanded{max-height:320px}
+.bus-alt-row{
+  display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);
+  border-top:0.5px solid var(--border-subtle);font-size:var(--font-caption);color:var(--text2);
+}
+.bus-alt-row .bus-alt-line{font-weight:700;color:var(--text);min-width:48px}
+.bus-alt-row .bus-alt-stop{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bus-alt-row .bus-alt-eta{flex-shrink:0;font-weight:600;color:var(--text2)}
+.bus-expand-hint{
+  text-align:center;font-size:var(--font-micro);font-weight:700;
+  color:var(--primary);text-transform:uppercase;letter-spacing:0.04em;
+  padding:var(--sp-2) 0 0;cursor:pointer;
+}
+.bus-detail{
+  max-height:0;overflow:hidden;font-size:var(--font-caption);color:var(--text2);
+  transition:max-height var(--ease-sheet);line-height:1.5;
+}
+.bus-detail.expanded{max-height:160px;padding-top:var(--sp-2)}
+.bus-detail .bd-row{padding:2px 0}
+
+/* === BIKE one-liner (tertiary, last) === */
 .tambien{
   margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:0.5px solid var(--border-subtle);
 }
@@ -403,7 +465,7 @@ body.map-expanded #scrim{display:none}
       <div class="input-row">
         <div class="dot green"></div>
         <div class="search-field">
-          <input type="text" id="originInput" class="input-field" placeholder="¿Desde dónde salís?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'origin')" onfocus="onSearchFocus('origin')">
+          <input type="text" id="originInput" class="input-field" placeholder="¿Desde dónde salís?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'origin')" onfocus="onSearchFocus('origin')" onkeydown="onSearchKeydown(event,'origin')">
           <div id="originDropdown" class="search-dropdown hidden"></div>
         </div>
         <button class="input-btn btn-locate" onclick="locateMe()" aria-label="Mi ubicación">📍</button>
@@ -412,7 +474,7 @@ body.map-expanded #scrim{display:none}
       <div class="input-row">
         <div class="dot red"></div>
         <div class="search-field">
-          <input type="text" id="destInput" class="input-field" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'dest')" onfocus="onSearchFocus('dest')">
+          <input type="text" id="destInput" class="input-field" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'dest')" onfocus="onSearchFocus('dest')" onkeydown="onSearchKeydown(event,'dest')">
           <div id="destDropdown" class="search-dropdown hidden"></div>
         </div>
         <button class="input-btn btn-map" onclick="activateMapDest()" aria-label="Elegir en mapa">📌</button>
@@ -548,6 +610,10 @@ var _destMarker=null;
 var _historyClearConfirmPending=false;
 var _sheetExpanded=false;
 var _tambienExpanded={bus:false,bike:false};
+// P5/P6: bus mini-block state
+var _busAltsExpanded=false;
+var _busDetailExpanded=false;
+var _activeBusLine=null; // currently-drawn bus route line
 
 // ===================== MAXIM OS GATE =====================
 // Maxim deep link only works on Android (intent://). On iOS/other, show disabled row.
@@ -683,6 +749,7 @@ var FALLBACK_STYLE={
   layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]
 };
 var _mapLoadTimeout=null;
+var _mapStyleLoaded=false; // P6: guard so runtime layer errors don't trigger full OSM fallback
 function initMap(){
   if(typeof maplibregl==='undefined'){
     console.error('[MAP] maplibregl is not defined — CDN script failed to load');
@@ -699,12 +766,16 @@ function initMap(){
     });
     _map.on('click',onMapClick);
     _map.on('error',function(e){
+      // P6: only switch to OSM fallback if the style hasn't loaded yet (load-time error).
+      // Runtime layer validation errors (e.g. a bad paint prop) should NOT cause a full style switch.
+      if(_mapStyleLoaded)return;
       clearTimeout(_mapLoadTimeout);
-      console.warn('[MAP] CARTO style error, switching to OSM fallback:',e);
+      console.warn('[MAP] CARTO style load error, switching to OSM fallback:',e);
       _map.setStyle(FALLBACK_STYLE);
     });
     _map.on('load',function(){
       clearTimeout(_mapLoadTimeout);
+      _mapStyleLoaded=true;
       _map.resize();
     });
     _mapLoadTimeout=setTimeout(function(){
@@ -990,12 +1061,17 @@ function saveTripToHistory(action){
 }
 
 // ===================== SEARCH =====================
-function renderSearchDropdown(results,field,isRecent){
+function renderSearchDropdown(results,field,isRecent,isSearching){
   var id=field==='origin'?'originDropdown':'destDropdown';
   var dropdown=document.getElementById(id);if(!dropdown)return;
   dropdown.innerHTML='';
   if(!results.length){
-    dropdown.innerHTML='<div class="search-item search-item--empty">Sin resultados en Santa Fe</div>';
+    // P1/F4: if we're still searching remote, show a hint instead of "no results"
+    if(isSearching){
+      dropdown.innerHTML='<div class="search-item search-item--empty">Buscando “'+escapeHtml(_currentSearchQuery[field]||'')+'”…</div>';
+    }else{
+      dropdown.innerHTML='<div class="search-item search-item--empty">Sin resultados · presioná Enter para buscar igual</div>';
+    }
     dropdown.classList.remove('hidden');return;
   }
   results.forEach(function(r){
@@ -1026,15 +1102,32 @@ function selectSearchResult(field,lat,lon,name){
     if(MC.getOrigin())runEstimations();
   }
   closeAllDropdowns();
+  // P2/F2: blur the input so the mobile keyboard dismisses immediately — keeps CTA visible.
+  var inp=document.getElementById(field==='origin'?'originInput':'destInput');
+  if(inp)inp.blur();
+  // P2/F2: scroll the hero CTA into view so it’s reachable with one thumb.
+  if(field==='dest'){
+    setTimeout(function(){
+      var heroBtn=document.querySelector('.hero-pedir');
+      if(heroBtn&&heroBtn.scrollIntoView){heroBtn.scrollIntoView({block:'center',behavior:'smooth'})}
+    },120);
+  }
 }
 function closeAllDropdowns(){document.querySelectorAll('.search-dropdown').forEach(function(d){d.classList.add('hidden')})}
+// P1/F4: track the live query per field so the “searching…” hint can show the typed text.
+var _currentSearchQuery={origin:'',dest:''};
+// P4/F4: track the last key pressed so Enter/Go can trigger fallback geocode.
+var _searchEnterPending={origin:false,dest:false};
+
 async function onSearchInput(val,field){
   MC.setSearchTimer(null);
   var id=field==='origin'?'originDropdown':'destDropdown';
-  var dropdown=document.getElementById(id);
-  if(!val||val.trim().length<2){
+  var dropdown=document.getElementById(id);if(!dropdown)return;
+  val=(val||'').trim();
+  _currentSearchQuery[field]=val;
+  if(!val||val.length<2){
     dropdown.classList.add('hidden');
-    if(!val||val.trim().length===0){
+    if(!val||val.length===0){
       if(field==='origin'){
         var origin=MC.getOrigin();
         if(origin&&origin.source!=='gps'&&origin.source!=='cache'){MC.clearOrigin();renderSheet();updateMapMarkers()}
@@ -1048,13 +1141,66 @@ async function onSearchInput(val,field){
     }
     return;
   }
+  // ---- P1/F1/F4: LOCAL-FIRST. Run local search synchronously and show instantly ----
+  var local=MC.searchLocal(val);
+  if(local.length){
+    renderSearchDropdown(local.slice(0,5),field,false,false);
+  }else{
+    // No local hit yet — show “searching…” while remote resolves.
+    renderSearchDropdown([],field,false,true);
+  }
+  // ---- REMOTE (debounced) — refines with Nominatim, merges + dedups ----
   var version=++_searchVersion;
   var timer=setTimeout(async function(){
-    var results=await MC.searchNominatim(val.trim());
+    var remote=await MC.searchNominatim(val);
     if(version!==_searchVersion)return;
-    renderSearchDropdown(results,field,false);
-  },400);
+    // Merge local (already computed) + remote, dedup. Cap at 6 for mobile.
+    var merged=MC.dedupResults(local.concat(remote||[]));
+    // dedupResults caps at 3; for destination we want a few more — slice explicitly.
+    if(merged.length===0&&local.length)merged=local.slice(0,5);
+    renderSearchDropdown(merged.slice(0,6),field,false,false);
+  },250);
   MC.setSearchTimer(timer);
+}
+// P4/F4: Enter/Go on the dest input → fallback geocode so manual typing still resolves.
+function onSearchKeydown(e,field){
+  if(e.key==='Enter'||e.keyCode===13){
+    var inp=e.target;
+    var val=(inp.value||'').trim();
+    if(val.length<2)return;
+    e.preventDefault();
+    _searchEnterPending[field]=true;
+    // If a dropdown is visible with results, select the first one.
+    var id=field==='origin'?'originDropdown':'destDropdown';
+    var dd=document.getElementById(id);
+    if(dd&&!dd.classList.contains('hidden')){
+      var first=dd.querySelector('.search-item:not(.search-item--empty)');
+      if(first){first.click();return}
+    }
+    // Otherwise run a fallback geocode with the typed text.
+    fallbackGeocode(val,field);
+  }
+}
+// P4/F4: manual fallback geocode — typed text → Nominatim → first result.
+async function fallbackGeocode(q,field){
+  try{
+    var url='https://nominatim.openstreetmap.org/search?'+
+      'q='+encodeURIComponent(q+', Santa Fe, Argentina')+
+      '&format=json&limit=1&accept-language=es'+
+      '&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=1';
+    var r=await fetch(url,{headers:{'User-Agent':'MovilidadAsistente/1.0'}});
+    var data=await r.json();
+    if(data&&data[0]){
+      var lat=parseFloat(data[0].lat),lon=parseFloat(data[0].lon);
+      var name=data[0].display_name.split(',').slice(0,2).join(', ');
+      selectSearchResult(field,lat,lon,data[0].display_name);
+      MC.saveRecentSearch({lat:lat,lon:lon,display_name:data[0].display_name});
+    }else{
+      showToast('No se encontró “'+q+'”','warn');
+    }
+  }catch(e){
+    showToast('Error de red al buscar','error');
+  }
 }
 function onSearchFocus(field){
   var inputId=field==='origin'?'originInput':'destInput';
@@ -1092,10 +1238,12 @@ function renderSheet(){
   var estimations=MC.getEstimations();
   if(!origin||!dest){
     container.innerHTML='<div class="sheet-empty"><span class="sheet-empty-icon">👆</span>Elegí origen y destino para ver opciones</div>';
+    clearBusRoute();
     return;
   }
   if(!estimations||!estimations.length){
     container.innerHTML='<div class="sheet-empty"><span class="sheet-empty-icon">⏳</span>Calculando rutas...</div>';
+    clearBusRoute();
     return;
   }
 
@@ -1109,6 +1257,7 @@ function renderSheet(){
 
   if(!autoEst){
     container.innerHTML='<div class="sheet-empty"><span class="sheet-empty-icon">🚗</span>Sin tarifas de auto disponibles</div>';
+    clearBusRoute();
     return;
   }
 
@@ -1190,38 +1339,70 @@ function renderSheet(){
     // We'll inject via innerHTML replacement after setting container
   }
 
-  // TAMBIÉN line — bus + bike inline
-  var tambienItems=[];
-  if(busEst){
-    var busText='🚌 Lin. '+busEst.linea+' por '+shortenStop(busEst.stopOrigenCalles)+' en '+busEst.totalMin+' min';
-    if(busEst.walkToStopMin<2)busText+=' · <span class="tambien-urgent">¡apurate!</span>';
-    tambienItems.push({type:'bus',icon:'🚌',html:busText});
+  // ===== P5: BUS MINI-BLOCK — own block, all plausible lines ranked =====
+  // Use MC.rankBusLines() if available (controller-side ranking). Fallback to single busEst.
+  var rankedBus=[];
+  if(typeof MC.rankBusLines==='function'){
+    try{rankedBus=MC.rankBusLines()||[]}catch(e){rankedBus=[]}
   }
+  if(!rankedBus.length&&busEst){rankedBus=[busEst]}
+  if(rankedBus.length){
+    var mainBus=rankedBus[0];
+    var otherBus=rankedBus.slice(1);
+    h+='<div class="bus-block">';
+    h+='<div class="bus-block-title">🚌 Colectivo <span class="bus-estimated-badge">≈ estimado</span></div>';
+    // Main line card (tap → toggle detail)
+    var busText='Lin. '+escapeHtml(mainBus.linea)+' por '+escapeHtml(shortenStop(mainBus.stopOrigenCalles));
+    h+='<div class="bus-line-main" onclick="toggleBusDetail()">';
+    h+='<span class="bus-line-icon">🚌</span>';
+    h+='<div class="bus-line-body">';
+    h+='<div class="bus-line-text">'+busText+'</div>';
+    h+='<div class="bus-line-sub">Subir en '+escapeHtml(shortenStop(mainBus.stopOrigenCalles))+' · '+formatMin(mainBus.walkToStopMin||0)+' caminando</div>';
+    h+='</div>';
+    h+='<div class="bus-line-eta">'+(mainBus.totalMin||0)+' min';
+    if(mainBus.walkToStopMin<2)h+='<div class="bus-urgent">¡apurate!</div>';
+    h+='</div>';
+    h+='</div>';
+    // Expandable detail (parada, SUBE, caminata)
+    h+='<div class="bus-detail'+(_busDetailExpanded?' expanded':'')+'" id="busDetail">';
+    h+='<div class="bd-row">📍 Parada origen: '+escapeHtml(mainBus.stopOrigenCalles||'')+'</div>';
+    h+='<div class="bd-row">🏁 Bajada: '+escapeHtml(mainBus.stopDestCalles||'')+'</div>';
+    h+='<div class="bd-row">💵 SUBE: '+(mainBus.price!=null?formatPrice(mainBus.price):'—')+'</div>';
+    h+='<div class="bd-row">🚶 Caminata al subida: '+formatMin(mainBus.walkToStopMin||0)+'</div>';
+    h+='<div class="bd-row">🚶 Caminata desde bajada: '+formatMin(mainBus.walkFromStopMin||0)+'</div>';
+    h+='<div class="bd-row" style="color:var(--text3);font-size:11px;margin-top:4px">Horario estimado (sin feed en vivo)</div>';
+    h+='</div>';
+    // Expandable alternates (other ranked lines)
+    if(otherBus.length){
+      h+='<div class="bus-alts'+(_busAltsExpanded?' expanded':'')+'" id="busAlts">';
+      otherBus.forEach(function(b){
+        h+='<div class="bus-alt-row">';
+        h+='<span class="bus-alt-line">Lin. '+escapeHtml(b.linea)+'</span>';
+        h+='<span class="bus-alt-stop">'+escapeHtml(shortenStop(b.stopOrigenCalles))+'</span>';
+        h+='<span class="bus-alt-eta">'+(b.totalMin||0)+' min</span>';
+        h+='</div>';
+      });
+      h+='</div>';
+      h+='<div class="bus-expand-hint" onclick="toggleBusAlts()">'+(_busAltsExpanded?'Cerrar ▴':('Ver '+otherBus.length+' líneas más ▾'))+'</div>';
+    }
+    h+='</div>';
+    // P6: draw the main bus line route on the map (clearly estimated)
+    drawBusRoute(mainBus.linea);
+  }else{
+    clearBusRoute();
+  }
+
+  // ===== BIKE one-liner (tertiary, LAST) =====
   if(bikeEst){
-    tambienItems.push({type:'bike',icon:'🚲',html:'🚲 '+bikeEst.distance.toFixed(1)+' km · gratis'});
-  }
-  if(tambienItems.length){
     h+='<div class="tambien">';
     h+='<div class="tambien-line">';
-    tambienItems.forEach(function(t){
-      h+='<span class="tambien-item '+t.type+'" onclick="toggleTambien(\''+t.type+'\')">'+t.html+'</span>';
-    });
+    h+='<span class="tambien-item bike" onclick="toggleTambien(\'bike\')">🚲 '+bikeEst.distance.toFixed(1)+' km · gratis</span>';
     h+='</div>';
-    // Expandable detail
-    if(busEst){
-      h+='<div class="tambien-detail'+(_tambienExpanded.bus?' expanded':'')+'" id="tambienBus">';
-      h+='<div class="td-row">📍 Parada: '+escapeHtml(busEst.stopOrigenCalles||'')+'</div>';
-      h+='<div class="td-row">💵 SUBE: '+(busEst.price!=null?formatPrice(busEst.price):'—')+'</div>';
-      h+='<div class="td-row">🚶 Caminata: '+formatMin(busEst.walkToStopMin||0)+'</div>';
-      h+='</div>';
-    }
-    if(bikeEst){
-      h+='<div class="tambien-detail'+(_tambienExpanded.bike?' expanded':'')+'" id="tambienBike">';
-      if(bikeEst.nearStation)h+='<div class="td-row">📍 Retirar: '+escapeHtml(bikeEst.nearStation.nombre)+' ('+escapeHtml(bikeEst.nearStation.calles)+')</div>';
-      if(bikeEst.nearDestStation)h+='<div class="td-row">📍 Dejar: '+escapeHtml(bikeEst.nearDestStation.nombre)+' ('+escapeHtml(bikeEst.nearDestStation.calles)+')</div>';
-      h+='<div class="td-row"><a href="'+buildBikeLink()+'" target="_blank" style="color:var(--primary);text-decoration:none">Abrir Las Bicis →</a></div>';
-      h+='</div>';
-    }
+    h+='<div class="tambien-detail'+(_tambienExpanded.bike?' expanded':'')+'" id="tambienBike">';
+    if(bikeEst.nearStation)h+='<div class="td-row">📍 Retirar: '+escapeHtml(bikeEst.nearStation.nombre)+' ('+escapeHtml(bikeEst.nearStation.calles)+')</div>';
+    if(bikeEst.nearDestStation)h+='<div class="td-row">📍 Dejar: '+escapeHtml(bikeEst.nearDestStation.nombre)+' ('+escapeHtml(bikeEst.nearDestStation.calles)+')</div>';
+    h+='<div class="td-row"><a href="'+buildBikeLink()+'" target="_blank" style="color:var(--primary);text-decoration:none">Abrir Las Bicis →</a></div>';
+    h+='</div>';
     h+='</div>';
   }
 
@@ -1268,6 +1449,72 @@ function toggleTambien(type){
   _tambienExpanded[type]=!_tambienExpanded[type];
   var el=document.getElementById(type==='bus'?'tambienBus':'tambienBike');
   if(el)el.classList.toggle('expanded',_tambienExpanded[type]);
+}
+
+// ===================== P5: BUS MINI-BLOCK TOGGLES =====================
+function toggleBusDetail(){
+  _busDetailExpanded=!_busDetailExpanded;
+  var el=document.getElementById('busDetail');
+  if(el)el.classList.toggle('expanded',_busDetailExpanded);
+}
+function toggleBusAlts(){
+  _busAltsExpanded=!_busAltsExpanded;
+  var el=document.getElementById('busAlts');
+  if(el)el.classList.toggle('expanded',_busAltsExpanded);
+  // Update hint text
+  var hint=el?el.parentNode.querySelector('.bus-expand-hint'):null;
+  if(hint){
+    var count=el?el.querySelectorAll('.bus-alt-row').length:0;
+    hint.textContent=_busAltsExpanded?'Cerrar ▴':('Ver '+count+' líneas más ▾');
+  }
+}
+
+// ===================== P6: BUS ROUTE OVERLAY (estimated) =====================
+// Draws the bus line's stop sequence as a dashed polyline on the map.
+// Clearly labeled "estimated" — no live vehicle positions are faked.
+function drawBusRoute(linea){
+  if(!_map)return;
+  // P6: always clear first (no early return) so re-renders refresh the overlay cleanly.
+  clearBusRoute();
+  if(!linea)return;
+  // Wait for style load — if not ready, defer via rAF so the overlay draws once the map is ready.
+  if(typeof _map.isStyleLoaded==='function' && !_map.isStyleLoaded()){
+    requestAnimationFrame(function(){drawBusRoute(linea)});return;
+  }
+  if(typeof MC.getBusLineGeometry!=='function')return;
+  var coords=MC.getBusLineGeometry(linea);
+  if(!coords||coords.length<2)return;
+  // Per-step try/catch so one failure doesn't block the rest.
+  try{
+    _map.addSource('bus-route-src',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:coords}}});
+  }catch(e){}
+  try{
+    _map.addLayer({id:'bus-route-shadow',type:'line',source:'bus-route-src',layout:{'line-cap':'round'},paint:{'line-color':'#FF9500','line-width':8,'line-opacity':0.12}});
+  }catch(e){}
+  try{
+    _map.addLayer({id:'bus-route-line',type:'line',source:'bus-route-src',layout:{'line-cap':'round'},paint:{'line-color':'#FF9500','line-width':3,'line-opacity':0.75,'line-dasharray':[2,1.5]}});
+  }catch(e){}
+  // Boarding stop marker (nearest to origin)
+  var origin=MC.getOrigin();
+  if(origin&&coords.length){
+    var boardStop=coords[0];var minD=Infinity;
+    coords.forEach(function(c){var d=Math.abs(c[1]-origin.lat)+Math.abs(c[0]-origin.lon);if(d<minD){minD=d;boardStop=c}});
+    try{
+      _map.addSource('bus-board-src',{type:'geojson',data:{type:'Feature',geometry:{type:'Point',coordinates:boardStop}}});
+      _map.addLayer({id:'bus-board-marker',type:'circle',source:'bus-board-src',paint:{'circle-radius':6,'circle-color':'#FF9500','circle-stroke-width':2,'circle-stroke-color':'#fff'}});
+    }catch(e){}
+  }
+  _activeBusLine=linea;
+}
+function clearBusRoute(){
+  if(!_map)return;
+  // Remove layers BEFORE their sources. Each in its own try/catch so one failure doesn't block others.
+  try{if(_map.getLayer('bus-board-marker'))_map.removeLayer('bus-board-marker')}catch(e){}
+  try{if(_map.getLayer('bus-route-line'))_map.removeLayer('bus-route-line')}catch(e){}
+  try{if(_map.getLayer('bus-route-shadow'))_map.removeLayer('bus-route-shadow')}catch(e){}
+  try{if(_map.getSource('bus-board-src'))_map.removeSource('bus-board-src')}catch(e){}
+  try{if(_map.getSource('bus-route-src'))_map.removeSource('bus-route-src')}catch(e){}
+  _activeBusLine=null;
 }
 
 // ===================== LINK BUILDERS =====================
