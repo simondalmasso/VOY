@@ -627,3 +627,47 @@ Stage Summary:
 - Deploy-ready: wrangler --dry-run SUCCESS. NOT deployed (user must use safe credentials after revoking leaked tokens).
 - SECURITY ALERT: GitHub PAT (ghp_dIbu…) + Cloudflare token (cfut_TiUBoY…) shared in plaintext — MUST be revoked immediately. Not used.
 - Files changed: public/VOY-Lite.html (full V5 rewrite), public/ui/mobilityController.js (V5 extensions added). public/core/mobilityEngine.js, worker.js, wrangler.jsonc UNTOUCHED.
+
+---
+Task ID: 15
+Agent: Main (Lead System Architect — VOY V6)
+Task: VOY_V6_ARCHITECTURE_PATCH + CLOUDFLARE_DOMAIN_MIGRATION + IS_A_DEV_REGISTRATION + VOY_PRODUCT_REDESIGN (Uber Design Systems 2026)
+
+Work Log:
+- Read worklog.md (Tasks 1-14) to ground V6 in prior state (V5 floating-search + ambient-map + IndexedDB + SVG icons, deployed to workers.dev)
+- Read public/VOY-Lite.html (1376 lines), confirmed V5 implementation is V6-compliant on all 12 objectives (ROOT_ROUTE, FLOATING_SEARCH, SEARCH_ENGINE, MAP, IDLE_CAMERA, VEHICLE_MODULE, BUS_MODULE, MEMORY, NO_EMOJIS, UX, DEEPLINK_CONFIRMATION, ANALYTICS)
+- Emoji scan: ZERO emojis in UI body text (28 SVG icons only). Visible /VOY-Lite.html references: 0 (only in HTML comment)
+- Applied V6 refinements (Uber Design Systems 2026: "no visual noise, every pixel justified"):
+  * Footer noise removed: "Tocá el título 5 veces para métricas" instruction text deleted (discovery via 5-tap is intentional; instruction is noise)
+  * Deep-link dialog message rewritten per V6 spec: "Salís de VOY y abrís una app externa. El precio y el servicio los define el proveedor, no VOY." (explicitly mentions leaving app + external prices, per DEEPLINK_CONFIRMATION objective)
+  * Analytics dashboard close button: 'x' text → SVG close icon (closes the last non-SVG icon in the app, achieving ZERO-emoji-equivalent in dashboard too)
+  * Dashboard background: rgba(0,0,0,.88) → .92 (full legibility, no bleed-through)
+  * Version header: V5 → V6
+- Constraints honored: worker.js UNTOUCHED, mobilityEngine.js UNTOUCHED, wrangler.jsonc UNTOUCHED, all existing APIs preserved, atomic single-file change
+
+Browser Verification (agent-browser):
+- 360px mobile initial load: title "VOY — Movilidad Santa Fe", placeholder "¿A dónde vas?", map opacity 1, filter none, pointer-events auto, footer "VOY · Movilidad Santa Fe · Datos informativos" (noise removed), origin field absent, scrollWidth===clientWidth===360 (no horizontal scroll), _driftEnabled=true, emojis:0 ✅
+- Search "Terminal": dropdown visible with 3 items, _driftEnabled=false after typing (drift stops on first char, never resumes) ✅
+- Select dest + inject GPS fix: 3 estimations, hero DiDi $2.500, "Pedir DiDi" CTA, Taxi accordion (Radiotaxi Santa Fe + TaxiApp, WhatsApp actions), Remis accordion (Remises Real), bus "Lin. 1 por San Martín y Rivadavia" + "Estimado · 67%" badge ✅
+- Deep-link dialog: visible, title "Abrir aplicación externa", provider "DiDi", message "Salís de VOY y abrís una app externa. El precio y el servicio los define el proveedor, no VOY.", Cancel+Continuar buttons 48px, Escape closes ✅
+- Taxi accordion expand: 2 companies, first "Radiotaxi Santa Fe", WhatsApp button present ✅
+- Favorite toggle: favActive=true, 3 memory chips rendered ✅
+- Desktop 1280px: app centered (max-width 560px, left offset matches), search-bar width 367px, footer pushed to 1211px when content long (natural push) ✅
+- Short content (no dest): docHeight=800=viewport, footer bottom=800 (sticky to viewport bottom) ✅
+- Reduced-motion CSS present (prefers-reduced-motion media query), sheet animation sheetIn active ✅
+- Zero console errors, zero page errors at 360px + 1280px ✅
+
+Deliverables produced:
+- v6-deliverables.md: complete doc with (1) V6 code summary, (2) Cloudflare subdomain migration steps (simondalmasso44 → voy, account-level dashboard change, no wrangler.jsonc edit), (3) is-a.dev ready-to-submit JSON (domains/voy.json, CNAME → voy-app.workers.dev), PR description (title + body), Cloudflare Custom Domain checklist (add voy.is-a.dev route, auto TLS, disable workers_dev after propagation)
+- Migration order documented: submit is-a.dev PR → change CF subdomain → update CNAME → configure Custom Domain → verify → disable workers.dev fallback
+
+Stage Summary:
+- VOY_V6_ARCHITECTURE_PATCH: COMPLETE — all 12 objectives verified at 360px + 1280px, zero emojis, zero console errors, no horizontal scroll, sticky footer verified, deep-link dialog mentions leaving app + external prices
+- VOY_PRODUCT_REDESIGN (Uber 2026): APPLIED — footer noise removed, dialog message tightened, SVG-only icons everywhere (including analytics dashboard close button), "every pixel justified"
+- CLOUDFLARE_DOMAIN_MIGRATION: DELIVERABLE READY — cannot execute (wrangler not authenticated in sandbox); user runs `npx wrangler login` + dashboard subdomain change (account-level, no code change)
+- IS_A_DEV_REGISTRATION: DELIVERABLES READY — JSON + PR description + CF checklist in v6-deliverables.md
+- SECURITY: no credentials used; previous-session leaked tokens (ghp_…, cfut_…) flagged for revocation
+- Files changed: public/VOY-Lite.html (V6 refinements). worker.js, mobilityEngine.js, mobilityController.js, wrangler.jsonc UNTOUCHED.
+- bun run lint: 0 errors (1 pre-existing warning in worker.js — untouched)
+- wrangler deploy --dry-run: SUCCESS (8 assets, ASSETS binding, 0.37 KiB worker)
+- NOT deployed (user deploys with safe credentials after revoking leaked tokens)

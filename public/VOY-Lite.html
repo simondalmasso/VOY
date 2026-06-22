@@ -1,6 +1,6 @@
 <!--
-VOY V5 — Premium urban mobility assistant
-Build: 2026 VOY_V5_ARCHITECTURE_PATCH
+VOY V6 — Premium urban mobility assistant (Uber Design Systems 2026)
+Build: 2026 VOY_V6_ARCHITECTURE_PATCH
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
@@ -430,7 +430,7 @@ button{cursor:pointer}
 </div>
 
 <!-- FOOTER (sticky bottom) -->
-<footer class="footer">VOY · Movilidad Santa Fe · Datos informativos · Tocá el título 5 veces para métricas</footer>
+<footer class="footer">VOY · Movilidad Santa Fe · Datos informativos</footer>
 
 <!-- DEEP-LINK CONFIRMATION DIALOG -->
 <div class="dialog-overlay" id="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="dgTitle">
@@ -438,7 +438,7 @@ button{cursor:pointer}
     <div class="dg-icon" id="dgIcon"></div>
     <div class="dg-title" id="dgTitle">Abrir aplicación externa</div>
     <div class="dg-provider" id="dgProvider"></div>
-    <div class="dg-msg">Vas a abrir una aplicación externa. El viaje, el precio y el servicio dependen exclusivamente del proveedor.</div>
+    <div class="dg-msg">Salís de VOY y abrís una app externa. El precio y el servicio los define el proveedor, no VOY.</div>
     <div class="dg-actions">
       <button class="dg-cancel" id="dgCancel">Cancelar</button>
       <button class="dg-confirm" id="dgConfirm">Continuar</button>
@@ -629,13 +629,14 @@ function va_metrics(){
 }
 function va_dashboard(){
   var m=va_metrics();var el=document.getElementById('vaDash');if(!el)return;
-  var close='onclick="document.getElementById(\'vaDash\').innerHTML=\'\'"';
+  var closeSvg=svg('close',22);
+  var closeBtn='<button onclick="document.getElementById(\'vaDash\').innerHTML=\'\'" aria-label="Cerrar metricas" style="border:none;background:transparent;cursor:pointer;color:#fff;padding:4px;display:flex;align-items:center">'+closeSvg+'</button>';
   if(!m.total){
-    el.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:99999;color:#fff;font-size:13px;padding:20px;overflow-y:auto;font-family:monospace"><div style="display:flex;justify-content:space-between;margin-bottom:16px"><b style="font-size:17px">VOY Metricas</b><span style="cursor:pointer;font-size:22px" '+close+'>x</span></div><div style="color:#94a3b8;margin-top:24px;text-align:center">Sin datos de sesiones aun.<br>Usa la app para generar metricas.</div><div style="margin-top:20px;font-size:11px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
+    el.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;color:#fff;font-size:13px;padding:24px 20px;overflow-y:auto;font-family:monospace"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><b style="font-size:17px;letter-spacing:-0.02em">VOY Metricas</b>'+closeBtn+'</div><div style="color:#8E8E93;margin-top:32px;text-align:center;line-height:1.6">Sin datos de sesiones aun.<br>Usa la app para generar metricas.</div><div style="margin-top:28px;font-size:11px;color:#636366;text-align:center">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
     return;
   }
-  var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:99999;color:#fff;font-size:13px;padding:20px;overflow-y:auto;font-family:monospace">';
-  h+='<div style="display:flex;justify-content:space-between;margin-bottom:16px"><b style="font-size:17px">VOY Metricas</b><span style="cursor:pointer;font-size:22px" '+close+'>x</span></div>';
+  var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;color:#fff;font-size:13px;padding:24px 20px;overflow-y:auto;font-family:monospace">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><b style="font-size:17px;letter-spacing:-0.02em">VOY Metricas</b>'+closeBtn+'</div>';
   h+='<div style="margin-bottom:14px">Sesiones: <b>'+m.total+'</b></div>';
   h+='<div style="margin-bottom:14px">';
   h+='<div style="border-bottom:1px solid #444;padding:6px 0">Conversion CTA: <b style="float:right">'+(m.ctaRate*100).toFixed(1)+'%</b></div>';
@@ -654,7 +655,7 @@ function va_dashboard(){
     m.topDest.forEach(function(d){h+='<div style="margin:3px 0">'+d.name+': '+d.count+'</div>'});
     h+='</div>';
   }
-  h+='<div style="margin-top:20px;font-size:11px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
+  h+='<div style="margin-top:24px;font-size:11px;color:#636366;text-align:center">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
   el.innerHTML=h;
 }
 var _vaTapCount=0,_vaTapTimer=null;
