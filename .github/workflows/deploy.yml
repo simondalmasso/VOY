@@ -1,0 +1,146 @@
+# ============================================================
+#  VOY V7 — Atomic deploy pipeline (single source of truth)
+#
+#  Trigger: push to main
+#  Pipeline: lint → inject build hash → deploy → purge → health → version guardrail
+#
+#  GUARDRAIL (hard fail): the deploy is rejected if the live /api/health.build_hash
+#  does not match the git short SHA just deployed. This is the V7 fix for the
+#  "local ≠ edge" desync — no more silent stale-asset serving.
+#
+#  Required secrets (Settings → Secrets and variables → Actions):
+#    CLOUDFLARE_API_TOKEN   — API token with Workers Deploy + Cache Purge perms
+#    CLOUDFLARE_ACCOUNT_ID  — numeric account ID (dashboard → right sidebar)
+#    CLOUDFLARE_ZONE_ID     — optional; only if you own the zone for cache purge.
+#                             voy.is-a.dev is NOT owned by this account (is-a.dev
+#                             owns it), so cache purge is skipped; the worker.js
+#                             Cache-Control: no-store header handles staleness.
+# ============================================================
+name: Deploy VOY V7
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # manual trigger from Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-voy-prod
+  cancel-in-progress: false # never cancel a mid-deploy; wait it out
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # shallow is fine; we only need HEAD SHA
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Lint (predeploy check)
+        run: bun run lint
+
+      - name: Dry-run (predeploy check — config + asset binding)
+        run: npx wrangler deploy --dry-run --minify
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Inject build hash (V7 guardrail — git SHA = single source of truth)
+        run: node scripts/inject-build-hash.mjs
+
+      - name: Deploy to Cloudflare Workers
+        id: deploy
+        run: |
+          npx wrangler deploy --minify 2>&1 | tee deploy.log
+          # Extract the worker URL from the output
+          WORKER_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1 || true)
+          echo "worker_url=${WORKER_URL}" >> "$GITHUB_OUTPUT"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Purge Cloudflare cache (if zone owned)
+        if: ${{ secrets.CLOUDFLARE_ZONE_ID != '' }}
+        run: |
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | jq .
+        continue-on-error: true # purge failure must not fail the deploy
+
+      - name: Health check (worker live + version match)
+        env:
+          EXPECTED_HASH: ${{ github.sha }}
+        run: |
+          set -e
+          # Give the edge 3s to propagate
+          sleep 3
+          WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
+          if [ -z "$WORKER_URL" ]; then
+            echo "⚠️ could not extract worker URL from deploy log; using canonical"
+            WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
+          fi
+          echo "Checking: $WORKER_URL/api/health"
+          HEALTH=$(curl -fsS "$WORKER_URL/api/health" || curl -fsS "https://voy-app.simondalmasso44.workers.dev/api/health")
+          echo "$HEALTH" | jq .
+          LIVE_HASH=$(echo "$HEALTH" | jq -r '.build_hash')
+          LIVE_VER=$(echo "$HEALTH" | jq -r '.version')
+          SHORT_SHA=$(echo "$EXPECTED_HASH" | cut -c1-7)
+          echo "Expected hash (git short): $SHORT_SHA"
+          echo "Live hash (worker):        $LIVE_HASH"
+          echo "Live version:              $LIVE_VER"
+          if [ "$LIVE_HASH" != "$SHORT_SHA" ]; then
+            echo "::error::VERSION MISMATCH — live build_hash ($LIVE_HASH) ≠ git SHA ($SHORT_SHA). Deploy FAILED the V7 guardrail."
+            exit 1
+          fi
+          if [ "$LIVE_VER" != "V7.0.0" ]; then
+            echo "::error::VERSION MISMATCH — live version ($LIVE_VER) ≠ V7.0.0. Stale worker deployed."
+            exit 1
+          fi
+          echo "✅ V7 guardrail passed: live build_hash matches git SHA."
+
+      - name: Verify UI serves V7 (HTML contains version pin)
+        run: |
+          set -e
+          WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
+          [ -z "$WORKER_URL" ] && WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
+          HTML=$(curl -fsS "$WORKER_URL/")
+          if echo "$HTML" | grep -q 'voy-version" content="V7.0.0"'; then
+            echo "✅ UI HTML contains V7.0.0 version pin."
+          else
+            echo "::error::UI HTML does NOT contain V7.0.0 version pin — stale HTML served."
+            exit 1
+          fi
+          # Verify cache-bust header
+          CC=$(curl -sI "$WORKER_URL/" | grep -i '^cache-control:' || true)
+          echo "Cache-Control: $CC"
+          if echo "$CC" | grep -qi 'no-store'; then
+            echo "✅ HTML Cache-Control: no-store confirmed (edge will not serve stale UI)."
+          else
+            echo "⚠️ WARNING: HTML Cache-Control header does not contain no-store. Edge may cache stale UI."
+          fi
+
+      - name: Verify single entrypoint (/VOY-Lite.html → 301 → /)
+        run: |
+          set -e
+          WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
+          [ -z "$WORKER_URL" ] && WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -I "$WORKER_URL/VOY-Lite.html")
+          echo "GET /VOY-Lite.html → HTTP $CODE (expected 301)"
+          if [ "$CODE" != "301" ] && [ "$CODE" != "308" ]; then
+            echo "::error::/VOY-Lite.html should 301 to / (hide internal path). Got $CODE."
+            exit 1
+          fi
+          echo "✅ Single entrypoint confirmed: /VOY-Lite.html redirects to /."

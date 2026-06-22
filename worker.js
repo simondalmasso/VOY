@@ -30,6 +30,10 @@
 // ============================================================
 
 const CANONICAL_ORIGIN = "https://voy.is-a.dev";
+const WORKER_VERSION = "V7.0.0";
+// __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
+// verify-production.sh checks /api/health.build_hash === git short SHA.
+const BUILD_HASH = "__BUILD_HASH__";
 
 const worker = {
   async fetch(request, env) {
@@ -59,16 +63,19 @@ const worker = {
     }
     if (pathLower === "/api/health") {
       return _cors(new Response(JSON.stringify({
-        ok: true, service: "voy-core", version: "v6.2",
+        ok: true, service: "voy-core", version: WORKER_VERSION, build_hash: BUILD_HASH,
         analytics: !!(env.VOY_METRICS), time: new Date().toISOString()
       }), { headers: { "Content-Type": "application/json" } }));
     }
 
     // 4) Root → internal rewrite to VOY-Lite.html (browser URL stays /).
+    //    V7: Cache-Control: no-store on HTML ONLY so the edge never serves a
+    //    stale UI build. Static assets (JS/CSS/icons) keep their own cache
+    //    headers + are cache-busted via ?v=9 query strings.
     if (url.pathname === "/" || url.pathname === "") {
       url.pathname = "/VOY-Lite.html";
       const resp = await env.ASSETS.fetch(new Request(url, request));
-      return _cleanHeaders(resp);
+      return _htmlNoStore(resp);
     }
 
     // 5) All other paths → static assets (with header cleanup).
@@ -150,4 +157,24 @@ function _cleanHeaders(resp) {
     resp.headers.delete("server");
   } catch (_) {}
   return resp;
+}
+
+// V7: HTML responses get Cache-Control: no-store so the edge NEVER serves a
+// stale UI build. This is the core fix for the "local ≠ edge" desync: even if
+// CF cache has a HIT for the HTML, no-store forces revalidation on every request.
+// We rebuild the Response with a fresh mutable Headers object (ASSETS responses
+// may have immutable headers).
+function _htmlNoStore(resp) {
+  const headers = new Headers(resp.headers);
+  headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+  headers.set("Vary", "Accept-Encoding");
+  headers.set("X-VOY-Version", WORKER_VERSION);
+  headers.set("X-VOY-Build", BUILD_HASH);
+  headers.delete("x-powered-by");
+  headers.delete("server");
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: headers
+  });
 }

@@ -164,10 +164,33 @@
     );
     // MOBILITY_CORE_RANKING_V1: attach contextual_score ranked providers to auto estimation.
     // The view layer reads est.rankedProviders instead of re-sorting by price.
+    // V7: the engine's rankProviders uses short IDs 'taxi'/'remis', but the view's
+    // PROVIDERS object uses 'radiotaxi'/'remisreal'. We pass alias providers so the
+    // engine's filter finds them, then remap the IDs back to PROVIDERS keys so the
+    // view's _modeMatches() + buildAppLink() resolve correctly. This fixes the V7
+    // transport mode selector (taxi/remis modes were showing empty heroes).
     if (_estimations && typeof MobilityEngine.rankProviders === 'function' && _config.providers) {
+      var _engineProviders = _config.providers;
+      // Build alias map only if the short IDs are missing from PROVIDERS
+      if (!_config.providers.taxi && _config.providers.radiotaxi) {
+        _engineProviders = {};
+        for (var k in _config.providers) { _engineProviders[k] = _config.providers[k]; }
+        _engineProviders.taxi = _config.providers.radiotaxi;
+        _engineProviders.remis = _config.providers.remisreal;
+      }
       for (var i = 0; i < _estimations.length; i++) {
         if (_estimations[i].mode === 'auto') {
-          _estimations[i].rankedProviders = MobilityEngine.rankProviders(_estimations[i], _config.providers);
+          _estimations[i].rankedProviders = MobilityEngine.rankProviders(_estimations[i], _engineProviders);
+          // Remap engine short IDs → PROVIDERS keys
+          if (_estimations[i].rankedProviders && _estimations[i].rankedProviders.length) {
+            _estimations[i].rankedProviders.forEach(function (p) {
+              if (p.id === 'taxi' && _config.providers.radiotaxi) {
+                p.id = 'radiotaxi'; p.name = _config.providers.radiotaxi.name;
+              } else if (p.id === 'remis' && _config.providers.remisreal) {
+                p.id = 'remisreal'; p.name = _config.providers.remisreal.name;
+              }
+            });
+          }
           break;
         }
       }

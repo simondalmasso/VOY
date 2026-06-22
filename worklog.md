@@ -911,3 +911,62 @@ Stage Summary:
 - Files changed: worker.js, wrangler.jsonc, public/manifest.json, public/icons/* (15 files), public/core/pricingEngine.js, public/core/eventBus.js, public/VOY-Lite.html, scripts/generate-icons.mjs, domains/voy.json, mini-services/scraper/* (6 files). mobilityEngine.js/mobilityController.js/logo.svg UNTOUCHED.
 - NOT deployed (user runs npx wrangler deploy + submits is-a.dev PR after revoking leaked creds)
 - Deliverable: v6.2-deploy.md (production verification + feature compliance + migration order + checklist)
+
+---
+Task ID: 18
+Agent: Main (V7 Clean Deploy — honest edition)
+Task: DEPLOY_CLEAN_UI_V7 — fix the "local ≠ edge" desync: version pin, cache bust, single entrypoint, CI/CD guardrail, verification script, honest deploy doc
+
+Work Log:
+- Verified REAL production state (not dry-run):
+  * dig voy.is-a.dev → A record 104.18.5.103 only, NO CNAME (is-a.dev NOT registered)
+  * curl https://voy.is-a.dev → 302 → https://is-a.dev/?d=voy (is-a.dev fallback page)
+  * curl https://voy-app.simondalmasso44.workers.dev/ → 307 → /VOY-Lite (OLD V4 worker)
+  * curl https://voy-app.simondalmasso44.workers.dev/VOY-Lite → 200, cf-cache: HIT, cache-control: public max-age=0 (STALE V4 build served)
+  * Confirmed: 0 of 7 production checks pass. V6 code was NEVER deployed — only dry-runs were run.
+- Implemented V7 code changes:
+  * VOY-Lite.html: <meta name="voy-version" content="V7.0.0"> + <meta name="voy-build" content="__BUILD_HASH__"> + window.VOY_VERSION/VOY_BUILD_HASH/VOY_DEPLOY_TS globals
+  * VOY-Lite.html: showModeSelector(true) after initModeSelector() — mode selector now force-visible on initial mount (was hidden until search completed)
+  * VOY-Lite.html: renderSheet() hero/alts loop now respects _activeMode via _modeMatches() — taxi→taxi providers, remis→remis providers, walk→bike-only, all/car/custom→ride-hailing apps
+  * VOY-Lite.html: script cache versions bumped ?v=8 → ?v=9
+  * worker.js: _htmlNoStore() helper — HTML responses get Cache-Control: no-store + Vary: Accept-Encoding + X-VOY-Version + X-VOY-Build (rebuilt Response with mutable Headers since ASSETS responses may have immutable headers)
+  * worker.js: /api/health returns version: "V7.0.0" + build_hash: "__BUILD_HASH__"
+  * worker.js: WORKER_VERSION + BUILD_HASH constants
+- Fixed pre-existing bug (V7 mode selector was broken without this):
+  * Engine rankProviders uses IDs 'taxi'/'remis' but PROVIDERS uses 'radiotaxi'/'remisreal' → taxi/remis filtered out of rankedProviders → mode selector showed empty heroes for taxi/remis modes
+  * Fix in mobilityController.js runEstimations(): pass alias providers (_engineProviders.taxi = PROVIDERS.radiotaxi) so engine filter finds them, then remap IDs back to PROVIDERS keys after ranking
+  * Verified: rankedProviders now has all 6 providers (was 4) with correct IDs
+- Created CI/CD pipeline (.github/workflows/deploy.yml):
+  * Trigger: push to main / manual
+  * Steps: checkout → bun install → lint → dry-run → inject-build-hash → wrangler deploy --minify → purge cache (if zone owned) → health check → VERSION GUARDRAIL
+  * Hard guardrail: if live /api/health.build_hash ≠ git short SHA → ::error:: VERSION MISMATCH, workflow fails
+  * Also verifies: UI HTML contains V7.0.0 meta, Cache-Control: no-store header, /VOY-Lite.html → 301
+  * concurrency: deploy-voy-prod, cancel-in-progress: false (never cancel a mid-deploy)
+- Created scripts/inject-build-hash.mjs: replaces __BUILD_HASH__ + __DEPLOY_TS__ in worker.js + VOY-Lite.html with git short SHA + ISO timestamp
+- Created scripts/verify-production.sh: 7-point production verification (DNS CNAME, HTTPS 200, /api/health version+hash, UI version pin, Cache-Control no-store, /VOY-Lite.html 301, modeSelector in DOM). Tested against live voy.is-a.dev → 0/7 pass (confirms the problem).
+- Created DEPLOY_V7.md: honest deploy guide documenting (1) what's broken, (2) what V7 changed locally, (3) the 6 manual steps ONLY the user can run (revoke creds, change subdomain, wrangler deploy, purge cache, is-a.dev PR, verify), (4) CI/CD guardrail explanation, (5) local verification steps, (6) file inventory, (7) honest status table.
+- Browser verification (agent-browser, 390px + 360px):
+  * Version pin: meta voy-version=V7.0.0, window.VOY_VERSION=V7.0.0 ✓
+  * Mode selector: display=flex, 6 pills, show=true (visible on initial mount) ✓
+  * Todo mode → hero=DiDi (ride-hailing app) ✓
+  * Taxi mode → hero=TaxiApp (taxi provider, category='taxi') ✓
+  * Remis mode → hero=Remises Real (remis provider, category='remis') ✓
+  * rankedProviders: all 6 providers with correct IDs ✓
+  * 0 console errors, 0 console logs ✓
+  * 0 horizontal scroll at 360px ✓
+  * Sticky footer: footer_bottom=740=vh, sticks=true, gap=0 ✓
+- Lint: 0 errors, 0 warnings
+- wrangler deploy --dry-run: SUCCESS (27 assets, 2.66 KiB worker, ASSETS + VOY_METRICS bindings)
+
+Stage Summary:
+- HONEST TRUTH: V6 code was never deployed. Production serves V4 (old). All prior "deploy" claims were dry-runs, not real deploys. The verify-production.sh script proves this (0/7 checks pass).
+- V7 CODE: Complete locally. Version pin (V7.0.0 + build hash), cache bust (no-store on HTML), mode selector functional (visible on mount + _activeMode filtering), ID remapping fix (6 providers in rankedProviders).
+- CI/CD GUARDRAIL: GitHub Actions workflow with hard version-mismatch failure. If live build_hash ≠ git SHA, deploy is rejected. This prevents future "local ≠ edge" desync.
+- WHAT I CANNOT DO (documented in DEPLOY_V7.md steps A-F):
+  * wrangler deploy (no CF credentials in sandbox)
+  * is-a.dev PR submission (no GitHub auth; domains/voy.json needs real email)
+  * CF cache purge (no CF API token; but no-store header makes this optional)
+  * Account subdomain change simondalmasso44 → voy (dashboard-only)
+- FILES CHANGED: public/VOY-Lite.html, worker.js, public/ui/mobilityController.js, .github/workflows/deploy.yml (new), scripts/inject-build-hash.mjs (new), scripts/verify-production.sh (new), DEPLOY_V7.md (new)
+- SECURITY: all previously leaked tokens (ghp_…, cfut_…) must be revoked before deploy (DEPLOY_V7.md step A)
+- NEXT: user must run DEPLOY_V7.md steps A-F to make production match local V7 code.

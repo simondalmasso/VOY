@@ -1,15 +1,19 @@
 <!--
-VOY V6 — Premium urban mobility assistant (Uber Design Systems 2026)
-Build: 2026 VOY_V6_ARCHITECTURE_PATCH
-Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet
+VOY V7.0.0 — Single source of truth (atomic deploy + cache bust + version pin)
+Build: 2026 VOY_V7_CLEAN_DEPLOY
+Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
+V7 deploy fixes:
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.0.0"> + window.VOY_BUILD_HASH
+  - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
+  - SINGLE ENTRYPOINT: ONLY / serves UI (/VOY-Lite.html → 301 → /)
+  - Mode selector force-rendered on initial mount
+  - Script cache versions bumped to ?v=9 (V7)
 Constraints honored:
   - mobilityEngine.js NOT modified
-  - worker.js NOT modified (already rewrites / -> /VOY-Lite.html)
   - Single page application, mobile-first, 60fps target
   - No emojis (SVG icon system only)
-  - No legacy UI (origin/dest fields, Mi ubicación text, Elegí origen y destino, helper hand all removed)
   - Map opacity 1, blur 0, native gestures, never dimmed after search
   - IndexedDB encrypted memory, user can erase everything
   - Deep-link confirmation dialog before opening external apps
@@ -27,6 +31,8 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="voy-version" content="V7.0.0">
+<meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,13 +46,13 @@ Constraints honored:
 <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-120.png">
 <link rel="apple-touch-icon" sizes="1024x1024" href="/icons/apple-touch-1024.png">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="core/mobilityEngine.js?v=8"></script>
-<script src="core/pricingEngine.js?v=8"></script>
-<script src="core/eventBus.js?v=8"></script>
-<script src="ui/mobilityController.js?v=8"></script>
+<script src="core/mobilityEngine.js?v=9"></script>
+<script src="core/pricingEngine.js?v=9"></script>
+<script src="core/eventBus.js?v=9"></script>
+<script src="ui/mobilityController.js?v=9"></script>
 <style>
 /* ============================================================
-   VOY V6 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.0.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -527,6 +533,16 @@ button{cursor:pointer}
 <div id="vaDash"></div>
 
 <script>
+// ===================== V7 VERSION PIN (single source of truth) =====================
+// HARD VERSION PIN — worker.js serves HTML with Cache-Control: no-store so the
+// edge never serves a stale build. The CI guardrail verifies window.VOY_VERSION
+// matches the deployed /api/health version before declaring deploy success.
+// __BUILD_HASH__ is replaced at deploy time by the GitHub Actions workflow
+// (scripts/verify-production.sh checks this equals the git short SHA).
+window.VOY_VERSION='V7.0.0';
+window.VOY_BUILD_HASH='__BUILD_HASH__';
+window.VOY_DEPLOY_TS='__DEPLOY_TS__';
+
 // ===================== GLOBAL ERROR HANDLERS =====================
 window.onerror=function(msg,src,line,col,err){console.error('[GLOBAL]',msg,src+':'+line+':'+col,err)};
 window.onunhandledrejection=function(ev){console.error('[REJECTION]',ev.reason)};
@@ -770,6 +786,7 @@ document.addEventListener('DOMContentLoaded',function(){
   bindOriginPill();
   startIdleDrift();
   initModeSelector();
+  showModeSelector(true); // V7: force transport selector visible on initial mount (not gated on search)
   // app_ready → dismiss splash (exit_condition: app_ready_event)
   _signalAppReady();
 
@@ -1185,14 +1202,23 @@ function renderSheet(){
   showModeSelector(true);
   if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:autoEst.providers?autoEst.providers[0]&&autoEst.providers[0].price:0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
 
-  // Build hero from ranked providers (ride-hailing apps only: uber/didi/maxim)
+  // V7: Build hero/alts respecting _activeMode (transport selector is functional, not decorative).
+  // all|car|custom → ride-hailing apps (uber/didi/maxim); taxi → taxi providers;
+  // remis → remis providers; walk → no ride-hailing hero (bike becomes primary).
   var ranked=autoEst.rankedProviders||[];
   var hero=null,alts=[];
+  var _modeMatches=function(pid){
+    if(!PROVIDERS[pid]||!PROVIDERS[pid].available)return false;
+    var cat=PROVIDERS[pid].category||'app';
+    if(_activeMode==='walk')return false;
+    if(_activeMode==='taxi')return cat==='taxi';
+    if(_activeMode==='remis')return cat==='remis';
+    return cat==='app'; // all|car|custom
+  };
   for(var i=0;i<ranked.length;i++){
     var p=ranked[i];
     var pid=p.id;
-    if(pid==='uber'||pid==='didi'||pid==='maxim'){
-      if(!PROVIDERS[pid]||!PROVIDERS[pid].available)continue;
+    if(_modeMatches(pid)){
       if(pid==='maxim'&&!isMaximSupported())continue;
       var url=buildAppLink(pid);
       if(!hero)hero={id:pid,name:p.name,price:p.price,timeMin:p.timeMin,url:url};
