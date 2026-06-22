@@ -75,25 +75,48 @@ This changes the worker URL from `voy-app.simondalmasso44.workers.dev` to
 
 ### Step C — Deploy the worker (THE actual deploy, not a dry-run)
 
+**One command** (does lint → dry-run → inject hash → deploy → verify):
+
 ```bash
-# From the project root:
-bun install
-bun run lint                                    # must pass with 0 errors
-node scripts/inject-build-hash.mjs              # inject git SHA into worker.js + HTML
-npx wrangler deploy --minify                    # REAL deploy (not --dry-run)
+export CLOUDFLARE_API_TOKEN=cfut_your_new_token
+export CLOUDFLARE_ACCOUNT_ID=your_account_id
+
+./scripts/deploy.sh
+# or, if you haven't changed the subdomain yet:
+./scripts/deploy.sh https://voy-app.simondalmasso44.workers.dev
 ```
 
-Verify immediately:
-```bash
-bash scripts/verify-production.sh https://voy-app.voy.workers.dev
-# All 7 checks should pass (except DNS CNAME which requires is-a.dev)
-```
+The script:
+1. Checks credentials are set
+2. `bun run lint` (fail → stop)
+3. `wrangler deploy --dry-run` (fail → stop)
+4. `node scripts/inject-build-hash.mjs` (injects git SHA into worker.js + HTML)
+5. `wrangler deploy --minify` (REAL deploy)
+6. `bash scripts/verify-production.sh` (7-point check — fails if edge ≠ local)
 
-If the worker URL is still `simondalmasso44` (step B not done yet), verify
-against the old URL:
+If you prefer to run the steps manually:
+
 ```bash
+bun run lint
+node scripts/inject-build-hash.mjs
+npx wrangler deploy --minify
 bash scripts/verify-production.sh https://voy-app.simondalmasso44.workers.dev
 ```
+
+**Alternative to is-a.dev: use a domain you already own.** If you have a domain
+in your Cloudflare account (e.g. `voyapp.dev`, `tu-dominio.com`), add it as a
+custom domain in `wrangler.jsonc`:
+
+```jsonc
+"routes": [
+  { "pattern": "voy.tu-dominio.com", "custom_domain": true }
+]
+```
+
+Then `wrangler deploy` auto-provisions the DNS record + TLS cert. This bypasses
+the is-a.dev PR wait entirely. The worker.js redirect edge still works —
+workers.dev visits redirect to your canonical domain (update `CANONICAL_ORIGIN`
+in worker.js to match).
 
 ### Step D — Purge the Cloudflare edge cache
 
@@ -121,35 +144,27 @@ curl -X POST "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/purge_cache" 
 
 ### Step E — Register voy.is-a.dev (the is-a.dev PR)
 
-The file `domains/voy.json` is ready but has `TU_EMAIL` as a placeholder.
-Replace it with your real email (is-a.dev requires contact info):
+**One command** (generates the JSON + prints exact git commands):
 
-```json
-{
-  "owner": {
-    "username": "simonkey888",
-    "email": "your-real-email@example.com"
-  },
-  "record": {
-    "CNAME": "voy-app.voy.workers.dev"
-  }
-}
-```
-
-Then submit the PR:
 ```bash
-# Fork is-a-dev/register, add domains/voy.json, open PR
-gh repo fork is-a-dev/register --clone
-cd register
-cp /path/to/domains/voy.json domains/voy.json
-git checkout -b add-voy-domain
-git add domains/voy.json
-git commit -m "Register voy.is-a.dev"
-git push origin add-voy-domain
-gh pr create --title "Register voy.is-a.dev" --body "Urban mobility assistant for Santa Fe, Argentina. CNAME to Cloudflare Worker."
+node scripts/prepare-isadev-pr.mjs your-real-email@example.com
+# If your GitHub username isn't simonkey888:
+node scripts/prepare-isadev-pr.mjs your@email.com --github your-gh-username
+# If you've changed the CF subdomain:
+node scripts/prepare-isadev-pr.mjs your@email.com --subdomain voy
 ```
+
+The script writes `domains/voy.json` with your real email and prints the
+exact fork → clone → commit → `gh pr create` commands.
+
+If you prefer to do it manually, the file `domains/voy.json` has `TU_EMAIL`
+as a placeholder — replace it with your real email (is-a.dev requires contact
+info), then fork `is-a-dev/register`, add the file, and open a PR.
 
 Wait for merge (usually 1-7 days) + DNS propagation (5-30 min after merge).
+
+> **Skip the wait:** if you own a domain, use Step C's "owned domain"
+> alternative instead. You'll have a canonical URL in 2 minutes, not 7 days.
 
 ### Step F — Verify the canonical domain
 
@@ -230,10 +245,12 @@ public/icons/                          — PWA icons (unchanged, V6-complete)
 public/core/mobilityEngine.js          — UNTOUCHED (pure functions)
 public/core/pricingEngine.js           — UNTOUCHED (Bayesian fare confidence)
 public/core/eventBus.js                — UNTOUCHED (event spec 1.4)
-public/ui/mobilityController.js        — UNTOUCHED (V5 extensions)
-domains/voy.json                       — is-a.dev PR file (replace TU_EMAIL)
-.github/workflows/deploy.yml           — V7 CI/CD pipeline with guardrail
-scripts/inject-build-hash.mjs          — CI build-hash injector
+public/ui/mobilityController.js        — V7: provider ID remapping fix (6 providers in ranked)
+domains/voy.json                       — is-a.dev PR file (use scripts/prepare-isadev-pr.mjs to fill)
+.github/workflows/deploy.yml           — V7 CI/CD pipeline with hash guardrail
+scripts/deploy.sh                      — ONE-COMMAND deploy (lint→inject→deploy→verify)
+scripts/inject-build-hash.mjs          — CI build-hash injector (git SHA → worker.js + HTML)
+scripts/prepare-isadev-pr.mjs          — Generates domains/voy.json + prints PR commands
 scripts/verify-production.sh           — 7-point production verification
 ```
 
