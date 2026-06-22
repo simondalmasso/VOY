@@ -1,11 +1,11 @@
 <!--
-VOY V7.3.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.4.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.3.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.4.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
@@ -33,8 +33,8 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.3.0">
-<meta name="voy-build" content="5d40cbc">
+<meta name="voy-version" content="V7.4.0">
+<meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -54,7 +54,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.3.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.4.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -113,36 +113,50 @@ button{font-family:inherit;letter-spacing:inherit}
 /* === APP (z-2) === */
 .app{position:relative;z-index:2;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0}
 
-/* === HEADER / FLOATING SEARCH === */
+/* === HEADER / FLOATING SEARCH (VOY_UI_FOCUS_V1 UI-002: floats over map, not stuck to top) === */
 .topbar{
   position:sticky;top:0;z-index:20;
-  padding:calc(12px + env(safe-area-inset-top,0px)) var(--sp-4) var(--sp-2);
-  background:var(--header-bg);
-  backdrop-filter:saturate(180%) blur(8px);
-  -webkit-backdrop-filter:saturate(180%) blur(8px);
+  padding:calc(10px + env(safe-area-inset-top,0px)) var(--sp-4) var(--sp-2);
+  background:transparent; /* UI-002: no header bg — search floats over the map */
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
 }
+/* UI-004 wake_animation: search bar enters with a 900ms wake (opacity + translateY + shadow) */
 .search-bar{
   position:relative;display:flex;align-items:center;gap:var(--sp-2);
   background:var(--surface);border:1px solid var(--border-strong);
   border-radius:var(--radius-card);
-  padding:var(--sp-2) var(--sp-3);min-height:56px;
+  /* UI-003 reduce_height -18%: 56px→46px, padding 8/12→6/10 */
+  padding:6px var(--sp-3);min-height:46px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.04); /* soft shadow (wake start) */
+  animation:wake 900ms cubic-bezier(0.22,1.2,0.36,1) both;
 }
+@keyframes wake{
+  0%{opacity:0;transform:translateY(-8px);box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+  100%{opacity:1;transform:translateY(0);box-shadow:0 2px 12px rgba(0,0,0,0.10)}
+}
+@media(prefers-reduced-motion:reduce){.search-bar{animation:none;opacity:1;transform:none}}
 .search-bar .sb-icon{color:var(--text3);flex-shrink:0;display:flex;align-items:center}
 .search-bar .sb-icon.sb-locate{color:var(--primary)}
 #destInput{
   flex:1;border:none;background:transparent;outline:none;
   font-size:var(--font-body);font-weight:var(--fw-body);color:var(--text);
-  min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;min-height:40px;
+  min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;min-height:32px; /* UI-003: 40→32 */
 }
 #destInput::placeholder{color:var(--text3)}
 .sb-btn{
   border:none;background:transparent;cursor:pointer;flex-shrink:0;
-  width:48px;height:48px;border-radius:var(--radius-sm);
+  width:44px;height:44px;border-radius:var(--radius-sm); /* UI-003: 48→44 */
   display:flex;align-items:center;justify-content:center;color:var(--text2);
   transition:transform var(--ease-out),background var(--ease-out);
 }
 .sb-btn:active{transform:scale(0.9);background:var(--bg3)}
 .sb-btn[disabled]{opacity:0.4;cursor:not-allowed}
+/* VOY_VOICE_SEARCH_V1: mic button + listening state */
+.sb-btn.sb-mic{color:var(--text2)}
+.sb-btn.sb-mic.listening{color:var(--red);background:rgba(255,59,48,0.10);animation:micPulse 1.1s ease-in-out infinite}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,48,0.35)}50%{box-shadow:0 0 0 6px rgba(255,59,48,0)}}
+@media(prefers-reduced-motion:reduce){.sb-btn.sb-mic.listening{animation:none}}
 
 /* Origin pill — shows GPS origin, tap to recenter */
 .origin-pill{
@@ -507,6 +521,7 @@ button{cursor:pointer}
     <div class="search-bar" role="search">
       <span class="sb-icon" aria-hidden="true" id="sbSearchIcon"></span>
       <input type="text" id="destInput" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Buscar destino" enterkeyhint="search">
+      <button class="sb-btn sb-mic" id="sbMicBtn" aria-label="Buscar por voz" title="Buscar por voz"></button>
       <button class="sb-btn" id="sbMapBtn" aria-label="Elegir destino en el mapa" title="Elegir en mapa"></button>
       <button class="sb-btn sb-locate" id="sbLocateBtn" aria-label="Usar mi ubicación" title="Mi ubicación"></button>
       <div id="destDropdown" class="search-dropdown hidden" role="listbox" aria-label="Sugerencias de destino"></div>
@@ -566,9 +581,9 @@ button{cursor:pointer}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.3.0';
-window.VOY_BUILD_HASH='5d40cbc';
-window.VOY_DEPLOY_TS='2026-06-22T13:50:18.135Z';
+window.VOY_VERSION='V7.4.0';
+window.VOY_BUILD_HASH='__BUILD_HASH__';
+window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
 // ===================== GLOBAL ERROR HANDLERS =====================
 window.onerror=function(msg,src,line,col,err){console.error('[GLOBAL]',msg,src+':'+line+':'+col,err)};
@@ -703,7 +718,8 @@ function svg(name,size){
     external:'<path d="M14 4h6v6M20 4 10 14M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>',
     list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     gauge:'<path d="M12 13l4-4"/><path d="M3 12a9 9 0 1 1 18 0"/><circle cx="12" cy="13" r="1.2"/>',
-    route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 6h6a4 4 0 0 1 0 8H10a4 4 0 0 0 0 8h6"/>'
+    route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 6h6a4 4 0 0 1 0 8H10a4 4 0 0 0 0 8h6"/>',
+    mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>'
   };
   return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[name]||'')+'</svg>';
 }
@@ -824,6 +840,7 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('sbSearchIcon').innerHTML=svg('search',22);
   document.getElementById('sbMapBtn').innerHTML=svg('mapPin',22);
   document.getElementById('sbLocateBtn').innerHTML=svg('locate',22);
+  document.getElementById('sbMicBtn').innerHTML=svg('mic',22);
   document.getElementById('dgIcon').innerHTML=svg('external',32);
   // VOY chevron brand mark in footer
   var fm=document.querySelector('.footer-mark');
@@ -869,9 +886,8 @@ function _signalAppReady(){
 }
 
 // ===================== TRANSPORT MODE SELECTOR (ui_system) =====================
-var _activeMode='all'; // all|car|motorcycle|taxi|remis|walk|custom
+var _activeMode='car'; // VOY_UI_FOCUS_V1 UI-001: 'Todo' pill removed (visual noise). Default → 'car'.
 var MODE_OPTIONS=[
-  {id:'all',label:'Todo',icon:'list'},
   {id:'car',label:'Auto',icon:'car'},
   {id:'taxi',label:'Taxi',icon:'taxi'},
   {id:'remis',label:'Remis',icon:'navigate'},
@@ -1071,8 +1087,45 @@ function bindSearchInput(){
   inp.addEventListener('focus',function(){onSearchFocus()});
   document.getElementById('sbMapBtn').addEventListener('click',activatePickDest);
   document.getElementById('sbLocateBtn').addEventListener('click',locateMe);
+  document.getElementById('sbMicBtn').addEventListener('click',toggleVoiceSearch);
 }
 function closeAllDropdowns(){var dd=document.getElementById('destDropdown');if(dd)dd.classList.add('hidden')}
+
+// ===================== VOICE SEARCH (Web Speech API, no dependencies) =====================
+// Spec VOY_VOICE_SEARCH_V1: tap mic → speech recognition → insert transcript → launch search.
+// Failback: browser_not_supported + permission_denied → toast, field stays a normal input.
+var _speechRec=null,_speechListening=false;
+function initSpeechRecognition(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null; // browser_not_supported — mic button stays but no-ops gracefully
+  var rec=new SR();
+  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+  rec.onstart=function(){_speechListening=true;var b=document.getElementById('sbMicBtn');if(b)b.classList.add('listening')};
+  rec.onend=function(){_speechListening=false;var b=document.getElementById('sbMicBtn');if(b)b.classList.remove('listening')};
+  rec.onerror=function(ev){
+    _speechListening=false;var b=document.getElementById('sbMicBtn');if(b)b.classList.remove('listening');
+    if(ev&&ev.error==='not-allowed'){showToast('Permiso de micrófono denegado','info')}
+    else if(ev&&ev.error==='no-speech'){showToast('No te escuché. Probá de nuevo','info')}
+    else if(ev&&ev.error){showToast('Voz no disponible: '+ev.error,'info')}
+  };
+  rec.onresult=function(ev){
+    var transcript='';
+    for(var i=ev.resultIndex;i<ev.results.length;i++){transcript+=ev.results[i][0].transcript}
+    transcript=transcript.trim();
+    var inp=document.getElementById('destInput');
+    if(inp&&transcript){inp.value=transcript;inp.dispatchEvent(new Event('input',{bubbles:true}))}
+  };
+  return rec;
+}
+function toggleVoiceSearch(){
+  if(!_speechRec)_speechRec=initSpeechRecognition();
+  if(!_speechRec){showToast('Voz no soportada en este navegador','info');return}
+  if(_speechListening){try{_speechRec.stop()}catch(e){};return}
+  try{_speechRec.start()}catch(e){
+    // start() throws if already started or not allowed — silent failback
+    if(e&&e.name==='not-allowed')showToast('Permiso de micrófono denegado','info');
+  }
+}
 async function onSearchInput(val){
   // Stop idle drift permanently on first real character
   if(val&&val.trim().length>0)stopIdleDrift();

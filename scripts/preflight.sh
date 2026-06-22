@@ -30,15 +30,15 @@ printf "VOY V7 preflight — proving local bundle is deploy-ready\n"
 
 # ── 1. worker.js V7 markers ─────────────────────────────────
 hdr "1. worker.js V7 markers"
-if grep -q 'WORKER_VERSION = "V7.3.0"' worker.js; then ok "WORKER_VERSION = V7.3.0"; else bad "WORKER_VERSION missing"; fi
+if grep -q 'WORKER_VERSION = "V7.4.0"' worker.js; then ok "WORKER_VERSION = V7.4.0"; else bad "WORKER_VERSION missing"; fi
 if grep -q 'BUILD_HASH = "__BUILD_HASH__"' worker.js; then ok "BUILD_HASH placeholder present (CI will inject)"; else bad "BUILD_HASH placeholder missing or already injected"; fi
 if grep -q '_htmlNoStore' worker.js; then ok "_htmlNoStore() helper present (cache-bust)"; else bad "_htmlNoStore missing"; fi
 if grep -q 'Cache-Control.*no-store' worker.js; then ok "Cache-Control: no-store on HTML"; else bad "no-store header missing"; fi
 
 # ── 2. VOY-Lite.html V7 markers ─────────────────────────────
 hdr "2. VOY-Lite.html V7 markers"
-if grep -q 'voy-version" content="V7.3.0"' public/VOY-Lite.html; then ok "meta voy-version = V7.3.0"; else bad "version meta missing"; fi
-if grep -q "window.VOY_VERSION='V7.3.0'" public/VOY-Lite.html; then ok "window.VOY_VERSION = V7.3.0"; else bad "VOY_VERSION JS missing"; fi
+if grep -q 'voy-version" content="V7.4.0"' public/VOY-Lite.html; then ok "meta voy-version = V7.4.0"; else bad "version meta missing"; fi
+if grep -q "window.VOY_VERSION='V7.4.0'" public/VOY-Lite.html; then ok "window.VOY_VERSION = V7.4.0"; else bad "VOY_VERSION JS missing"; fi
 if grep -q 'id="modeSelector"' public/VOY-Lite.html; then ok "modeSelector element present"; else bad "modeSelector missing"; fi
 if grep -q 'showModeSelector(true)' public/VOY-Lite.html; then ok "mode selector force-shown on mount"; else bad "showModeSelector(true) missing"; fi
 if grep -q '_modeMatches' public/VOY-Lite.html; then ok "_activeMode filter (_modeMatches) present"; else bad "_modeMatches missing"; fi

@@ -31,10 +31,10 @@
 // ============================================================
 
 const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
-const WORKER_VERSION = "V7.3.0"; // V7.3 = VOY_PROVIDER_ROUTER_V1 (confirmation dialog message_short/extended + provider icon; Uber/DiDi/Maxim/Taxi/Remis routing verified)
-// 5d40cbc is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
+const WORKER_VERSION = "V7.4.0"; // V7.4 = VOY_UI_FOCUS_V1 (remove Todo pill + floating search + wake anim) + VOY_VOICE_SEARCH_V1 (Web Speech API mic button)
+// __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
 // verify-production.sh checks /api/health.build_hash === git short SHA.
-const BUILD_HASH = "5d40cbc";
+const BUILD_HASH = "__BUILD_HASH__";
 
 const worker = {
   async fetch(request, env) {
