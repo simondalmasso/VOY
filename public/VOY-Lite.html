@@ -1,12 +1,13 @@
 <!--
-VOY V7.2.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.3.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.2.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.3.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
+  - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
   - SINGLE ENTRYPOINT: ONLY / serves UI (/VOY-Lite.html → 301 → /)
   - Mode selector force-rendered on initial mount
@@ -32,7 +33,7 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.2.0">
+<meta name="voy-version" content="V7.3.0">
 <meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
@@ -53,7 +54,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.2.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.3.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -396,6 +397,7 @@ button{cursor:pointer}
 .dialog .dg-icon{display:flex;justify-content:center;margin-bottom:var(--sp-3);color:var(--primary)}
 .dialog .dg-title{font-size:var(--font-title);font-weight:var(--fw-title);color:var(--text);text-align:center;letter-spacing:-0.02em;margin-bottom:var(--sp-2)}
 .dialog .dg-provider{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);text-align:center;margin-bottom:var(--sp-2)}
+.dialog .dg-msg-short{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);text-align:center;line-height:1.4;margin-bottom:var(--sp-2)}
 .dialog .dg-msg{font-size:var(--font-caption);color:var(--text2);text-align:center;line-height:1.5;margin-bottom:var(--sp-5)}
 .dialog .dg-actions{display:flex;gap:var(--sp-2)}
 .dg-cancel{
@@ -542,7 +544,8 @@ button{cursor:pointer}
     <div class="dg-icon" id="dgIcon"></div>
     <div class="dg-title" id="dgTitle">Abrir aplicación externa</div>
     <div class="dg-provider" id="dgProvider"></div>
-    <div class="dg-msg">Vas a salir de VOY. El servicio y el precio final dependen del proveedor externo, no de VOY.</div>
+    <div class="dg-msg-short" id="dgMsgShort">Vas a salir de VOY y abrir una app externa.</div>
+    <div class="dg-msg">El servicio y el precio final dependen del proveedor externo, no de VOY.</div>
     <div class="dg-actions">
       <button class="dg-cancel" id="dgCancel">Cancelar</button>
       <button class="dg-confirm" id="dgConfirm">Continuar</button>
@@ -563,7 +566,7 @@ button{cursor:pointer}
 // matches the deployed /api/health version before declaring deploy success.
 // __BUILD_HASH__ is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.2.0';
+window.VOY_VERSION='V7.3.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -1569,6 +1572,16 @@ function openDeepLinkDialog(action,url,name){
   _pendingDeepLink={action:action,url:url,name:name};
   v5event('provider_selected',{provider:action});
   document.getElementById('dgProvider').textContent=name||'';
+  // VOY_PROVIDER_ROUTER_V1: show a provider-appropriate icon so the user has
+  // visual confirmation of WHICH app they are about to open before tapping
+  // Continuar. Maps action → svg icon name (see svg() helper).
+  var iconName='app';
+  if(action&&action.indexOf('taxi')===0)iconName='taxi';
+  else if(action&&action.indexOf('remis')===0)iconName='taxi';
+  else if(action==='uber'||action==='didi'||action==='maxim')iconName='car';
+  if(name&&/whatsapp/i.test(name))iconName='whatsapp';
+  var iconEl=document.getElementById('dgIcon');
+  if(iconEl)iconEl.innerHTML=svg(iconName,36);
   document.getElementById('dialogOverlay').classList.add('show');
 }
 function closeDeepLinkDialog(){

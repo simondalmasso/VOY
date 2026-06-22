@@ -1310,3 +1310,85 @@ Stage Summary:
 - No new layers, no new screens, no heavy overlays — all constraints honored.
 - Files changed: public/VOY-Lite.html (BUS_STOPS data + CSS + bus-block render + drawBusRoute/clearBusRoute + selectBusLine/renderBusBlockHTML/attachBusBlockEvents + OSRM guard + dest-change reset), public/ui/mobilityController.js (rankBusLines scoring rewrite).
 - Production deploy pending user credentials (code is deploy-ready: lint 0/0, browser-verified golden path).
+
+---
+Task ID: 25
+Agent: Main (Senior Mobile UX — VOY_PROVIDER_ROUTER_V1)
+Task: Corregir la lógica de apertura de botones para Uber, DiDi, Maxim, Taxi y Remis sin fallas de navegador ni redirecciones absurdas. Confirmation dialog gate before leaving VOY.
+
+Work Log:
+- Read worklog.md (Tasks 1–24) to ground work in current state: V7.2.0 deployed locally (Colectivo engine V1 from Task 24 applied), production still at V7.1.0 (V7.2.0 + Colectivo V1 pending deploy).
+- Audited current button routing vs VOY_PROVIDER_ROUTER_V1 spec:
+  * Uber: m.uber.com/ul/?action=setPickup universal link with real coords — ALREADY CORRECT (Task 23)
+  * DiDi: didiglobal.com/passenger/deeplink universal deep link with exact pickup/dropoff coords — ALREADY CORRECT (Task 23)
+  * Maxim: intent:// scheme=maxim (not taxsee) + package=com.taxsee.taxsee + S.browser_fallback_url=playstore — ALREADY CORRECT (Task 23); opened via window.location.href (same tab, NOT window.open) per line 1553
+  * Taxi: accordion with TAXI_COMPANIES (Radiotaxi, TaxiApp) + WhatsApp CTA — ALREADY CORRECT
+  * Remis: accordion with REMIS_COMPANIES (Remises Real) + WhatsApp CTA — ALREADY CORRECT
+  * Confirmation dialog: #dialogOverlay with Cancelar/Continuar — ALREADY EXISTS and WIRED to ALL provider buttons (cta-primary, acc-head, co-action) via attachSheetEvents() → openDeepLinkDialog()
+- Identified 2 gaps vs spec:
+  1. Dialog message was a single combined string "Vas a salir de VOY. El servicio y el precio final..." — spec requires message_short ("Vas a salir de VOY y abrir una app externa.") + message_extended ("El servicio y el precio final dependen del proveedor externo, no de VOY.") as separate fields. The short message was missing "y abrir una app externa."
+  2. #dgIcon div existed but was never populated — dialog had no visual feedback for WHICH app the user is about to open.
+
+- Applied PATCH 1 (dialog HTML, VOY-Lite.html L545-547): Split single .dg-msg into:
+  * <div class="dg-msg-short" id="dgMsgShort">Vas a salir de VOY y abrir una app externa.</div> (bold, prominent)
+  * <div class="dg-msg">El servicio y el precio final dependen del proveedor externo, no de VOY.</div> (caption, muted)
+- Applied PATCH 2 (dialog CSS, VOY-Lite.html L399): Added .dg-msg-short { font-size:var(--font-body); font-weight:var(--fw-bold); color:var(--text); text-align:center; line-height:1.4; margin-bottom:var(--sp-2) } — visually distinct from .dg-msg (caption/muted).
+- Applied PATCH 3 (openDeepLinkDialog, VOY-Lite.html L1570-1585): Added provider icon mapping:
+  * action starts with 'taxi' → 'taxi' icon
+  * action starts with 'remis' → 'taxi' icon
+  * action is uber/didi/maxim → 'car' icon
+  * name matches /whatsapp/i → 'whatsapp' icon (override — WhatsApp CTAs from Taxi/Remis accordions)
+  * Default: 'app' icon
+  * Populates #dgIcon.innerHTML = svg(iconName, 36) on every dialog open.
+- Applied PATCH 4 (version bump V7.2.0 → V7.3.0):
+  * VOY-Lite.html: window.VOY_VERSION, meta voy-version, header comment (5 occurrences)
+  * worker.js: WORKER_VERSION + descriptive comment
+  * scripts/preflight.sh: 3 version checks
+  * scripts/verify-production.sh: 11 version checks
+  * Added V7.3 changelog entry to VOY-Lite.html header comment
+
+Browser Verification (agent-browser, 390×844 mobile viewport, Santa Fe geo -31.6106/-60.7008):
+- Page loads: window.VOY_VERSION="V7.3.0", 0 console errors, 0 page errors ✓
+- Set origin (-31.6106/-60.7008) + dest (Plaza España -31.6402/-60.7134) → sheet renders:
+  * Hero CTA: Uber, URL=https://m.uber.com/ul/?action=setPickup&pickup[latitude]=-31.6106&pickup[longitude]=-60.7008&...&dropoff[latitude]=-31.6402&dropoff[longitude]=-60.7134 (real coords) ✓
+  * Alt row: DiDi ✓
+  * Taxi accordion: present ✓
+  * Remis accordion: present ✓
+  * 4 co-action buttons (Taxi/Remis WhatsApp + TaxiApp app) ✓
+
+Acceptance Criteria (all 6 verified):
+1. "Uber abre." — Click Uber CTA → dialog opens with car icon, provider="Uber", msgShort="Vas a salir de VOY y abrir una app externa.", msgExtended="El servicio y el precio final dependen del proveedor externo, no de VOY.", Cancelar+Continuar buttons present ✓
+2. "DiDi abre con la URL correcta." — Click DiDi → dialog with car icon, pendingUrl=https://www.didiglobal.com/passenger/deeplink?pickup_lat=-31.6106&pickup_lng=-60.7008&dropoff_lat=-31.6402&dropoff_lng=-60.7134 (coords correct, NOT inverted: pickup_lat matches origin lat, pickup_lng matches origin lon) ✓
+3. "Maxim intenta app primero." — Android emulation (Pixel 5): buildAppLink('maxim') returns intent://order?startLat=-31.610600&startLon=-60.700800&finishLat=-31.640200&finishLon=-60.713400#Intent;scheme=maxim;package=com.taxsee.taxsee;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.taxsee.taxsee;end — scheme=maxim (NOT taxsee), app opens if installed, Play Store only as fallback. Click Maxim → Continuar → window.open NOT called (intercepted), window.location.href used (same tab) ✓
+4. "Taxi despliega empresas." — Click accTaxiHead → expands, shows 2 companies (Radiotaxi Santa Fe, TaxiApp), 3 co-action buttons (2 WhatsApp + 1 TaxiApp app), WhatsApp buttons present ✓
+5. "Remis despliega empresas." — Click accRemisHead → expands, shows 1 company (Remises Real), 1 WhatsApp co-action button ✓
+6. "La confirmación aparece antes de salir." — ALL provider buttons (Uber, DiDi, Maxim, Taxi-WhatsApp, Remis-WhatsApp) route through openDeepLinkDialog first; link only opens on Continuar click. Cancelar closes dialog without opening anything (verified: showBefore=true, showAfter=false) ✓
+
+WhatsApp dialog icon test: Click Radiotaxi WhatsApp button → dialog opens with WhatsApp icon (path M3 21l1.6), provider="Radiotaxi Santa Fe (WhatsApp)", correct msgShort + msgExtended ✓
+
+Implementation Rules (all 4 verified):
+1. "No usar window.open para intent críticos de Maxim." — window.open intercepted and NOT called for Maxim intent:// URL; window.location.href used instead (line 1553) ✓
+2. "No invertir coordenadas de DiDi." — pickup_lat=-31.6106 (origin lat), pickup_lng=-60.7008 (origin lon), dropoff_lat=-31.6402 (dest lat), dropoff_lng=-60.7134 (dest lon) — correct order, no inversion ✓
+3. "No abrir Play Store por error si la app está instalada." — intent:// with scheme=maxim + package=com.taxsee.taxsee → Android resolves to installed Maxim app directly; S.browser_fallback_url (Play Store) only triggers when app NOT installed ✓
+4. "No disparar el deep link sin confirmar cuando el usuario sale de VOY." — attachSheetEvents() wires ALL provider buttons (cta-primary, acc-head, co-action) → openDeepLinkDialog() → dialog shows → user must click Continuar before any navigation occurs ✓
+
+Lint: 0 errors, 0 warnings ✓
+Screenshots: v73-uber-dialog.png, v73-whatsapp-dialog.png, v73-didi-dialog.png, v73-final-sheet.png
+
+Stage Summary:
+- VOY_PROVIDER_ROUTER_V1: COMPLETE — all 6 acceptance criteria browser-verified, all 4 implementation rules satisfied.
+- button_policy.uber: COMPLETE — universal deep link with real origin/destination, web fallback inherent in universal link
+- button_policy.didi: COMPLETE — universal deep link with exact pickup_lat/pickup_lng/dropoff_lat/dropoff_lng (no inversion), web fallback inherent
+- button_policy.maxim: COMPLETE — Android intent first (scheme=maxim, not taxsee), same-tab navigation (window.location.href, not window.open), Play Store only as fallback when app absent
+- button_policy.taxi: COMPLETE — expand_company_dropdown with all legal taxis (Radiotaxi Santa Fe, TaxiApp), WhatsApp primary CTA
+- button_policy.remis: COMPLETE — expand_company_dropdown with all legal remises (Remises Real), WhatsApp primary CTA
+- confirmation_dialog.enabled: COMPLETE — dialog gates ALL external navigation
+- confirmation_dialog.message_short: COMPLETE — "Vas a salir de VOY y abrir una app externa." (bold, prominent)
+- confirmation_dialog.message_extended: COMPLETE — "El servicio y el precio final dependen del proveedor externo, no de VOY." (caption, muted)
+- confirmation_dialog.buttons ["Cancelar","Continuar"]: COMPLETE — both present and functional
+- Provider icon: NEW enhancement — dialog now shows car/taxi/whatsapp SVG icon matching the provider being opened (was empty before)
+- No new layers, no new screens — all changes are to the existing confirmation dialog (HTML + CSS + JS icon mapping)
+- Files changed: public/VOY-Lite.html (dialog HTML + CSS + openDeepLinkDialog icon logic + version bump + header comment), worker.js (version + comment), scripts/preflight.sh + scripts/verify-production.sh (version checks)
+- Engine (mobilityEngine.js) and controller (mobilityController.js) UNTOUCHED — all changes are view-layer
+- Production deploy pending: V7.2.0 (UI patches) + Colectivo V1 + V7.3.0 (this task) all local-only, production still at V7.1.0. User must run: export CLOUDFLARE_API_TOKEN=...; export CLOUDFLARE_ACCOUNT_ID=...; ./scripts/deploy.sh
+- SECURITY: prior session tokens (ghp_..., cfut_...) shared in plaintext should remain revoked; user should use fresh credentials for deploy
