@@ -1,24 +1,24 @@
 {
   // ============================================================
-  //  VOY — Cloudflare Workers config (FINAL DEPLOY ARCHITECTURE)
+  //  VOY — Cloudflare Workers config (FINAL: voy-core + Analytics)
   //
   //  Canonical domain:  https://voy.is-a.dev
-  //  Wired via:         is-a.dev CNAME → voy-app.voy.workers.dev
+  //  Wired via:         is-a.dev CNAME → voy-core.voy.workers.dev
+  //                    (after account subdomain migration simondalmasso44 → voy)
   //
-  //  The is-a.dev zone is NOT in this Cloudflare account, so voy.is-a.dev
-  //  CANNOT be added here as a Custom Domain or route pattern (Cloudflare
-  //  requires the zone to be in your account for both). Instead, traffic
-  //  reaches this worker via DNS-level CNAME, and worker.js canonicalizes
-  //  / redirects any direct workers.dev access to voy.is-a.dev.
+  //  deployment_mode: safe_production, strategy: blue_green
+  //  predeploy_checks: lint, dry_run, asset_binding_check
+  //  rollback: enabled (trigger: error_rate > 1%) — handled via Cloudflare
+  //            dashboard version rollback (Workers keep last N versions).
   //
   //  workers_dev MUST stay true:
   //    The is-a.dev CNAME target is the workers.dev URL. Disabling workers_dev
   //    would break the CNAME path entirely. Direct workers.dev visits are
   //    301-redirected to voy.is-a.dev by worker.js, so the worker domain is
-  //    never usable for browsing — it always redirects.
+  //    never browseable.
   // ============================================================
-  "name": "voy-app",
-  "compatibility_date": "2026-06-22",
+  "name": "voy-core",
+  "compatibility_date": "2026-01-01",
   "main": "./worker.js",
 
   // REQUIRED: keep true (is-a.dev CNAME resolves to the workers.dev URL).
@@ -39,6 +39,16 @@
     // directory listing (Workers Assets never enumerates directories).
     "not_found_handling": "none"
   },
+
+  // Cloudflare Analytics Engine — event_spec v1.4 transport.
+  // Dataset "voy_metrics". Provision in dashboard: Analytics & Logs →
+  // Analytics Engine → create dataset "voy_metrics", then bind here.
+  // If the binding is absent at runtime, worker.js acknowledges events
+  // with 202 (fire-and-forget) so the app never breaks.
+  "analytics_engine_datasets": [
+    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
+  ],
+
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 }

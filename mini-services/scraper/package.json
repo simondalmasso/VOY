@@ -1,0 +1,12 @@
+{
+  "name": "voy-scraper",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Legal-only, non-intrusive taxi/remis directory scraper skeleton for VOY (Santa Fe, AR).",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  },
+  "license": "MIT"
+}

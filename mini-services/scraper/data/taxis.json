@@ -1,0 +1,47 @@
+[
+  {
+    "id": "radiotaxi-santafe",
+    "name": "Radiotaxi Santa Fe",
+    "type": "taxi",
+    "phone": "+54 342 4XXX-XXXX",
+    "whatsapp": "+54 9 342 4XXX-XXXX",
+    "base_fare": 1800,
+    "coverage": [
+      "Centro",
+      "Norte",
+      "Sur",
+      "Oeste"
+    ],
+    "source": "seed/placeholder",
+    "updated_at": "2026-06-22T10:49:24.204Z"
+  },
+  {
+    "id": "taxiapp-santafe",
+    "name": "TaxiApp Santa Fe",
+    "type": "taxi",
+    "phone": "+54 342 4XXX-XXXX",
+    "whatsapp": "+54 9 342 4XXX-XXXX",
+    "base_fare": 1900,
+    "coverage": [
+      "Centro",
+      "Costenlindo",
+      "Guadalupe"
+    ],
+    "source": "seed/placeholder",
+    "updated_at": "2026-06-22T10:49:24.204Z"
+  },
+  {
+    "id": "radio-taxi-aeropuerto",
+    "name": "Radio Taxi Aeropuerto Santa Fe",
+    "type": "taxi",
+    "phone": "+54 342 4XXX-XXXX",
+    "whatsapp": "+54 9 342 4XXX-XXXX",
+    "base_fare": 2500,
+    "coverage": [
+      "Aeropuerto Sauce Viejo",
+      "citywide"
+    ],
+    "source": "seed/placeholder",
+    "updated_at": "2026-06-22T10:49:24.204Z"
+  }
+]

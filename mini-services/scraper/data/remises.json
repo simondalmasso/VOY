@@ -1,0 +1,40 @@
+[
+  {
+    "id": "remises-real",
+    "name": "Remises Real",
+    "type": "remis",
+    "phone": "+54 342 4XXX-XXXX",
+    "whatsapp": "+54 9 342 4XXX-XXXX",
+    "base_fare": 2100,
+    "coverage": [
+      "citywide"
+    ],
+    "source": "seed/placeholder",
+    "updated_at": "2026-06-22T10:49:24.204Z"
+  },
+  {
+    "id": "remis-centro-santafe",
+    "name": "Remis Centro Santa Fe",
+    "type": "remis",
+    "phone": "+54 342 4XXX-XXXX",
+    "base_fare": 2000,
+    "coverage": [
+      "Centro"
+    ],
+    "source": "seed/placeholder",
+    "updated_at": "2026-06-22T10:49:24.204Z"
+  },
+  {
+    "id": "remises-25-de-mayo",
+    "name": "Remises 25 de Mayo",
+    "type": "remis",
+    "phone": "+54 342 4XXX-XXXX",
+    "base_fare": 1950,
+    "coverage": [
+      "Sur",
+      "Oeste"
+    ],
+    "source": "seed/placeholder",
+    "updated_at": "2026-06-22T10:49:24.204Z"
+  }
+]

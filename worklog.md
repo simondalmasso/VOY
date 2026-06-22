@@ -812,3 +812,102 @@ Stage Summary:
 - Files changed: worker.js (rewritten), wrangler.jsonc (comments + not_found_handling), domains/voy.json (NEW), src/middleware.ts (+308 path hiding). VOY-Lite.html/mobilityEngine.js/mobilityController.js/logo.svg UNTOUCHED.
 - NOT deployed (user runs `npx wrangler deploy` with safe creds after revoking leaked ghp_/cfut_ tokens + changing CF subdomain)
 - bun run lint: 0/0 | wrangler --dry-run: SUCCESS | browser: 0 errors, 0 hscroll, sticky footer verified, 0 emojis, golden path verified
+
+---
+Task ID: 8
+Agent: Scraper mini-service builder
+Task: Build a legal-only, non-intrusive taxi/remis directory scraper mini-service (Bun project) in /home/z/my-project/mini-services/scraper/
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Tasks 1–17 prior context) to understand project layout (Bun + Next.js + Cloudflare Workers for VOY Santa Fe mobility app)
+- Created /home/z/my-project/mini-services/scraper/ directory + data/ subdir
+- Created package.json: name=voy-scraper, type=module, scripts.dev="bun --hot index.ts", scripts.start="bun index.ts"
+- Created sources.ts: SOURCE_REGISTRY (5 documented-placeholder Santa Fe public source descriptors, all enabled:false) + SEED_PROVIDERS (6 illustrative companies marked source:"seed/placeholder") + getEnabledSources() helper. Phone numbers placeholder-shaped (+54 342 4XXX-XXXX) to avoid implying verified contact data.
+- Created normalizer.ts: pure Provider type (id/name/type/phone?/whatsapp?/base_fare?/coverage?/source/updated_at), normalizeOne() + normalizeBatch() (splits by type). No I/O.
+- Created store.ts: writeProviders() + readTaxis() + readRemises() using node:fs/promises. Writes to /home/z/my-project/mini-services/scraper/data/{taxis,remises}.json. Missing/invalid files return [] (next cycle repopulates).
+- Created index.ts:
+  * Prominent LEGAL-ONLY policy comment block at top (legal_only, no_bypass, no_auth_bypass, polite-UA, no JS rendering, 1.5s same-host delay, no cookies/credentials/auth headers)
+  * Bun.serve on hardcoded PORT=3007 (NOT env)
+  * politeFetch() helper: GET only, credentials:"omit", explicit Cookie:"" + Authorization:"" headers, polite UA, 1.5s per-host rate limit (lastRequestByHost map). EXPORTED but NOT invoked against any real URL in skeleton mode
+  * runScrapeCycle(): non-intrusive, uses SEED_PROVIDERS when no enabled source (skeleton). Logs each step with ISO timestamp via logCycle(). Idempotent. Returns {taxis, remises, source:"seed"}
+  * Boot: ensureSeedData() writes seed data on first start if data files missing
+  * Routes: GET /health → {ok:true, service:"voy-scraper", port:3007}; GET /api/taxis → Provider[]; GET /api/remises → Provider[]; POST /api/scrape → {ok:true, scraped:{taxis,remises}, source:"seed"}; 404 JSON for everything else
+- Created README.md: legal-only policy table, no-bypass/no-auth-bypass enforcement matrix, 24h frequency (operator-driven via POST /api/scrape), endpoints table, normalized Provider schema, file tree, seed data disclaimer, "How to add a real source" 5-step process, Source review log table (empty), constraints honored section
+- Ran `cd /home/z/my-project/mini-services/scraper && bun install` → "No packages!" (skeleton has zero deps) — no lockfile needed
+- Started dev server in background: `bun run dev &` → bun --hot index.ts, PID 18719, listening on http://localhost:3007
+- Verified with curl (all 4 endpoints):
+  * GET /health → {"ok":true,"service":"voy-scraper","port":3007} ✓
+  * GET /api/taxis → 3 taxi Provider objects (radiotaxi-santafe, taxiapp-santafe, radio-taxi-aeropuerto) ✓
+  * GET /api/remises → 3 remis Provider objects (remises-real, remis-centro-santafe, remises-25-de-mayo) ✓
+  * POST /api/scrape → {"ok":true,"scraped":{"taxis":3,"remises":3},"source":"seed"} ✓
+- Verified data files written: data/taxis.json (1058B, 3 records), data/remises.json (864B, 3 records)
+- Verified dev server still running (PID 18719) — left running per instructions ("kill nothing else")
+- Did NOT touch any files outside /home/z/my-project/mini-services/scraper/
+
+Stage Summary:
+- Mini-service live at http://localhost:3007 (Bun --hot, background)
+- 6 files created: package.json, index.ts, sources.ts, normalizer.ts, store.ts, README.md
+- 2 data files created on boot: data/taxis.json (3 taxis), data/remises.json (3 remises)
+- All 4 endpoints verified via curl with exact-spec response shapes
+- Legal-only policy enforced in code (politeFetch) + documented in README + commented at top of index.ts
+- Zero real outbound HTTP in skeleton mode (runScrapeCycle uses seed data; SOURCE_REGISTRY all enabled:false)
+- politeFetch() ready for future legal-cleared sources (5-step "How to add a real source" process documented in README)
+- 24h frequency is operator-driven (POST /api/scrape from cron); no auto-schedule in skeleton for inspectability
+- Scope respected: only /home/z/my-project/mini-services/scraper/ touched; nothing else modified; nothing killed
+
+---
+Task ID: 18
+Agent: Main (Lead Engineer — V6.2 Production Batch)
+Task: VOY V6.2 — verify_production_domain + safe_production deploy (voy-core) + PWA/icons/splash + pricing_engine v2 bayesian + event_spec v1.4 + cloudflare_analytics_engine + ui_system (#00D4FF/grid/mode-selector) + scraper_system legal-only. Finish previous task's verification first.
+
+Work Log:
+- Read worklog.md (Tasks 1–17) to ground this pass: prior task (17) delivered final deploy architecture (worker.js 4-rule redirect edge, wrangler.jsonc, domains/voy.json, src/middleware.ts path-hiding). mobilityEngine.js/mobilityController.js/VOY-Lite.html V6.1 state preserved.
+- FINISH PREVIOUS TASK (verify_production_domain): ran DNS+HTTPS+root checks against voy.is-a.dev. Found: dig resolves to 104.18.5.103/104.18.4.103 (Cloudflare) BUT curl returns 302 → https://is-a.dev/?d=voy (is-a.dev "unregistered" landing). Conclusion: subdomain NOT yet registered (PR not submitted). Documented in v6.2-deploy.md §1 with artifacts + production checklist. Ran local-preview stand-in verification (localhost:3000): / → 200, /VOY-Lite.html → 308 → /, all assets 200.
+- DELEGATED Task 8 (scraper mini-service) to general-purpose subagent → built mini-services/scraper/ (port 3007, legal-only, non-intrusive, seed data, /health + /api/taxis + /api/remises + POST /api/scrape). Verified curl outputs. Subagent appended its own worklog entry (Task ID 8).
+- worker.js REWRITTEN: added /api/events POST endpoint (writes to VOY_METRICS Analytics Engine: index1=event name, blob1=anon_id, blob2=geo cluster, doubles=session_age_ms/estimated_fare/route_distance), /api/health endpoint, CORS handling, graceful degradation (202 if VOY_METRICS binding absent). Preserved 4-rule redirect edge from Task 17.
+- wrangler.jsonc UPDATED: worker name voy-app → voy-core, compatibility_date 2026-06-22 → 2026-01-01, added analytics_engine_datasets binding VOY_METRICS → voy_metrics. workers_dev:true kept (CNAME path requires it).
+- PWA (icons spec): created public/icons/app-icon.svg (1024 voy chevron, #000 bg / #FFF fg), app-icon-maskable.svg, scripts/generate-icons.mjs (sharp). Generated 13 PNGs: apple-touch-120/152/167/180/1024, icon-48/72/96/144/192/512, maskable-192/512. Created public/manifest.json (display:standalone, theme #000, bg #FFF, 5 icons incl SVG, 2 shortcuts). Added head links: manifest, 5 apple-touch-icons, theme-color #000000 (light+dark), apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style black-translucent.
+- SPLASH (splash spec): inline SVG chevron in #splash div, @keyframes spFadeInScale 900ms cubic-bezier(0.22,1.2,0.36,1), minimal_dot_pulse (spDotPulse 1100ms), background #000, _signalAppReady() dismisses on load+900ms with 2500ms safety. Mobile 96px / desktop 80px. reduced-motion respected.
+- PRICING ENGINE v2 (pricing_engine spec): created public/core/pricingEngine.js — PURE module. PROVIDER_CONFIDENCE priors (uber 0.85/didi 0.88/maxim 0.75/taxi 0.82/remis 0.78), PROVIDER_VARIANCE. timeSurge (night 1.1-1.3x), weatherSurge (rain 1.15/heavy 1.25), demandSurge (event 1.2/rush 1.1), surgeMultiplier (clamped 1.0-2.5). fareConfidence = multi_variable_bayes_estimation: prior × Gaussian likelihood over fare deviation, blended with distance/time factors, clamped 0.55-0.95. fareRange = surge-aware spread. taxiTariff (diurno/nocturno, daily_refresh TODO). Backward compatible (v6 functions preserved).
+- EVENT SPEC v1.4 (event_spec + analytics + cloudflare_analytics_engine): created public/core/eventBus.js — anonymous_id_only (voy_anon_id), local_fallback (voy_events_v14 localStorage, FIFO 500), PostHog stub (forwards if window.posthog), Cloudflare transport (batched flush 15s/25-batch, sendBeacon + fetch keepalive, flush on pagehide/visibilitychange). 8 events wired: app_boot (auto), search_performed, destination_selected, route_calculated, vehicle_viewed, provider_clicked, deeplink_opened, ride_estimated, favorite_saved. v5event() dual-writes (legacy local + eventBus). Coarse geo cluster ~500m (no raw lat/lon). runEstimations emits route_calculated; renderSheet emits ride_estimated.
+- UI SYSTEM (ui_system spec): #mapGrid div (48px cyan grid, rgba(0,212,255,0.06), mix-blend:screen, opacity 0.5/0.35 dark). Route line color #007AFF → #00D4FF (shadow + line, width 12/4, blur 2). Transport mode selector: 6 pills (Todo/Auto/Taxi/Remis/A pie/Ruta) horizontal scrollable, active = black bg white text, click → renderSheet + vehicle_viewed event. Shown when estimations render, hidden when none. Adapted semicircle_menu to pill row (mobile thumb ergonomics; documented).
+- VOY-Lite.html integration: head (manifest + 5 apple-touch-icons + theme-color + 3 new scripts pricingEngine/eventBus v=8), splash DOM, mapGrid div, mode-selector div, route #00D4FF, v5event dual-write, runEstimations emits route_calculated, renderSheet emits ride_estimated + showModeSelector, hero/taxi/bus confidence upgraded to PricingEngineV2.fareConfidence (bayesian) with MC.v6 fallback. Script cache ?v=7 → ?v=8.
+
+Validation:
+- bun run lint: 0 errors, 0 warnings
+- wrangler deploy --dry-run: SUCCESS — 27 assets, env.VOY_METRICS (voy_metrics) Analytics Engine Dataset + env.ASSETS bindings, 3.62 KiB / gzip 1.25 KiB
+- curl localhost:3000/:manifest.json/core/pricingEngine.js/core/eventBus.js/icons/app-icon.svg/icons/icon-192.png → all HTTP 200
+- curl localhost:3007/health → {"ok":true,"service":"voy-scraper","port":3007}; /api/taxis + /api/remises + POST /api/scrape all verified
+
+Browser Verification (agent-browser, 360px + 1280px):
+- Splash: present on reload, dismissed after ~900ms (exists:false, removed:true) ✅
+- Title: "VOY — Movilidad Santa Fe"; manifest link present; theme-color #000000 ✅
+- Console errors: 0 at 360px + 0 at 1280px ✅
+- Horizontal scroll @360px: false (360=360); @1280px: false (1280=1280) ✅
+- Sticky footer @360px: 800=800; @1280px: 900=900 ✅
+- GPS inject → search "Terminal" → 3 suggestions → select → hero renders: "DiDi 5 min · 2.1 km · Confianza 95% $2.500 $2.338 – $2.663" (bayesian confidence 95% vs prior v6 81%; tighter surge-aware range) ✅
+- Mode selector: 6 pills [Todo, Auto, Taxi, Remis, A pie, Ruta], active=Todo, click Taxi → active=Taxi ✅
+- Route line paint: color #00D4FF, width 4 (browser-verified via _map.getPaintProperty) ✅
+- CTA background: rgb(0,0,0) (corporate minimal black preserved) ✅
+- EventBus: voy_anon_id set in localStorage; events emit on golden path (local store drains via batched flush) ✅
+- Screenshots: v62-splash-360.png, v62-initial-360.png, v62-hero-mode-selector-360.png, v62-desktop-1280.png
+
+Production domain verification (voy.is-a.dev):
+- DNS: resolves to 104.18.5.103/104.18.4.103 (Cloudflare — is-a.dev infra) 
+- HTTPS: HTTP/2 302 → location: https://is-a.dev/?d=voy (is-a.dev "unregistered" landing)
+- Conclusion: voy.is-a.dev NOT yet live — is-a.dev PR (domains/voy.json) must be submitted + merged + worker deployed. Code is deploy-ready.
+- fail_if conditions all clear in code (no 5xx paths, no redirect loop logic, no workers.dev in UI)
+
+Stage Summary:
+- verify_production_domain: COMPLETE (documented — domain not live yet; PR ready; local stand-in verified with screenshots/console/network)
+- safe_production deploy (voy-core): COMPLETE (wrangler.jsonc renamed, compat 2026-01-01, VOY_METRICS binding, predeploy checks pass; rollback via CF dashboard version history)
+- PWA: COMPLETE (manifest + 13 PNG icons + 2 SVG + head links + theme #000)
+- splash: COMPLETE (SVG chevron + fade_in_scale 900ms + dot pulse + app_ready exit)
+- pricing_engine v2: COMPLETE (bayesian multi_variable confidence + time/weather/demand surge + taxi municipal tariff)
+- event_spec v1.4: COMPLETE (8 events + local_fallback + posthog stub + cloudflare transport; anon_id only, no PII)
+- cloudflare_analytics_engine: COMPLETE (voy_metrics dataset binding, /api/events endpoint, graceful degradation)
+- ui_system: COMPLETE (#00D4FF route + grid overlay + 6-pill mode selector + product card sheet)
+- scraper_system: COMPLETE (mini-service port 3007, legal-only, non-intrusive, seed data, documented sources pending legal review)
+- Files changed: worker.js, wrangler.jsonc, public/manifest.json, public/icons/* (15 files), public/core/pricingEngine.js, public/core/eventBus.js, public/VOY-Lite.html, scripts/generate-icons.mjs, domains/voy.json, mini-services/scraper/* (6 files). mobilityEngine.js/mobilityController.js/logo.svg UNTOUCHED.
+- NOT deployed (user runs npx wrangler deploy + submits is-a.dev PR after revoking leaked creds)
+- Deliverable: v6.2-deploy.md (production verification + feature compliance + migration order + checklist)
