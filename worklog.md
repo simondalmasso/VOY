@@ -102,3 +102,43 @@ Stage Summary:
 - SECURITY ALERT: Usuario compartió GitHub PAT en chat plaintext — debe revocarse inmediatamente
 - NO se usó el token compartido; se proveen alternativas seguras (GitHub CLI + Codespaces secret injection)
 - Entregables finales listos: comandos de build/deploy + script único para Codespaces
+
+---
+Task ID: 5
+Agent: Main (Cloudflare Migration)
+Task: Migrar VOY Lite a Cloudflare Workers Assets + arreglar config de deploy
+
+Work Log:
+- Analizado error de Cloudflare Workers Build:
+  * "The build token selected for this build has been deleted or rolled" → token de build eliminado/rotado, hay que regenerarlo en Worker Builds settings
+- Detectado problema de fondo MÁS GRAVE: config actual usa `bun run build` + `bun run start`
+  * `bun run start` levanta Node.js standalone server — Cloudflare Workers NO corre Node.js servers
+  * Cloudflare Workers usa V8 isolates, no Node.js runtime completo
+  * El middleware Next.js (src/middleware.ts) reescribe / → /VOY-Lite.html, pero Next.js completo es overkill
+- VOY Lite es 99% estático (HTML + JS vanilla, sin API routes usadas, sin SSR real)
+- Decidido migrar a Cloudflare Workers Assets (binding ASSETS) — la forma correcta y nativa de servir estáticos en CF
+- Creado /home/z/my-project/wrangler.jsonc:
+  * name: voy-app
+  * main: ./worker.js
+  * assets.directory: ./public (sirve los 3 archivos estáticos)
+  * binding ASSETS para acceso programático
+  * html_handling: auto-trailing-slash
+  * not_found_handling: single-page-application (graceful 404)
+  * observability habilitado
+- Creado /home/z/my-project/worker.js:
+  * Worker minimal que replica el middleware Next.js
+  * / → /VOY-Lite.html (rewrite)
+  * Todo lo demás → env.ASSETS.fetch(request) (assets estáticos)
+- Verificado que public/ contiene los 3 archivos necesarios:
+  * VOY-Lite.html (56KB) — entry point
+  * core/mobilityEngine.js (14.5KB) — cargado por el HTML
+  * ui/mobilityController.js (25.9KB) — cargado por el HTML
+- SECURITY: segundo token comprometido en chat (cfut_TiUBoY... Cloudflare API token) — alertar a usuario
+
+Stage Summary:
+- wrangler.jsonc + worker.js creados — listos para commit/push
+- Config Cloudflare correcta:
+  * Build command: (vacío o `echo "static assets"`) — NO usar `bun run build`
+  * Deploy command: (vacío) — Cloudflare usa wrangler.jsonc automáticamente
+- Proximo paso: usuario sube archivos a GitHub + regenera build token en Cloudflare
+- Migración de runtime: Next.js standalone → Cloudflare Workers Assets (más simple, más barato, más rápido)
