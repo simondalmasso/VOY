@@ -114,25 +114,25 @@ body{
 .search-item-text{flex:1;min-width:0}
 .search-item-text strong{display:block;font-weight:600;font-size:15px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em}
 .search-item-text small{color:var(--text2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:2px}
-/* MAP — compact, rounded, in padded wrapper (210h, 22r, 16 padding) */
+/* MAP — UI_SIMPLIFICATION_CORE_V1: background_layer mode.
+   Opacity 0.25, low interaction priority. Decision-first layout. */
 #map{
   width:100%;height:210px;min-height:210px;background:#E5E5EA;position:relative;
-  border-radius:22px;overflow:hidden;
+  border-radius:22px;overflow:hidden;opacity:0.25;pointer-events:none;
 }
 @media(min-width:600px){#map{height:280px;min-height:280px}}
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
+/* Map container still receives clicks for manual pin mode via wrapper */
+.map-wrap{position:relative}
+.map-wrap.map-active #map{opacity:1;pointer-events:auto}
+.map-wrap.map-active{z-index:50}
 /* Map labels (legacy — hidden since FAVORITOS_OVERLAY patch) */
 .voy-label{display:none}
 .voy-label-popup{display:none}
 .voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
 .voy-label-popup .maplibregl-popup-tip{display:none}
-/* MAP HINT — floating pill */
-.map-hint{
-  display:none;padding:10px 18px;background:var(--card-bg);color:var(--text2);
-  font-size:13px;font-weight:500;border-radius:14px;margin:10px 16px 0;
-  box-shadow:var(--shadow-sm);letter-spacing:-0.01em;text-align:center;
-}
-.map-hint.show{display:block}
+/* MAP HINT — UI_SIMPLIFICATION_CORE_V1: removed (instructional text overlay) */
+.map-hint{display:none!important}
 /* ROUTE CARDS — floating panels */
 .cards{flex:1;padding:8px 16px 100px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .route-card{
@@ -172,9 +172,15 @@ body{
 }
 .btn-pedir:active{transform:scale(0.95);box-shadow:0 2px 6px rgba(52,199,89,0.28)}
 .card-price{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.02em}
-/* MAIN_CTA — cheapest provider (first row, sorted asc by JS) becomes full-width green block.
-   Uses :not(.provider-row ~ .provider-row) to target the FIRST .provider-row regardless
-   of preceding .rc-header / .rc-subtitle divs (which break :first-of-type). */
+/* UI_SIMPLIFICATION_CORE_V1: secondary provider rows collapsed to compact.
+   Only first (cheapest) gets full MAIN_CTA block. Rows 2-3 become compact. */
+.provider-row.provider-row--secondary{padding:10px 0;gap:10px}
+.provider-row.provider-row--secondary .provider-name{font-size:14px;font-weight:500;min-width:64px;color:var(--text2)}
+.provider-row.provider-row--secondary .provider-color{height:24px;width:4px}
+.provider-row.provider-row--secondary .card-price{font-size:14px;font-weight:600;color:var(--text2)}
+.provider-row.provider-row--secondary .btn-pedir{height:44px;min-height:44px;min-width:90px;font-size:15px;font-weight:700;padding:0 16px;box-shadow:0 2px 8px rgba(52,199,89,0.22)}
+.provider-row.provider-row--secondary .btn-pedir:active{transform:scale(0.95);box-shadow:0 1px 4px rgba(52,199,89,0.18)}
+.provider-row.provider-row--secondary .rc-time{font-size:13px;padding:4px 8px}
 .route-card[data-mode="auto"] .provider-row:not(.provider-row ~ .provider-row){
   background:linear-gradient(135deg,#34C759 0%,#2BB24C 100%);
   margin:14px -20px -20px;padding:20px 20px 22px;
@@ -311,8 +317,9 @@ body{
   </div>
 </div>
 
-<!-- MAP — compact, padded wrapper (16px), radius 22px on map -->
-<div style="position:relative;padding:0 16px">
+<!-- MAP — UI_SIMPLIFICATION_CORE_V1: background_layer (opacity 0.25, low interaction).
+     .map-wrap toggles .map-active when user enters manual pin mode (restores full opacity + interaction). -->
+<div class="map-wrap" id="mapWrap" style="position:relative;padding:0 16px">
   <div style="position:relative">
     <div id="map"></div>
     <div id="mapLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg2);font-size:14px;color:var(--text2);pointer-events:none;z-index:5;border-radius:22px">Cargando mapa…</div>
@@ -320,8 +327,7 @@ body{
   </div>
 </div>
 
-<!-- MAP HINT -->
-<div class="map-hint" id="mapHint">🗺️ Ruta en mapa · Arrastrá para cambiar</div>
+<!-- MAP HINT removed — UI_SIMPLIFICATION_CORE_V1 (instructional text overlay eliminated) -->
 
 <!-- ROUTE CARDS -->
 <div class="cards" id="cardsContainer"></div>
@@ -865,18 +871,33 @@ function locateMe(){
 }
 
 // ===================== MAP CLICK / MANUAL PIN =====================
+// UI_SIMPLIFICATION_CORE_V1: map is background_layer (opacity 0.25, pointer-events none).
+// Entering manual pin mode toggles .map-active on wrapper → restores full opacity + interaction.
 function activateMapOrigin(){
   _manualOriginMode=true;
   _manualDestMode=false;
-  document.getElementById('map').classList.add('crosshair');
+  var mapEl=document.getElementById('map');
+  var wrap=document.getElementById('mapWrap');
+  if(mapEl)mapEl.classList.add('crosshair');
+  if(wrap)wrap.classList.add('map-active');
   showToast('Tocá el mapa para fijar el origen','info');
 }
 
 function activateMapDest(){
   _manualDestMode=true;
   _manualOriginMode=false;
-  document.getElementById('map').classList.add('crosshair');
+  var mapEl=document.getElementById('map');
+  var wrap=document.getElementById('mapWrap');
+  if(mapEl)mapEl.classList.add('crosshair');
+  if(wrap)wrap.classList.add('map-active');
   showToast('Tocá el mapa para fijar el destino','info');
+}
+
+function _exitManualMapMode(){
+  var mapEl=document.getElementById('map');
+  var wrap=document.getElementById('mapWrap');
+  if(mapEl)mapEl.classList.remove('crosshair');
+  if(wrap)wrap.classList.remove('map-active');
 }
 
 function onMapClick(e){
@@ -886,7 +907,7 @@ function onMapClick(e){
 
   if(_manualDestMode){
     _manualDestMode=false;
-    document.getElementById('map').classList.remove('crosshair');
+    _exitManualMapMode();
     MC.setDest(lat,lon,'','map');
     va_dest('',lat,lon);
     reverseGeocodeDest(lat,lon);
@@ -898,7 +919,7 @@ function onMapClick(e){
   if(_manualOriginMode){
     _manualOriginMode=false;
     MC.setOriginManual(true);
-    document.getElementById('map').classList.remove('crosshair');
+    _exitManualMapMode();
     MC.setOrigin(lat,lon,'','map');
     va_origin('map');
     reverseGeocodeOrigin(lat,lon);
@@ -1326,7 +1347,8 @@ function renderActiveCard(est,idx){
   }
 
   else if(est.mode==='auto'){
-    // Rideshare card — 6 providers, sorted by price ascending
+    // Rideshare card — UI_SIMPLIFICATION_CORE_V1: max 3 visible modes (cheapest).
+    // collapse_secondary: rows 2-3 get --secondary class (compact, lower visual weight).
     h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
     h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
     var autoProvidersList=[
@@ -1337,9 +1359,11 @@ function renderActiveCard(est,idx){
       {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
       {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
     ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available})
-     .sort(function(a,b){return a.price-b.price});
-    autoProvidersList.forEach(function(p){
-      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url);
+     .sort(function(a,b){return a.price-b.price})
+     .slice(0,3); // UI_SIMPLIFICATION_CORE_V1: max_visible_modes 3
+    autoProvidersList.forEach(function(p,rowIdx){
+      var isSecondary=rowIdx>0; // first row = cheapest (MAIN_CTA), rest = secondary
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url,isSecondary);
     });
   }
 
@@ -1347,7 +1371,7 @@ function renderActiveCard(est,idx){
   return h;
 }
 
-function renderProviderRow(key,name,price,colorKey,timeOverride,waLink){
+function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,isSecondary){
   var provider=PROVIDERS[key];
   if(!provider||!provider.available)return'';
   var color=provider.color||'#666';
@@ -1358,7 +1382,9 @@ function renderProviderRow(key,name,price,colorKey,timeOverride,waLink){
   else if(key==='maxim')url=buildMaximLink();
   else if(waLink)url=waLink;
 
-  var h='<div class="provider-row">';
+  // UI_SIMPLIFICATION_CORE_V1: collapse_secondary — secondary rows get compact class.
+  var rowClass='provider-row'+(isSecondary?' provider-row--secondary':'');
+  var h='<div class="'+rowClass+'">';
   h+='<div class="provider-color" style="background:'+color+'"></div>';
   h+='<span class="provider-name">'+name+'</span>';
   h+='<div class="card-action-row">';

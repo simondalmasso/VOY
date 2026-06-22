@@ -248,3 +248,53 @@ Stage Summary:
 - "DO NOT require user tap for origin": VERIFIED — origin auto-set on first fix
 - watch_mode (30m/3000ms): UNCHANGED from Task 6
 - All prior logic preserved (MobilityEngine, calculations, debounce, hysteresis untouched)
+
+---
+Task ID: 9
+Agent: Main (Senior Mobile UX)
+Task: UI_SIMPLIFICATION_CORE_V1 — hierarchy reduction, decision-first layout, map→background_layer
+
+Work Log:
+- Read full CSS (L19-270) + HTML body (L272-336) + renderActiveCard (L1290-1348) + renderProviderRow (L1350-1372)
+- Identified 4 spec gaps:
+  1. provider_display.max_visible_modes 3 → VIOLATED: auto card rendered all 6 providers (Uber/DiDi/Maxim/Radiotaxi/Remises/TaxiApp)
+  2. provider_display.collapse_secondary → MISSING: all rows had equal visual weight
+  3. map_behavior background_layer opacity 0.25 → VIOLATED: map was foreground at opacity 1, full interaction
+  4. remove_components instructional text overlays → VIOLATED: map-hint "🗺️ Ruta en mapa · Arrastrá para cambiar" still rendered
+
+PATCH 1 — CSS #map (L117-128): Added opacity:0.25, pointer-events:none. Added .map-wrap / .map-wrap.map-active classes to restore full opacity+interaction when user enters manual pin mode.
+PATCH 2 — CSS .map-hint (L134-135): Replaced 6-line style with display:none!important (instructional overlay eliminated).
+PATCH 3 — CSS .provider-row--secondary (L175-183): New compact style — padding 10px, font 14px, color text2, smaller button (44px/90px). Only first row keeps MAIN_CTA green block.
+PATCH 4 — HTML map wrapper (L320-333): Added id="mapWrap" class="map-wrap". Removed #mapHint div entirely.
+PATCH 5 — JS renderActiveCard auto branch (L1334-1353): Added .slice(0,3) to cap providers at 3 (cheapest). Pass isSecondary=(rowIdx>0) to renderProviderRow.
+PATCH 6 — JS renderProviderRow (L1359-1383): Added isSecondary param. rowClass conditionally adds 'provider-row--secondary'.
+PATCH 7 — JS activateMapOrigin/activateMapDest (L873-894): Toggle .map-active on #mapWrap (restores opacity 1 + pointer-events auto for manual pin placement).
+PATCH 8 — JS _exitManualMapMode() (L896-901): New helper removes crosshair + map-active. Called from onMapClick after pin placement (both origin and dest paths).
+
+Preserved: MobilityEngine, mobilityController, all calculations, all link builders, all GPS logic from Tasks 6-8, bus/bike cards, memory block, footer, toast system.
+
+Browser Verification (agent-browser):
+- Map opacity: 0.25 ✅ (was 1)
+- Map pointer-events: none ✅ (was auto)
+- Map-hint element: REMOVED ✅
+- Provider rows count: 3 ✅ (was 6)
+- Secondary rows count: 2 ✅ (rows 2-3 collapsed)
+- First row (cheapest=Maxim): NO --secondary class, green gradient background ✅
+- Secondary row padding: 10px (compact, was 14px) ✅
+- Secondary row font-size: 14px (was 16px) ✅
+- Map-active toggle: activateMapOrigin() → opacity 1 + map-active=true ✅
+- Exit manual mode → opacity 0.25 restored ✅
+- Total cards: 3 (auto, bus, bike) ✅ — decision-first 3 options
+- Zero console errors ✅
+
+Stage Summary:
+- provider_display.max_visible_modes 3: COMPLETE — auto card capped to 3 cheapest providers
+- provider_display.priority_order [cheapest, fastest, default_fallback]: COMPLETE — JS sorts by price asc, first = cheapest = MAIN_CTA
+- provider_display.collapse_secondary: COMPLETE — rows 2-3 get --secondary class (compact, muted)
+- remove_components secondary_brand_blocks: COMPLETE — only 3 providers shown (was 6)
+- remove_components instructional text overlays: COMPLETE — map-hint div removed from HTML
+- map_behavior background_layer opacity 0.25: COMPLETE — #map opacity:0.25, pointer-events:none
+- map_behavior interaction_priority low: COMPLETE — map non-interactive by default; .map-active restores interaction only for manual pin mode
+- "Reduce cognitive load to 3 options max": VERIFIED — 3 cards (auto/bus/bike) + 3 providers max in auto
+- "Eliminate redundant visual hierarchy": VERIFIED — single MAIN_CTA green block, secondaries collapsed
+- "Convert UI into decision-first layout": VERIFIED — map dimmed to background, cards are primary focus
