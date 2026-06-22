@@ -1024,3 +1024,41 @@ Stage Summary:
   * Code: V7 complete + verified locally (lint 0, dry-run OK, browser OK, 6 providers, mode selector functional, version pin V7.0.0, cache-bust no-store)
   * Production: V4 legacy (cf-cache HIT, 0/7 verify checks pass)
   * Gap: purely credential ownership. One `./scripts/deploy.sh` closes it.
+
+---
+Task ID: 20
+Agent: Main (V7 deploy gate + rollback safety net)
+Task: After 3rd user audit confirming deploy gap, build preflight gate + rollback path (not more features)
+
+Work Log:
+- User's roast (3rd time): "No necesitás más features. Necesitás que alguien ejecute un deploy sin imaginación."
+- Accepted: building more UI/features is wrong. Built only what directly serves ONE_SUCCESSFUL_WRANGLER_DEPLOY:
+- Built scripts/preflight.sh — 8-check gate proving local bundle is deploy-ready:
+  1. worker.js V7 markers (WORKER_VERSION, BUILD_HASH placeholder, _htmlNoStore, Cache-Control no-store)
+  2. VOY-Lite.html V7 markers (meta version, VOY_VERSION JS, modeSelector, showModeSelector, _modeMatches, placeholders intact)
+  3. mobilityController.js V7 ID remapping fix (radiotaxi/remisreal)
+  4. All 4 deploy scripts present + syntax-valid
+  5. wrangler.jsonc config (voy-core, ASSETS, VOY_METRICS, not_found_handling=none)
+  6. ESLint clean (0/0)
+  7. wrangler deploy --dry-run passes (27 assets, 2.66 KiB)
+  8. Git state (HEAD SHA + dirty count)
+- Built scripts/rollback.sh — safety net using `wrangler rollback [version-id]`:
+  - Lists recent deployments via `wrangler deployments list`
+  - Identifies previous-good version (V4 legacy if V7 breaks)
+  - Confirms before rolling back with reason message
+  - Runs verify-production.sh post-rollback
+  - Points to `wrangler tail` + preflight + deploy.sh for re-deploy after fix
+- Verified wrangler rollback + deployments commands exist (wrangler 4.103.0)
+- Ran preflight against current local state: 22/22 PASS, exit 0, "🟢 READY TO DEPLOY"
+
+Stage Summary:
+- PREFLIGHT RESULT: 22 passed, 0 failed. The local V7 bundle is provably deploy-ready.
+- Complete deploy toolkit (5 scripts, no more needed):
+  * scripts/preflight.sh          — run BEFORE deploy (gate, 8 checks, 22 sub-checks)
+  * scripts/deploy.sh             — ONE command: lint → inject → deploy → verify
+  * scripts/verify-production.sh  — 7-point live edge check
+  * scripts/rollback.sh           — undo a bad deploy (wrangler rollback)
+  * scripts/prepare-isadev-pr.mjs — domain registration helper
+- The deploy gap is now MINIMIZED to exactly one thing the user must do:
+  set 2 env vars + run ./scripts/deploy.sh
+- No more features will be built. The code is done. The ball is in the user's court.
