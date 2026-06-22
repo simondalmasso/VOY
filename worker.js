@@ -1,15 +1,16 @@
 // ============================================================
 //  VOY — Cloudflare Worker (FINAL DEPLOY ARCHITECTURE + Analytics)
 //
-//  Canonical origin:  https://voy.is-a.dev
-//  Worker name:       voy-core
+//  Canonical origin:  https://voy.is-a.dev  (NOT YET LIVE — is-a.dev PR pending)
+//  Worker name:       voy-app  (updates the EXISTING production worker)
 //  Strategy:          cloudflare_worker_static_assets + /api/events endpoint
 //  Internal entry:    /VOY-Lite.html  (rewritten from /, never user-facing)
 //
 //  Rules (evaluated in order):
-//   1. /VOY-Lite.html  → 301 → https://voy.is-a.dev/   (hide internal path)
-//   2. *.workers.dev / *simondalmasso* hosts → 301 → https://voy.is-a.dev{path}{search}
-//      (CNAME'd traffic keeps Host = voy.is-a.dev → served by rules 3/4, never redirected)
+//   1. /VOY-Lite.html  → 301 → /  (same-host relative redirect; hides internal path)
+//   2. CANONICAL REDIRECT DISABLED until voy.is-a.dev is registered.
+//      Re-enable rule 2 (workers.dev → voy.is-a.dev) after the is-a.dev PR merges
+//      and DNS propagates. See DEPLOY_V7.md Step E + scripts/prepare-isadev-pr.mjs.
 //   3. /api/events  → POST → Analytics Engine (VOY_METRICS) + 202 (fire-and-forget)
 //   4. /  → internal rewrite → /VOY-Lite.html  (browser URL stays /)
 //   5. everything else → ASSETS binding (core/, ui/, icons/, manifest.json, logo.svg, …)
@@ -29,8 +30,8 @@
 //     acknowledged with 202 so the frontend never blocks on analytics.
 // ============================================================
 
-const CANONICAL_ORIGIN = "https://voy.is-a.dev";
-const WORKER_VERSION = "V7.0.0";
+const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
+const WORKER_VERSION = "V7.1.0"; // V7.1 = Gemini hardening (OSRM, walk hero, SRI, SW, bus TSP)
 // __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
 // verify-production.sh checks /api/health.build_hash === git short SHA.
 const BUILD_HASH = "__BUILD_HASH__";
@@ -41,18 +42,22 @@ const worker = {
     const host = url.hostname.toLowerCase();
     const pathLower = url.pathname.toLowerCase();
 
-    // 1) Hide internal entry path on ANY host → canonical root (single hop).
+    // 1) Hide internal entry path → same-host root (relative 301).
+    //    V7.1: was CANONICAL_ORIGIN + "/"; now relative so it works on any host
+    //    (workers.dev OR voy.is-a.dev once live). Bookmark cleanup, not domain hop.
     if (pathLower === "/voy-lite.html" || pathLower === "/voy-lite") {
-      return Response.redirect(CANONICAL_ORIGIN + "/", 301);
+      return Response.redirect("/", 301);
     }
 
-    // 2) Redirect edge: workers.dev hosts + legacy simondalmasso host → canonical.
-    //    Preserves deep-link path + query so bookmarked URLs keep working.
-    //    CNAME'd requests (Host = voy.is-a.dev) do NOT match → served below.
-    if (host.endsWith(".workers.dev") || host.includes("simondalmasso")) {
-      const target = CANONICAL_ORIGIN + url.pathname + url.search;
-      return Response.redirect(target, 301);
-    }
+    // 2) CANONICAL REDIRECT — DISABLED.
+    //    Was: workers.dev / simondalmasso hosts → 301 → voy.is-a.dev.
+    //    Reason: voy.is-a.dev is NOT registered yet (is-a.dev PR not merged).
+    //    Deploying the redirect would break voy-app.simondalmasso44.workers.dev.
+    //    Re-enable this block AFTER scripts/prepare-isadev-pr.mjs completes + DNS.
+    // if (host.endsWith(".workers.dev") || host.includes("simondalmasso")) {
+    //   const target = CANONICAL_ORIGIN + url.pathname + url.search;
+    //   return Response.redirect(target, 301);
+    // }
 
     // 3) Analytics ingestion endpoint (event_spec v1.4 transport: cloudflare).
     if (pathLower === "/api/events" && request.method === "POST") {
@@ -63,7 +68,7 @@ const worker = {
     }
     if (pathLower === "/api/health") {
       return _cors(new Response(JSON.stringify({
-        ok: true, service: "voy-core", version: WORKER_VERSION, build_hash: BUILD_HASH,
+        ok: true, service: "voy-app", version: WORKER_VERSION, build_hash: BUILD_HASH,
         analytics: !!(env.VOY_METRICS), time: new Date().toISOString()
       }), { headers: { "Content-Type": "application/json" } }));
     }

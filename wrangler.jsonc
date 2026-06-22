@@ -2,9 +2,9 @@
   // ============================================================
   //  VOY — Cloudflare Workers config (FINAL: voy-core + Analytics)
   //
-  //  Canonical domain:  https://voy.is-a.dev
-  //  Wired via:         is-a.dev CNAME → voy-core.voy.workers.dev
-  //                    (after account subdomain migration simondalmasso44 → voy)
+  //  Canonical domain:  https://voy.is-a.dev  (NOT YET LIVE — is-a.dev PR pending)
+  //  Worker name:       voy-app  (the EXISTING production worker at
+  //                    voy-app.simondalmasso44.workers.dev — deploying updates it)
   //
   //  deployment_mode: safe_production, strategy: blue_green
   //  predeploy_checks: lint, dry_run, asset_binding_check
@@ -12,12 +12,12 @@
   //            dashboard version rollback (Workers keep last N versions).
   //
   //  workers_dev MUST stay true:
-  //    The is-a.dev CNAME target is the workers.dev URL. Disabling workers_dev
-  //    would break the CNAME path entirely. Direct workers.dev visits are
-  //    301-redirected to voy.is-a.dev by worker.js, so the worker domain is
-  //    never browseable.
+  //    The is-a.dev CNAME target will be the workers.dev URL (once registered).
+  //    Disabling workers_dev would break the CNAME path entirely.
+  //    V7.1: the workers.dev → voy.is-a.dev redirect in worker.js is DISABLED
+  //    until voy.is-a.dev is registered. Re-enable after is-a.dev PR merges.
   // ============================================================
-  "name": "voy-core",
+  "name": "voy-app",
   "compatibility_date": "2026-01-01",
   "main": "./worker.js",
 

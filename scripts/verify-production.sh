@@ -3,10 +3,10 @@
 #  VOY V7 — Production verification script
 #
 #  Checks the FULL production stack is live and consistent:
-#    1. DNS:        voy.is-a.dev CNAME → workers.dev
-#    2. HTTPS:      voy.is-a.dev → 200 (not 302 is-a.dev fallback)
-#    3. Health:     /api/health → version V7.0.0 + build_hash == local git SHA
-#    4. UI version: / contains <meta name="voy-version" content="V7.0.0">
+#    1. DNS:        voy.is-a.dev CNAME → workers.dev  (SKIPPED if target ≠ voy.is-a.dev)
+#    2. HTTPS:      target → 200 (not 302 is-a.dev fallback)
+#    3. Health:     /api/health → version V7.1.0 + build_hash == local git SHA
+#    4. UI version: / contains <meta name="voy-version" content="V7.1.0">
 #    5. Cache-bust: / response has Cache-Control: no-store
 #    6. Entrypoint: /VOY-Lite.html → 301 (internal path hidden)
 #    7. Mode selector: / contains modeSelector (transport selector mounted)
@@ -33,31 +33,36 @@ printf "VOY V7 production verification\n"
 printf "Target:   %s\n" "$CANONICAL"
 printf "Local SHA: %s\n" "$LOCAL_SHA"
 
-# ── 1. DNS ──────────────────────────────────────────────────
-hdr "1. DNS (voy.is-a.dev CNAME)"
-if command -v dig >/dev/null 2>&1; then
-  CNAME=$(dig +short voy.is-a.dev CNAME 2>/dev/null | head -1)
-  if [ -n "$CNAME" ]; then
-    ok "CNAME → $CNAME"
-    if echo "$CNAME" | grep -q 'workers.dev'; then
-      ok "CNAME points to workers.dev (is-a.dev PR merged)"
+# ── 1. DNS (only for voy.is-a.dev target) ──────────────────
+if echo "$CANONICAL" | grep -q 'voy.is-a.dev'; then
+  hdr "1. DNS (voy.is-a.dev CNAME)"
+  if command -v dig >/dev/null 2>&1; then
+    CNAME=$(dig +short voy.is-a.dev CNAME 2>/dev/null | head -1)
+    if [ -n "$CNAME" ]; then
+      ok "CNAME → $CNAME"
+      if echo "$CNAME" | grep -q 'workers.dev'; then
+        ok "CNAME points to workers.dev (is-a.dev PR merged)"
+      else
+        bad "CNAME does not point to workers.dev (is-a.dev PR NOT merged)"
+      fi
     else
-      bad "CNAME does not point to workers.dev (is-a.dev PR NOT merged)"
+      A_RECORD=$(dig +short voy.is-a.dev A 2>/dev/null | head -1)
+      if [ -n "$A_RECORD" ]; then
+        bad "No CNAME found (A record: $A_RECORD). is-a.dev likely NOT registered or not propagated."
+      else
+        bad "No DNS records found for voy.is-a.dev"
+      fi
     fi
   else
-    A_RECORD=$(dig +short voy.is-a.dev A 2>/dev/null | head -1)
-    if [ -n "$A_RECORD" ]; then
-      bad "No CNAME found (A record: $A_RECORD). is-a.dev likely NOT registered or not propagated."
-    else
-      bad "No DNS records found for voy.is-a.dev"
-    fi
+    printf "  ⚠️  dig not available — skipping DNS check\n"
   fi
 else
-  printf "  ⚠️  dig not available — skipping DNS check\n"
+  hdr "1. DNS (skipped — target is workers.dev, not voy.is-a.dev)"
+  printf "  ⏭️  DNS check only applies to voy.is-a.dev. Run with that target after is-a.dev PR merges.\n"
 fi
 
 # ── 2. HTTPS ────────────────────────────────────────────────
-hdr "2. HTTPS (voy.is-a.dev → 200, not is-a.dev fallback)"
+hdr "2. HTTPS ($CANONICAL → 200)"
 # Fetch HTML once (reused by checks 4 and 7 too).
 HTML=$(curl -fsS -m 10 "$CANONICAL/" 2>/dev/null || echo "")
 # Don't follow redirects — we want to catch the is-a.dev 302 fallback.
@@ -90,10 +95,10 @@ if [ -n "$HEALTH" ]; then
   LIVE_HASH=$(echo "$HEALTH" | grep -o '"build_hash":"[^"]*"' | cut -d'"' -f4 || echo "")
   printf "  version:    %s\n" "${LIVE_VER:-<missing>}"
   printf "  build_hash: %s\n" "${LIVE_HASH:-<missing>}"
-  if [ "$LIVE_VER" = "V7.0.0" ]; then
-    ok "Worker version is V7.0.0"
+  if [ "$LIVE_VER" = "V7.1.0" ]; then
+    ok "Worker version is V7.1.0"
   else
-    bad "Worker version is '$LIVE_VER' (expected V7.0.0) — STALE WORKER deployed"
+    bad "Worker version is '$LIVE_VER' (expected V7.1.0) — STALE WORKER deployed"
   fi
   if [ -n "$LIVE_HASH" ] && [ "$LIVE_HASH" != "__BUILD_HASH__" ]; then
     ok "Build hash injected: $LIVE_HASH"
@@ -112,12 +117,12 @@ fi
 # ── 4. UI version pin ───────────────────────────────────────
 hdr "4. UI version pin (<meta voy-version>)"
 # HTML already fetched in check 2.
-if echo "$HTML" | grep -q 'voy-version" content="V7.0.0"'; then
-  ok "UI HTML contains V7.0.0 version pin"
+if echo "$HTML" | grep -q 'voy-version" content="V7.1.0"'; then
+  ok "UI HTML contains V7.1.0 version pin"
 else
   if echo "$HTML" | grep -q 'voy-version'; then
     LIVE_UI_VER=$(echo "$HTML" | grep -o 'voy-version" content="[^"]*"' | cut -d'"' -f4 || echo "")
-    bad "UI version is '$LIVE_UI_VER' (expected V7.0.0) — STALE HTML on edge"
+    bad "UI version is '$LIVE_UI_VER' (expected V7.1.0) — STALE HTML on edge"
   else
     bad "UI HTML has NO voy-version meta tag — OLD build (pre-V7) still serving"
   fi
