@@ -1,381 +1,439 @@
 <!--
-VOY Lite — Slim mobility UI for Santa Fe
-Build: 2026-06-09 LITE
-Runtime: public/VOY-Lite.html
-Engine: core/mobilityEngine.js (refactored — auto/bus/bike only)
-Controller: ui/mobilityController.js (refactored — no prefs, no recommendation)
-3 card types only. No moto, no walk, no fake bus, no favorites, no decision core.
+VOY V4 — Ambient map wallpaper + bottom decision sheet
+Build: 2026-06-22 V4
+Architecture: hybrid_command_layer (ambient map + decision sheet)
+Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
+Controller: ui/mobilityController.js (UNTOUCHED — memory/search/estimation)
 -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>VOY Lite – Movilidad Santa Fe</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>VOY – Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="core/mobilityEngine.js?v=3"></script>
-<script src="ui/mobilityController.js?v=3"></script>
+<script src="core/mobilityEngine.js?v=4"></script>
+<script src="ui/mobilityController.js?v=4"></script>
 <style>
 /* ============================================================
-   VOY Lite — APPLE_MAPS_DESIGN_SYSTEM_V1
-   All UI uses tokens. No ad-hoc styling. No full-screen green blocks.
+   VOY V4 — AMBIENT_MAP_DECISION_SHEET
+   - Map: fixed full-bleed ambient background (opacity 0.35, blur 3px, pe:none)
+   - Header: solid bg (no backdrop-filter), 17px wordmark
+   - Inputs: single compact card
+   - Decision: single bottom sheet, price is largest element (32px)
+   - Bus/bike: inline one-liner inside sheet
+   - Footer/toast: solid bg, no blur
    ============================================================ */
 :root{
-  /* COLOR SYSTEM (tokens) */
-  --bg:#F5F5F7;            /* background */
-  --surface:#FFFFFF;        /* surface (cards, inputs) */
-  --bg3:#E5E5EA;            /* tertiary surface */
-  --text:#111111;           /* primary text */
-  --text2:#6E6E73;          /* secondary text */
-  --text3:#8E8E93;          /* tertiary text */
-  --primary:#007AFF;        /* primary action */
-  --success:#34C759;        /* success / CTA accent */
-  --red:#FF3B30;--orange:#FF9500;--purple:#AF52DE;
-  --card-bg:var(--surface);--card-border:rgba(0,0,0,0.06);
+  /* COLOR SYSTEM */
+  --bg:#F5F5F7;
+  --surface:#FFFFFF;
+  --bg3:#E5E5EA;
+  --text:#111111;
+  --text2:#6E6E73;
+  --text3:#8E8E93;
+  --primary:#007AFF;
+  --success:#34C759;
+  --red:#FF3B30;
+  --orange:#FF9500;
+  --border-subtle:rgba(0,0,0,0.06);
   /* SPACING SYSTEM (grid=8) */
-  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;
-  --card-padding:16px;--section-gap:12px;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:32px;
+  --sheet-padding:20px;
+  --section-gap:8px;
   /* RADIUS SYSTEM */
   --radius-card:20px;--radius-button:16px;--radius-input:14px;
   --radius-sm:10px;--radius-xs:8px;
-  /* TYPE SYSTEM (SF Pro) */
-  --font-title:28px;--font-headline:18px;--font-body:16px;--font-caption:13px;
-  --font-weight-title:800;--font-weight-headline:700;--font-weight-body:500;
+  /* TYPE SYSTEM — price is largest (decision inversion) */
+  --font-decision:32px;   /* PRICE — largest element on screen */
+  --font-title:17px;      /* VOY wordmark + sheet hero provider name */
+  --font-headline:17px;   /* section labels */
+  --font-body:15px;       /* inputs, subtitles, alternatives */
+  --font-caption:13px;    /* ETA pills, metadata */
+  --font-micro:11px;      /* button labels uppercase */
+  --font-weight-decision:800;
+  --font-weight-title:700;
+  --font-weight-headline:700;
+  --font-weight-body:500;
   /* SHADOWS */
   --shadow-sm:0 1px 2px rgba(0,0,0,0.04),0 1px 3px rgba(0,0,0,0.06);
   --shadow-md:0 4px 16px rgba(0,0,0,0.06),0 1px 4px rgba(0,0,0,0.04);
   --shadow-lg:0 12px 40px rgba(0,0,0,0.10),0 4px 12px rgba(0,0,0,0.05);
-  /* GLASS */
-  --glass-bg:rgba(255,255,255,0.78);--glass-bg-strong:rgba(255,255,255,0.92);
-  --blur:saturate(180%) blur(20px);
-  --header-bg:rgba(245,245,247,0.82);--footer-bg:rgba(245,245,247,0.92);
+  --shadow-sheet:0 -4px 24px rgba(0,0,0,0.08),0 -1px 6px rgba(0,0,0,0.04);
+  /* SOLID BACKGROUNDS (no backdrop-filter — perf) */
+  --header-bg:rgba(245,245,247,0.92);
+  --footer-bg:rgba(245,245,247,0.95);
+  --scrim-bg:linear-gradient(180deg,rgba(245,245,247,0.35) 0%,rgba(245,245,247,0.72) 40%,rgba(245,245,247,0.95) 100%);
   /* MOTION */
   --ease:180ms ease-out;
+  --ease-sheet:220ms cubic-bezier(0.22,0.61,0.36,1);
 }
 [data-theme="dark"]{
   --bg:#000000;--surface:#1C1C1E;--bg3:#2C2C2E;--text:#F2F2F7;--text2:#98989F;
-  --text3:#636366;--card-bg:#1C1C1E;--card-border:rgba(255,255,255,0.08);
-  --glass-bg:rgba(28,28,30,0.78);--glass-bg-strong:rgba(28,28,30,0.92);
-  --header-bg:rgba(0,0,0,0.82);--footer-bg:rgba(0,0,0,0.92);
+  --text3:#636366;--border-subtle:rgba(255,255,255,0.08);
+  --header-bg:rgba(0,0,0,0.92);--footer-bg:rgba(0,0,0,0.95);
+  --scrim-bg:linear-gradient(180deg,rgba(0,0,0,0.4) 0%,rgba(0,0,0,0.72) 40%,rgba(0,0,0,0.95) 100%);
   --shadow-sm:0 1px 2px rgba(0,0,0,0.3),0 1px 3px rgba(0,0,0,0.4);
   --shadow-md:0 4px 16px rgba(0,0,0,0.4),0 1px 4px rgba(0,0,0,0.3);
   --shadow-lg:0 12px 40px rgba(0,0,0,0.55),0 4px 12px rgba(0,0,0,0.35);
+  --shadow-sheet:0 -4px 24px rgba(0,0,0,0.5),0 -1px 6px rgba(0,0,0,0.3);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Helvetica,Arial,'Segoe UI',Roboto,sans-serif;
   background:var(--bg);color:var(--text);font-size:var(--font-body);
   min-height:100dvh;display:flex;flex-direction:column;
   -webkit-tap-highlight-color:transparent;letter-spacing:-0.01em;
+  overflow-x:hidden;
 }
-/* HEADER — glass, token-driven */
+
+/* === AMBIENT MAP (z-0) — full-bleed background, dim, blurred, non-interactive === */
+#ambientMap{
+  position:fixed;inset:0;z-index:0;
+  background:var(--bg3);
+}
+#ambientMap #map{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0.35;filter:blur(3px) saturate(120%);
+  pointer-events:none;
+}
+/* MAP EXPAND MODAL — toggled by .map-expanded on body */
+body.map-expanded #ambientMap #map{
+  opacity:1;filter:none;pointer-events:auto;z-index:200;
+}
+body.map-expanded #mapModal{display:block}
+#mapModal{display:none;position:fixed;inset:0;z-index:199;pointer-events:none}
+#mapModal .map-close{
+  position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:16px;z-index:201;
+  width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;
+  background:var(--surface);color:var(--text);font-size:20px;font-weight:700;
+  box-shadow:var(--shadow-md);pointer-events:auto;
+  display:flex;align-items:center;justify-content:center;
+}
+#mapModal .map-close:active{transform:scale(0.92)}
+#centerRouteBtn{
+  position:absolute;bottom:calc(24px + env(safe-area-inset-bottom,0px));right:16px;z-index:201;
+  display:none;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+  background:var(--surface);color:var(--primary);font-size:22px;
+  box-shadow:var(--shadow-md);pointer-events:auto;
+}
+body.map-expanded #centerRouteBtn{display:flex;align-items:center;justify-content:center}
+#centerRouteBtn:active{transform:scale(0.92)}
+/* Map labels (dead — preserved for compat) */
+.voy-label{display:none}.voy-label-popup{display:none}
+.voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
+.voy-label-popup .maplibregl-popup-tip{display:none}
+#map.crosshair .maplibregl-canvas{cursor:crosshair!important}
+
+/* === SCRIM (z-1) — ensures sheet legibility over map === */
+#scrim{position:fixed;inset:0;z-index:1;background:var(--scrim-bg);pointer-events:none}
+body.map-expanded #scrim{display:none}
+
+/* === APP CONTENT (z-2) === */
+.app{
+  position:relative;z-index:2;
+  max-width:540px;margin:0 auto;width:100%;
+  min-height:100dvh;display:flex;flex-direction:column;
+}
+
+/* === HEADER — solid bg, 17px wordmark, GPS dot === */
 .header{
-  background:var(--header-bg);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
-  color:var(--text);padding:var(--sp-3) var(--sp-5);display:flex;align-items:center;gap:var(--sp-3);
-  position:sticky;top:0;z-index:100;border-bottom:0.5px solid var(--card-border);
+  background:var(--header-bg);
+  color:var(--text);
+  padding:calc(10px + env(safe-area-inset-top,0px)) var(--sp-4) 10px;
+  display:flex;align-items:center;gap:var(--sp-3);
+  position:sticky;top:0;z-index:100;
 }
-.header h1{font-size:var(--font-title);font-weight:var(--font-weight-title);letter-spacing:-0.03em;flex:1;color:var(--text)}
-.header .gps-status{
-  font-size:var(--font-caption);display:flex;align-items:center;gap:var(--sp-1);padding:var(--sp-2) var(--sp-3);
-  background:var(--glass-bg-strong);border-radius:var(--radius-input);
-  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
-  border:0.5px solid var(--card-border);
+.header h1{
+  font-size:var(--font-title);font-weight:var(--font-weight-title);
+  letter-spacing:-0.02em;flex:1;color:var(--text);cursor:pointer;
 }
-/* INPUTS — token-driven */
-.inputs{background:transparent;padding:var(--sp-4) var(--sp-4) var(--sp-2);border-bottom:none}
-.input-row{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);position:relative}
-.input-row:last-child{margin-bottom:0}
+.gps-dot{
+  width:12px;height:12px;border-radius:50%;flex-shrink:0;
+  background:var(--text3);box-shadow:0 0 0 3px rgba(255,255,255,0.6);
+  transition:background var(--ease);cursor:pointer;
+}
+.gps-dot.ok{background:var(--success)}
+.gps-dot.err{background:var(--red)}
+
+/* === INPUTS — single compact card === */
+.inputs{padding:var(--sp-2) var(--sp-4) var(--sp-1)}
+.input-card{
+  background:var(--surface);border:0.5px solid var(--border-subtle);
+  border-radius:var(--radius-card);box-shadow:var(--shadow-md);
+  overflow:hidden;
+}
+.input-row{
+  display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-4);position:relative;
+}
+.input-divider{height:0.5px;background:var(--border-subtle);margin:0 var(--sp-4) 0 calc(var(--sp-4) + 26px)}
 .dot{
-  width:14px;height:14px;border-radius:50%;flex-shrink:0;
-  box-shadow:0 0 0 3px rgba(255,255,255,0.9),0 2px 6px rgba(0,0,0,0.15);
+  width:12px;height:12px;border-radius:50%;flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(255,255,255,0.9),0 1px 4px rgba(0,0,0,0.1);
 }
 .dot.green{background:var(--success)}.dot.red{background:var(--red)}
-.input-label{font-size:var(--font-caption);font-weight:600;color:var(--text2);min-width:48px;letter-spacing:-0.01em}
 .input-field{
-  flex:1;border:0.5px solid var(--card-border);border-radius:var(--radius-input);padding:var(--sp-4) var(--sp-5);
-  font-size:var(--font-body);font-weight:var(--font-weight-body);background:var(--card-bg);color:var(--text);
-  outline:none;min-width:0;box-shadow:var(--shadow-sm);
-  transition:box-shadow var(--ease),transform var(--ease);letter-spacing:-0.01em;
+  flex:1;border:none;background:transparent;outline:none;
+  font-size:var(--font-body);font-weight:var(--font-weight-body);color:var(--text);
+  min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;
 }
-.input-field:focus{box-shadow:0 0 0 4px rgba(0,122,255,0.18),var(--shadow-md);border-color:transparent}
+.input-field::placeholder{color:var(--text3)}
 .input-btn{
-  font-size:var(--font-caption);font-weight:600;padding:var(--sp-4) var(--sp-4);border:0.5px solid var(--card-border);
-  border-radius:var(--radius-button);cursor:pointer;white-space:nowrap;flex-shrink:0;min-height:48px;
-  display:inline-flex;align-items:center;justify-content:center;
-  transition:transform var(--ease);background:var(--card-bg);letter-spacing:-0.01em;
+  border:none;background:transparent;cursor:pointer;flex-shrink:0;
+  width:40px;height:40px;border-radius:var(--radius-sm);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;transition:transform var(--ease),background var(--ease);
 }
-.input-btn:active{transform:scale(0.95)}
-.btn-locate{color:var(--primary);box-shadow:var(--shadow-sm);font-size:var(--font-headline);padding:var(--sp-4) var(--sp-4)}
-.btn-map{color:var(--text);box-shadow:var(--shadow-sm)}
-/* Search field + inline dropdown */
-.search-field{position:relative;width:100%}
-.search-field input{width:100%;box-sizing:border-box}
+.input-btn:active{transform:scale(0.9);background:var(--bg3)}
+.btn-locate{color:var(--primary)}
+.btn-map{color:var(--text2);font-size:16px}
+/* Search dropdown */
+.search-field{position:relative;flex:1;min-width:0}
 .search-dropdown{
   position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:2000;
-  background:var(--card-bg);border:0.5px solid var(--card-border);
+  background:var(--surface);border:0.5px solid var(--border-subtle);
   border-radius:var(--radius-card);box-shadow:var(--shadow-lg);overflow:hidden;
   max-height:280px;overflow-y:auto;-webkit-overflow-scrolling:touch;
 }
 .search-dropdown.hidden{display:none}
 .search-item{
-  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-5);cursor:pointer;
-  border-bottom:0.5px solid var(--card-border);font-size:15px;line-height:1.35;
-  -webkit-tap-highlight-color:transparent;min-height:56px;
+  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);cursor:pointer;
+  border-bottom:0.5px solid var(--border-subtle);font-size:var(--font-body);line-height:1.35;
+  -webkit-tap-highlight-color:transparent;min-height:52px;
   transition:background var(--ease);
 }
 .search-item:last-child{border-bottom:none}
 .search-item:active,.search-item:hover{background:var(--bg3)}
-.search-item--recent{opacity:1}
 .search-item--recent .search-item-icon{color:var(--text3)}
 .search-item--empty{padding:var(--sp-5);color:var(--text2);font-size:14px;cursor:default;text-align:center}
-.search-item-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+.search-item-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center}
 .search-item-text{flex:1;min-width:0}
-.search-item-text strong{display:block;font-weight:600;font-size:15px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em}
+.search-item-text strong{display:block;font-weight:600;font-size:var(--font-body);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em}
 .search-item-text small{color:var(--text2);font-size:var(--font-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:2px}
-/* MAP — background_layer (opacity 0.25, low interaction priority) */
-#map{
-  width:100%;height:210px;min-height:210px;background:var(--bg3);position:relative;
-  border-radius:var(--radius-card);overflow:hidden;opacity:0.25;pointer-events:none;
+
+/* === MEMORY BLOCK — horizontal chip row === */
+.memory-block{display:none;padding:0 var(--sp-4) var(--sp-1)}
+.memory-block.show{display:block}
+.memory-section{display:flex;align-items:center;gap:var(--sp-2);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.memory-section::-webkit-scrollbar{display:none}
+.memory-title{font-size:var(--font-caption);font-weight:600;color:var(--text2);white-space:nowrap;flex-shrink:0;letter-spacing:0.02em;text-transform:uppercase}
+.chip{
+  display:inline-flex;align-items:center;gap:var(--sp-1);
+  padding:8px 14px;border-radius:var(--radius-button);
+  background:var(--surface);border:0.5px solid var(--border-subtle);
+  font-size:var(--font-caption);font-weight:600;color:var(--text);
+  white-space:nowrap;flex-shrink:0;cursor:pointer;min-height:36px;
+  box-shadow:var(--shadow-sm);transition:transform var(--ease);
+  -webkit-tap-highlight-color:transparent;
 }
-@media(min-width:600px){#map{height:280px;min-height:280px}}
-#map.crosshair .maplibregl-canvas{cursor:crosshair!important}
-.map-wrap{position:relative}
-.map-wrap.map-active #map{opacity:1;pointer-events:auto}
-.map-wrap.map-active{z-index:50}
-/* Map labels (legacy) */
-.voy-label{display:none}
-.voy-label-popup{display:none}
-.voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
-.voy-label-popup .maplibregl-popup-tip{display:none}
-/* MAP HINT — removed (instructional text overlay eliminated) */
-.map-hint{display:none!important}
-/* ROUTE CARDS — token-driven */
-.cards{flex:1;padding:var(--sp-2) var(--sp-4) 100px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
-.route-card{
-  background:var(--card-bg);border:0.5px solid var(--card-border);border-radius:var(--radius-card);
-  padding:var(--card-padding);margin-bottom:var(--sp-4);box-shadow:var(--shadow-md);position:relative;
-  transition:transform var(--ease),box-shadow var(--ease);overflow:hidden;
+.chip:active{transform:scale(0.95)}
+.chip .chip-icon{font-size:14px}
+.chip .chip-text{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.chip.chip-clear{color:var(--primary);background:rgba(0,122,255,0.08);border-color:transparent}
+.chip.chip-clear-confirm{color:#fff;background:var(--red);border-color:transparent}
+
+/* === DECISION SHEET — single bottom-anchored surface === */
+.sheet-wrap{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 var(--sp-4)}
+.sheet{
+  background:var(--surface);border-radius:var(--radius-card) var(--radius-card) 0 0;
+  box-shadow:var(--shadow-sheet);padding:var(--sheet-padding);
+  padding-bottom:calc(var(--sheet-padding) + env(safe-area-inset-bottom,0px) + 56px);
+  margin-top:var(--sp-6);position:relative;
 }
-.route-card:active{transform:scale(0.98);box-shadow:var(--shadow-sm)}
-.rc-header{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)}
-.rc-icon{font-size:var(--font-title);flex-shrink:0}
-.rc-title{font-size:var(--font-headline);font-weight:var(--font-weight-headline);flex:1;letter-spacing:-0.02em;color:var(--text)}
-.rc-time{
-  font-size:15px;font-weight:var(--font-weight-headline);color:var(--text);background:var(--bg3);
-  padding:var(--sp-1) var(--sp-3);border-radius:var(--radius-xs);letter-spacing:-0.01em;
+.sheet-empty{
+  text-align:center;padding:var(--sp-6) var(--sp-4);color:var(--text2);
+  font-size:var(--font-body);font-weight:var(--font-weight-body);
 }
-.rc-subtitle{font-size:15px;color:var(--text2);margin-bottom:var(--sp-4);white-space:pre-line;line-height:1.5;letter-spacing:-0.01em}
-/* Apurate badge */
-.apurate-badge{
-  display:inline-block;background:var(--red);color:#fff;font-size:11px;font-weight:800;
-  padding:var(--sp-1) var(--sp-3);border-radius:var(--radius-xs);margin-left:var(--sp-2);letter-spacing:0.02em;
-  text-transform:uppercase;animation:pulseApurate 1.2s ease-in-out infinite;vertical-align:middle;
+.sheet-empty .sheet-empty-icon{font-size:40px;display:block;margin-bottom:var(--sp-3);opacity:0.4}
+/* Hero provider row — the decision */
+.sheet-hero{
+  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) 0 var(--sp-3);
+  cursor:pointer;border-bottom:0.5px solid var(--border-subtle);
 }
-@keyframes pulseApurate{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.75;transform:scale(0.96)}}
-/* Provider row — token-driven */
-.provider-row{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) 0;border-top:0.5px solid var(--card-border)}
-.provider-row ~ .provider-row{padding-top:var(--sp-3)}
-.provider-name{font-size:var(--font-body);font-weight:600;min-width:80px;color:var(--text);letter-spacing:-0.01em}
-.provider-color{width:6px;height:36px;border-radius:3px;flex-shrink:0}
-.card-action-row{display:flex;align-items:center;gap:var(--sp-3);margin-left:auto;flex-shrink:0}
-.btn-pedir{
-  background:var(--success);color:#fff;border:none;border-radius:var(--radius-button);padding:0 var(--sp-5);
-  font-size:var(--font-headline);font-weight:var(--font-weight-headline);cursor:pointer;white-space:nowrap;
-  height:52px;min-height:52px;min-width:110px;
-  display:inline-flex;align-items:center;justify-content:center;
-  transition:transform var(--ease),box-shadow var(--ease);
+.hero-color{width:6px;height:44px;border-radius:3px;flex-shrink:0}
+.hero-info{flex:1;min-width:0}
+.hero-name{
+  font-size:var(--font-title);font-weight:var(--font-weight-title);
+  color:var(--text);letter-spacing:-0.02em;line-height:1.2;
+}
+.hero-eta{
+  font-size:var(--font-caption);font-weight:600;color:var(--text2);
+  margin-top:2px;letter-spacing:-0.01em;
+}
+.hero-price{
+  font-size:var(--font-decision);font-weight:var(--font-weight-decision);
+  color:var(--text);letter-spacing:-0.03em;line-height:1;
+}
+.hero-pedir{
+  background:var(--success);color:#fff;border:none;border-radius:var(--radius-button);
+  padding:0 24px;height:52px;min-height:52px;font-size:var(--font-body);
+  font-weight:var(--font-weight-headline);cursor:pointer;flex-shrink:0;
   box-shadow:0 4px 12px rgba(52,199,89,0.32);letter-spacing:-0.01em;
+  transition:transform var(--ease),box-shadow var(--ease);
+  display:inline-flex;align-items:center;justify-content:center;
 }
-.btn-pedir:active{transform:scale(0.95);box-shadow:0 2px 6px rgba(52,199,89,0.28)}
-.card-price{font-size:var(--font-headline);font-weight:var(--font-weight-headline);color:var(--text);letter-spacing:-0.02em}
-/* Secondary provider rows — compact */
-.provider-row.provider-row--secondary{padding:var(--sp-3) 0;gap:var(--sp-3)}
-.provider-row.provider-row--secondary .provider-name{font-size:14px;font-weight:var(--font-weight-body);min-width:64px;color:var(--text2)}
-.provider-row.provider-row--secondary .provider-color{height:24px;width:4px}
-.provider-row.provider-row--secondary .card-price{font-size:14px;font-weight:600;color:var(--text2)}
-.provider-row.provider-row--secondary .btn-pedir{height:44px;min-height:44px;min-width:90px;font-size:15px;font-weight:var(--font-weight-headline);padding:0 var(--sp-4);box-shadow:0 2px 8px rgba(52,199,89,0.22)}
-.provider-row.provider-row--secondary .btn-pedir:active{transform:scale(0.95);box-shadow:0 1px 4px rgba(52,199,89,0.18)}
-.provider-row.provider-row--secondary .rc-time{font-size:var(--font-caption);padding:var(--sp-1) var(--sp-2)}
-/* MOBILITY_CORE_RANKING_V1: layer separation — bus=informational, bike=tertiary.
-   Do NOT mix bus + ride-hailing in same visual weight. Token-driven. */
-.route-card[data-mode="bus"]{
-  background:var(--surface);border:0.5px solid var(--card-border);border-radius:var(--radius-card);
-  padding:var(--card-padding);margin-bottom:var(--section-gap);box-shadow:var(--shadow-sm);opacity:0.85;
+.hero-pedir:active{transform:scale(0.95);box-shadow:0 2px 6px rgba(52,199,89,0.28)}
+.hero-pedir.hero-pedir--disabled{
+  background:var(--bg3);color:var(--text3);box-shadow:none;cursor:not-allowed;
 }
-.route-card[data-mode="bus"] .rc-title{font-size:var(--font-headline);font-weight:var(--font-weight-body);color:var(--text2)}
-.route-card[data-mode="bus"] .rc-time{font-size:var(--font-caption);padding:var(--sp-1) var(--sp-3);background:transparent;color:var(--text2)}
-.route-card[data-mode="bus"] .rc-subtitle{font-size:14px;color:var(--text3);margin-bottom:var(--sp-3)}
-.provider-row--info{padding:var(--sp-2) 0;border-top:none;gap:var(--sp-3)}
-.provider-row--info .provider-name{font-size:14px;font-weight:var(--font-weight-body);color:var(--text2);min-width:64px}
-.provider-row--info .provider-color{height:20px;width:4px;opacity:0.6}
-.provider-row--info .card-price{font-size:14px;font-weight:600;color:var(--text2)}
-.route-card[data-mode="bike"]{
-  background:transparent;border:1px dashed var(--card-border);border-radius:var(--radius-card);
-  padding:var(--sp-3) var(--sp-4);margin-bottom:var(--sp-2);box-shadow:none;opacity:0.7;
+/* Expandable alternates */
+.sheet-alts{
+  max-height:0;overflow:hidden;
+  transition:max-height var(--ease-sheet);
 }
-.route-card[data-mode="bike"] .rc-title{font-size:15px;font-weight:var(--font-weight-body);color:var(--text2)}
-.route-card[data-mode="bike"] .rc-time{font-size:12px;padding:3px var(--sp-2);background:transparent;color:var(--text3)}
-.route-card[data-mode="bike"] .rc-subtitle{font-size:var(--font-caption);color:var(--text3);margin-bottom:var(--sp-3)}
-.rc-action--tertiary{
-  background:transparent!important;color:var(--text2)!important;border:1px solid var(--card-border)!important;
-  height:44px!important;min-height:44px!important;font-size:15px!important;font-weight:600!important;
-  box-shadow:none!important;flex:0 1 auto;padding:0 var(--sp-5)!important;
+.sheet-alts.expanded{max-height:300px}
+.alt-row{
+  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) 0;
+  border-bottom:0.5px solid var(--border-subtle);
 }
-.rc-action--tertiary:active{transform:scale(0.97);background:var(--bg3)!important}
-/* APPLE_MAPS_DESIGN_SYSTEM_V1: NO full-screen green blocks.
-   Cheapest provider (first row) gets a subtle accent: thicker color bar + bold price.
-   Row stays within card padding — no negative margins, no full-width green. */
-.route-card[data-mode="auto"] .provider-row:not(.provider-row ~ .provider-row){
-  padding:var(--sp-3) 0;
-  border-top:none;
+.alt-row:last-child{border-bottom:none}
+.alt-color{width:4px;height:28px;border-radius:2px;flex-shrink:0;opacity:0.7}
+.alt-name{
+  flex:1;min-width:0;font-size:var(--font-body);font-weight:var(--font-weight-body);
+  color:var(--text2);letter-spacing:-0.01em;
 }
-.route-card[data-mode="auto"] .provider-row:not(.provider-row ~ .provider-row) .provider-name{
-  font-size:var(--font-headline);font-weight:var(--font-weight-headline);min-width:0;flex:1;
+.alt-name.alt-name--disabled{color:var(--text3)}
+.alt-price{
+  font-size:var(--font-body);font-weight:600;color:var(--text2);
+  letter-spacing:-0.01em;
 }
-.route-card[data-mode="auto"] .provider-row:not(.provider-row ~ .provider-row) .provider-color{height:40px;width:8px;border-radius:var(--radius-xs)}
-.route-card[data-mode="auto"] .provider-row:not(.provider-row ~ .provider-row) .card-price{font-size:var(--font-title);font-weight:var(--font-weight-title)}
-/* Bike action link — token-driven */
-.rc-actions{display:flex;gap:var(--sp-3);flex-wrap:wrap;margin-top:var(--sp-4)}
-.rc-action{
-  padding:0 var(--sp-5);border:none;border-radius:var(--radius-button);font-size:var(--font-headline);font-weight:var(--font-weight-headline);
-  cursor:pointer;color:#fff;height:52px;min-height:52px;text-decoration:none;
-  display:inline-flex;align-items:center;justify-content:center;flex:1;
-  transition:transform var(--ease);letter-spacing:-0.01em;
+.alt-pedir{
+  background:var(--success);color:#fff;border:none;border-radius:var(--radius-button);
+  padding:0 16px;height:44px;min-height:44px;font-size:var(--font-caption);
+  font-weight:var(--font-weight-headline);cursor:pointer;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(52,199,89,0.22);letter-spacing:-0.01em;
+  transition:transform var(--ease);
 }
-.rc-action:active{transform:scale(0.95)}
-.rc-action.bike{background:var(--success);box-shadow:0 4px 12px rgba(52,199,89,0.32)}
-/* Footer — glass, sticky bottom, iOS safe-area */
+.alt-pedir:active{transform:scale(0.95)}
+.alt-pedir.alt-pedir--disabled{
+  background:var(--bg3);color:var(--text3);box-shadow:none;cursor:not-allowed;
+}
+.sheet-expand-hint{
+  text-align:center;font-size:var(--font-micro);font-weight:700;
+  color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;
+  padding:var(--sp-2) 0 0;cursor:pointer;
+}
+
+/* === TAMBIÉN line — bus + bike inline === */
+.tambien{
+  margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:0.5px solid var(--border-subtle);
+}
+.tambien-line{
+  display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;
+  font-size:var(--font-body);color:var(--text2);line-height:1.5;
+}
+.tambien-item{
+  display:inline-flex;align-items:center;gap:var(--sp-1);
+  padding:6px 12px;border-radius:var(--radius-sm);cursor:pointer;
+  transition:background var(--ease);-webkit-tap-highlight-color:transparent;
+}
+.tambien-item:active{background:var(--bg3);transform:scale(0.98)}
+.tambien-item .t-icon{font-size:16px}
+.tambien-item .t-text{font-weight:var(--font-weight-body)}
+.tambien-item.bus .t-text{color:var(--text2)}
+.tambien-item.bike .t-text{color:var(--text3)}
+.tambien-urgent{color:var(--red);font-weight:700}
+.tambien-detail{
+  max-height:0;overflow:hidden;font-size:var(--font-caption);color:var(--text2);
+  transition:max-height var(--ease-sheet);line-height:1.5;
+}
+.tambien-detail.expanded{max-height:120px;padding-top:var(--sp-2)}
+.tambien-detail .td-row{padding:2px 0}
+
+/* === FOOTER — solid, no blur, safe-area === */
 .footer{
-  position:fixed;bottom:0;left:0;right:0;background:var(--footer-bg);
-  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
-  color:var(--text2);font-size:11px;padding:var(--sp-2) var(--sp-4);
+  position:fixed;bottom:0;left:0;right:0;z-index:50;
+  background:var(--footer-bg);
+  color:var(--text3);font-size:var(--font-micro);
+  padding:var(--sp-2) var(--sp-4);
   padding-bottom:calc(var(--sp-2) + env(safe-area-inset-bottom,0px));
-  text-align:center;z-index:100;border-top:0.5px solid var(--card-border);letter-spacing:-0.01em;
+  text-align:center;letter-spacing:-0.01em;
+  border-top:0.5px solid var(--border-subtle);
 }
-/* Toast — token-driven */
+
+/* === TOAST — solid bg, no blur === */
 .toast-container{
-  position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:9999;
+  position:fixed;top:calc(64px + env(safe-area-inset-top,0px));left:50%;
+  transform:translateX(-50%);z-index:9999;
   display:flex;flex-direction:column;gap:var(--sp-2);pointer-events:none;
   width:calc(100vw - 32px);max-width:420px;
 }
 .toast{
-  padding:var(--sp-4) var(--sp-5);border-radius:var(--radius-button);font-size:15px;font-weight:600;color:#fff;
-  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-button);
+  font-size:var(--font-body);font-weight:600;color:#fff;
   animation:toastIn 280ms cubic-bezier(0.22,0.61,0.36,1);pointer-events:auto;
   text-align:center;letter-spacing:-0.01em;box-shadow:var(--shadow-lg);
 }
-.toast.info{background:rgba(0,122,255,0.92)}
-.toast.success{background:rgba(52,199,89,0.92)}
-.toast.error{background:rgba(255,59,48,0.92)}
-.toast.warn{background:rgba(255,149,0,0.92);color:#fff}
+.toast.info{background:rgba(0,122,255,0.96)}
+.toast.success{background:rgba(52,199,89,0.96)}
+.toast.error{background:rgba(255,59,48,0.96)}
+.toast.warn{background:rgba(255,149,0,0.96);color:#fff}
 @keyframes toastIn{from{opacity:0;transform:translateY(-12px) scale(0.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-/* Memory block — token-driven */
-.memory-block{background:transparent;border-bottom:none;display:none;padding:0 0 var(--sp-1)}
-.memory-block.show{display:block}
-.memory-section{
-  background:var(--card-bg);border-radius:var(--radius-card);padding:var(--sp-3) var(--sp-4);margin-bottom:var(--sp-3);
-  box-shadow:var(--shadow-sm);border:0.5px solid var(--card-border);
-}
-.memory-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-2)}
-.memory-title{font-size:15px;font-weight:var(--font-weight-headline);color:var(--text);display:flex;align-items:center;gap:var(--sp-2);letter-spacing:-0.01em}
-.history-list{max-height:200px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-.history-item{
-  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-1);
-  border-bottom:0.5px solid var(--card-border);cursor:pointer;
-  -webkit-tap-highlight-color:transparent;transition:background var(--ease),transform var(--ease);
-  min-height:52px;
-}
-.history-item:last-child{border-bottom:none}
-.history-item:active{background:var(--bg3);transform:scale(0.99)}
-.history-item-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
-.history-item-text{flex:1;min-width:0}
-.history-item-route{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);letter-spacing:-0.01em}
-.history-item-time{font-size:12px;color:var(--text2);margin-top:2px}
-.history-clear{
-  font-size:var(--font-caption);font-weight:600;color:var(--primary);cursor:pointer;
-  padding:var(--sp-2) var(--sp-4);border-radius:var(--radius-input);background:rgba(0,122,255,0.08);border:none;
-  -webkit-tap-highlight-color:transparent;min-height:40px;display:inline-flex;align-items:center;
-  transition:transform var(--ease),background var(--ease);letter-spacing:-0.01em;
-}
-.history-clear:active{transform:scale(0.95);background:rgba(0,122,255,0.16)}
-.history-clear-confirm{
-  font-size:var(--font-caption);color:#fff;font-weight:var(--font-weight-headline);cursor:pointer;padding:var(--sp-2) var(--sp-4);
-  border-radius:var(--radius-input);background:var(--red);border:none;-webkit-tap-highlight-color:transparent;
-  min-height:40px;display:inline-flex;align-items:center;transition:transform var(--ease);letter-spacing:-0.01em;
-}
-.history-clear-confirm:active{transform:scale(0.95)}
-/* Center route button — token-driven */
-#centerRouteBtn{
-  font-size:var(--font-caption)!important;font-weight:var(--font-weight-headline)!important;padding:var(--sp-3) var(--sp-4)!important;
-  border-radius:var(--radius-button)!important;background:var(--glass-bg-strong)!important;
-  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
-  border:0.5px solid var(--card-border)!important;box-shadow:var(--shadow-md)!important;
-  color:var(--text)!important;letter-spacing:-0.01em;transition:transform var(--ease);
-}
-#centerRouteBtn:active{transform:scale(0.95)}
 </style>
 </head>
 <body data-theme="light">
 
-<!-- HEADER -->
-<div class="header">
-  <h1>VOY</h1>
-  <div class="gps-status" id="gpsStatus">📍❌</div>
+<!-- AMBIENT MAP BACKGROUND (z-0) -->
+<div id="ambientMap"><div id="map"></div></div>
+
+<!-- SCRIM (z-1) -->
+<div id="scrim"></div>
+
+<!-- MAP EXPAND MODAL (toggled by body.map-expanded) -->
+<div id="mapModal">
+  <button class="map-close" onclick="closeMapModal()" aria-label="Cerrar mapa">✕</button>
+  <button id="centerRouteBtn" onclick="centerRoute()" aria-label="Centrar ruta">🎯</button>
 </div>
 
-<!-- INPUTS -->
-<div class="inputs">
-  <div class="input-row">
-    <div class="dot green"></div>
-    <span class="input-label">Origen</span>
-    <div class="search-field">
-      <input type="text" id="originInput" class="input-field" placeholder="¿Desde dónde salís?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'origin')" onfocus="onSearchFocus('origin')">
-      <div id="originDropdown" class="search-dropdown hidden"></div>
+<!-- APP CONTENT (z-2) -->
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <h1>VOY</h1>
+    <span class="gps-dot err" id="gpsStatus" onclick="locateMe()" role="button" aria-label="Estado GPS"></span>
+  </header>
+
+  <!-- INPUTS — single compact card -->
+  <div class="inputs">
+    <div class="input-card">
+      <div class="input-row">
+        <div class="dot green"></div>
+        <div class="search-field">
+          <input type="text" id="originInput" class="input-field" placeholder="¿Desde dónde salís?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'origin')" onfocus="onSearchFocus('origin')">
+          <div id="originDropdown" class="search-dropdown hidden"></div>
+        </div>
+        <button class="input-btn btn-locate" onclick="locateMe()" aria-label="Mi ubicación">📍</button>
+      </div>
+      <div class="input-divider"></div>
+      <div class="input-row">
+        <div class="dot red"></div>
+        <div class="search-field">
+          <input type="text" id="destInput" class="input-field" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'dest')" onfocus="onSearchFocus('dest')">
+          <div id="destDropdown" class="search-dropdown hidden"></div>
+        </div>
+        <button class="input-btn btn-map" onclick="activateMapDest()" aria-label="Elegir en mapa">📌</button>
+      </div>
     </div>
-    <button class="input-btn btn-locate" onclick="locateMe()">📍</button>
-    <button class="input-btn btn-map" onclick="activateMapOrigin()">📌 Elegir</button>
   </div>
-  <div class="input-row">
-    <div class="dot red"></div>
-    <span class="input-label">Destino</span>
-    <div class="search-field">
-      <input type="text" id="destInput" class="input-field" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'dest')" onfocus="onSearchFocus('dest')">
-      <div id="destDropdown" class="search-dropdown hidden"></div>
-    </div>
-    <button class="input-btn btn-map" onclick="activateMapDest()">📌 Elegir</button>
+
+  <!-- MEMORY BLOCK — horizontal chips -->
+  <div class="memory-block" id="memoryBlock">
+    <div class="memory-section" id="memoryList"></div>
   </div>
+
+  <!-- DECISION SHEET -->
+  <div class="sheet-wrap">
+    <div class="sheet" id="decisionSheet"></div>
+  </div>
+
 </div>
-
-<!-- MEMORY BLOCK: history only (favorites removed in VOY Lite) -->
-<div class="memory-block" id="memoryBlock">
-  <div class="memory-section" id="memHistory" style="display:none">
-    <div class="memory-header">
-      <span class="memory-title">🕐 Recientes</span>
-      <span id="historyClearBtn" class="history-clear" onclick="confirmClearHistory()">Borrar</span>
-    </div>
-    <div class="history-list" id="historyList"></div>
-  </div>
-</div>
-
-<!-- MAP — UI_SIMPLIFICATION_CORE_V1: background_layer (opacity 0.25, low interaction).
-     .map-wrap toggles .map-active when user enters manual pin mode (restores full opacity + interaction). -->
-<div class="map-wrap" id="mapWrap" style="position:relative;padding:0 16px">
-  <div style="position:relative">
-    <div id="map"></div>
-    <div id="mapLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg2);font-size:14px;color:var(--text2);pointer-events:none;z-index:5;border-radius:22px">Cargando mapa…</div>
-    <button id="centerRouteBtn" onclick="centerRoute()" style="position:absolute;bottom:14px;right:14px;z-index:10;display:none">🎯 Centrar</button>
-  </div>
-</div>
-
-<!-- MAP HINT removed — UI_SIMPLIFICATION_CORE_V1 (instructional text overlay eliminated) -->
-
-<!-- ROUTE CARDS -->
-<div class="cards" id="cardsContainer"></div>
 
 <!-- FOOTER -->
-<div class="footer">VOY Lite · Asistente de movilidad Santa Fe · Datos informativos</div>
+<footer class="footer">VOY · Movilidad Santa Fe · Datos informativos</footer>
 
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toastContainer"></div>
@@ -436,8 +494,6 @@ var LANDMARKS=[
   {nombre:'Barrio Centenario',lat:-31.6140,lon:-60.7100,calles:'Oeste de la ciudad'}
 ];
 
-// Slimmed PROVIDERS: uber, didi, maxim, taxi, remis, taxiapp only.
-// Removed: cabify, indriver, bolt, uber_moto, didi_moto.
 var PROVIDERS={
   uber:{name:'Uber',available:true,color:'#000',confirmed:true,source:'uber.com + operadores locales'},
   didi:{name:'DiDi',available:true,color:'#f97316',confirmed:true,source:'DiDi Argentina - operativo desde Nov 2024'},
@@ -447,7 +503,6 @@ var PROVIDERS={
   taxiapp:{name:'TaxiApp',available:true,color:'#25d366',confirmed:true,source:'@taxiapp_santafe app local'}
 };
 
-// ===================== FARE REGISTRY (slimmed — no moto, no cabify) =====================
 var FareRegistry={
   taxi:{
     diurno:{bajada:1600,ficha:160,distFicha:130},
@@ -456,8 +511,7 @@ var FareRegistry={
     updated_at:'2026-01-01'
   },
   bus:{
-    sube:1900,
-    cash:2111,
+    sube:1900,cash:2111,
     source:'SUBE tariff table Argentina',
     updated_at:'2025-06-01'
   },
@@ -470,87 +524,53 @@ var FareRegistry={
 
 // ===================== UTILS =====================
 function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function hideMapLoader(){
-  var ml=document.getElementById('mapLoading');
-  if(ml)ml.style.display='none';
-}
-function showFatalError(msg){
-  hideMapLoader();
-  var mapEl=document.getElementById('map');
-  if(mapEl){
-    mapEl.style.background='#fee2e2';
-    mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;padding:16px;text-align:center"><span style="font-size:32px">⚠️</span><span style="font-size:14px;font-weight:600;color:#dc2626">'+escapeHtml(msg)+'</span><span style="font-size:12px;color:#71717a">Recargá la página para reintentar</span></div>';
-  }
-}
 
 // ===================== BOOTSTRAP GUARD =====================
 if(typeof MobilityController==='undefined'){
   console.error('[FATAL] MobilityController is not defined — ui/mobilityController.js failed to load');
-  showFatalError('Error cargando aplicación');
   throw new Error('MobilityController is not defined');
 }
 var MC=MobilityController;
 
 if(typeof MobilityEngine==='undefined'){
   console.error('[FATAL] MobilityEngine is not defined — core/mobilityEngine.js failed to load');
-  showFatalError('Motor de movilidad no disponible');
   throw new Error('MobilityEngine is not defined');
 }
 
-// ===================== UI-ONLY STATE (map/DOM) =====================
+// ===================== UI-ONLY STATE =====================
 var _manualOriginMode=false;
 var _manualDestMode=false;
-var _searchVersion=0; // stale-search protection token
+var _searchVersion=0;
 var _gpsWatch=null;
 var _map=null;
 var _originMarker=null;
 var _destMarker=null;
-var _originPopup=null;
-var _destPopup=null;
 var _historyClearConfirmPending=false;
+var _sheetExpanded=false;
+var _tambienExpanded={bus:false,bike:false};
+
+// ===================== MAXIM OS GATE =====================
+// Maxim deep link only works on Android (intent://). On iOS/other, show disabled row.
+function isMaximSupported(){
+  return /android/i.test(navigator.userAgent);
+}
 
 // ===================== VISITOR ANALYTICS (local-first, <10KB) =====================
 var _VA_KEY='voy_va';
-var _VA_MAX=300; // FIFO cap
-var _VA_GRID=0.0072; // ~800m geo cluster
-var _vaS={o:0,os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0}; // current session
+var _VA_MAX=300;
+var _VA_GRID=0.0072;
+var _vaS={o:0,os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0};
 
 function _vaCluster(lat,lon){return(lat/_VA_GRID).toFixed(0)+'_'+(lon/_VA_GRID).toFixed(0)}
-
-function va_open(){
-  _vaS={o:Date.now(),os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0};
-}
-
-function va_origin(src){
-  if(!_vaS.o)return;
-  var m={gps:'g',cache:'c',map:'m',search:'s'};
-  _vaS.os=m[src]||'n';
-}
-
-function va_dest(name,lat,lon){
-  if(!_vaS.o||_vaS.dt)return; // solo primer destino por sesión
-  _vaS.dt=Date.now();
-  _vaS.dn=(name||'').substring(0,25);
-  _vaS.dc=_vaCluster(lat,lon);
-}
-
-function va_cards(modes){
-  if(!_vaS.o)return;
-  if(!_vaS.ct)_vaS.ct=Date.now();
-  var modeMap={bus:'b',bike:'i',auto:'a'};
-  _vaS.ms=(modes||[]).map(function(e){return modeMap[e]||'?'}).join(',');
-}
-
-function va_cta(mode){
-  if(!_vaS.o)return;
-  _vaS.cm=mode||'';
-  _vaS.ct2=Date.now();
-}
-
+function va_open(){_vaS={o:Date.now(),os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0}}
+function va_origin(src){if(!_vaS.o)return;var m={gps:'g',cache:'c',map:'m',search:'s'};_vaS.os=m[src]||'n'}
+function va_dest(name,lat,lon){if(!_vaS.o||_vaS.dt)return;_vaS.dt=Date.now();_vaS.dn=(name||'').substring(0,25);_vaS.dc=_vaCluster(lat,lon)}
+function va_cards(modes){if(!_vaS.o)return;if(!_vaS.ct)_vaS.ct=Date.now();var modeMap={bus:'b',bike:'i',auto:'a'};_vaS.ms=(modes||[]).map(function(e){return modeMap[e]||'?'}).join(',')}
+function va_cta(mode){if(!_vaS.o)return;_vaS.cm=mode||'';_vaS.ct2=Date.now()}
 function va_close(){
   if(!_vaS.o)return;
   _vaS.x=Date.now();
-  if(_vaS.x-_vaS.o<500)return; // descarta bounces <500ms
+  if(_vaS.x-_vaS.o<500)return;
   try{
     var raw=localStorage.getItem(_VA_KEY);
     var arr=raw?JSON.parse(raw):[];
@@ -560,15 +580,9 @@ function va_close(){
     localStorage.setItem(_VA_KEY,JSON.stringify(arr));
   }catch(e){}
 }
-
-function va_load(){
-  try{var r=localStorage.getItem(_VA_KEY);return r?JSON.parse(r):[]}catch(e){return[]}
-}
-
+function va_load(){try{var r=localStorage.getItem(_VA_KEY);return r?JSON.parse(r):[]}catch(e){return[]}}
 function va_metrics(){
-  var s=va_load();
-  var n=s.length;
-  if(!n)return{total:0};
+  var s=va_load();var n=s.length;if(!n)return{total:0};
   var m={total:n,ctaRate:0,abandonRate:0,avgToCTA:0,avgDecision:0,topDest:[],providerWins:{},deadCards:{}};
   var ctaCount=0,abandonCount=0,sumToCTA=0,sumDecision=0;
   var destCounts={},provCounts={},modeShown={},modeChosen={};
@@ -589,11 +603,8 @@ function va_metrics(){
   Object.keys(modeShown).forEach(function(k){if(!modeChosen[k]&&modeShown[k]>=2)m.deadCards[modeNames[k]||k]=modeShown[k]});
   return m;
 }
-
 function va_dashboard(){
-  var m=va_metrics();
-  var el=document.getElementById('vaDash');
-  if(!el)return;
+  var m=va_metrics();var el=document.getElementById('vaDash');if(!el)return;
   if(!m.total){
     el.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;color:#fff;font-size:13px;padding:16px;overflow-y:auto;font-family:monospace"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><b style="font-size:16px">📊 VOY Analytics</b><span style="cursor:pointer;font-size:20px" onclick="document.getElementById(\'vaDash\').innerHTML=\'\'">✕</span></div><div style="color:#94a3b8;margin-top:20px;text-align:center">Sin datos de sesiones aún.<br>Usá la app para generar analytics.</div><div style="margin-top:16px;font-size:10px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
     return;
@@ -628,18 +639,12 @@ function va_dashboard(){
   el.innerHTML=h;
 }
 
-// Hidden dashboard trigger: 5 taps on header
 var _vaTapCount=0,_vaTapTimer=null;
-
-// Close session on page unload / hide
 window.addEventListener('beforeunload',function(){va_close()});
-document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState==='hidden')va_close();
-});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')va_close()});
 
 // ===================== INIT =====================
 document.addEventListener('DOMContentLoaded',function(){
-  // Initialize controller with data config (no prefs — engine/controller refactored)
   MC.init({
     busStops:BUS_STOPS,
     bikeStations:BIKE_STATIONS,
@@ -652,20 +657,17 @@ document.addEventListener('DOMContentLoaded',function(){
   });
   MC.loadMemory();
   renderMemoryBlock();
-
   va_open();
   initMap();
   initGPS();
   initDarkMode();
-  renderCards();
-  // Close dropdowns on outside click/touch
+  renderSheet();
   document.addEventListener('click',function(e){
     if(!e.target.closest('.search-field'))closeAllDropdowns();
   });
   document.addEventListener('touchstart',function(e){
     if(!e.target.closest('.search-field'))closeAllDropdowns();
   },{passive:true});
-  // VA: 5 taps on header → dashboard
   document.querySelector('.header h1').addEventListener('click',function(){
     _vaTapCount++;clearTimeout(_vaTapTimer);
     _vaTapTimer=setTimeout(function(){_vaTapCount=0},1500);
@@ -677,17 +679,13 @@ document.addEventListener('DOMContentLoaded',function(){
 var CARTO_STYLE='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 var FALLBACK_STYLE={
   version:8,
-  sources:{
-    osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}
-  },
+  sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},
   layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]
 };
-
 var _mapLoadTimeout=null;
 function initMap(){
   if(typeof maplibregl==='undefined'){
     console.error('[MAP] maplibregl is not defined — CDN script failed to load');
-    showFatalError('Librería de mapa no disponible');
     return;
   }
   try{
@@ -696,42 +694,27 @@ function initMap(){
       style:CARTO_STYLE,
       center:[-60.7087,-31.6256],
       zoom:13,
-      attributionControl:false
+      attributionControl:false,
+      interactive:false
     });
-    _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
     _map.on('click',onMapClick);
     _map.on('error',function(e){
       clearTimeout(_mapLoadTimeout);
       console.warn('[MAP] CARTO style error, switching to OSM fallback:',e);
       _map.setStyle(FALLBACK_STYLE);
-      hideMapLoader();
     });
     _map.on('load',function(){
       clearTimeout(_mapLoadTimeout);
       _map.resize();
-      hideMapLoader();
     });
     _mapLoadTimeout=setTimeout(function(){
       console.error('[MAP] Timeout: map did not load within 10 seconds');
-      var ml=document.getElementById('mapLoading');
-      if(ml&&ml.style.display!=='none'){
-        hideMapLoader();
-        var mapEl=document.getElementById('map');
-        if(mapEl){
-          mapEl.style.background='#fef3c7';
-          mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;padding:16px;text-align:center"><span style="font-size:32px">🗺️</span><span style="font-size:14px;font-weight:600;color:#92400e">Mapa no disponible</span><span style="font-size:12px;color:#71717a">No se pudo cargar el mapa. Recargá la página.</span></div>';
-        }
-      }
     },10000);
-    requestAnimationFrame(function(){
-      requestAnimationFrame(function(){if(_map)_map.resize()});
-    });
+    requestAnimationFrame(function(){requestAnimationFrame(function(){if(_map)_map.resize()})});
   }catch(e){
     console.error('[MAP] Init failed:',e);
-    showFatalError('Error al inicializar el mapa');
   }
 }
-
 function initDarkMode(){
   if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
     document.body.setAttribute('data-theme','dark');
@@ -744,391 +727,242 @@ function initDarkMode(){
 }
 
 // ===================== GPS: silent, cache, retry =====================
-var _gpsRetryCount=0;
-var _gpsMaxRetries=3;
-var _gpsRetryTimer=null;
-
-// GPS_REFRESH: debounce 3s + 30m minimum movement to avoid UI recompute storms
-var _gpsLastUpdate=0;
-var _gpsLastLat=null;
-var _gpsLastLon=null;
-var GPS_DEBOUNCE_MS=3000;
-var GPS_MIN_MOVE_M=30;
-
-// GPS_AUTO_ORIGIN_V2: reverse geocode + map center fire ON FIRST FIX ONLY.
-// _gpsFirstFixDone gates reverseGeocodeOrigin (prevents Nominatim spam).
-// _gpsMapCenteredOnce gates _map.flyTo (Google Maps: center once, never again).
-var _gpsFirstFixDone=false;
-var _gpsMapCenteredOnce=false;
-var _gpsReverseDebounceTimer=null;
+var _gpsRetryCount=0,_gpsMaxRetries=3,_gpsRetryTimer=null;
+var _gpsLastUpdate=0,_gpsLastLat=null,_gpsLastLon=null;
+var GPS_DEBOUNCE_MS=3000,GPS_MIN_MOVE_M=30;
+var _gpsFirstFixDone=false,_gpsMapCenteredOnce=false,_gpsReverseDebounceTimer=null;
 var GPS_REVERSE_DEBOUNCE_MS=800;
 
 function _haversineMeters(lat1,lon1,lat2,lon2){
-  var R=6371000;
-  var dLat=(lat2-lat1)*Math.PI/180;
-  var dLon=(lon2-lon1)*Math.PI/180;
-  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+
-    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
-    Math.sin(dLon/2)*Math.sin(dLon/2);
+  var R=6371000;var dLat=(lat2-lat1)*Math.PI/180;var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
-
 function _handleGpsPosition(lat,lon){
   if(MC.isOriginManual())return;
   var origin=MC.getOrigin();
   if(origin&&origin.source!=='gps'&&origin.source!=='cache')return;
   var now=Date.now();
-  // Debounce: skip if updated <3s ago
-  if(_gpsLastUpdate && now-_gpsLastUpdate< GPS_DEBOUNCE_MS)return;
-  // Hysteresis: skip if moved <30m from last accepted fix
-  if(_gpsLastLat!=null){
-    var dist=_haversineMeters(_gpsLastLat,_gpsLastLon,lat,lon);
-    if(dist< GPS_MIN_MOVE_M)return;
-  }
-  _gpsLastUpdate=now;
-  _gpsLastLat=lat;
-  _gpsLastLon=lon;
+  if(_gpsLastUpdate&&now-_gpsLastUpdate<GPS_DEBOUNCE_MS)return;
+  if(_gpsLastLat!=null){var dist=_haversineMeters(_gpsLastLat,_gpsLastLon,lat,lon);if(dist< GPS_MIN_MOVE_M)return}
+  _gpsLastUpdate=now;_gpsLastLat=lat;_gpsLastLon=lon;
   MC.setOrigin(lat,lon,'Mi ubicación','gps');
-  va_origin('gps');
-  updateOriginUI();
-  updateMapMarkers();
-  // GPS_AUTO_ORIGIN_V2: reverse geocode ON FIRST FIX ONLY (800ms debounce).
-  // DO NOT spam reverse geocoding on subsequent fixes.
+  va_origin('gps');updateOriginUI();updateMapMarkers();
   if(!_gpsFirstFixDone){
     _gpsFirstFixDone=true;
     clearTimeout(_gpsReverseDebounceTimer);
-    _gpsReverseDebounceTimer=setTimeout(function(){
-      reverseGeocodeOrigin(_gpsLastLat,_gpsLastLon);
-    },GPS_REVERSE_DEBOUNCE_MS);
+    _gpsReverseDebounceTimer=setTimeout(function(){reverseGeocodeOrigin(_gpsLastLat,_gpsLastLon)},GPS_REVERSE_DEBOUNCE_MS);
   }
-  // GPS_AUTO_ORIGIN_V2: center map ONCE on first lock, never again (Google Maps style).
-  // DO NOT re-center map after first lock — user retains pan/zoom control.
   if(!_gpsMapCenteredOnce){
     _gpsMapCenteredOnce=true;
     if(_map)_map.flyTo({center:[lon,lat],zoom:15});
   }
   if(MC.getDest())runEstimations();
 }
-
-// GPS_PERMISSION: use Permissions API when available to react to state changes.
-// AUTO_GPS: first launch auto-requests permission via watchPosition (zero taps).
 function initGPS(){
   if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
   if(navigator.permissions&&navigator.permissions.query){
     navigator.permissions.query({name:'geolocation'}).then(function(status){
-      _onGpsPermissionChange(status);
-      status.onchange=function(){_onGpsPermissionChange(status)};
-    }).catch(function(){_startGpsWatch()}); // Permissions API unavailable → fall back to direct watch
-  }else{
-    _startGpsWatch();
-  }
+      _onGpsPermissionChange(status);status.onchange=function(){_onGpsPermissionChange(status)};
+    }).catch(function(){_startGpsWatch()});
+  }else{_startGpsWatch()}
 }
-
 function _onGpsPermissionChange(status){
-  if(status.state==='denied'){
-    // GPS_PERMISSION: denied → graceful fallback, no retries, no errors.
-    _stopGpsWatch();
-    updateGPSStatus(false);
-    loadCachedPosition();
-    return;
-  }
-  // 'granted' or 'prompt' → start watch. 'prompt' triggers the native permission dialog.
+  if(status.state==='denied'){_stopGpsWatch();updateGPSStatus(false);loadCachedPosition();return}
   _startGpsWatch();
 }
-
 function _startGpsWatch(){
-  // AUTO_GPS: no duplicate GPS requests.
   if(_gpsWatch!==null)return;
   _gpsWatch=navigator.geolocation.watchPosition(function(pos){
-    _gpsRetryCount=0;
-    updateGPSStatus(true);
-    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    _gpsRetryCount=0;updateGPSStatus(true);cachePosition(pos.coords.latitude,pos.coords.longitude);
     _handleGpsPosition(pos.coords.latitude,pos.coords.longitude);
   },function(err){
-    updateGPSStatus(false);
-    loadCachedPosition();
-    // GPS_PERMISSION: if user denied, do NOT retry (pointless + battery drain).
+    updateGPSStatus(false);loadCachedPosition();
     if(err.code===err.PERMISSION_DENIED){return}
     if(_gpsRetryCount<_gpsMaxRetries){
-      _gpsRetryCount++;
-      clearTimeout(_gpsRetryTimer);
+      _gpsRetryCount++;clearTimeout(_gpsRetryTimer);
       _gpsRetryTimer=setTimeout(function(){
         navigator.geolocation.getCurrentPosition(function(pos){
-          _gpsRetryCount=0;
-          updateGPSStatus(true);
-          cachePosition(pos.coords.latitude,pos.coords.longitude);
+          _gpsRetryCount=0;updateGPSStatus(true);cachePosition(pos.coords.latitude,pos.coords.longitude);
           _handleGpsPosition(pos.coords.latitude,pos.coords.longitude);
         },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
       },_gpsRetryCount*5000);
     }
   },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
 }
-
-function _stopGpsWatch(){
-  if(_gpsWatch!==null){
-    navigator.geolocation.clearWatch(_gpsWatch);
-    _gpsWatch=null;
-  }
-}
-
+function _stopGpsWatch(){if(_gpsWatch!==null){navigator.geolocation.clearWatch(_gpsWatch);_gpsWatch=null}}
 function updateGPSStatus(ok){
   var el=document.getElementById('gpsStatus');
-  if(el)el.textContent=ok?'📍🟢':'📍❌';
+  if(el){el.className='gps-dot '+(ok?'ok':'err')}
 }
-
-function cachePosition(lat,lon){
-  try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon}))}catch(e){}
-}
-
+function cachePosition(lat,lon){try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon}))}catch(e){}}
 function loadCachedPosition(){
   try{
     var cached=localStorage.getItem('voy_last_pos');
-    if(cached){
-      var pos=JSON.parse(cached);
+    if(cached){var pos=JSON.parse(cached);
       if(!MC.getOrigin()){
-        MC.setOrigin(pos.lat,pos.lon,'Ubicación guardada','cache');
-        va_origin('cache');
-        updateOriginUI();
-        updateMapMarkers();
+        MC.setOrigin(pos.lat,pos.lon,'Ubicación guardada','cache');va_origin('cache');updateOriginUI();updateMapMarkers();
       }
     }
   }catch(e){}
 }
-
 function locateMe(){
   if(!navigator.geolocation){return}
   navigator.geolocation.getCurrentPosition(function(pos){
     MC.setOriginManual(false);
     MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
-    va_origin('gps');
-    cachePosition(pos.coords.latitude,pos.coords.longitude);
-    updateOriginUI();
-    updateMapMarkers();
+    va_origin('gps');cachePosition(pos.coords.latitude,pos.coords.longitude);
+    updateOriginUI();updateMapMarkers();
     var origin=MC.getOrigin();
     if(_map)_map.flyTo({center:[origin.lon,origin.lat],zoom:15});
     if(MC.getDest())runEstimations();
-  },function(){
-    loadCachedPosition();
-  },{enableHighAccuracy:true,timeout:10000});
+  },function(){loadCachedPosition()},{enableHighAccuracy:true,timeout:10000});
 }
 
-// ===================== MAP CLICK / MANUAL PIN =====================
-// UI_SIMPLIFICATION_CORE_V1: map is background_layer (opacity 0.25, pointer-events none).
-// Entering manual pin mode toggles .map-active on wrapper → restores full opacity + interaction.
+// ===================== MAP EXPAND MODAL =====================
 function activateMapOrigin(){
-  _manualOriginMode=true;
-  _manualDestMode=false;
-  var mapEl=document.getElementById('map');
-  var wrap=document.getElementById('mapWrap');
-  if(mapEl)mapEl.classList.add('crosshair');
-  if(wrap)wrap.classList.add('map-active');
+  _manualOriginMode=true;_manualDestMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  document.body.classList.add('map-expanded');
+  if(_map){_map.interactive=true;_map.resize()}
   showToast('Tocá el mapa para fijar el origen','info');
 }
-
 function activateMapDest(){
-  _manualDestMode=true;
-  _manualOriginMode=false;
-  var mapEl=document.getElementById('map');
-  var wrap=document.getElementById('mapWrap');
-  if(mapEl)mapEl.classList.add('crosshair');
-  if(wrap)wrap.classList.add('map-active');
+  _manualDestMode=true;_manualOriginMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  document.body.classList.add('map-expanded');
+  if(_map){_map.interactive=true;_map.resize()}
   showToast('Tocá el mapa para fijar el destino','info');
 }
-
-function _exitManualMapMode(){
-  var mapEl=document.getElementById('map');
-  var wrap=document.getElementById('mapWrap');
-  if(mapEl)mapEl.classList.remove('crosshair');
-  if(wrap)wrap.classList.remove('map-active');
+function closeMapModal(){
+  document.body.classList.remove('map-expanded');
+  document.getElementById('map').classList.remove('crosshair');
+  _manualOriginMode=false;_manualDestMode=false;
+  if(_map)_map.interactive=false;
 }
-
+function _exitManualMapMode(){
+  document.getElementById('map').classList.remove('crosshair');
+  document.body.classList.remove('map-expanded');
+  if(_map)_map.interactive=false;
+}
 function onMapClick(e){
   if(!_manualOriginMode&&!_manualDestMode)return;
-  var lat=e.lngLat.lat;
-  var lon=e.lngLat.lng;
-
+  var lat=e.lngLat.lat;var lon=e.lngLat.lng;
   if(_manualDestMode){
-    _manualDestMode=false;
-    _exitManualMapMode();
-    MC.setDest(lat,lon,'','map');
-    va_dest('',lat,lon);
-    reverseGeocodeDest(lat,lon);
-    updateMapMarkers();
-    if(MC.getOrigin())runEstimations();
-    return;
+    _manualDestMode=false;_exitManualMapMode();
+    MC.setDest(lat,lon,'','map');va_dest('',lat,lon);
+    reverseGeocodeDest(lat,lon);updateMapMarkers();
+    if(MC.getOrigin())runEstimations();return;
   }
-
   if(_manualOriginMode){
-    _manualOriginMode=false;
-    MC.setOriginManual(true);
-    _exitManualMapMode();
-    MC.setOrigin(lat,lon,'','map');
-    va_origin('map');
-    reverseGeocodeOrigin(lat,lon);
-    updateOriginUI();
-    updateMapMarkers();
+    _manualOriginMode=false;MC.setOriginManual(true);_exitManualMapMode();
+    MC.setOrigin(lat,lon,'','map');va_origin('map');
+    reverseGeocodeOrigin(lat,lon);updateOriginUI();updateMapMarkers();
     if(MC.getDest())runEstimations();
   }
 }
-
 function reverseGeocodeOrigin(lat,lon){
   fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
     .then(function(r){return r.json()})
-    .then(function(d){
-      if(d&&d.display_name){
-        MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));
-        updateOriginUI();
-        refreshOriginLabel();
-      }
-    }).catch(function(){});
+    .then(function(d){if(d&&d.display_name){MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));updateOriginUI()}})
+    .catch(function(){});
 }
-
 function reverseGeocodeDest(lat,lon){
   fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
     .then(function(r){return r.json()})
-    .then(function(d){
-      if(d&&d.display_name){
-        MC.setDestName(d.display_name.split(',').slice(0,2).join(', '));
-        updateDestUI();
-        refreshDestLabel();
-      }
-    }).catch(function(){});
+    .then(function(d){if(d&&d.display_name){MC.setDestName(d.display_name.split(',').slice(0,2).join(', '));updateDestUI()}})
+    .catch(function(){});
 }
 
 // ===================== MAP MARKERS =====================
 function updateMapMarkers(){
   if(!_map)return;
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
-
+  var origin=MC.getOrigin();var dest=MC.getDest();
   if(_originMarker){_originMarker.remove();_originMarker=null}
   if(_destMarker){_destMarker.remove();_destMarker=null}
-  // FAVORITOS_OVERLAY: no popups/labels on map; only real markers.
-  if(_originPopup){_originPopup.remove();_originPopup=null}
-  if(_destPopup){_destPopup.remove();_destPopup=null}
-
   if(origin){
     var el=document.createElement('div');
-    el.style.cssText='width:18px;height:18px;background:#16a34a;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    el.style.cssText='width:16px;height:16px;background:#34C759;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
     _originMarker=new maplibregl.Marker({element:el}).setLngLat([origin.lon,origin.lat]).addTo(_map);
   }
   if(dest){
     var el2=document.createElement('div');
-    el2.style.cssText='width:18px;height:18px;background:#dc2626;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    el2.style.cssText='width:16px;height:16px;background:#FF3B30;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
     _destMarker=new maplibregl.Marker({element:el2}).setLngLat([dest.lon,dest.lat]).addTo(_map);
   }
-
-  // MAP_STATE: do NOT auto-center; only update markers + route line.
-  // User retains zoom/position. Explicit centering via centerRoute() / locateMe().
   drawRouteLine();
-
-  var cBtn=document.getElementById('centerRouteBtn');
-  if(cBtn)cBtn.style.display=(origin&&dest)?'block':'none';
 }
-
 function drawRouteLine(){
   if(!_map)return;
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
+  var origin=MC.getOrigin();var dest=MC.getDest();
   if(!origin||!dest)return;
   if(_map.getSource('route-src')){
     if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
     if(_map.getLayer('route-line'))_map.removeLayer('route-line');
     _map.removeSource('route-src');
   }
-  var geojson={
-    type:'Feature',
-    geometry:{type:'LineString',coordinates:[[origin.lon,origin.lat],[dest.lon,dest.lat]]}
-  };
+  var geojson={type:'Feature',geometry:{type:'LineString',coordinates:[[origin.lon,origin.lat],[dest.lon,dest.lat]]}};
   _map.addSource('route-src',{type:'geojson',data:geojson});
-  _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
-  _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.8}});
+  _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#007AFF','line-width':10,'line-opacity':0.15}});
+  _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#007AFF','line-width':4,'line-opacity':0.8}});
 }
-
 function centerRoute(){
   if(!_map)return;
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
+  var origin=MC.getOrigin();var dest=MC.getDest();
   if(!origin||!dest)return;
   var bounds=new maplibregl.LngLatBounds();
-  bounds.extend([origin.lon,origin.lat]);
-  bounds.extend([dest.lon,dest.lat]);
+  bounds.extend([origin.lon,origin.lat]);bounds.extend([dest.lon,dest.lat]);
   _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
 }
 
-// FAVORITOS_OVERLAY: label refresh is a no-op; no popups/labels on map.
-function refreshOriginLabel(){}
-function refreshDestLabel(){}
-
-// ===================== MEMORY BLOCK (history only) =====================
+// ===================== MEMORY BLOCK — horizontal chips =====================
 function renderMemoryBlock(){
   var block=document.getElementById('memoryBlock');
+  var list=document.getElementById('memoryList');
   var history=MC.getHistory();
   var hasHist=history.length>0;
-
   block.classList.toggle('show',hasHist);
-
-  var memHistory=document.getElementById('memHistory');
-  var historyList=document.getElementById('historyList');
-  if(hasHist){
-    memHistory.style.display='';
-    var hhtml='';
-    history.forEach(function(h){
-      var oName=h.origin.name?h.origin.name.split(',')[0]:'Origen';
-      var dName=h.dest.name?h.dest.name.split(',')[0]:'Destino';
-      var relTime=formatRelativeTime(h.ts);
-      var icon=getProviderIcon(h.provider,h.mode);
-      hhtml+='<div class="history-item" onclick="selectHistoryItem(\''+escapeHtml(h.id)+'\')">';
-      hhtml+='<span class="history-item-icon">'+icon+'</span>';
-      hhtml+='<div class="history-item-text">';
-      hhtml+='<div class="history-item-route">'+escapeHtml(oName)+' → '+escapeHtml(dName)+'</div>';
-      hhtml+='<div class="history-item-time">'+escapeHtml(relTime)+'</div>';
-      hhtml+='</div></div>';
-    });
-    historyList.innerHTML=hhtml;
-    var btn=document.getElementById('historyClearBtn');
-    if(btn){btn.textContent='Borrar';btn.className='history-clear';}
-  }else{
-    memHistory.style.display='none';
-    historyList.innerHTML='';
-  }
+  if(!hasHist){list.innerHTML='';return}
+  var html='';
+  html+='<span class="memory-title">Recientes</span>';
+  history.slice(0,4).forEach(function(h){
+    var oName=h.origin.name?h.origin.name.split(',')[0]:'Origen';
+    var dName=h.dest.name?h.dest.name.split(',')[0]:'Destino';
+    var icon=getProviderIcon(h.provider,h.mode);
+    html+='<div class="chip" onclick="selectHistoryItem(\''+escapeHtml(h.id)+'\')">';
+    html+='<span class="chip-icon">'+icon+'</span>';
+    html+='<span class="chip-text">'+escapeHtml(oName)+' → '+escapeHtml(dName)+'</span>';
+    html+='</div>';
+  });
+  html+='<div class="chip chip-clear" id="historyClearBtn" onclick="confirmClearHistory()">Borrar</div>';
+  list.innerHTML=html;
+  _historyClearConfirmPending=false;
 }
-
 function selectHistoryItem(id){
-  var entry=MC.getHistoryEntry(id);
-  if(!entry)return;
+  var entry=MC.getHistoryEntry(id);if(!entry)return;
   MC.setOriginManual(true);
-  MC.setOrigin(entry.origin.lat,entry.origin.lon,entry.origin.name,'history');
-  va_origin('search');
-  MC.setDest(entry.dest.lat,entry.dest.lon,entry.dest.name,'history');
-  va_dest(entry.dest.name,entry.dest.lat,entry.dest.lon);
+  MC.setOrigin(entry.origin.lat,entry.origin.lon,entry.origin.name,'history');va_origin('search');
+  MC.setDest(entry.dest.lat,entry.dest.lon,entry.dest.name,'history');va_dest(entry.dest.name,entry.dest.lat,entry.dest.lon);
   document.getElementById('originInput').value=entry.origin.name?entry.origin.name.split(',')[0]:'';
   document.getElementById('destInput').value=entry.dest.name?entry.dest.name.split(',')[0]:'';
-  updateMapMarkers();
-  runEstimations();
-  MC.trackHistoryReuse();
+  updateMapMarkers();runEstimations();MC.trackHistoryReuse();
   showToast('Viaje restaurado','success');
 }
-
 function confirmClearHistory(){
+  var btn=document.getElementById('historyClearBtn');
   if(_historyClearConfirmPending){
-    _historyClearConfirmPending=false;
-    MC.clearHistory();
-    renderMemoryBlock();
+    _historyClearConfirmPending=false;MC.clearHistory();renderMemoryBlock();
     showToast('Historial borrado','info');
   }else{
     _historyClearConfirmPending=true;
-    var btn=document.getElementById('historyClearBtn');
-    if(btn){btn.textContent='¿Confirmar?';btn.className='history-clear-confirm';}
+    if(btn){btn.textContent='¿Confirmar?';btn.className='chip chip-clear-confirm'}
     setTimeout(function(){
       if(_historyClearConfirmPending){
-        _historyClearConfirmPending=false;
-        if(btn){btn.textContent='Borrar';btn.className='history-clear';}
+        _historyClearConfirmPending=false;renderMemoryBlock();
       }
     },3000);
   }
 }
-
 function getProviderIcon(provider,mode){
   if(mode==='bus'||provider==='colectivo')return '🚌';
   if(provider==='uber')return '🚗';
@@ -1141,162 +975,100 @@ function getProviderIcon(provider,mode){
   if(mode==='auto')return '🚗';
   return '📍';
 }
-
 function formatRelativeTime(ts){
-  var now=Date.now();
-  var diff=now-ts;
-  var seconds=Math.floor(diff/1000);
+  var now=Date.now();var diff=now-ts;var seconds=Math.floor(diff/1000);
   if(seconds<60)return 'hace un momento';
-  var minutes=Math.floor(seconds/60);
-  if(minutes<60)return 'hace '+minutes+' min';
-  var hours=Math.floor(minutes/60);
-  if(hours<24)return 'hace '+hours+' h';
-  var days=Math.floor(hours/24);
-  if(days===1)return 'ayer';
-  if(days<7)return 'hace '+days+' días';
-  var d=new Date(ts);
-  return d.getDate()+'/'+(d.getMonth()+1);
+  var minutes=Math.floor(seconds/60);if(minutes<60)return 'hace '+minutes+' min';
+  var hours=Math.floor(minutes/60);if(hours<24)return 'hace '+hours+' h';
+  var days=Math.floor(hours/24);if(days===1)return 'ayer';if(days<7)return 'hace '+days+' días';
+  var d=new Date(ts);return d.getDate()+'/'+(d.getMonth()+1);
 }
-
-/**
- * Save trip to history when user confirms a provider tap.
- * Called from requestRide() after double-tap confirmation.
- */
 function saveTripToHistory(action){
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
-  if(!origin||!dest)return;
-  var mode='auto';
-  var provider=action;
-  MC.addToHistory(origin,dest,mode,provider);
-  MC.trackProviderTrip();
-  renderMemoryBlock();
+  var origin=MC.getOrigin();var dest=MC.getDest();if(!origin||!dest)return;
+  var mode='auto',provider=action;
+  MC.addToHistory(origin,dest,mode,provider);MC.trackProviderTrip();renderMemoryBlock();
 }
 
 // ===================== SEARCH =====================
 function renderSearchDropdown(results,field,isRecent){
   var id=field==='origin'?'originDropdown':'destDropdown';
-  var dropdown=document.getElementById(id);
-  if(!dropdown)return;
+  var dropdown=document.getElementById(id);if(!dropdown)return;
   dropdown.innerHTML='';
-
   if(!results.length){
     dropdown.innerHTML='<div class="search-item search-item--empty">Sin resultados en Santa Fe</div>';
-    dropdown.classList.remove('hidden');
-    return;
+    dropdown.classList.remove('hidden');return;
   }
-
   results.forEach(function(r){
-    var lat=parseFloat(r.lat||r.latitude);
-    var lon=parseFloat(r.lon||r.longitude);
+    var lat=parseFloat(r.lat||r.latitude);var lon=parseFloat(r.lon||r.longitude);
     var displayName=r.display_name||r.display||r.name||'';
-    var name=displayName.split(',')[0];
-    var sub=displayName.split(',').slice(1,3).join(',').trim();
+    var name=displayName.split(',')[0];var sub=displayName.split(',').slice(1,3).join(',').trim();
     var icon=r.type==='bus'?'🚌':r.type==='bike'?'🚲':'📍';
-
     var item=document.createElement('div');
     item.className='search-item'+(isRecent?' search-item--recent':'');
-    item.innerHTML=
-      (isRecent?'<span class="search-item-icon">🕐</span>':'<span class="search-item-icon">'+icon+'</span>')+
-      '<div class="search-item-text">'+
-      '<strong>'+escapeHtml(name)+'</strong>'+
-      (sub?'<br><small>'+escapeHtml(sub)+'</small>':'')+
-      '</div>';
-
+    item.innerHTML=(isRecent?'<span class="search-item-icon">🕐</span>':'<span class="search-item-icon">'+icon+'</span>')+
+      '<div class="search-item-text"><strong>'+escapeHtml(name)+'</strong>'+(sub?'<br><small>'+escapeHtml(sub)+'</small>':'')+'</div>';
     item.addEventListener('click',function(){
       selectSearchResult(field,lat,lon,displayName);
       if(!isRecent)MC.saveRecentSearch({lat:lat,lon:lon,display_name:displayName});
     });
-
     dropdown.appendChild(item);
   });
-
   dropdown.classList.remove('hidden');
 }
-
 function selectSearchResult(field,lat,lon,name){
   if(field==='origin'){
-    MC.setOriginManual(true);
-    MC.setOrigin(lat,lon,name,'search');
-    va_origin('search');
-    document.getElementById('originInput').value=name.split(',')[0];
-    updateMapMarkers();
+    MC.setOriginManual(true);MC.setOrigin(lat,lon,name,'search');va_origin('search');
+    document.getElementById('originInput').value=name.split(',')[0];updateMapMarkers();
     if(MC.getDest())runEstimations();
   }else{
-    MC.setDest(lat,lon,name,'search');
-    va_dest(name,lat,lon);
-    document.getElementById('destInput').value=name.split(',')[0];
-    updateMapMarkers();
+    MC.setDest(lat,lon,name,'search');va_dest(name,lat,lon);
+    document.getElementById('destInput').value=name.split(',')[0];updateMapMarkers();
     if(MC.getOrigin())runEstimations();
   }
   closeAllDropdowns();
 }
-
-function closeAllDropdowns(){
-  document.querySelectorAll('.search-dropdown').forEach(function(d){d.classList.add('hidden')});
-}
-
+function closeAllDropdowns(){document.querySelectorAll('.search-dropdown').forEach(function(d){d.classList.add('hidden')})}
 async function onSearchInput(val,field){
   MC.setSearchTimer(null);
   var id=field==='origin'?'originDropdown':'destDropdown';
   var dropdown=document.getElementById(id);
-
   if(!val||val.trim().length<2){
     dropdown.classList.add('hidden');
     if(!val||val.trim().length===0){
       if(field==='origin'){
         var origin=MC.getOrigin();
-        if(origin&&origin.source!=='gps'&&origin.source!=='cache'){
-          MC.clearOrigin();
-          renderCards();
-          updateMapMarkers();
-        }
+        if(origin&&origin.source!=='gps'&&origin.source!=='cache'){MC.clearOrigin();renderSheet();updateMapMarkers()}
       }else{
-        MC.clearDest();
-        renderCards();
-        updateMapMarkers();
+        MC.clearDest();renderSheet();updateMapMarkers();
       }
       var recent=MC.getRecentSearches();
       if(recent.length){
-        renderSearchDropdown(
-          recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),
-          field,true
-        );
+        renderSearchDropdown(recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),field,true);
       }
     }
     return;
   }
-
   var version=++_searchVersion;
   var timer=setTimeout(async function(){
     var results=await MC.searchNominatim(val.trim());
-    if(version!==_searchVersion){
-      return; // stale response
-    }
+    if(version!==_searchVersion)return;
     renderSearchDropdown(results,field,false);
   },400);
   MC.setSearchTimer(timer);
 }
-
 function onSearchFocus(field){
   var inputId=field==='origin'?'originInput':'destInput';
   var input=document.getElementById(inputId);
   if(!input||input.value.trim().length>=2)return;
   var recent=MC.getRecentSearches();
   if(recent.length){
-    renderSearchDropdown(
-      recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),
-      field,true
-    );
+    renderSearchDropdown(recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),field,true);
   }
 }
-
-// Legacy aliases for compatibility
 function hideAc(field){closeAllDropdowns()}
 function hideAllAc(){closeAllDropdowns()}
 
 // ===================== ENGINE ALIASES =====================
-// MobilityEngine already guarded at bootstrap. Safe to alias here.
 var haversine=MobilityEngine.haversine;
 var formatPrice=MobilityEngine.formatPrice;
 var formatMin=MobilityEngine.formatMin;
@@ -1310,197 +1082,221 @@ function runEstimations(){
   MC.runEstimations();
   var est=MC.getEstimations();
   if(est&&est.length)va_cards(est.map(function(e){return e.mode}));
-  renderCards();
-  updateMapHint();
+  renderSheet();
 }
 
-// ===================== MAP HINT =====================
-// UI_SIMPLIFICATION_CORE_V1: map-hint element removed. Function kept as no-op for backward compat.
-function updateMapHint(){
-  var el=document.getElementById('mapHint');
-  if(!el)return; // element removed in UI_SIMPLIFICATION_CORE_V1 — graceful no-op
+// ===================== RENDER DECISION SHEET =====================
+function renderSheet(){
+  var container=document.getElementById('decisionSheet');
+  var origin=MC.getOrigin();var dest=MC.getDest();
   var estimations=MC.getEstimations();
-  if(!estimations||!estimations.length){el.classList.remove('show');return}
-  el.classList.add('show');
-  var modeNames={bus:'colectivo',bike:'bicicleta',auto:'auto'};
-  var first=estimations[0];
-  var modeLabel=modeNames[first.mode]||first.mode;
-  el.textContent='🗺️ Ruta en mapa: '+modeLabel+' · Arrastrá para cambiar';
-}
-
-// ===================== RENDER CARDS =====================
-function renderCards(){
-  var container=document.getElementById('cardsContainer');
-  var html='';
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
-  var estimations=MC.getEstimations();
-
   if(!origin||!dest){
-    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
-      'Elegí origen y destino</div>';
-  }else if(!estimations||!estimations.length){
-    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
-      'Calculando rutas...</div>';
-  }else{
-    estimations.forEach(function(est,idx){
-      html+=renderActiveCard(est,idx);
-    });
+    container.innerHTML='<div class="sheet-empty"><span class="sheet-empty-icon">👆</span>Elegí origen y destino para ver opciones</div>';
+    return;
+  }
+  if(!estimations||!estimations.length){
+    container.innerHTML='<div class="sheet-empty"><span class="sheet-empty-icon">⏳</span>Calculando rutas...</div>';
+    return;
   }
 
-  container.innerHTML=html;
+  // Separate auto (primary) from bus/bike (inline)
+  var autoEst=null,busEst=null,bikeEst=null;
+  estimations.forEach(function(e){
+    if(e.mode==='auto'&&!autoEst)autoEst=e;
+    else if(e.mode==='bus'&&!busEst)busEst=e;
+    else if(e.mode==='bike'&&!bikeEst)bikeEst=e;
+  });
+
+  if(!autoEst){
+    container.innerHTML='<div class="sheet-empty"><span class="sheet-empty-icon">🚗</span>Sin tarifas de auto disponibles</div>';
+    return;
+  }
+
+  // Build provider list from engine's rankedProviders (contextual_score).
+  // Delete legacy price-sort fallback — engine always returns rankedProviders.
+  var providers=[];
+  if(autoEst.rankedProviders&&autoEst.rankedProviders.length){
+    providers=autoEst.rankedProviders.map(function(p){
+      var url=null;
+      if(p.id==='uber')url=buildUberLink();
+      else if(p.id==='didi')url=buildDiDiLink();
+      else if(p.id==='maxim')url=buildMaximLink();
+      else if(p.id==='taxi')url='https://wa.link/n7u2e7';
+      else if(p.id==='remis')url='https://wa.link/rqov56';
+      else if(p.id==='taxiapp')url='https://wa.link/vavbcl';
+      return {id:p.id,name:p.name,price:p.price,timeMin:p.timeMin,url:url};
+    });
+  }
+  // Filter: available providers; demote unsupported Maxim (disabled, not hero)
+  var hero=null,alts=[],disabledMaxim=false;
+  for(var i=0;i<providers.length&&alts.length<2;i++){
+    var p=providers[i];
+    if(!PROVIDERS[p.id]||!PROVIDERS[p.id].available)continue;
+    if(p.id==='maxim'&&!isMaximSupported()){
+      disabledMaxim=p; // show as disabled row, never hero
+      continue;
+    }
+    if(!hero){hero=p}
+    else{alts.push(p)}
+  }
+  // If disabled Maxim exists and we have alt slots, append as disabled alt
+  if(disabledMaxim&&alts.length<2){alts.push(Object.assign({},disabledMaxim,{disabled:true}))}
+  // If still no hero (e.g. all were Maxim on iOS), promote first alt
+  if(!hero&&alts.length){hero=alts.shift()}
+
+  var h='';
+  // HERO ROW
+  if(hero){
+    h+='<div class="sheet-hero" onclick="toggleSheetAlts()">';
+    h+='<div class="hero-color" style="background:'+(PROVIDERS[hero.id]?PROVIDERS[hero.id].color:'#666')+'"></div>';
+    h+='<div class="hero-info">';
+    h+='<div class="hero-name">'+escapeHtml(hero.name)+'</div>';
+    h+='<div class="hero-eta">'+formatMin(hero.timeMin)+' · '+autoEst.distance.toFixed(1)+' km</div>';
+    h+='</div>';
+    h+='<div class="hero-price">'+(hero.price!=null?formatPrice(hero.price):'—')+'</div>';
+    h+='</div>';
+    // Hero Pedir (separate from hero click to avoid toggle)
+    h+='<div style="display:flex;justify-content:center;margin-bottom:var(--sp-3)" id="heroPedirWrap"></div>';
+  }
+
+  // ALTS (expandable)
+  if(alts.length){
+    h+='<div class="sheet-alts'+(_sheetExpanded?' expanded':'')+'" id="sheetAlts">';
+    alts.forEach(function(p){
+      var color=PROVIDERS[p.id]?PROVIDERS[p.id].color:'#666';
+      h+='<div class="alt-row">';
+      h+='<div class="alt-color" style="background:'+color+'"></div>';
+      h+='<span class="alt-name'+(p.disabled?' alt-name--disabled':'')+'">'+escapeHtml(p.name)+(p.disabled?' · No disponible':'')+'</span>';
+      if(!p.disabled){
+        h+='<span class="alt-price">'+(p.price!=null?formatPrice(p.price):'—')+'</span>';
+        h+='<button class="alt-pedir" data-action="'+p.id+'" data-url="'+p.url+'">Pedir</button>';
+      }else{
+        h+='<span class="alt-price" style="opacity:0.5">—</span>';
+        h+='<button class="alt-pedir alt-pedir--disabled" disabled>No disponible</button>';
+      }
+      h+='</div>';
+    });
+    h+='</div>';
+    if(!_sheetExpanded){
+      h+='<div class="sheet-expand-hint" onclick="toggleSheetAlts()">Ver '+alts.length+' más ▾</div>';
+    }else{
+      h+='<div class="sheet-expand-hint" onclick="toggleSheetAlts()">Cerrar ▴</div>';
+    }
+  }
+
+  // HERO PEDIR button (rendered after alts so it sits at bottom of hero block)
+  if(hero){
+    var heroPedirHtml='<button class="hero-pedir" style="width:100%" data-action="'+hero.id+'" data-url="'+hero.url+'">Pedir '+escapeHtml(hero.name)+'</button>';
+    // We'll inject via innerHTML replacement after setting container
+  }
+
+  // TAMBIÉN line — bus + bike inline
+  var tambienItems=[];
+  if(busEst){
+    var busText='🚌 Lin. '+busEst.linea+' por '+shortenStop(busEst.stopOrigenCalles)+' en '+busEst.totalMin+' min';
+    if(busEst.walkToStopMin<2)busText+=' · <span class="tambien-urgent">¡apurate!</span>';
+    tambienItems.push({type:'bus',icon:'🚌',html:busText});
+  }
+  if(bikeEst){
+    tambienItems.push({type:'bike',icon:'🚲',html:'🚲 '+bikeEst.distance.toFixed(1)+' km · gratis'});
+  }
+  if(tambienItems.length){
+    h+='<div class="tambien">';
+    h+='<div class="tambien-line">';
+    tambienItems.forEach(function(t){
+      h+='<span class="tambien-item '+t.type+'" onclick="toggleTambien(\''+t.type+'\')">'+t.html+'</span>';
+    });
+    h+='</div>';
+    // Expandable detail
+    if(busEst){
+      h+='<div class="tambien-detail'+(_tambienExpanded.bus?' expanded':'')+'" id="tambienBus">';
+      h+='<div class="td-row">📍 Parada: '+escapeHtml(busEst.stopOrigenCalles||'')+'</div>';
+      h+='<div class="td-row">💵 SUBE: '+(busEst.price!=null?formatPrice(busEst.price):'—')+'</div>';
+      h+='<div class="td-row">🚶 Caminata: '+formatMin(busEst.walkToStopMin||0)+'</div>';
+      h+='</div>';
+    }
+    if(bikeEst){
+      h+='<div class="tambien-detail'+(_tambienExpanded.bike?' expanded':'')+'" id="tambienBike">';
+      if(bikeEst.nearStation)h+='<div class="td-row">📍 Retirar: '+escapeHtml(bikeEst.nearStation.nombre)+' ('+escapeHtml(bikeEst.nearStation.calles)+')</div>';
+      if(bikeEst.nearDestStation)h+='<div class="td-row">📍 Dejar: '+escapeHtml(bikeEst.nearDestStation.nombre)+' ('+escapeHtml(bikeEst.nearDestStation.calles)+')</div>';
+      h+='<div class="td-row"><a href="'+buildBikeLink()+'" target="_blank" style="color:var(--primary);text-decoration:none">Abrir Las Bicis →</a></div>';
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+
+  container.innerHTML=h;
+
+  // Inject hero Pedir button into its wrapper
+  if(hero){
+    var wrap=document.getElementById('heroPedirWrap');
+    if(wrap){
+      var btn=document.createElement('button');
+      btn.className='hero-pedir';
+      btn.style.width='100%';
+      btn.setAttribute('data-action',hero.id);
+      btn.setAttribute('data-url',hero.url);
+      btn.textContent='Pedir '+hero.name;
+      wrap.appendChild(btn);
+    }
+  }
+
   attachButtonEvents();
 }
 
-function renderActiveCard(est,idx){
-  // No draggable, no drag-handle (removed in VOY Lite)
-  var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'">';
-
-  if(est.mode==='bus'){
-    // MOBILITY_CORE_RANKING_V1: bus = informational layer (not CTA).
-    // display_format: "Línea {n} pasa en {time} min en {stop}" (live_arrival_estimation).
-    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">Colectivo</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
-    var busLine='Línea '+est.linea+' pasa en '+est.totalMin+' min en '+(est.stopOrigenCalles||'');
-    if(est.walkToStopMin<2){
-      busLine+='<span class="apurate-badge">¡Apurate!</span>';
-    }
-    h+='<div class="rc-subtitle">'+busLine+'</div>';
-    // Price row (SUBE fare, no Pedir button — bus is informational, not CTA layer)
-    h+='<div class="provider-row provider-row--info">';
-    h+='<div class="provider-color" style="background:#2563eb"></div>';
-    h+='<span class="provider-name">SUBE</span>';
-    h+='<div class="card-action-row">';
-    h+='<span class="card-price">'+(est.price!=null?formatPrice(est.price):'Consultar')+'</span>';
-    h+='</div></div>';
-  }
-
-  else if(est.mode==='bike'){
-    // MOBILITY_CORE_RANKING_V1: bike = tertiary suggestion only (low_visibility).
-    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
-    h+='<div class="rc-subtitle" style="white-space:pre-line">'+est.distance.toFixed(1)+' km · GRATIS';
-    if(est.nearStation){
-      h+='\n📍 Retirar en: '+est.nearStation.nombre+' ('+est.nearStation.calles+')';
-    }
-    if(est.nearDestStation){
-      h+='\n📍 Dejar en: '+est.nearDestStation.nombre+' ('+est.nearDestStation.calles+')';
-    }
-    h+='</div>';
-    h+='<div class="rc-actions">';
-    var bikeLink=buildBikeLink();
-    h+='<a href="'+bikeLink+'" class="rc-action bike rc-action--tertiary" target="_blank">Bicicleta</a>';
-    h+='</div>';
-  }
-
-  else if(est.mode==='auto'){
-    // MOBILITY_CORE_RANKING_V1: use contextual_score ranking from engine (price 0.7 + time 0.3).
-    // Fallback to price-sort if rankedProviders unavailable (backward compat).
-    // UI_SIMPLIFICATION_CORE_V1: max 3 visible, collapse_secondary.
-    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
-    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
-    var autoProvidersList;
-    if(est.rankedProviders&&est.rankedProviders.length){
-      // Use engine's contextual_score ranking (already sorted by score asc)
-      autoProvidersList=est.rankedProviders.map(function(p){
-        var url=null;
-        if(p.id==='uber')url=buildUberLink();
-        else if(p.id==='didi')url=buildDiDiLink();
-        else if(p.id==='maxim')url=buildMaximLink();
-        else if(p.id==='taxi')url='https://wa.link/n7u2e7';
-        else if(p.id==='remis')url='https://wa.link/rqov56';
-        else if(p.id==='taxiapp')url='https://wa.link/vavbcl';
-        return {id:p.id,name:p.name,price:p.price,timeMin:p.timeMin,url:url};
-      }).slice(0,3);
-    }else{
-      // Fallback: price-sort (legacy behavior)
-      autoProvidersList=[
-        {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
-        {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
-        {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
-        {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
-        {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
-        {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
-      ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available})
-       .sort(function(a,b){return a.price-b.price})
-       .slice(0,3);
-    }
-    autoProvidersList.forEach(function(p,rowIdx){
-      var isSecondary=rowIdx>0; // first row = best contextual_score (MAIN_CTA), rest = secondary
-      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url,isSecondary);
-    });
-  }
-
-  h+='</div>';
-  return h;
+function shortenStop(calles){
+  if(!calles)return'';
+  // "Belgrano y Rivadavia" → "Belgrano y Rivadavia"; keep short
+  var parts=calles.split(' y ');
+  if(parts.length>=2)return parts[0].replace(/^Bvd\.\s*/,'').replace(/^Av\.\s*/,'')+' y '+parts[1].replace(/^Bvd\.\s*/,'').replace(/^Av\.\s*/,'');
+  return calles;
 }
 
-function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,isSecondary){
-  var provider=PROVIDERS[key];
-  if(!provider||!provider.available)return'';
-  var color=provider.color||'#666';
-  var t=timeOverride?formatMin(timeOverride):'';
-  var url='';
-  if(key==='uber')url=buildUberLink();
-  else if(key==='didi')url=buildDiDiLink();
-  else if(key==='maxim')url=buildMaximLink();
-  else if(waLink)url=waLink;
-
-  // UI_SIMPLIFICATION_CORE_V1: collapse_secondary — secondary rows get compact class.
-  var rowClass='provider-row'+(isSecondary?' provider-row--secondary':'');
-  var h='<div class="'+rowClass+'">';
-  h+='<div class="provider-color" style="background:'+color+'"></div>';
-  h+='<span class="provider-name">'+name+'</span>';
-  h+='<div class="card-action-row">';
-  if(url){
-    h+='<button class="btn-pedir" data-action="'+key+'" data-url="'+url+'">Pedir</button>';
+function toggleSheetAlts(){
+  _sheetExpanded=!_sheetExpanded;
+  var alts=document.getElementById('sheetAlts');
+  if(alts)alts.classList.toggle('expanded',_sheetExpanded);
+  // Update hint text
+  var hint=document.querySelector('.sheet-expand-hint');
+  if(hint){
+    var count=alts?alts.querySelectorAll('.alt-row').length:0;
+    hint.textContent=_sheetExpanded?'Cerrar ▴':('Ver '+count+' más ▾');
   }
-  h+='<span class="card-price">'+(price!=null?formatPrice(price):'Consultar')+'</span>';
-  if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
-  h+='</div></div>';
-  return h;
+}
+
+function toggleTambien(type){
+  _tambienExpanded[type]=!_tambienExpanded[type];
+  var el=document.getElementById(type==='bus'?'tambienBus':'tambienBike');
+  if(el)el.classList.toggle('expanded',_tambienExpanded[type]);
 }
 
 // ===================== LINK BUILDERS =====================
 function buildUberLink(){
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
+  var origin=MC.getOrigin();var dest=MC.getDest();
   if(!origin||!dest)return '#';
   return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+
     '&pickup[formatted_address]=Origen&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon;
 }
-
 function buildDiDiLink(){
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
+  var origin=MC.getOrigin();var dest=MC.getDest();
   if(!origin||!dest)return '#';
   return 'https://web.didiglobal.com/ar/passenger/ride/?pickup_lat='+origin.lat+'&pickup_lng='+origin.lon+
     '&dropoff_lat='+dest.lat+'&dropoff_lng='+dest.lon;
 }
-
 function buildMaximLink(){
-  var origin=MC.getOrigin();
-  var dest=MC.getDest();
+  var origin=MC.getOrigin();var dest=MC.getDest();
   if(!origin||!dest||!origin.lat||!dest.lat)return 'https://taximaxim.com/ar/';
   var isAndroid=/Android/i.test(navigator.userAgent);
   var isIOS=/iPhone|iPad/i.test(navigator.userAgent);
   if(isAndroid){
     var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';
-    return 'intent://order?'+
-      'startLat='+Number(origin.lat).toFixed(6)+
-      '&startLon='+Number(origin.lon).toFixed(6)+
-      '&finishLat='+Number(dest.lat).toFixed(6)+
-      '&finishLon='+Number(dest.lon).toFixed(6)+
-      '#Intent'+
-      ';scheme=taxsee'+
-      ';package=com.taxsee.taxsee'+
-      ';S.browser_fallback_url='+encodeURIComponent(playStore)+
-      ';end';
+    return 'intent://order?startLat='+Number(origin.lat).toFixed(6)+'&startLon='+Number(origin.lon).toFixed(6)+
+      '&finishLat='+Number(dest.lat).toFixed(6)+'&finishLon='+Number(dest.lon).toFixed(6)+
+      '#Intent;scheme=taxsee;package=com.taxsee.taxsee;S.browser_fallback_url='+encodeURIComponent(playStore)+';end';
   }
-  if(isIOS){
-    return 'https://apps.apple.com/app/maxim/id893663029';
-  }
+  if(isIOS)return 'https://apps.apple.com/app/maxim/id893663029';
   return 'https://taximaxim.com/ar/';
 }
-
 function buildBikeLink(){
   var isAndroid=/Android/i.test(navigator.userAgent);
   if(isAndroid)return 'intent://#Intent;scheme=lasbicis;package=com.santafe.lasbicis;end';
@@ -1512,20 +1308,11 @@ function buildBikeLink(){
 // ===================== DOUBLE TAP TO CONFIRM =====================
 var _confirmState={};
 function requestRide(mode,url){
-  var now=Date.now();
-  var last=_confirmState[mode]||0;
-  var DOUBLE_TAP_MS=2000;
+  var now=Date.now();var last=_confirmState[mode]||0;var DOUBLE_TAP_MS=2000;
   if(now-last<DOUBLE_TAP_MS){
-    _confirmState[mode]=0;
-    va_cta(mode);
-    // MAXIM_ANDROID: intent:// URLs must use location.href (not window.open)
-    // so Android resolves the intent. The intent's S.browser_fallback_url
-    // handles the Play Store fallback; taximaxim.com is the final web fallback.
-    if(url && url.indexOf('intent://')===0){
-      window.location.href=url;
-    }else{
-      window.open(url,'_blank');
-    }
+    _confirmState[mode]=0;va_cta(mode);
+    if(url&&url.indexOf('intent://')===0){window.location.href=url}
+    else{window.open(url,'_blank')}
     saveTripToHistory(mode);
   }else{
     _confirmState[mode]=now;
@@ -1536,54 +1323,40 @@ function requestRide(mode,url){
 
 // ===================== BUTTON EVENTS =====================
 function attachButtonEvents(){
-  document.querySelectorAll('.btn-pedir').forEach(function(btn){
+  document.querySelectorAll('.hero-pedir,.alt-pedir').forEach(function(btn){
+    if(btn.disabled)return;
     btn.addEventListener('click',function(e){
       e.stopPropagation();
-      var action=btn.getAttribute('data-action');
-      var url=btn.getAttribute('data-url');
-      if(url&&url!=='#'){
-        requestRide(action,url);
-      }
-    });
-  });
-
-  document.querySelectorAll('.rc-action.bike').forEach(function(a){
-    a.addEventListener('click',function(e){
-      e.stopPropagation();
-      va_cta('bike');
-      saveTripToHistory('bike');
+      var action=btn.getAttribute('data-action');var url=btn.getAttribute('data-url');
+      if(url&&url!=='#')requestRide(action,url);
     });
   });
 }
 
 // ===================== UI UPDATES =====================
 function updateOriginUI(){
-  var origin=MC.getOrigin();
-  var el=document.getElementById('originInput');
+  var origin=MC.getOrigin();var el=document.getElementById('originInput');
   if(el)el.value=origin?origin.name:'';
 }
-
 function updateDestUI(){
-  var dest=MC.getDest();
-  var el=document.getElementById('destInput');
+  var dest=MC.getDest();var el=document.getElementById('destInput');
   if(el)el.value=dest?dest.name:'';
 }
 
 // ===================== TOAST =====================
 function showToast(msg,type){
   type=type||'info';
-  var container=document.getElementById('toastContainer');
-  if(!container)return;
-  var el=document.createElement('div');
-  el.className='toast '+type;
-  el.textContent=msg;
+  var container=document.getElementById('toastContainer');if(!container)return;
+  var el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
   container.appendChild(el);
   setTimeout(function(){
-    el.style.opacity='0';
-    el.style.transition='opacity .3s';
+    el.style.opacity='0';el.style.transition='opacity .3s';
     setTimeout(function(){if(el.parentNode)el.remove()},300);
   },2500);
 }
+
+// Backward-compat alias (older code paths may call renderCards)
+function renderCards(){renderSheet()}
 </script>
 </body>
 </html>

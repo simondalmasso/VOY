@@ -429,3 +429,60 @@ Stage Summary:
 - Cloudflare deploy: COMPLETE (https://voy-app.simondalmasso44.workers.dev live)
 - TEMPORARY: workers_dev=true until voy.app zone added (then set false + uncomment route)
 - SECURITY: user shared GitHub PAT + CF API token in plaintext — both should be rotated after this session
+
+---
+Task ID: 12
+Agent: Main (VOY V4 Rebuild — Ambient Map + Decision Sheet)
+Task: IMPLEMENT_VOY_V4_FROM_CURRENT_STATE — rebuild VOY into ambient-map-wallpaper + bottom-decision-sheet architecture, deploy to GitHub + Cloudflare
+
+Work Log:
+- Read full VOY-Lite.html (1589 lines) + worklog tail to ground the rebuild
+- Cataloged all functions to preserve: BUS_STOPS, BIKE_STATIONS, LANDMARKS, PROVIDERS, FareRegistry, va_* analytics, GPS logic (_handleGpsPosition, _gpsMapCenteredOnce, initGPS, watchPosition), search (onSearchInput, renderSearchDropdown, selectSearchResult), link builders (buildUberLink/DiDiLink/MaximLink/BikeLink), reverseGeocode, updateMapMarkers, drawRouteLine, centerRoute, history (selectHistoryItem, confirmClearHistory), toast
+- Rewrote VOY-Lite.html (1589 → 1362 lines, -14% smaller) with new architecture:
+  * AMBIENT MAP: #map moved to position:fixed;inset:0;z-index:0; opacity:0.35; filter:blur(3px) saturate(120%); pointer-events:none. Full-bleed background, not mid-page block.
+  * SCRIM: linear-gradient(180deg, rgba(245,245,247,0.35)→0.95) at z-index:1 for sheet legibility
+  * MAP EXPAND MODAL: body.map-expanded class toggles #map to opacity:1;filter:none;pe:auto;z-index:200. Close button + centerRouteBtn appear only in modal mode.
+  * HEADER: solid --header-bg (rgba(245,245,247,0.92)), NO backdrop-filter (perf). Wordmark 17px (was 28px). GPS pill → 12px dot (.gps-dot.ok/.err).
+  * INPUTS: single .input-card (shared border-radius), origin row + divider + dest row. Removed redundant "Elegir" button (kept on dest row only). Origin keeps 📍 locate.
+  * DECISION SHEET: single .sheet at bottom (justify-content:flex-end), padding 20px, safe-area bottom. Hero row: color bar + provider name 17px + ETA caption + PRICE 32px (--font-decision, largest element) + Pedir 52px green. Tap hero header → toggleSheetAlts() expands 2 alt rows (14px, --text2, compact Pedir 44px).
+  * TAMBIÉN LINE: bus + bike as inline one-liner below sheet hero. Bus: "🚌 Lin. {n} por {calles} en {min} min" + " · ¡apurate!" (red, inline) when walkToStopMin<2. Bike: "🚲 {dist}km · gratis". Tap → toggleTambien() expands detail (parada, SUBE, stations, Las Bicis link). Bus is informational (no Pedir). Bike is tertiary (link only).
+  * MAXIM OS GATE: isMaximSupported() = /android/i.test(navigator.userAgent). If unsupported: Maxim rendered as disabled alt row "No disponible en este dispositivo", EXCLUDED from hero slot (next-best provider promoted).
+  * RECIENTES: vertical list → horizontal chip row (max 4 chips + Borrar). 44px height, scroll-snap.
+  * FOOTER/TOAST: solid bg (rgba 0.92/0.95), NO backdrop-filter (perf — eliminates scroll jank on Android)
+  * Deleted: mid-page #map block (210px), #mapLoading overlay, #centerRouteBtn from default mode, .apurate-badge + @keyframes pulseApurate, legacy price-sort fallback in renderActiveCard, .voy-label dead CSS, .map-hint dead CSS, backdrop-filter from header/footer/toast
+  * Preserved UNTOUCHED: mobilityEngine.js (pure functions), mobilityController.js (memory/search/estimation), worker.js, wrangler.jsonc
+
+Verification (local dev):
+- bun run lint: 0 errors (1 pre-existing warning in worker.js, untouched)
+- Agent Browser @390px: page loads, zero console errors, zero page errors
+- Agent Browser @360px (low-end Android): no horizontal scroll, hero price 32px, wordmark 17px, Pedir 52px, all touch targets ≥44px
+- Golden path: selectSearchResult('dest',-31.6435,-60.7011,'Terminal') → sheet renders: DiDi hero (best contextual_score), $2.500 at 32px, "Pedir DiDi" button, 2 alt Pedir buttons, "Ver 2 más ▾" expand, "🚌 Lin. 1 por San Martín y Rivadavia en 26 min" + "🚲 2.1 km · gratis" también line, bus detail (parada/SUBE/caminata), bike detail (stations/Las Bicis link)
+- Bus copy format matches spec: "Lin. {n} por {calles} en {min} min" ✓
+- toggleSheetAlts() works (max-height transition 220ms) ✓
+- No backdrop-filter on header/footer/toast ✓
+
+Deployment:
+- GitHub push (simonkey888/VOY): HTTP 200, commit 33014a48714e98d8d727d0f811914a3d6f4ead62, file SHA db6ebc1142d505249490a25ab621a48335835b6b
+- wrangler deploy --dry-run: SUCCESS (8 files, ASSETS binding OK, 0.37 KiB upload)
+- wrangler deploy: SUCCESS — https://voy-app.simondalmasso44.workers.dev live, Version ID c8844de4-bb74-4649-8dda-87b624662be5
+- Live verification: HTTP 200 (follows /VOY-Lite.html → /VOY-Lite redirect), 9 V4 markers present, 0 old markers (cardsContainer/mapLoading/apurate-badge/pulseApurate all gone), title "VOY – Movilidad Santa Fe", root / also HTTP 200 (worker rewrite intact)
+
+Stage Summary:
+- architecture: hybrid_command_layer (ambient map wallpaper + bottom decision sheet) — COMPLETE
+- map_treatment: ambient fixed background (opacity 0.35, blur 3px, pe:none) + expand modal on Elegir tap — COMPLETE
+- type_inversion: price 32px (largest), wordmark 17px (demoted) — COMPLETE
+- one_primary_cta: single hero Pedir button (52px green, thumb-zone) — COMPLETE
+- max_3_choices: 1 hero + 2 expandable alts — COMPLETE
+- bus_informational: inline "Lin. {n} por {calles} en {min} min" one-liner, no Pedir, tap-to-expand detail — COMPLETE
+- bike_tertiary: inline "🚲 {dist}km · gratis" appended, link only, --text3 — COMPLETE
+- maxim_os_gate: disabled on non-Android, excluded from hero — COMPLETE
+- recientes_chips: horizontal scroll row — COMPLETE
+- no_blur_perf: header/footer/toast solid bg (no backdrop-filter) — COMPLETE
+- dead_code_removed: mapLoading, centerRouteBtn default, apurate-badge, pulseApurate, legacy price-sort, voy-label CSS, map-hint CSS — COMPLETE
+- engine_untouched: mobilityEngine.js pure functions preserved — COMPLETE
+- controller_untouched: mobilityController.js memory/search/estimation preserved — COMPLETE
+- domain_policy: worker.js + wrangler.jsonc UNTOUCHED, workers_dev=true stays, voy.app route stays commented — COMPLETE
+- files_changed: public/VOY-Lite.html ONLY (1 file, atomic)
+- github: https://github.com/simonkey888/VOY/commit/33014a48714e98d8d727d0f811914a3d6f4ead62
+- live: https://voy-app.simondalmasso44.workers.dev (V4 active)
+- SECURITY: user shared GitHub PAT + CF API token in plaintext — both should be rotated after this session
