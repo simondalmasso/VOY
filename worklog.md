@@ -208,3 +208,43 @@ Stage Summary:
 - voy.app custom domain — APPLIED to config (will provision at first real deploy once voy.app zone is added to CF account; Cloudflare auto-creates DNS record + Universal TLS cert)
 - voy-app.test staging — BLOCKED & DOCUMENTED (.test is RFC 2606 reserved, cannot be a CF zone). Proposed valid alternatives in wrangler.jsonc comments: staging.voy.app/* or test.voy.app/* (route-based, same worker, require voy.app zone). Awaiting user confirmation on which substitution to activate.
 - No deploy executed (no CF credentials cached; voy.app zone not confirmed in account). Code is deploy-ready.
+
+---
+Task ID: 8
+Agent: Main (Senior Mobile UX Engineer)
+Task: GPS_AUTO_ORIGIN_V2 — first-fix-only reverse geocode + center-map-once (anti-spam, Google Maps style)
+
+Work Log:
+- Read current _handleGpsPosition (L720-742, post-Task-6 state) and identified 3 spec gaps:
+  1. reverse_geocode.trigger "on_first_fix_only" → VIOLATED: reverseGeocodeOrigin fired on every fix passing 3s/30m gate (Nominatim spam)
+  2. reverse_geocode.debounce_ms 800 → MISSING: no debounce on reverse geocode call
+  3. on_first_fix.center_map_once true → MISSING: map never auto-centered on GPS lock (MAP_STATE patch L899 disabled all auto-center)
+- Applied PATCH 1 (state vars, L710-716): Added 4 vars:
+  * _gpsFirstFixDone=false — gates reverseGeocodeOrigin to first fix only
+  * _gpsMapCenteredOnce=false — gates _map.flyTo to first fix only
+  * _gpsReverseDebounceTimer=null — holds the 800ms setTimeout handle
+  * GPS_REVERSE_DEBOUNCE_MS=800 — reverse geocode debounce constant
+- Applied PATCH 2 (_handleGpsPosition body, L747-761): Replaced unconditional reverseGeocodeOrigin(lat,lon) with:
+  * First-fix gate: if(!_gpsFirstFixDone){ _gpsFirstFixDone=true; setTimeout(reverseGeocodeOrigin, 800) }
+  * Uses _gpsLastLat/_gpsLastLon (latest accepted coords) inside the timeout closure
+  * Map-center-once gate: if(!_gpsMapCenteredOnce){ _gpsMapCenteredOnce=true; _map.flyTo({center:[lon,lat],zoom:15}) }
+- Preserved ALL existing logic: MC.isOriginManual() check, 3s debounce, 30m hysteresis, va_origin(), updateOriginUI(), updateMapMarkers(), runEstimations() conditional
+- Fallback label "Mi ubicación" preserved: setOrigin sets it immediately; reverse geocode overwrites only if Nominatim responds (after 800ms). If it fails, "Mi ubicación" stays.
+- Did NOT touch locateMe() (manual action, not first fix), onMapClick reverseGeocodeOrigin (manual pin, not GPS), MobilityEngine, mobilityController
+
+Browser Verification (agent-browser, mocked geolocation):
+- First fix: _gpsFirstFixDone=true, _gpsMapCenteredOnce=true, reverseCallCount=1, flyToCallCount=1 ✅
+- Second fix (100m north, passes hysteresis): origin coords updated (-31.6256→-31.6247), reverseCallCount STILL=1 (no spam), flyToCallCount STILL=1 (no recenter) ✅
+- Third fix (-31.6238): reverseCallCount STILL=1, flyToCallCount STILL=1 ✅
+- 800ms debounce timing: reverseCallCount=0 at 300ms, =1 at 1200ms (debounce respected) ✅
+- Zero console errors, zero console logs ✅
+
+Stage Summary:
+- reverse_geocode.trigger "on_first_fix_only": COMPLETE — _gpsFirstFixDone gates to single call per session
+- reverse_geocode.debounce_ms 800: COMPLETE — setTimeout 800ms before Nominatim call
+- on_first_fix.center_map_once: COMPLETE — _gpsMapCenteredOnce gates _map.flyTo to first lock only
+- "DO NOT spam reverse geocoding": VERIFIED — count stays 1 across 3 fixes
+- "DO NOT re-center map after first lock": VERIFIED — flyTo count stays 1 across 3 fixes
+- "DO NOT require user tap for origin": VERIFIED — origin auto-set on first fix
+- watch_mode (30m/3000ms): UNCHANGED from Task 6
+- All prior logic preserved (MobilityEngine, calculations, debounce, hysteresis untouched)

@@ -707,6 +707,14 @@ var _gpsLastLon=null;
 var GPS_DEBOUNCE_MS=3000;
 var GPS_MIN_MOVE_M=30;
 
+// GPS_AUTO_ORIGIN_V2: reverse geocode + map center fire ON FIRST FIX ONLY.
+// _gpsFirstFixDone gates reverseGeocodeOrigin (prevents Nominatim spam).
+// _gpsMapCenteredOnce gates _map.flyTo (Google Maps: center once, never again).
+var _gpsFirstFixDone=false;
+var _gpsMapCenteredOnce=false;
+var _gpsReverseDebounceTimer=null;
+var GPS_REVERSE_DEBOUNCE_MS=800;
+
 function _haversineMeters(lat1,lon1,lat2,lon2){
   var R=6371000;
   var dLat=(lat2-lat1)*Math.PI/180;
@@ -736,8 +744,21 @@ function _handleGpsPosition(lat,lon){
   va_origin('gps');
   updateOriginUI();
   updateMapMarkers();
-  // AUTO_GPS: reverse-geocode so the origin input shows a real address (zero taps).
-  reverseGeocodeOrigin(lat,lon);
+  // GPS_AUTO_ORIGIN_V2: reverse geocode ON FIRST FIX ONLY (800ms debounce).
+  // DO NOT spam reverse geocoding on subsequent fixes.
+  if(!_gpsFirstFixDone){
+    _gpsFirstFixDone=true;
+    clearTimeout(_gpsReverseDebounceTimer);
+    _gpsReverseDebounceTimer=setTimeout(function(){
+      reverseGeocodeOrigin(_gpsLastLat,_gpsLastLon);
+    },GPS_REVERSE_DEBOUNCE_MS);
+  }
+  // GPS_AUTO_ORIGIN_V2: center map ONCE on first lock, never again (Google Maps style).
+  // DO NOT re-center map after first lock — user retains pan/zoom control.
+  if(!_gpsMapCenteredOnce){
+    _gpsMapCenteredOnce=true;
+    if(_map)_map.flyTo({center:[lon,lat],zoom:15});
+  }
   if(MC.getDest())runEstimations();
 }
 
