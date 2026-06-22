@@ -1,11 +1,11 @@
 <!--
-VOY V7.4.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.5.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.4.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.5.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
@@ -33,7 +33,7 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.4.0">
+<meta name="voy-version" content="V7.5.0">
 <meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
@@ -54,7 +54,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.4.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.5.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -392,6 +392,42 @@ button{cursor:pointer}
 }
 .footer-mark{display:inline-flex;align-items:center;color:var(--text2)}
 
+/* === FOOTER DISCLOSURE — VOY_SHARE_SUPPORT_V1 (share + support, low visibility) === */
+.footer-more{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;margin-left:6px;
+  background:transparent;border:none;cursor:pointer;
+  color:var(--text3);font-size:14px;line-height:1;letter-spacing:1px;
+  padding:0;border-radius:6px;
+  transition:color var(--ease-out),background var(--ease-out);
+  -webkit-tap-highlight-color:transparent;
+}
+.footer-more:hover,.footer-more:focus-visible{color:var(--text2);background:var(--bg3);outline:none}
+.footer-more[aria-expanded="true"]{color:var(--text2);background:var(--bg3)}
+.footer-menu{
+  position:fixed;left:50%;transform:translateX(-50%) translateY(8px);
+  bottom:calc(46px + env(safe-area-inset-bottom,0px));
+  z-index:9100;background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:var(--radius-card);
+  box-shadow:0 8px 24px rgba(0,0,0,0.18);
+  min-width:220px;padding:var(--sp-1);
+  opacity:0;pointer-events:none;
+  transition:opacity var(--ease-out),transform var(--ease-out);
+}
+.footer-menu.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+.fm-item{
+  display:flex;align-items:center;gap:10px;width:100%;
+  padding:10px 12px;background:transparent;border:none;cursor:pointer;
+  color:var(--text);font-size:var(--font-body);font-weight:var(--fw-body);
+  border-radius:var(--radius-button);text-align:left;letter-spacing:-0.01em;
+  transition:background var(--ease-out);
+  -webkit-tap-highlight-color:transparent;
+}
+.fm-item:hover,.fm-item:focus-visible{background:var(--bg3);outline:none}
+.fm-item:active{background:var(--bg3);transform:scale(0.99)}
+.fm-ic{display:inline-flex;color:var(--text2);flex-shrink:0}
+.fm-sep{height:1px;background:var(--border-subtle);margin:2px 4px}
+
 /* === DEEP-LINK CONFIRMATION DIALOG === */
 .dialog-overlay{
   position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);
@@ -551,7 +587,20 @@ button{cursor:pointer}
 </div>
 
 <!-- FOOTER (sticky bottom) -->
-<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos</footer>
+<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos<button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button></footer>
+
+<!-- FOOTER DISCLOSURE MENU (VOY_SHARE_SUPPORT_V1: share + support, hidden by default — not always shown) -->
+<div class="footer-menu" id="footerMenu" role="menu" aria-label="Compartir y apoyar" hidden>
+  <button class="fm-item" id="fmShare" role="menuitem">
+    <span class="fm-ic" id="fmShareIc" aria-hidden="true"></span>
+    <span>Compartir VOY</span>
+  </button>
+  <div class="fm-sep" aria-hidden="true"></div>
+  <button class="fm-item" id="fmSupport" role="menuitem">
+    <span class="fm-ic" id="fmSupportIc" aria-hidden="true"></span>
+    <span>Invitame un café</span>
+  </button>
+</div>
 
 <!-- DEEP-LINK CONFIRMATION DIALOG -->
 <div class="dialog-overlay" id="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="dgTitle">
@@ -581,7 +630,7 @@ button{cursor:pointer}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.4.0';
+window.VOY_VERSION='V7.5.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -719,7 +768,8 @@ function svg(name,size){
     list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     gauge:'<path d="M12 13l4-4"/><path d="M3 12a9 9 0 1 1 18 0"/><circle cx="12" cy="13" r="1.2"/>',
     route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 6h6a4 4 0 0 1 0 8H10a4 4 0 0 0 0 8h6"/>',
-    mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>'
+    mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
+    coffee:'<path d="M5 9h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9Z"/><path d="M16 10h2.5a2 2 0 0 1 0 4H16"/><path d="M8 2v3M12 2v3"/>'
   };
   return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[name]||'')+'</svg>';
 }
@@ -842,6 +892,9 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('sbLocateBtn').innerHTML=svg('locate',22);
   document.getElementById('sbMicBtn').innerHTML=svg('mic',22);
   document.getElementById('dgIcon').innerHTML=svg('external',32);
+  // VOY_SHARE_SUPPORT_V1: footer disclosure menu icons (low visibility, hidden until tapped)
+  var fmShareIc=document.getElementById('fmShareIc');if(fmShareIc)fmShareIc.innerHTML=svg('share',18);
+  var fmSupportIc=document.getElementById('fmSupportIc');if(fmSupportIc)fmSupportIc.innerHTML=svg('coffee',18);
   // VOY chevron brand mark in footer
   var fm=document.querySelector('.footer-mark');
   if(fm)fm.innerHTML='<svg width="12" height="12" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 24 32 L 60 92 L 96 32 L 60 56 Z"/></svg>';
@@ -858,6 +911,7 @@ document.addEventListener('DOMContentLoaded',function(){
   bindSearchInput();
   bindDialogButtons();
   bindOriginPill();
+  bindFooterMenu();
   startIdleDrift();
   initModeSelector();
   showModeSelector(true); // V7: force transport selector visible on initial mount (not gated on search)
@@ -1798,6 +1852,65 @@ function buildBikeLink(){
   var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
   if(isIOS)return 'https://apps.apple.com/ar/app/id6444962582';
   return 'https://www.santafe.gob.ar/index.php/educacionycultura/content/download/55027/283898/file/Las%20Bicis.pdf';
+}
+
+// ===================== VOY_SHARE_SUPPORT_V1 (footer disclosure — share + support) =====================
+// RULES: footer_only placement, low visibility trigger, content hidden by default (no mostrar siempre).
+// Share: navigator.share with copy-link fallback. Support: copies MercadoPago alias "SIMON.BI".
+var _footerMenuOpen=false;
+function toggleFooterMenu(force){
+  var menu=document.getElementById('footerMenu');if(!menu)return;
+  var btn=document.getElementById('footerMore');if(!btn)return;
+  var open=(typeof force==='boolean')?force:!_footerMenuOpen;
+  _footerMenuOpen=open;
+  if(open){menu.removeAttribute('hidden');requestAnimationFrame(function(){menu.classList.add('show')});btn.setAttribute('aria-expanded','true')}
+  else{menu.classList.remove('show');btn.setAttribute('aria-expanded','false');setTimeout(function(){if(!_footerMenuOpen)menu.setAttribute('hidden','')},180)}
+}
+function closeFooterMenu(){toggleFooterMenu(false)}
+function _fallbackCopy(text){
+  try{var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-9999px';ta.setAttribute('readonly','');document.body.appendChild(ta);ta.select();var ok=document.execCommand('copy');ta.remove();return ok}catch(e){return false}
+}
+function shareApp(){
+  var url=window.location.href;
+  var shareData={title:'VOY — Movilidad Santa Fe',text:'Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.',url:url};
+  if(navigator.share){
+    navigator.share(shareData).then(function(){v5event('share_app',{via:'native'})}).catch(function(e){
+      if(e&&e.name==='AbortError')return; // user cancelled share sheet — silent
+      if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo compartir','error')}
+    });
+  }else if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){showToast('Enlace copiado','success');v5event('share_app',{via:'clipboard'})}).catch(function(){
+      if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo copiar el enlace','error')}
+    });
+  }else{
+    if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo copiar el enlace','error')}
+  }
+  closeFooterMenu();
+}
+function supportCreator(){
+  var alias='SIMON.BI';
+  var ok=false;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(alias).then(function(){showToast('Alias copiado: '+alias+' — ¡Gracias!','success');v5event('support_alias_copied',{alias:alias,via:'clipboard'})}).catch(function(){
+      if(_fallbackCopy(alias)){showToast('Alias copiado: '+alias+' — ¡Gracias!','success');v5event('support_alias_copied',{alias:alias,via:'fallback'})}else{showToast('Alias: '+alias,'info')}
+    });
+  }else{
+    if(_fallbackCopy(alias)){showToast('Alias copiado: '+alias+' — ¡Gracias!','success');v5event('support_alias_copied',{alias:alias,via:'fallback'})}else{showToast('Alias: '+alias,'info')}
+  }
+  closeFooterMenu();
+}
+function bindFooterMenu(){
+  var btn=document.getElementById('footerMore');if(btn)btn.addEventListener('click',function(e){e.stopPropagation();toggleFooterMenu()});
+  var sh=document.getElementById('fmShare');if(sh)sh.addEventListener('click',shareApp);
+  var sp=document.getElementById('fmSupport');if(sp)sp.addEventListener('click',supportCreator);
+  // Close on outside click
+  document.addEventListener('click',function(e){
+    if(!_footerMenuOpen)return;
+    var menu=document.getElementById('footerMenu');var more=document.getElementById('footerMore');
+    if(menu&&more&&!menu.contains(e.target)&&!more.contains(e.target))closeFooterMenu();
+  });
+  // Close on Escape
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&_footerMenuOpen)closeFooterMenu()});
 }
 
 // ===================== TOAST =====================

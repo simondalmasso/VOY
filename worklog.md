@@ -1569,3 +1569,99 @@ Stage Summary:
 - No new dependencies added (Web Speech API is native browser API).
 - Files changed: public/VOY-Lite.html (ICONS + MODE_OPTIONS + CSS + HTML mic button + JS voice functions + version bump), worker.js (version + BUILD_HASH placeholder restored), scripts/preflight.sh + scripts/verify-production.sh (version checks).
 - Production deploy pending: V7.1.0 (prod) → V7.4.0 (local). 4 version batches pending (V7.2.0 UI + Colectivo V1 + V7.3.0 Router + V7.4.0 Focus/Voice). User runs: export CLOUDFLARE_API_TOKEN=...; export CLOUDFLARE_ACCOUNT_ID=...; ./scripts/deploy.sh
+
+---
+Task ID: 28
+Agent: Main (Senior Mobile UX + Share/Support Integration)
+Task: VOY_SHARE_SUPPORT_V1 — Add share + support (donation) features without polluting the UI. Share via navigator.share (fallback copy link); Support copies MercadoPago alias "SIMON.BI". Footer-only placement, low visibility, hidden by default (not always shown).
+
+Work Log:
+- Read worklog.md (Tasks 1–27) to ground work in current state: V7.4.0 local (UI Focus + Voice Search applied by Task 27), production still at V7.1.0. Confirmed both VOY_UI_FOCUS_V1 and VOY_VOICE_SEARCH_V1 were COMPLETED in Task 27 — sbMicBtn present at L524, initSpeechRecognition + toggleVoiceSearch functions present.
+- Read public/VOY-Lite.html: footer CSS (L382-393), footer HTML (L554), ICONS object (L689-725 — confirmed 'share' icon already exists, no 'coffee' icon), init block (L840-863), showToast (L1804-1810), footer-mark brand SVG injection (L845-847).
+- Inspected worker.js WORKER_VERSION (L34 = "V7.4.0"), preflight.sh + verify-production.sh version refs (V7.4.0).
+
+DESIGN DECISION (satisfies all 3 RULES):
+- Pattern: tiny "··" disclosure button appended inside <footer> (low visibility: text3 color, 22×22px, no bg/border). Hidden by default.
+- Tap "··" → small popover slides up above footer with 2 stacked minimal items:
+  * Row 1: share icon + "Compartir VOY" (placement: footer_only, visibility: low)
+  * Row 2 (UNDER row 1): coffee icon + "Invitame un café" (placement: footer_under_share)
+- Popover is hidden by default → satisfies "no mostrar siempre" (the FEATURES aren't always shown; only the tiny "··" trigger is, and even that is muted gray).
+- Footer-only placement → satisfies "No mostrar arriba" + "No mostrar en hero".
+- Auto-close on: item action, outside click, Escape key.
+
+VOY_SHARE_SUPPORT_V1 (6 edits to public/VOY-Lite.html):
+- SS-1 (coffee icon): Added coffee:'<path d="M5 9h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9Z"/><path d="M16 10h2.5a2 2 0 0 1 0 4H16"/><path d="M8 2v3M12 2v3"/>' to ICONS.P (cup body + handle + 2 steam lines).
+- SS-2 (CSS): Added .footer-more (22×22 muted "··" trigger button), .footer-menu (fixed popover above footer, opacity 0 + pointer-events none when hidden, .show class animates to opacity 1), .fm-item (minimal full-width text+icon rows, hover:bg3), .fm-ic (inline-flex icon wrapper text2 color), .fm-sep (1px border-subtle divider). All transitions use existing --ease-out var. Respects -webkit-tap-highlight-color:transparent.
+- SS-3 (HTML): Appended <button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button> inside <footer>. Added <div class="footer-menu" id="footerMenu" role="menu" hidden> with 2 fm-item buttons (fmShare + fmSupport) + fm-sep between them. Menu has `hidden` attribute by default (no mostrar siempre).
+- SS-4 (icon injection): In init(), added svg('share',18) → #fmShareIc and svg('coffee',18) → #fmSupportIc.
+- SS-5 (wiring): Added bindFooterMenu() call in init() after bindOriginPill(). bindFooterMenu wires: footerMore click → toggleFooterMenu(); fmShare click → shareApp(); fmSupport click → supportCreator(); document click → close on outside; document keydown Escape → close.
+- SS-6 (JS functions): Added 5 functions before showToast():
+  * toggleFooterMenu(force) — toggles hidden attr + .show class + aria-expanded + _footerMenuOpen flag. Uses requestAnimationFrame for smooth CSS transition. Re-adds hidden attr after 180ms transition on close.
+  * closeFooterMenu() — convenience wrapper.
+  * _fallbackCopy(text) — execCommand('copy') fallback for non-clipboard-API browsers (creates temp textarea, selects, copies, removes).
+  * shareApp() — tries navigator.share({title,text,url}) first; on AbortError (user cancelled share sheet) returns silently; on other errors falls back to navigator.clipboard.writeText; if that fails, falls back to _fallbackCopy. Toasts "Enlace copiado" on success. v5event('share_app',{via}). Auto-closes menu.
+  * supportCreator() — copies "SIMON.BI" via navigator.clipboard.writeText with _fallbackCopy fallback. Toasts "Alias copiado: SIMON.BI — ¡Gracias!". v5event('support_alias_copied',{alias,via}). Auto-closes menu.
+
+VERSION BUMP V7.4.0 → V7.5.0 (5 files):
+- public/VOY-Lite.html: meta voy-version (L36), window.VOY_VERSION (L633), HTML comment header (L2), CSS comment header (L57), version pin comment (L8)
+- worker.js: WORKER_VERSION = "V7.5.0" with updated comment
+- scripts/preflight.sh: 3 grep checks (V7.4.0 → V7.5.0)
+- scripts/verify-production.sh: 7 version checks (V7.4.0 → V7.5.0)
+
+Browser Verification (agent-browser, 390×844 mobile + 1280×800 desktop, Santa Fe geo -31.6106/-60.7008):
+- Page loads: window.VOY_VERSION="V7.5.0" ✓ (mobile + desktop)
+- 0 console errors, 0 page errors ✓
+- STRUCTURE (mobile):
+  * footerMoreExists=true ✓ (disclosure button in footer)
+  * footerMoreLabel="Más opciones" ✓
+  * footerMoreExpanded="false" (collapsed by default) ✓
+  * menuExists=true ✓
+  * menuHidden=true (hidden attribute present by default — "no mostrar siempre") ✓
+  * shareExists=true, supportExists=true ✓
+  * supportAfterShare=true (fmSupport.compareDocumentPosition(fmShare) & DOCUMENT_POSITION_PRECEDING — support is AFTER share in DOM order = "footer_under_share") ✓
+  * shareIconRendered=true, supportIconRendered=true ✓
+  * moreInTopbar=0 (no share/support elements in topbar — "No mostrar arriba") ✓
+  * heroHasMore=0 (no share/support elements in hero/stage — "No mostrar en hero") ✓
+  * footerText="VOY · Movilidad Santa Fe · Datos informativos··" ✓
+  * All 4 functions exist: shareApp, supportCreator, bindFooterMenu, toggleFooterMenu ✓
+  * coffeeIconExists=true (svg('coffee',18) returns valid SVG) ✓
+- LOW VISIBILITY (computed styles):
+  * footerMore color mobile = "rgb(107, 107, 107)" (muted gray = text3 in light mode) ✓
+  * footerMore color desktop = "rgb(155, 155, 155)" (muted gray = text3 in dark mode) ✓
+  * footerMenu opacity default = "0" (invisible when hidden) ✓
+- INTERACTIVITY (mobile, mocked navigator.share=undefined + clipboard.writeText mock):
+  * Tap "··" → menu opens: menuHidden=false, menuClasses="footer-menu show", btnExpanded="true", _footerMenuOpen=true ✓
+  * Tap "Compartir VOY" → shareApp fires → navigator.share unavailable → clipboard.writeText fallback → toast "Enlace copiado" ✓ → menu auto-closes (menuHidden=true, btnExpanded="false") ✓
+  * Tap "Invitame un café" → supportCreator fires → copies "SIMON.BI" → toast "Alias copiado: SIMON.BI — ¡Gracias!" ✓ → menu auto-closes ✓
+  * Escape key closes menu (afterEscapeHidden=true, afterEscapeOpen=false) ✓
+  * Outside click closes menu (afterOutsideClickHidden=true, afterOutsideClickOpen=false) ✓
+- RESPONSIVE:
+  * Mobile 390px: scrollWidth=390=innerWidth (no horizontal scroll) ✓
+  * Desktop 1280px: scrollWidth=1280=innerWidth (no horizontal scroll) ✓
+- SEARCH FLOW INTACT:
+  * destInput exists + accepts text ✓
+  * Typed "Plaza" → dropdown visible with 3 results (Plaza Mayor, Plaza España, Plaza Pueyrredón) ✓
+  * Selected "Plaza Mayor" → MC.getDest() returns {lat:-31.6313, lon:-60.7008, name:"Plaza Mayor, San Martín y Rivadavia", source:"search"} ✓
+  * MC.setOrigin(-31.6106,-60.7008,"Centro Santa Fe","manual") → MC.getOrigin() returns the set origin ✓
+  * footerMoreStillExists=true throughout the search flow (no DOM corruption) ✓
+  * menuStillHidden=true throughout (no accidental disclosure) ✓
+  * Sheet empty-state "Buscá un destino arriba…" is the SAME pre-existing headless GPS limitation as Task 27 (GPS doesn't fix in headless UI flow without explicit user gesture; not a regression — my changes are purely additive and don't touch search/renderSheet/runEstimations/MC/map pipeline)
+- Lint: 0 errors, 0 warnings ✓
+- Preflight: 22/22 PASS, "READY TO DEPLOY" ✓
+- Screenshots: v75-mobile-footer-collapsed.png, v75-mobile-footer-open.png, v75-desktop-footer-collapsed.png, v75-desktop-golden-path.png
+
+ACCEPTANCE VERIFICATION (implied by ACTIONS + RULES — no explicit ACCEPTANCE field in spec):
+- share: footer_only placement ✓; low visibility (muted "··" trigger + hidden popover) ✓; navigator.share API ✓; copy-link fallback ✓ (verified end-to-end: mocked navigator.share=undefined → clipboard.writeText → "Enlace copiado" toast)
+- support: footer_under_share (positioned after share in DOM + visual stacking) ✓; text "Invitame un café" ✓; minimal style (plain text+icon row, no button chrome) ✓; action type=copy value="SIMON.BI" ✓ (verified: toast "Alias copiado: SIMON.BI — ¡Gracias!")
+- "No mostrar arriba": ✓ (moreInTopbar=0, only in footer)
+- "No mostrar en hero": ✓ (heroHasMore=0, only in footer)
+- "No mostrar siempre": ✓ (menu hidden attribute + opacity 0 by default; only revealed on user tap of "··")
+
+Stage Summary:
+- VOY_SHARE_SUPPORT_V1: COMPLETE — all 3 RULES satisfied, both ACTIONS fully implemented and end-to-end verified.
+- Pattern: footer-only disclosure menu. Tiny "··" trigger (low visibility: text3 muted gray, 22×22px, no chrome) appended inside existing <footer>. Tap opens a minimal popover above footer with 2 stacked items: "Compartir VOY" (share icon, navigator.share + copy-link fallback) and "Invitame un café" (coffee icon, copies alias "SIMON.BI"). Auto-closes on item action, outside click, or Escape.
+- Zero UI pollution: by default, the only visible addition is a 22×22 muted "··" glyph at the end of the footer — invisible to casual users, discoverable on intent. No topbar changes, no hero changes, no always-visible share/support widgets.
+- No new dependencies: navigator.share + navigator.clipboard are native browser APIs. execCommand('copy') used as last-resort fallback for legacy browsers.
+- Engine (mobilityEngine.js) and controller (mobilityController.js) UNTOUCHED — all changes are view-layer (HTML/CSS/JS in VOY-Lite.html).
+- Files changed: public/VOY-Lite.html (coffee icon + CSS + HTML disclosure + JS functions + version bump V7.4.0→V7.5.0), worker.js (WORKER_VERSION + comment), scripts/preflight.sh + scripts/verify-production.sh (version checks).
+- Production deploy pending: V7.1.0 (prod) → V7.5.0 (local). 5 version batches now pending (V7.2.0 UI + Colectivo V1 + V7.3.0 Router + V7.4.0 Focus/Voice + V7.5.0 Share/Support). User runs: export CLOUDFLARE_API_TOKEN=...; export CLOUDFLARE_ACCOUNT_ID=...; ./scripts/deploy.sh https://voy-app.simondalmasso44.workers.dev

@@ -31,7 +31,7 @@
 // ============================================================
 
 const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
-const WORKER_VERSION = "V7.4.0"; // V7.4 = VOY_UI_FOCUS_V1 (remove Todo pill + floating search + wake anim) + VOY_VOICE_SEARCH_V1 (Web Speech API mic button)
+const WORKER_VERSION = "V7.5.0"; // V7.5 = VOY_SHARE_SUPPORT_V1 (footer disclosure: share via navigator.share + copy-link fallback; support: copy alias SIMON.BI; low visibility, footer only, not always shown)
 // __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
 // verify-production.sh checks /api/health.build_hash === git short SHA.
 const BUILD_HASH = "__BUILD_HASH__";
