@@ -32,7 +32,7 @@
 
 const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
 const WORKER_VERSION = "V7.1.0"; // V7.1 = Gemini hardening (OSRM, walk hero, SRI, SW, bus TSP)
-// __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
+// b2b4a04 is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
 // verify-production.sh checks /api/health.build_hash === git short SHA.
 const BUILD_HASH = "__BUILD_HASH__";
 
