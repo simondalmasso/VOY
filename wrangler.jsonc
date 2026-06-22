@@ -34,7 +34,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "html_handling": "auto-trailing-slash",
+    "html_handling": "none",
     // "none" → unknown paths return a plain 404. No SPA fallback, no
     // directory listing (Workers Assets never enumerates directories).
     "not_found_handling": "none"
