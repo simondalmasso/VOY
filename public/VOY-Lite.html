@@ -1,11 +1,12 @@
 <!--
-VOY V7.1.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.2.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.1.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.2.0"> + window.VOY_BUILD_HASH
+  - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
   - SINGLE ENTRYPOINT: ONLY / serves UI (/VOY-Lite.html → 301 → /)
   - Mode selector force-rendered on initial mount
@@ -31,8 +32,8 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.1.0">
-<meta name="voy-build" content="b2b4a04">
+<meta name="voy-version" content="V7.2.0">
+<meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -52,7 +53,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.1.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.2.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -212,13 +213,22 @@ button{font-family:inherit;letter-spacing:inherit}
   padding:var(--sp-4);
   padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
   animation:sheetIn var(--ease-sheet) both;
+  /* UI-2 SheetCompression: cap height so the map stays protagonist in 9:16.
+     Default content ~24vh, grows to 34vh, hard cap 38vh with internal scroll. */
+  max-height:38vh;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent;
 }
+.sheet::-webkit-scrollbar{width:5px}
+.sheet::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:999px}
+.sheet::-webkit-scrollbar-track{background:transparent}
 @keyframes sheetIn{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
 .sheet-empty{text-align:center;padding:var(--sp-5) var(--sp-4);color:var(--text2);font-size:var(--font-body);font-weight:var(--fw-body)}
 .sheet-empty .se-icon{display:flex;justify-content:center;color:var(--text3);opacity:0.5;margin-bottom:var(--sp-3)}
 
-/* Sheet header: route summary + save-favorite */
-.sheet-head{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3);padding-bottom:var(--sp-3);border-bottom:0.5px solid var(--border-subtle)}
+/* Sheet header: route summary + save-favorite. Sticky inside the scrollable sheet
+   so the A→B route stays visible while browsing providers below. */
+.sheet-head{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3);padding-bottom:var(--sp-3);border-bottom:0.5px solid var(--border-subtle);position:sticky;top:0;z-index:4;background:var(--surface)}
 .sheet-head .sh-route{flex:1;min-width:0}
 .sheet-head .sh-origin{font-size:var(--font-caption);color:var(--text2);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sheet-head .sh-dest{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
@@ -540,11 +550,11 @@ button{cursor:pointer}
 // HARD VERSION PIN — worker.js serves HTML with Cache-Control: no-store so the
 // edge never serves a stale build. The CI guardrail verifies window.VOY_VERSION
 // matches the deployed /api/health version before declaring deploy success.
-// b2b4a04 is replaced at deploy time by the GitHub Actions workflow
+// __BUILD_HASH__ is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.1.0';
-window.VOY_BUILD_HASH='b2b4a04';
-window.VOY_DEPLOY_TS='2026-06-22T12:01:00.386Z';
+window.VOY_VERSION='V7.2.0';
+window.VOY_BUILD_HASH='__BUILD_HASH__';
+window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
 // ===================== GLOBAL ERROR HANDLERS =====================
 window.onerror=function(msg,src,line,col,err){console.error('[GLOBAL]',msg,src+':'+line+':'+col,err)};
@@ -958,21 +968,31 @@ function drawRouteLine(){
     _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#00D4FF','line-width':12,'line-opacity':0.18,'line-blur':2}});
     _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#00D4FF','line-width':4,'line-opacity':0.9}});
   }catch(e){}
+  // UI-3 MapAlwaysVisible: fitBounds with portrait-aware padding so the full A→B
+  // route stays visible above the bottom sheet in 9:16. Bottom padding accounts for
+  // ~38vh sheet + footer; top for the floating search bar. Applied immediately to
+  // the straight line so the map frames A→B even before OSRM resolves.
+  var _fitRoute=function(coords){
+    var lats=coords.map(function(p){return p[1]}),lons=coords.map(function(p){return p[0]});
+    var _padTop=Math.round(Math.min(120,window.innerHeight*0.14));
+    var _padBottom=Math.round(window.innerHeight*0.44);
+    _map.fitBounds([[Math.min.apply(null,lons),Math.min.apply(null,lats)],[Math.max.apply(null,lons),Math.max.apply(null,lats)]],{padding:{top:_padTop,bottom:_padBottom,left:50,right:50},duration:600});
+  };
+  _fitRoute(_straight);
   // V7.1 (Gemini AC-2): real street routing via OSRM (foot profile in walk mode).
   // Straight line renders instantly; OSRM refines it when available. Cached per O/D pair.
   var profile=(_activeMode==='walk')?'foot':'driving';
   var ck='osrm_'+profile+'_'+origin.lat.toFixed(4)+'_'+origin.lon.toFixed(4)+'_'+dest.lat.toFixed(4)+'_'+dest.lon.toFixed(4);
   try{
     var cached=sessionStorage.getItem(ck);
-    if(cached){var cc=JSON.parse(cached);if(cc&&cc.length>2){_setCoords(cc);return}}
+    if(cached){var cc=JSON.parse(cached);if(cc&&cc.length>2){_setCoords(cc);_fitRoute(cc);return}}
     var osrmUrl='https://router.project-osrm.org/route/v1/'+profile+'/'+origin.lon+','+origin.lat+';'+dest.lon+','+dest.lat+'?overview=full&geometries=geojson';
     fetch(osrmUrl).then(function(r){return r.json()}).then(function(d){
       if(d&&d.routes&&d.routes[0]&&d.routes[0].geometry&&d.routes[0].geometry.coordinates&&d.routes[0].geometry.coordinates.length>1){
         var coords=d.routes[0].geometry.coordinates;
         try{sessionStorage.setItem(ck,JSON.stringify(coords))}catch(e){}
         _setCoords(coords);
-        var lats=coords.map(function(p){return p[1]}),lons=coords.map(function(p){return p[0]});
-        _map.fitBounds([[Math.min.apply(null,lons),Math.min.apply(null,lats)],[Math.max.apply(null,lons),Math.max.apply(null,lats)]],{padding:60,duration:600});
+        _fitRoute(coords);
       }
     }).catch(function(){});
   }catch(e){}
@@ -1013,23 +1033,28 @@ async function onSearchInput(val){
   if(_searchRemoteTimer){clearTimeout(_searchRemoteTimer);_searchRemoteTimer=null}
   val=(val||'').trim();
   var dd=document.getElementById('destDropdown');
-  if(!val||val.length<2){
-    if(!val||val.length===0){
-      if(MC.getDest()){MC.clearDest();renderSheet();updateMapMarkers();clearBusRoute()}
-      renderEmptyDropdown();
-    }
+  if(!val||val.length===0){
+    if(MC.getDest()){MC.clearDest();renderSheet();updateMapMarkers();clearBusRoute()}
+    renderEmptyDropdown();
     dd.classList.add('hidden');
     return;
   }
+  // UI-4 DestinationInstantFeedback: a SINGLE character already fires a visible
+  // response. Previously the threshold was 2 chars → on mobile the field felt dead
+  // after typing the first letter. Now we immediately show a "Buscando…" state,
+  // then local results, then remote (debounced 150ms for snappier mobile feel).
   v5event('search',{q:val.substring(0,40)});
-  // Local-first: favorites → home/work → recents → local DB, ranked with GPS bias
   var version=++_searchVersion;
   var gpsOrigin=MC.getOrigin();
+  // Instant feedback: show the dropdown with a searching state right away
+  renderSearchDropdown([],false,true);
+  dd.classList.remove('hidden');
+  // Local-first: favorites → home/work → recents → local DB, ranked with GPS bias
   var localRanked=await MC.v5SearchLocalRanked(val,gpsOrigin);
   if(version!==_searchVersion)return;
   if(localRanked.length){renderSearchDropdown(localRanked,false,false)}
   else{renderSearchDropdown([],false,true)}
-  // Remote (debounced 200ms) — cancel stale
+  // Remote (debounced 150ms — snappier on mobile) — cancel stale
   _searchRemoteTimer=setTimeout(async function(){
     _searchRemoteTimer=null;
     if(version!==_searchVersion)return;
@@ -1037,8 +1062,9 @@ async function onSearchInput(val){
     if(version!==_searchVersion)return;
     var merged=MC.dedupResults(localRanked.concat(remote||[]));
     if(version!==_searchVersion)return;
-    renderSearchDropdown(merged.slice(0,8),false,false);
-  },200);
+    if(merged.length){renderSearchDropdown(merged.slice(0,8),false,false)}
+    else{renderSearchDropdown([],false,true)}
+  },150);
 }
 function onSearchKeydown(e){
   if(e.key==='Enter'||e.keyCode===13){
@@ -1557,10 +1583,19 @@ function clearBusRoute(){
 function buildAppLink(pid){
   var origin=MC.getOrigin(),dest=MC.getDest();if(!origin||!dest)return '#';
   if(pid==='uber')return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+'&pickup[formatted_address]=Origen&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon;
-  if(pid==='didi')return 'https://web.didiglobal.com/ar/passenger/ride/?pickup_lat='+origin.lat+'&pickup_lng='+origin.lon+'&dropoff_lat='+dest.lat+'&dropoff_lng='+dest.lon;
+  // UI-1: DiDi universal deep link — opens native app if installed (with prefilled
+  // pickup/dropoff coords), falls back to web booking if not. The old
+  // web.didiglobal.com/ar/passenger/ride/ URL was a web-app page that silently
+  // ignored the coord params → "coordenadas inconsistentes". The /passenger/deeplink
+  // endpoint is DiDi's documented universal link that reads pickup_lat/lng + dropoff_lat/lng.
+  if(pid==='didi')return 'https://www.didiglobal.com/passenger/deeplink?pickup_lat='+origin.lat+'&pickup_lng='+origin.lon+'&dropoff_lat='+dest.lat+'&dropoff_lng='+dest.lon;
   if(pid==='maxim'){
     var isAndroid=/Android/i.test(navigator.userAgent);
-    if(isAndroid){var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';return 'intent://order?startLat='+Number(origin.lat).toFixed(6)+'&startLon='+Number(origin.lon).toFixed(6)+'&finishLat='+Number(dest.lat).toFixed(6)+'&finishLon='+Number(dest.lon).toFixed(6)+'#Intent;scheme=taxsee;package=com.taxsee.taxsee;S.browser_fallback_url='+encodeURIComponent(playStore)+';end'}
+    // UI-1: Maxim uses the `maxim://` scheme (NOT `taxsee://` — that was the parent
+    // company name and never resolved, so Android fell through to the Play Store even
+    // when the app was installed). With scheme=maxim + package=com.taxsee.taxsee,
+    // Android opens the installed app directly; only falls back to Play Store when absent.
+    if(isAndroid){var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';return 'intent://order?startLat='+Number(origin.lat).toFixed(6)+'&startLon='+Number(origin.lon).toFixed(6)+'&finishLat='+Number(dest.lat).toFixed(6)+'&finishLon='+Number(dest.lon).toFixed(6)+'#Intent;scheme=maxim;package=com.taxsee.taxsee;S.browser_fallback_url='+encodeURIComponent(playStore)+';end'}
     return 'https://taximaxim.com/ar/';
   }
   return '#';
