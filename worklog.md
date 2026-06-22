@@ -544,3 +544,86 @@ Stage Summary:
 - Domain policy respected: worker.js + wrangler.jsonc UNTOUCHED, workers.dev deployment unchanged
 - Files changed: public/VOY-Lite.html (P1–P4, P7 view, P5/P6 view), public/ui/mobilityController.js (P5 rankBusLines, P6 getBusLineGeometry, searchNominatim fix). mobilityEngine.js UNTOUCHED.
 - Local-only patches — NOT deployed. User can deploy to workers.dev when ready (no credentials handled).
+
+---
+Task ID: 14
+Agent: Main (Lead System Architect — VOY V5)
+Task: VOY_V5_ARCHITECTURE_PATCH — transform VOY into premium native-feeling urban mobility assistant (floating search, ambient interactive map, IndexedDB encrypted memory, SVG icons, deep-link dialog, Taxi/Remis accordions, fare confidence)
+
+Work Log:
+- Read worklog.md (Tasks 1–13) to ground V5 in prior state (V4.1 ambient-map + decision-sheet, deployed to workers.dev)
+- Read public/VOY-Lite.html (1609 lines), public/ui/mobilityController.js (851 lines), public/core/mobilityEngine.js (440 lines — UNTOUCHED per constraint)
+- SECURITY: user shared GitHub PAT (ghp_…) + Cloudflare API token (cfut_…) in plaintext AGAIN — refused to use them; flagged for immediate revocation. All work is local code only; user deploys with safe credentials.
+- Added V5 EXTENSIONS to mobilityController.js (additive, ~360 lines inserted before EXPORTS):
+  * IndexedDB layer (openDB/dbPut/dbGetAll/dbDelete/dbClear/dbMetaGet/dbMetaSet) with 4 stores: recents, favorites, trips, meta
+  * AES-GCM encryption via WebCrypto SubtleCrypto (per-install key in localStorage, falls back to plaintext if crypto.subtle unavailable). Every value encrypted before dbPut, decrypted on read.
+  * v5AddRecent/v5GetRecents/v5ClearRecents (max 20, FIFO)
+  * v5AddFavorite/v5GetFavorites/v5RemoveFavorite (label: home|work|custom)
+  * v5LogTrip (drives inference, trims to 200, stores lastTransport + preferredProvider meta)
+  * v5InferHomeWork (night 20–08h → home, weekday 09–18h → work, requires ≥2 visits)
+  * v5GetFrequent (top N by visit count)
+  * v5EraseAll (privacy: clears all stores + rotates crypto key)
+  * v5FareConfidence (0.55–0.95 based on distance/time factors)
+  * v5FareRange (±spread based on (1−confidence)·0.3)
+  * v5SearchLocalRanked (favorites→home/work→recents→local DB, GPS-bias boost for results within 5km)
+  * v5NewSessionToken/v5GetSessionToken (remote search dedup)
+  * All 16 new functions exported; existing API 100% preserved (backward compat)
+- Rewrote public/VOY-Lite.html (1609 → ~1100 lines) as V5:
+  * FLOATING SEARCH: single centered persistent input "¿A dónde vas?" (no origin field — origin is auto-GPS). Origin-pill below shows GPS status, tap to recenter.
+  * AMBIENT INTERACTIVE MAP: opacity 1, filter none, interactive:true (native gestures). Never dimmed after search.
+  * IDLE CINEMATIC DRIFT: setInterval(8s) easeTo tiny random offset, ONLY while search empty. stopIdleDrift() called on first character; never resumes. Respects prefers-reduced-motion.
+  * SVG ICON SYSTEM: svg(name,size) helper with 28 inline icons (search, locate, pin, bus, bike, car, taxi, phone, whatsapp, app, web, close, chevron, clock, star, home, work, navigate, share, trash, arrow, user, dot, flag, external, list, gauge, route). ZERO emojis in entire UI (including analytics dashboard).
+  * ENHANCED SEARCH PIPELINE: onSearchInput → local-first v5SearchLocalRanked (instant) → debounced 200ms remote Nominatim → merge+dedup. _searchVersion cancels stale. Enter/Go selects first or fallbackGeocode.
+  * DECISION SHEET: route summary header + save-favorite star. Hero ride-hailing (best of Uber/DiDi/Maxim by contextual_score) with price (30px display), confidence badge (high/mid color), fare range, "Pedir X" CTA (52px). Expandable alts for other apps. Taxi accordion (Radiotaxi + TaxiApp, each with WhatsApp action + estimated fare/range). Remis accordion (Remises Real, WhatsApp). Bus mini-block (all candidate lines ranked, main line + expandable detail + expandable alts, "Estimado · N%" badge, route overlay). Bike tertiary (only <3km, dashed border, Las Bicis link).
+  * DEEP-LINK CONFIRMATION DIALOG: bottom-sheet modal. Opens on any Pedir/WhatsApp tap. Shows provider name + warning "Vas a abrir una aplicación externa. El viaje, el precio y el servicio dependen exclusivamente del proveedor." Cancel/Continuar. Continuar → opens link (intent:// or window.open noopener) + logs trip to IndexedDB + analytics event. Escape closes.
+  * FARE ENGINE: hero shows estimated fare + confidence % + range (low–high). Taxi/remis computed from FareRegistry.taxi (diurno/nocturno by hour). Remis = taxi×1.05 estimate.
+  * USER MEMORY: IndexedDB-backed. Memory-row chips show favorites + recents (tap to navigate). "Borrar" chip → 2-tap confirm → v5EraseAll. Favorite star in sheet head toggles save.
+  * ANALYTICS: anonymous local events (search, provider_selected, destination_selected, deeplink_opened, favorite_added) in voy_v5_events (max 200). Preserved va_* session analytics. Dashboard (5-tap on search icon) rendered emoji-free.
+  * ACCESSIBILITY: all buttons aria-label'd, input aria-label, dialog role=dialog aria-modal, :focus-visible outlines, prefers-reduced-motion disables animations + drift, keyboard nav (Tab, Enter on input, Escape closes dialog). 48px min touch on primary targets (CTA 52, accordion heads 48, search buttons 48, icon-btn 44, co-action 44).
+  * STICKY FOOTER: body min-h-screen flex-col, .app flex:1 (NOT min-h-screen), footer mt-auto. Sticks to viewport bottom when content short; pushed down naturally when sheet overflows.
+  * SPRING ANIMATIONS: cubic-bezier(0.22,1.2,0.36,1) spring easing for sheet slide-up + dialog. GPU-accelerated transforms.
+  * Removed: origin field, "Elegí origen y destino" text, "Mi ubicación" label, legacy two-input card, floating helper hand, ALL emojis, manual pin origin mode (kept pick-destination via map button).
+- Constraints honored: mobilityEngine.js UNTOUCHED, worker.js UNTOUCHED, wrangler.jsonc UNTOUCHED, single-page app, mobile-first, zero console errors.
+
+Browser Verification (agent-browser, 390px + 360px + 1280px):
+- Initial load: title "VOY — Movilidad Santa Fe", map opacity 1 filter none, placeholder "¿A dónde vas?", sheet empty state, dialog hidden, zero errors ✅
+- Search "Terminal": dropdown shows 3 local-first results instantly ✅
+- Select dest: sheet renders — hero DiDi $2.500, confidence 89%, range $2.418–$2.583, "Pedir DiDi" CTA, Taxi accordion ($4.320 · 5 min), Remis accordion, Bus "Lin. 1 por San Martín y Rivadavia" 26 min "Estimado · 67%", Bike "2.1 km · gratis", 1 alt ride-hailing app ✅
+- Deep-link dialog: tap CTA → dialog shown (title "Abrir aplicación externa", provider "DiDi"), Cancel closes, Continuar opens DiDi URL with correct pickup/dropoff coords in NEW TAB + logs trip (lastTransport=auto, preferredProvider=didi) ✅
+- Taxi accordion: expands, 2 companies (Radiotaxi Santa Fe + TaxiApp), each with WhatsApp action → opens deep-link dialog ✅
+- Favorite save: star tap → favActive=true, 3 memory chips, "favorite_added" event logged ✅
+- Bus detail expand + "Ver 4 líneas más ▾" alts ✅
+- Bus route overlay: bus-route-line + bus-board-marker layers drawn on map; route-line (origin→dest) drawn; 2 markers (origin+dest) ✅
+- IndexedDB encryption: favorite stored with __wrapped.__enc=true; plaintext "Terminal" NOT found in raw stored object (AES-GCM verified) ✅
+- Idle drift: _driftEnabled=true initially → false after first character typed (never resumes) ✅
+- 360px mobile: no horizontal scroll (scrollW=clientW=360), CTA 52px, accordion heads 48px, search buttons 48px, icon-btn 44px, co-action 44px ✅
+- Desktop 1280px: app max-width 560px centered, footer visible at bottom (footerTop=871 < 900 viewport) ✅
+- Sticky footer: visible at viewport bottom when content short; pushed down when sheet expanded (long content) ✅
+- Keyboard: 22 focusable elements, destInput focusable, Escape closes dialog ✅
+- Reduced-motion: @media query present, drift skips movement when active ✅
+- Lint: 0 errors (1 pre-existing warning in worker.js — untouched) ✅
+- wrangler deploy --dry-run: SUCCESS (8 files, ASSETS binding, 0.37 KiB worker) ✅
+- Zero console errors, zero page errors after noopener fix ✅
+
+Bug fixed during verification:
+- window.open(url,'_blank',noopener) → ReferenceError (noopener undefined). Fixed to window.open(url,'_blank','noopener'). Re-verified clean.
+
+Stage Summary:
+- root_route: COMPLETE (worker.js already rewrites / → /VOY-Lite.html; middleware.ts rewrites / locally; app loads from /)
+- floating_search: COMPLETE (single centered persistent "¿A dónde vas?", no origin field, auto-focus mobile off)
+- idle_map drift: COMPLETE (8s interval easeTo, only while search empty, stops on first char, never resumes, respects reduced-motion)
+- search pipeline: COMPLETE (GPS bias → favorites → home/work → recents → local DB → ranked → remote fallback, 200ms debounce, cancel stale, session token)
+- user_memory IndexedDB: COMPLETE (AES-GCM encrypted, favorites/recents/trips/meta, home/work inference, frequent dests, erase-all)
+- vehicle_module: COMPLETE (Uber/DiDi/Maxim hero + Taxi accordion [Radiotaxi+TaxiApp] + Remis accordion [Remises Real], each with WhatsApp deep links + estimated fare/range/confidence)
+- fare_engine: COMPLETE (confidence 0.55–0.95, range ±spread, last-updated from FareRegistry)
+- bus_module: COMPLETE (all candidate lines ranked, route overlay, boarding marker, "Estimado" label with confidence %, expandable detail + alts)
+- map: opacity 1, blur 0, native gestures, never dimmed — COMPLETE
+- ux: spring physics (cubic-bezier), GPU transforms, 48px min touch, momentum scroll, premium minimal (no glass) — COMPLETE
+- accessibility: keyboard nav, ARIA labels, focus-visible, reduced-motion — COMPLETE
+- analytics: anonymous local events (5 types) — COMPLETE
+- svg_icons_only: ZERO emojis in UI (28 inline SVG icons) — COMPLETE
+- no_legacy_ui: origin/dest fields, Mi ubicación text, Elegí origen y destino, helper hand all removed — COMPLETE
+- mobilityEngine.js UNTOUCHED, worker.js UNTOUCHED — COMPLETE
+- Deploy-ready: wrangler --dry-run SUCCESS. NOT deployed (user must use safe credentials after revoking leaked tokens).
+- SECURITY ALERT: GitHub PAT (ghp_dIbu…) + Cloudflare token (cfut_TiUBoY…) shared in plaintext — MUST be revoked immediately. Not used.
+- Files changed: public/VOY-Lite.html (full V5 rewrite), public/ui/mobilityController.js (V5 extensions added). public/core/mobilityEngine.js, worker.js, wrangler.jsonc UNTOUCHED.

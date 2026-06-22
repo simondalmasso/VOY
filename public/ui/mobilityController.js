@@ -756,6 +756,368 @@
   function saveHistory() { saveMemory(); }
 
   // =====================================================================
+  //  V5 EXTENSIONS — IndexedDB (AES-GCM encrypted) + inference + fare
+  //  confidence + ranked search. Additive only; existing API preserved.
+  // =====================================================================
+
+  var _db = null;
+  var DB_NAME = 'voy_v5';
+  var DB_VERSION = 1;
+  var _cryptoKey = null;
+  var CRYPTO_KEY_NAME = 'voy_v5_key';
+  var RECENT_MAX_V5 = 20;
+  var TRIP_MAX_V5 = 200;
+
+  function _supportsSubtle() {
+    return typeof crypto !== 'undefined' && crypto.subtle && typeof crypto.subtle.encrypt === 'function';
+  }
+
+  async function _getCryptoKey() {
+    if (_cryptoKey) return _cryptoKey;
+    if (!_supportsSubtle()) return null;
+    try {
+      var raw = null;
+      try { raw = localStorage.getItem(CRYPTO_KEY_NAME); } catch (e) {}
+      if (!raw) {
+        var key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+        var exported = await crypto.subtle.exportKey('raw', key);
+        raw = _bytesToB64(new Uint8Array(exported));
+        try { localStorage.setItem(CRYPTO_KEY_NAME, raw); } catch (e) {}
+      }
+      var bytes = _b64ToBytes(raw);
+      _cryptoKey = await crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+      return _cryptoKey;
+    } catch (e) { return null; }
+  }
+
+  function _bytesToB64(bytes) {
+    var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+  function _b64ToBytes(b64) {
+    var s = atob(b64); var arr = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) arr[i] = s.charCodeAt(i);
+    return arr;
+  }
+
+  async function _encrypt(plain) {
+    var key = await _getCryptoKey();
+    if (!key) return { __plain: true, v: plain };
+    try {
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      var enc = new TextEncoder().encode(JSON.stringify(plain));
+      var cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, enc);
+      var combined = new Uint8Array(iv.length + cipher.byteLength);
+      combined.set(iv, 0);
+      combined.set(new Uint8Array(cipher), iv.length);
+      return { __enc: true, v: _bytesToB64(combined) };
+    } catch (e) { return { __plain: true, v: plain }; }
+  }
+
+  async function _decrypt(wrapped) {
+    if (!wrapped) return null;
+    if (wrapped.__plain) return wrapped.v;
+    if (!wrapped.__enc) return wrapped; // legacy/raw value
+    var key = await _getCryptoKey();
+    if (!key) return null;
+    try {
+      var combined = _b64ToBytes(wrapped.v);
+      var iv = combined.slice(0, 12);
+      var cipher = combined.slice(12);
+      var plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, cipher);
+      return JSON.parse(new TextDecoder().decode(plain));
+    } catch (e) { return null; }
+  }
+
+  function openDB() {
+    return new Promise(function (resolve) {
+      if (typeof indexedDB === 'undefined') { resolve(null); return; }
+      if (_db) { resolve(_db); return; }
+      try {
+        var req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = function (e) {
+          var d = e.target.result;
+          if (!d.objectStoreNames.contains('recents')) d.createObjectStore('recents', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('favorites')) d.createObjectStore('favorites', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('trips')) d.createObjectStore('trips', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', { keyPath: 'key' });
+        };
+        req.onsuccess = function (e) { _db = e.target.result; resolve(_db); };
+        req.onerror = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  function dbPut(store, value) {
+    return openDB().then(function (d) {
+      if (!d) return false;
+      return new Promise(function (resolve) {
+        try {
+          var tx = d.transaction(store, 'readwrite');
+          tx.objectStore(store).put(value);
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function () { resolve(false); };
+        } catch (e) { resolve(false); }
+      });
+    });
+  }
+
+  function dbGetAll(store) {
+    return openDB().then(function (d) {
+      if (!d) return [];
+      return new Promise(function (resolve) {
+        try {
+          var tx = d.transaction(store, 'readonly');
+          var req = tx.objectStore(store).getAll();
+          req.onsuccess = function () { resolve(req.result || []); };
+          req.onerror = function () { resolve([]); };
+        } catch (e) { resolve([]); }
+      });
+    });
+  }
+
+  function dbDelete(store, id) {
+    return openDB().then(function (d) {
+      if (!d) return false;
+      return new Promise(function (resolve) {
+        try {
+          var tx = d.transaction(store, 'readwrite');
+          tx.objectStore(store).delete(id);
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function () { resolve(false); };
+        } catch (e) { resolve(false); }
+      });
+    });
+  }
+
+  function dbClear(store) {
+    return openDB().then(function (d) {
+      if (!d) return false;
+      return new Promise(function (resolve) {
+        try {
+          var tx = d.transaction(store, 'readwrite');
+          tx.objectStore(store).clear();
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function () { resolve(false); };
+        } catch (e) { resolve(false); }
+      });
+    });
+  }
+
+  // Encrypted put/get wrappers
+  async function encPut(store, value) {
+    var wrapped = await _encrypt(value);
+    return dbPut(store, { id: value.id, __wrapped: wrapped });
+  }
+  async function encGetAll(store) {
+    var rows = await dbGetAll(store);
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].__wrapped) {
+        var v = await _decrypt(rows[i].__wrapped);
+        if (v) out.push(v);
+      } else if (rows[i] && !rows[i].__wrapped && rows[i].id) {
+        out.push(rows[i]);
+      }
+    }
+    return out;
+  }
+
+  function dbMetaGet(key) {
+    return openDB().then(function (d) {
+      if (!d) return null;
+      return new Promise(function (resolve) {
+        try {
+          var tx = d.transaction('meta', 'readonly');
+          var req = tx.objectStore('meta').get(key);
+          req.onsuccess = function () { resolve(req.result ? req.result.value : null); };
+          req.onerror = function () { resolve(null); };
+        } catch (e) { resolve(null); }
+      });
+    });
+  }
+  function dbMetaSet(key, value) { return dbPut('meta', { key: key, value: value }); }
+
+  // ---- Recents ----
+  async function v5AddRecent(place) {
+    if (!place || place.lat == null || place.lon == null) return;
+    var entry = {
+      id: 'r_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
+      name: place.name || '',
+      lat: place.lat, lon: place.lon,
+      ts: Date.now()
+    };
+    await encPut('recents', entry);
+    var all = await encGetAll('recents');
+    all.sort(function (a, b) { return b.ts - a.ts; });
+    if (all.length > RECENT_MAX_V5) {
+      for (var i = RECENT_MAX_V5; i < all.length; i++) await dbDelete('recents', all[i].id);
+    }
+  }
+  async function v5GetRecents(limit) {
+    var all = await encGetAll('recents');
+    all.sort(function (a, b) { return b.ts - a.ts; });
+    return all.slice(0, limit || 10);
+  }
+  async function v5ClearRecents() { return dbClear('recents'); }
+
+  // ---- Favorites ----
+  async function v5AddFavorite(place, label) {
+    if (!place || place.lat == null || place.lon == null) return false;
+    var entry = {
+      id: 'f_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
+      name: place.name || '',
+      label: label || '',
+      lat: place.lat, lon: place.lon,
+      ts: Date.now()
+    };
+    return encPut('favorites', entry);
+  }
+  async function v5GetFavorites() { return encGetAll('favorites'); }
+  async function v5RemoveFavorite(id) { return dbDelete('favorites', id); }
+
+  // ---- Trip logging (drives inference + frequent) ----
+  async function v5LogTrip(origin, dest, mode, provider) {
+    if (!origin || !dest) return;
+    var entry = {
+      id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      ts: Date.now(),
+      origin: { lat: origin.lat, lon: origin.lon, name: origin.name || '' },
+      dest: { lat: dest.lat, lon: dest.lon, name: dest.name || '' },
+      mode: mode || 'auto',
+      provider: provider || ''
+    };
+    await encPut('trips', entry);
+    await dbMetaSet('lastTransport', mode || 'auto');
+    if (provider) await dbMetaSet('preferredProvider', provider);
+    // Trim
+    var all = await encGetAll('trips');
+    all.sort(function (a, b) { return b.ts - a.ts; });
+    if (all.length > TRIP_MAX_V5) {
+      for (var i = TRIP_MAX_V5; i < all.length; i++) await dbDelete('trips', all[i].id);
+    }
+  }
+
+  // ---- Home/Work inference ----
+  async function v5InferHomeWork() {
+    var trips = await encGetAll('trips');
+    if (!trips.length) return { home: null, work: null };
+    var night = {}, day = {};
+    trips.forEach(function (t) {
+      if (!t.dest) return;
+      var h = new Date(t.ts).getHours();
+      var key = Math.round(t.dest.lat * 1000) + '_' + Math.round(t.dest.lon * 1000);
+      var bucket = (h >= 20 || h < 8) ? night : (h >= 9 && h < 18) ? day : null;
+      if (!bucket) return;
+      if (!bucket[key]) bucket[key] = { count: 0, dest: t.dest };
+      bucket[key].count++;
+    });
+    function top(b) {
+      var best = null, max = 0;
+      Object.keys(b).forEach(function (k) { if (b[k].count > max) { max = b[k].count; best = b[k]; } });
+      return best && best.count >= 2 ? best.dest : null;
+    }
+    return { home: top(night), work: top(day) };
+  }
+
+  // ---- Frequent destinations ----
+  async function v5GetFrequent(limit) {
+    var trips = await encGetAll('trips');
+    var counts = {};
+    trips.forEach(function (t) {
+      if (!t.dest) return;
+      var key = Math.round(t.dest.lat * 1000) + '_' + Math.round(t.dest.lon * 1000);
+      if (!counts[key]) counts[key] = { count: 0, dest: t.dest };
+      counts[key].count++;
+    });
+    var arr = Object.keys(counts).map(function (k) { return counts[k]; });
+    arr.sort(function (a, b) { return b.count - a.count; });
+    return arr.slice(0, limit || 5).map(function (x) { return x.dest; });
+  }
+
+  async function v5GetMeta(key) { return dbMetaGet(key); }
+
+  // ---- Erase everything (privacy: user can erase everything) ----
+  async function v5EraseAll() {
+    await dbClear('recents');
+    await dbClear('favorites');
+    await dbClear('trips');
+    await dbClear('meta');
+    try { localStorage.removeItem(CRYPTO_KEY_NAME); } catch (e) {}
+    _cryptoKey = null;
+    return true;
+  }
+
+  // ---- Fare confidence + range ----
+  function v5FareConfidence(distanceKm, timeMin) {
+    var distFactor = Math.max(0.55, 1 - distanceKm / 40);
+    var timeFactor = Math.max(0.7, 1 - timeMin / 90);
+    return Math.round(Math.min(0.95, distFactor * timeFactor) * 100) / 100;
+  }
+  function v5FareRange(price, confidence) {
+    var spread = (1 - confidence) * 0.3;
+    return {
+      low: Math.round(price * (1 - spread)),
+      high: Math.round(price * (1 + spread))
+    };
+  }
+
+  // ---- Ranked search: favorites → recents → home/work → local → (remote by caller) ----
+  async function v5SearchLocalRanked(query, gpsOrigin) {
+    var q = MobilityEngine.normalize(query || '').trim();
+    if (q.length < 2) return [];
+    var results = [];
+
+    var favs = await v5GetFavorites();
+    favs.forEach(function (f) {
+      var s = MobilityEngine.fuzzyScore(q, f.name || '');
+      if (s > 0) results.push({ type: 'favorite', name: f.name, lat: f.lat, lon: f.lon, score: s + 55, label: f.label });
+    });
+
+    var hw = await v5InferHomeWork();
+    if (hw.home) {
+      var sh = MobilityEngine.fuzzyScore(q, 'casa');
+      if (sh > 0) results.push({ type: 'home', name: 'Casa', lat: hw.home.lat, lon: hw.home.lon, score: sh + 50 });
+    }
+    if (hw.work) {
+      var sw = MobilityEngine.fuzzyScore(q, 'trabajo');
+      if (sw > 0) results.push({ type: 'work', name: 'Trabajo', lat: hw.work.lat, lon: hw.work.lon, score: sw + 50 });
+    }
+
+    var recents = await v5GetRecents(12);
+    recents.forEach(function (r) {
+      var s = MobilityEngine.fuzzyScore(q, r.name || '');
+      if (s > 0) results.push({ type: 'recent', name: r.name, lat: r.lat, lon: r.lon, score: s + 45 });
+    });
+
+    var local = searchLocal(query);
+    local.forEach(function (r) {
+      if (r && r.lat != null) results.push(r);
+    });
+
+    if (gpsOrigin) {
+      results.forEach(function (r) {
+        if (r.lat != null && r.lon != null) {
+          var d = MobilityEngine.haversine(gpsOrigin.lat, gpsOrigin.lon, r.lat, r.lon);
+          r.gpsBias = Math.max(0, 1 - d / 5);
+          r.score = (r.score || 0) + r.gpsBias * 20;
+        }
+      });
+    }
+
+    results.sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
+    return results.slice(0, 8);
+  }
+
+  // ---- Session token (for remote search dedup) ----
+  var _v5SessionToken = null;
+  function v5NewSessionToken() {
+    _v5SessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    return _v5SessionToken;
+  }
+  function v5GetSessionToken() { return _v5SessionToken; }
+
+  // =====================================================================
   //  EXPORTS
   // =====================================================================
 
@@ -836,7 +1198,25 @@
     loadHistoryMetrics: loadHistoryMetrics, // legacy compat shim
     getHistoryMetrics: getHistoryMetrics,
     trackHistoryReuse: trackHistoryReuse,
-    trackProviderTrip: trackProviderTrip
+    trackProviderTrip: trackProviderTrip,
+
+    // V5 Extensions — IndexedDB (AES-GCM encrypted) + inference + fare
+    v5AddRecent: v5AddRecent,
+    v5GetRecents: v5GetRecents,
+    v5ClearRecents: v5ClearRecents,
+    v5AddFavorite: v5AddFavorite,
+    v5GetFavorites: v5GetFavorites,
+    v5RemoveFavorite: v5RemoveFavorite,
+    v5LogTrip: v5LogTrip,
+    v5InferHomeWork: v5InferHomeWork,
+    v5GetFrequent: v5GetFrequent,
+    v5GetMeta: v5GetMeta,
+    v5EraseAll: v5EraseAll,
+    v5FareConfidence: v5FareConfidence,
+    v5FareRange: v5FareRange,
+    v5SearchLocalRanked: v5SearchLocalRanked,
+    v5NewSessionToken: v5NewSessionToken,
+    v5GetSessionToken: v5GetSessionToken
   };
 
   // Browser global
