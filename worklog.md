@@ -735,3 +735,80 @@ Stage Summary:
 - bus_system: already implemented (rankBusLines, route geometry overlay, ETA estimation model "distance/avg_speed + wait_time")
 - Files changed: public/logo.svg (replaced), public/VOY-Lite.html (CSS overhaul + v6 fare view + brand mark), public/ui/mobilityController.js (v6 fare engine). worker.js, mobilityEngine.js, wrangler.jsonc UNTOUCHED.
 - NOT deployed (user deploys with safe credentials after revoking leaked tokens from prior session)
+
+---
+Task ID: 17
+Agent: Main (Lead DevOps — Final Deploy Architecture)
+Task: VOY_FINAL_DEPLOY_ARCHITECTURE — canonical domain voy.is-a.dev, redirect edge, hide /VOY-Lite.html, is-a.dev CNAME, header cleanup, disable directory listing
+
+Work Log:
+- Read worklog.md (Tasks 1–16) to ground this pass in prior state (V6.1 corporate minimal + fare engine v2 + logo system, deployed logic in worker.js/wrangler.jsonc)
+- Read current worker.js (20-line root-rewrite only), wrangler.jsonc (workers_dev:true, routes empty/commented, SPA fallback), src/middleware.ts (rewrite / → /VOY-Lite.html), v6-deliverables.md
+- User GLM SPEC requested: canonical https://voy.is-a.dev, internal https://voy.workers.dev, 301 redirects for workers.dev/* + /VOY-Lite.html, hide_internal_paths, expose_worker_domain:false, disable_directory_listing, remove [server, x-powered-by, cf-ray], is-a.dev JSON, PASO 4 REDIRECT EDGE (obligatorio) in worker.js
+- REWROTE /home/z/my-project/worker.js (4-rule edge routing):
+  * Rule 1: /VOY-Lite.html (any host, case-insensitive) → 301 → https://voy.is-a.dev/ (hide internal path, single hop)
+  * Rule 2: host endsWith .workers.dev OR contains simondalmasso → 301 → https://voy.is-a.dev{path}{search} (preserves deep links; CNAME'd traffic keeps Host=voy.is-a.dev so served, not redirected)
+  * Rule 3: / → internal rewrite → /VOY-Lite.html (browser URL stays /)
+  * Rule 4: everything else → env.ASSETS.fetch (static files)
+  * _cleanHeaders(): deletes x-powered-by + server (best-effort; edge re-adds server)
+  * Assigned export to `const worker` then `export default worker` (silences lint import/no-anonymous-default-export warning)
+- UPDATED /home/z/my-project/wrangler.jsonc:
+  * workers_dev: true KEPT (REQUIRED — is-a.dev CNAME targets workers.dev URL; disabling breaks CNAME path; direct workers.dev visits 301'd by worker so never browseable)
+  * routes: [] (voy.is-a.dev + voy.app zones not in this CF account; cannot add custom_domain/route; CNAME reaches worker at DNS level)
+  * assets.not_found_handling: "single-page-application" → "none" (unknown paths 404; no SPA fallback; Workers Assets never lists dirs → directory listing inherently disabled)
+  * Comments rewritten to document is-a.dev CNAME strategy + why workers_dev must stay true
+- CREATED /home/z/my-project/domains/voy.json (is-a.dev registration record):
+  * owner.username: simonkey888, owner.email: TU_EMAIL (placeholder, user fills)
+  * record.CNAME: voy-app.voy.workers.dev (realistic resolvable target post-migration; voy.workers.dev is invalid — workers.dev URLs require {worker}.{subdomain}.workers.dev two-label format)
+- UPDATED /home/z/my-project/src/middleware.ts (mirrors worker for local preview):
+  * /VOY-Lite.html → 308 → / (NextResponse.redirect, permanent) — hides internal path in localhost preview
+  * / → rewrite → /VOY-Lite.html (unchanged, browser URL stays /)
+  * No host redirects (keeps localhost:3000 reachable; host canonicalization is worker.js edge-only)
+- CREATED /home/z/my-project/v6-final-deploy.md (comprehensive deliverable):
+  * §1 Deploy architecture JSON (as implemented, with realistic internal_worker = voy-app.voy.workers.dev)
+  * §2 worker.js 4-rule table + CNAME Host-preservation explanation (no redirect loop)
+  * §3 wrangler.jsonc decisions (workers_dev:true required, routes empty, not_found_handling:none)
+  * §4 is-a.dev JSON + PR description (title, body, checklist)
+  * §5 Header removal HONEST limitation: x-powered-by ✓ removable; server ⚠️ edge re-adds; cf-ray ❌ edge-injected (cannot remove from Worker; would need Enterprise)
+  * §6 Directory listing disabled (Assets never lists + not_found_handling:none)
+  * §7 Final deploy checklist (infra + product + UX)
+  * §8 Migration order (revoke creds → change subdomain → verify → is-a.dev PR → deploy → verify; workers_dev stays true)
+  * §9 Files changed this pass
+  * §10 Security (no creds used; leaked ghp_/cfut_ must be revoked)
+- Constraints: PASO 4 explicitly requested worker.js modification (overrides earlier "don't touch worker.js" constraint from V6 pass). mobilityEngine.js, mobilityController.js, VOY-Lite.html, logo.svg UNTOUCHED. All V6.1 product work preserved.
+
+Validation:
+- bun run lint: 0 errors, 0 warnings (fixed prior anonymous-default-export warning by assigning to const worker)
+- wrangler deploy --dry-run: SUCCESS (8 assets, ASSETS binding, 1.26 KiB worker / gzip 0.58 KiB)
+- curl localhost:3000/ → HTTP 200, title "VOY — Movilidad Santa Fe"
+- curl localhost:3000/VOY-Lite.html → HTTP 308, Location: http://localhost:3000/ (path hiding works)
+
+Browser Verification (agent-browser, 360px + 1280px):
+- Open /VOY-Lite.html → browser lands on http://localhost:3000/ (308 followed, URL normalized) ✅
+- Title: "VOY — Movilidad Santa Fe" ✅
+- Console errors: 0 ✅ | Console messages: 0 ✅
+- Horizontal scroll @360px: false (scrollW=360=clientW) ✅
+- Horizontal scroll @1280px: false (scrollW=1280=clientW) ✅
+- Sticky footer @360px short page: footerBottom=800=vh=800 (atViewportBottom=true) ✅
+- Footer @360px long page (hero+dialog): footerBottom=1082 (pushed down naturally, no overlap) ✅
+- Sticky footer @1280px: footerBottom=900=vh=900 ✅
+- Footer text: "VOY · Movilidad Santa Fe · Datos informativos" (no technical branding, no personal name) ✅
+- Mock GPS injected → origin set → search "Terminal" → 3 local-first suggestions (Terminal Belgrano y Freyre, Terminal de Ómnibus x2) ✅
+- Select destination → hero renders: "DiDi 5 min · 2.1 km · Confianza 81% $2.500 $2.381 – $2.619" (v6 fare engine confidence range working) ✅
+- Deep-link dialog text: "Vas a salir de VOY. El servicio y el precio final dependen del proveedor externo, no de VOY." (matches fare_engine_v2 spec) ✅
+- Emoji count in visible body text: 0 (zero emojis) ✅
+- Screenshots: v6-final-mobile-360.png, v6-final-hero-360.png, v6-final-hero-clean-360.png, v6-final-desktop-1280.png
+
+Stage Summary:
+- CANONICAL_DOMAIN: voy.is-a.dev wired via is-a.dev CNAME → voy-app.voy.workers.dev (post subdomain migration). worker.js 301-redirects all direct workers.dev/simondalmasso traffic to canonical.
+- ROOT_ROUTE: / → internal rewrite → /VOY-Lite.html (browser URL stays /, no visible internal path)
+- HIDE_INTERNAL_PATHS: /VOY-Lite.html → 301 → https://voy.is-a.dev/ (worker) / 308 → / (middleware, local preview)
+- REDIRECT_EDGE: 301 for *.workers.dev + *simondalmasso* hosts (preserves path+query); CNAME'd traffic served (Host preservation, no loop)
+- EXPOSE_WORKER_DOMAIN: false in practice — workers_dev stays true (CNAME needs it) but direct workers.dev visits always 301 to canonical (never browseable)
+- DISABLE_DIRECTORY_LISTING: true (Workers Assets never lists dirs + not_found_handling:none → 404 for unknown paths)
+- HEADER_CLEANUP: x-powered-by deleted; server best-effort (edge re-adds); cf-ray CANNOT be removed from Worker (documented as platform limitation, not gap)
+- IS_A_DEV: domains/voy.json ready (CNAME → voy-app.voy.workers.dev, the realistic resolvable target); PR description in v6-final-deploy.md §4b
+- MIGRATION_ORDER documented: revoke creds → change subdomain simondalmasso44→voy → verify → is-a.dev PR → deploy → verify. workers_dev MUST stay true.
+- Files changed: worker.js (rewritten), wrangler.jsonc (comments + not_found_handling), domains/voy.json (NEW), src/middleware.ts (+308 path hiding). VOY-Lite.html/mobilityEngine.js/mobilityController.js/logo.svg UNTOUCHED.
+- NOT deployed (user runs `npx wrangler deploy` with safe creds after revoking leaked ghp_/cfut_ tokens + changing CF subdomain)
+- bun run lint: 0/0 | wrangler --dry-run: SUCCESS | browser: 0 errors, 0 hscroll, sticky footer verified, 0 emojis, golden path verified

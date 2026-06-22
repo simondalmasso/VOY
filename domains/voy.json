@@ -1,0 +1,9 @@
+{
+  "owner": {
+    "username": "simonkey888",
+    "email": "TU_EMAIL"
+  },
+  "record": {
+    "CNAME": "voy-app.voy.workers.dev"
+  }
+}

@@ -2,15 +2,18 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * VOY Lite Runtime Middleware
+ * VOY Runtime Middleware (mirrors worker.js canonicalization for local preview)
  *
  * Single Source of Truth: public/VOY-Lite.html
  *
- * Architecture:
- *   / → middleware rewrite → /VOY-Lite.html (served as static file)
- *   Browser URL stays as / — no iframe, no React shell, no duplicate HTML
+ * Rules:
+ *   /VOY-Lite.html → 308 → /               (hide internal path; mirrors worker.js)
+ *   /              → rewrite → /VOY-Lite.html (browser URL stays /)
+ *   /core/*, /ui/* → no-cache headers (fresh dev assets)
  *
- * All VOY assets get no-cache headers to prevent stale versions.
+ * Host redirects (workers.dev → voy.is-a.dev) are NOT applied here so the
+ * local Next.js preview stays reachable on localhost:3000. They live in
+ * worker.js for the Cloudflare edge only.
  */
 
 const VOY_HTML = '/VOY-Lite.html';
@@ -23,7 +26,15 @@ const NO_CACHE_HEADERS: Record<string, string> = {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // PRIMARY: Rewrite / to VOYv2.html — single entry point, zero iframe
+  // Hide internal entry path: /VOY-Lite.html → / (permanent, mirrors worker.js)
+  if (pathname.toLowerCase() === VOY_HTML.toLowerCase()) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    url.search = '';
+    return NextResponse.redirect(url, 308);
+  }
+
+  // PRIMARY: / → rewrite → /VOY-Lite.html (single entry point, browser URL = /)
   if (pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = VOY_HTML;
@@ -35,7 +46,7 @@ export function middleware(request: NextRequest) {
   }
 
   // NO-CACHE: Force fresh copies of all VOY runtime assets
-  if (pathname === VOY_HTML || pathname.startsWith('/core/') || pathname.startsWith('/ui/')) {
+  if (pathname.startsWith('/core/') || pathname.startsWith('/ui/')) {
     const response = NextResponse.next();
     for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
       response.headers.set(k, v);

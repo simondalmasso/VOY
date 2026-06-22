@@ -1,44 +1,43 @@
 {
   // ============================================================
-  //  VOY Lite — Cloudflare Workers config
-  //  Sirve public/ como assets estáticos + rewrite / → /VOY-Lite.html
+  //  VOY — Cloudflare Workers config (FINAL DEPLOY ARCHITECTURE)
   //
-  //  DOMAIN_CANONICALIZATION_V1
-  //  - Production: voy.app (custom domain, auto-provisions DNS + TLS)
-  //  - Staging: route-based alias (see STAGING note below)
-  //  - workers.dev public access: DISABLED
+  //  Canonical domain:  https://voy.is-a.dev
+  //  Wired via:         is-a.dev CNAME → voy-app.voy.workers.dev
+  //
+  //  The is-a.dev zone is NOT in this Cloudflare account, so voy.is-a.dev
+  //  CANNOT be added here as a Custom Domain or route pattern (Cloudflare
+  //  requires the zone to be in your account for both). Instead, traffic
+  //  reaches this worker via DNS-level CNAME, and worker.js canonicalizes
+  //  / redirects any direct workers.dev access to voy.is-a.dev.
+  //
+  //  workers_dev MUST stay true:
+  //    The is-a.dev CNAME target is the workers.dev URL. Disabling workers_dev
+  //    would break the CNAME path entirely. Direct workers.dev visits are
+  //    301-redirected to voy.is-a.dev by worker.js, so the worker domain is
+  //    never usable for browsing — it always redirects.
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-06-22",
   "main": "./worker.js",
 
-  // DOMAIN_CANONICALIZATION_V1: workers.dev disabled for production once voy.app zone is added.
-  // TEMPORARY: re-enabled until voy.app zone is confirmed in CF account (otherwise app is inaccessible).
-  // Set to false after adding voy.app zone + confirming the custom domain route deploys successfully.
+  // REQUIRED: keep true (is-a.dev CNAME resolves to the workers.dev URL).
+  // Direct workers.dev access is redirected by worker.js → voy.is-a.dev.
   "workers_dev": true,
 
-  "routes": [
-    // Production custom domain — UNCOMMENT after adding voy.app zone to CF account.
-    // Cloudflare auto-provisions the DNS record + Universal TLS cert.
-    // { "pattern": "voy.app", "custom_domain": true }
-    //
-    // STAGING note (DOMAIN_CANONICALIZATION_V1 → staging_domain: "voy-app.test"):
-    // The .test TLD is reserved by RFC 2606 and CANNOT be registered or
-    // added as a Cloudflare zone. A route pattern for voy-app.test would
-    // cause `wrangler deploy` to fail ("Could not find zone").
-    //
-    // Valid route-based alias alternatives (uncomment ONE after adding
-    // the voy.app zone to Cloudflare):
-    //
-    //   { "pattern": "staging.voy.app/*", "custom_domain": false }
-    //   { "pattern": "test.voy.app/*",   "custom_domain": false }
-  ],
+  // No routes: voy.is-a.dev and voy.app zones are not in this CF account.
+  // voy.is-a.dev reaches the worker via the is-a.dev CNAME (DNS-level), not
+  // via a CF route. Adding a route for a non-owned zone would fail deploy
+  // ("Could not find zone for voy.is-a.dev").
+  "routes": [],
 
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "single-page-application"
+    // "none" → unknown paths return a plain 404. No SPA fallback, no
+    // directory listing (Workers Assets never enumerates directories).
+    "not_found_handling": "none"
   },
   "observability": {
     "enabled": true,
