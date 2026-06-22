@@ -68,3 +68,37 @@ Stage Summary:
 - **90-day roadmap**: Data advantage (spread map, surge prediction, reliability signals, expansion playbook)
 - **12-month roadmap**: Structural advantage (multi-provider identity, B2B embedding, multi-city, price guarantee)
 - **Critical risk**: Window of 12-18 months before market consolidation reduces need for comparison
+
+---
+Task ID: 4
+Agent: Main (DevOps / Deployment)
+Task: Verificación final VOY Lite + preparar entregables de deployment para Codespaces
+
+Work Log:
+- Verificado estado actual del proyecto:
+  * public/VOY-Lite.html (56KB, 1300 líneas) — UI shell
+  * public/core/mobilityEngine.js (14.5KB) — engine puro, sin DOM/localStorage/fetch
+  * public/ui/mobilityController.js (25.8KB) — controller
+  * Total VOY assets: ~96KB (target <180KB ✓)
+- Verificada arquitectura: src/middleware.ts reescribe `/` → `/VOY-Lite.html`
+- Verificado con Agent Browser (headless):
+  * Página carga con título "VOY Lite – Movilidad Santa Fe"
+  * Header "VOY" + GPS status
+  * Inputs origen/destino con autocomplete funcional (dropdown muestra 3 resultados)
+  * Al setear origen + destino → renderiza 3 cards:
+    1. Auto: 6 providers ordenados por precio (Maxim $2.375 → Uber $3.000), cada uno con botón "Pedir"
+    2. Colectivo: "Línea 11 - 15 min - 25 de Mayo y San Martín", SUBE $1.900
+    3. Bicicleta: card pequeña al final, con info de estaciones
+  * Footer sticky: "VOY Lite · Asistente de movilidad Santa Fe · Datos informativos"
+  * Sin errores de consola ni runtime
+- Preparados comandos de build/deploy para Codespaces
+- Preparado script único de setup para Codespaces
+
+Stage Summary:
+- VOY Lite está VERIFICADO y COMPILABLE
+- 96KB total bundle, well below 180KB target
+- 3 cards exactas según spec (auto/bus/bike), 6 providers verificados
+- Layout coincide con spec: map 220px → inputs → rideshare → bus → bike (last)
+- SECURITY ALERT: Usuario compartió GitHub PAT en chat plaintext — debe revocarse inmediatamente
+- NO se usó el token compartido; se proveen alternativas seguras (GitHub CLI + Codespaces secret injection)
+- Entregables finales listos: comandos de build/deploy + script único para Codespaces
