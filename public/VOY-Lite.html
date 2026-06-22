@@ -736,11 +736,40 @@ function _handleGpsPosition(lat,lon){
   va_origin('gps');
   updateOriginUI();
   updateMapMarkers();
+  // AUTO_GPS: reverse-geocode so the origin input shows a real address (zero taps).
+  reverseGeocodeOrigin(lat,lon);
   if(MC.getDest())runEstimations();
 }
 
+// GPS_PERMISSION: use Permissions API when available to react to state changes.
+// AUTO_GPS: first launch auto-requests permission via watchPosition (zero taps).
 function initGPS(){
   if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
+  if(navigator.permissions&&navigator.permissions.query){
+    navigator.permissions.query({name:'geolocation'}).then(function(status){
+      _onGpsPermissionChange(status);
+      status.onchange=function(){_onGpsPermissionChange(status)};
+    }).catch(function(){_startGpsWatch()}); // Permissions API unavailable → fall back to direct watch
+  }else{
+    _startGpsWatch();
+  }
+}
+
+function _onGpsPermissionChange(status){
+  if(status.state==='denied'){
+    // GPS_PERMISSION: denied → graceful fallback, no retries, no errors.
+    _stopGpsWatch();
+    updateGPSStatus(false);
+    loadCachedPosition();
+    return;
+  }
+  // 'granted' or 'prompt' → start watch. 'prompt' triggers the native permission dialog.
+  _startGpsWatch();
+}
+
+function _startGpsWatch(){
+  // AUTO_GPS: no duplicate GPS requests.
+  if(_gpsWatch!==null)return;
   _gpsWatch=navigator.geolocation.watchPosition(function(pos){
     _gpsRetryCount=0;
     updateGPSStatus(true);
@@ -749,6 +778,8 @@ function initGPS(){
   },function(err){
     updateGPSStatus(false);
     loadCachedPosition();
+    // GPS_PERMISSION: if user denied, do NOT retry (pointless + battery drain).
+    if(err.code===err.PERMISSION_DENIED){return}
     if(_gpsRetryCount<_gpsMaxRetries){
       _gpsRetryCount++;
       clearTimeout(_gpsRetryTimer);
@@ -762,6 +793,13 @@ function initGPS(){
       },_gpsRetryCount*5000);
     }
   },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+}
+
+function _stopGpsWatch(){
+  if(_gpsWatch!==null){
+    navigator.geolocation.clearWatch(_gpsWatch);
+    _gpsWatch=null;
+  }
 }
 
 function updateGPSStatus(ok){
