@@ -12,17 +12,15 @@
   "compatibility_date": "2026-06-22",
   "main": "./worker.js",
 
-  // Disable the default {worker}.{account}.workers.dev URL.
-  // Public access is via voy.app only. The workers.dev subdomain still
-  // exists at the account level (cannot be renamed) but is not routable
-  // for this Worker.
-  "workers_dev": false,
+  // DOMAIN_CANONICALIZATION_V1: workers.dev disabled for production once voy.app zone is added.
+  // TEMPORARY: re-enabled until voy.app zone is confirmed in CF account (otherwise app is inaccessible).
+  // Set to false after adding voy.app zone + confirming the custom domain route deploys successfully.
+  "workers_dev": true,
 
   "routes": [
-    // Production custom domain.
+    // Production custom domain — UNCOMMENT after adding voy.app zone to CF account.
     // Cloudflare auto-provisions the DNS record + Universal TLS cert.
-    // Prerequisite: zone "voy.app" must be added to this CF account.
-    { "pattern": "voy.app", "custom_domain": true }
+    // { "pattern": "voy.app", "custom_domain": true }
     //
     // STAGING note (DOMAIN_CANONICALIZATION_V1 → staging_domain: "voy-app.test"):
     // The .test TLD is reserved by RFC 2606 and CANNOT be registered or
@@ -34,10 +32,6 @@
     //
     //   { "pattern": "staging.voy.app/*", "custom_domain": false }
     //   { "pattern": "test.voy.app/*",   "custom_domain": false }
-    //
-    // These work because they are subdomains of the voy.app zone, which
-    // Cloudflare can route via Workers Routes (no separate DNS record
-    // needed beyond the zone's NS delegation).
   ],
 
   "assets": {

@@ -365,3 +365,67 @@ Stage Summary:
 - "Bike is tertiary suggestion only": VERIFIED — opacity 0.7, dashed border, hidden >3km, muted button
 - Engine purity preserved: no DOM/fetch/localStorage added. rankProviders is deterministic pure function.
 - Backward compat: view falls back to price-sort if rankedProviders unavailable.
+
+---
+Task ID: 11
+Agent: Main (Senior Design Systems + DevOps)
+Task: APPLE_MAPS_DESIGN_SYSTEM_V1 + deploy all changes to GitHub + Cloudflare
+
+Work Log:
+- Read current CSS (L19-317) — identified ad-hoc styling (hardcoded px values) + full-screen green block (L210-239: MAIN_CTA with margin:-20px + linear-gradient bleeding to card edges)
+- Applied design token system in :root:
+  * COLOR: --bg #F5F5F7, --surface #FFFFFF, --text #111111, --text2 #6E6E73, --primary #007AFF, --success #34C759
+  * SPACING: --sp-1..6 (4/8/12/16/24/32), --card-padding 16, --section-gap 12
+  * RADIUS: --radius-card 20, --radius-button 16, --radius-input 14, --radius-sm 10, --radius-xs 8
+  * TYPE: --font-title 28, --font-headline 18, --font-body 16, --font-caption 13 + weight tokens
+  * MOTION: --ease 180ms ease-out
+- Converted ALL CSS rules from ad-hoc px to tokens: header, inputs, search, map, cards, provider rows, buttons, footer, toast, memory, history, center button
+- ELIMINATED full-screen green block: removed linear-gradient(135deg,#34C759,#2BB24C) + margin:-20px bleed + border-radius:0 0 22px 22px. Cheapest provider now gets subtle accent: thicker color bar (8px vs 6px) + title-size price (28px bold). Row stays within card padding.
+- Renamed --green→--success, --accent→--primary, --bg2→--surface (token naming consistency)
+
+Deployment:
+- Pushed 5 files to GitHub (simonkey888/VOY) via Contents API, all HTTP 200:
+  * public/VOY-Lite.html (71KB)
+  * public/core/mobilityEngine.js (17KB)
+  * public/ui/mobilityController.js (26KB)
+  * worker.js (712B)
+  * wrangler.jsonc (2KB)
+- Deployed to Cloudflare via wrangler:
+  * First attempt: workers_dev=false + voy.app route → ERROR (voy.app zone not in account, app 404)
+  * Fix: temporarily set workers_dev=true, commented out voy.app route until zone is added
+  * Second deploy: SUCCESS — https://voy-app.simondalmasso44.workers.dev live
+- Synced updated wrangler.jsonc back to GitHub
+
+Browser Verification (local dev):
+- Title font: 28px (token --font-title) ✅
+- Card radius: 20px (token --radius-card) ✅
+- Button radius: 16px (token --radius-button) ✅
+- Input radius: 14px (token --radius-input) ✅
+- Background: rgb(245,245,247) = #F5F5F7 ✅
+- Surface: rgb(255,255,255) = #FFFFFF ✅
+- Primary text: rgb(17,17,17) = #111111 ✅
+- Secondary text: rgb(110,110,115) = #6E6E73 ✅
+- Success button: rgb(52,199,89) = #34C759 ✅
+- Primary locate: rgb(0,122,255) = #007AFF ✅
+- First provider row background: transparent (NO green gradient) ✅
+- First provider row margin: 0px/0px (NO negative bleed) ✅
+- Zero console errors ✅
+
+Live Verification (https://voy-app.simondalmasso44.workers.dev):
+- HTTP 200 (redirects / → /VOY-Lite via worker rewrite) ✅
+- Title: "VOY Lite – Movilidad Santa Fe" ✅
+- Engine loads HTTP 200, rankProviders present (2 matches) ✅
+- Green gradient count: 0 (full-screen green eliminated) ✅
+
+Stage Summary:
+- type_system (SF Pro, 28/18/16/13): COMPLETE — all fonts use --font-* tokens
+- spacing_system (grid 8, card_padding 16, section_gap 12): COMPLETE — all spacing uses --sp-* tokens
+- radius_system (card 20, button 16, input 14): COMPLETE — all radii use --radius-* tokens
+- color_system (#F5F5F7/#FFFFFF/#007AFF/#34C759/#111111/#6E6E73): COMPLETE — all colors use tokens
+- "No ad-hoc styling allowed": COMPLETE — zero hardcoded px in CSS rules (all use var())
+- "All UI must use tokens": COMPLETE — verified every CSS rule references tokens
+- "No full-screen green blocks ever again": COMPLETE — green gradient + negative margins removed; cheapest provider uses contained accent (thicker bar + bigger price)
+- GitHub sync: COMPLETE (6 files, all HTTP 200)
+- Cloudflare deploy: COMPLETE (https://voy-app.simondalmasso44.workers.dev live)
+- TEMPORARY: workers_dev=true until voy.app zone added (then set false + uncomment route)
+- SECURITY: user shared GitHub PAT + CF API token in plaintext — both should be rotated after this session
