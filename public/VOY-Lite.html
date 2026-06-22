@@ -1,0 +1,1300 @@
+<!--
+VOY Lite — Slim mobility UI for Santa Fe
+Build: 2026-06-09 LITE
+Runtime: public/VOY-Lite.html
+Engine: core/mobilityEngine.js (refactored — auto/bus/bike only)
+Controller: ui/mobilityController.js (refactored — no prefs, no recommendation)
+3 card types only. No moto, no walk, no fake bus, no favorites, no decision core.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VOY Lite – Movilidad Santa Fe</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="core/mobilityEngine.js?v=2"></script>
+<script src="ui/mobilityController.js?v=2"></script>
+<style>
+:root{
+  --bg:#f5f5f5;--bg2:#fff;--bg3:#e8e8e8;--text:#1a1a1a;--text2:#555;--accent:#2563eb;
+  --green:#16a34a;--red:#dc2626;--orange:#f97316;--purple:#8b5cf6;--card-bg:#fff;
+  --card-border:#e5e5e5;--shadow:0 1px 3px rgba(0,0,0,.1);--radius:12px;
+  --header-bg:#1e293b;--footer-bg:#1e293b;
+}
+[data-theme="dark"]{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--text:#e2e8f0;--text2:#94a3b8;
+  --card-bg:#1e293b;--card-border:#334155;--shadow:0 1px 3px rgba(0,0,0,.4);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100dvh;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent}
+/* HEADER */
+.header{background:var(--header-bg);color:#fff;padding:8px 12px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:800;letter-spacing:1px;flex:1}
+.header .gps-status{font-size:12px;display:flex;align-items:center;gap:2px}
+/* INPUTS */
+.inputs{background:var(--bg2);padding:10px 12px;border-bottom:1px solid var(--card-border)}
+.input-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative}
+.input-row:last-child{margin-bottom:0}
+.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.dot.green{background:var(--green)}.dot.red{background:var(--red)}
+.input-label{font-size:11px;color:var(--text2);min-width:44px}
+.input-field{flex:1;border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--bg);color:var(--text);outline:none;min-width:0}
+.input-field:focus{border-color:var(--accent)}
+.input-btn{font-size:10px;padding:4px 6px;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.btn-locate{background:#dbeafe;color:#1d4ed8}
+.btn-map{background:#fef3c7;color:#92400e}
+/* Search field + inline dropdown */
+.search-field{position:relative;width:100%}
+.search-field input{width:100%;box-sizing:border-box}
+.search-dropdown{position:absolute;top:100%;left:0;right:0;z-index:2000;background:var(--bg2,#fff);border:1px solid var(--card-border,#e0e0e0);border-top:none;border-radius:0 0 10px 10px;box-shadow:0 6px 16px rgba(0,0,0,.15);overflow:hidden;max-height:200px;overflow-y:auto}
+.search-dropdown.hidden{display:none}
+.search-item{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--card-border,#f0f0f0);font-size:13px;line-height:1.3;-webkit-tap-highlight-color:transparent}
+.search-item:last-child{border-bottom:none}
+.search-item:active,.search-item:hover{background:var(--bg3,#f5f5f5)}
+.search-item--recent{opacity:.85}
+.search-item--empty{padding:12px 14px;color:var(--text2,#999);font-size:12px;cursor:default}
+.search-item-icon{font-size:14px;flex-shrink:0}
+.search-item-text{flex:1;min-width:0}
+.search-item-text strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.search-item-text small{color:var(--text2,#888);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+/* MAP */
+#map{width:100%;height:220px;min-height:160px;background:#e8e0d8;position:relative}
+@media(min-width:600px){#map{height:320px}}
+#map.crosshair .maplibregl-canvas{cursor:crosshair!important}
+/* Map floating labels */
+.voy-label{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;line-height:1.3;pointer-events:none}
+.voy-label--green{background:#16a34a;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.voy-label--red{background:#dc2626;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
+.voy-label-popup .maplibregl-popup-tip{display:none}
+/* MAP HINT */
+.map-hint{display:none;padding:6px 12px;background:#eff6ff;color:#1d4ed8;font-size:12px;border-bottom:1px solid #bfdbfe}
+.map-hint.show{display:block}
+/* ROUTE CARDS */
+.cards{flex:1;padding:8px 12px;overflow-y:auto;padding-bottom:80px}
+.route-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:12px;margin-bottom:8px;box-shadow:var(--shadow);position:relative;transition:transform .15s}
+.rc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rc-icon{font-size:20px}
+.rc-title{font-size:14px;font-weight:700;flex:1}
+.rc-time{font-size:12px;color:var(--text2)}
+.rc-subtitle{font-size:13px;color:var(--text2);margin-bottom:6px;white-space:pre-line;line-height:1.5}
+/* Apurate badge for bus card */
+.apurate-badge{display:inline-block;background:#dc2626;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;margin-left:6px;letter-spacing:.5px;animation:pulseApurate 1.2s ease-in-out infinite}
+@keyframes pulseApurate{0%,100%{opacity:1}50%{opacity:.65}}
+/* Provider row */
+.provider-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--card-border)}
+.provider-name{font-size:12px;font-weight:600;min-width:70px}
+.provider-color{width:4px;height:24px;border-radius:2px;flex-shrink:0}
+.card-action-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.btn-pedir{background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:44px}
+.btn-pedir:active{transform:scale(.95)}
+.card-price{font-size:14px;font-weight:700}
+/* Bike action link */
+.rc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rc-action{padding:6px 12px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#fff;min-height:44px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.rc-action.bike{background:var(--green)}
+/* Footer */
+.footer{position:fixed;bottom:0;left:0;right:0;background:var(--footer-bg);color:#94a3b8;font-size:10px;padding:6px 12px;text-align:center;z-index:100}
+/* Toast */
+.toast-container{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;animation:toastIn .3s ease;pointer-events:auto;max-width:90vw;text-align:center}
+.toast.info{background:#2563eb}.toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.warn{background:#f59e0b;color:#1a1a1a}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+/* Memory block — history only */
+.memory-block{background:var(--bg2);border-bottom:1px solid var(--card-border);display:none}
+.memory-block.show{display:block}
+.memory-section{padding:6px 12px 4px}
+.memory-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.memory-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:4px}
+.history-list{max-height:160px;overflow-y:auto;overscroll-behavior:contain}
+.history-item{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--card-border);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .1s}
+.history-item:last-child{border-bottom:none}
+.history-item:active{background:var(--bg3)}
+.history-item-icon{font-size:14px;flex-shrink:0;width:20px;text-align:center}
+.history-item-text{flex:1;min-width:0}
+.history-item-route{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.history-item-time{font-size:11px;color:var(--text2)}
+.history-clear{font-size:11px;color:var(--text2);cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid var(--card-border);background:var(--bg);-webkit-tap-highlight-color:transparent}
+.history-clear:active{background:var(--bg3)}
+.history-clear-confirm{font-size:11px;color:var(--red);font-weight:600;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid var(--red);background:transparent;-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body data-theme="light">
+
+<!-- HEADER -->
+<div class="header">
+  <h1>VOY</h1>
+  <div class="gps-status" id="gpsStatus">📍❌</div>
+</div>
+
+<!-- INPUTS -->
+<div class="inputs">
+  <div class="input-row">
+    <div class="dot green"></div>
+    <span class="input-label">Origen</span>
+    <div class="search-field">
+      <input type="text" id="originInput" class="input-field" placeholder="¿Desde dónde salís?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'origin')" onfocus="onSearchFocus('origin')">
+      <div id="originDropdown" class="search-dropdown hidden"></div>
+    </div>
+    <button class="input-btn btn-locate" onclick="locateMe()">📍</button>
+    <button class="input-btn btn-map" onclick="activateMapOrigin()">📌 Elegir</button>
+  </div>
+  <div class="input-row">
+    <div class="dot red"></div>
+    <span class="input-label">Destino</span>
+    <div class="search-field">
+      <input type="text" id="destInput" class="input-field" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" oninput="onSearchInput(this.value,'dest')" onfocus="onSearchFocus('dest')">
+      <div id="destDropdown" class="search-dropdown hidden"></div>
+    </div>
+    <button class="input-btn btn-map" onclick="activateMapDest()">📌 Elegir</button>
+  </div>
+</div>
+
+<!-- MEMORY BLOCK: history only (favorites removed in VOY Lite) -->
+<div class="memory-block" id="memoryBlock">
+  <div class="memory-section" id="memHistory" style="display:none">
+    <div class="memory-header">
+      <span class="memory-title">🕐 Recientes</span>
+      <span id="historyClearBtn" class="history-clear" onclick="confirmClearHistory()">Borrar</span>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div style="position:relative">
+<div id="map"></div>
+<div id="mapLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg2);font-size:13px;color:var(--text2);pointer-events:none;z-index:5">Cargando mapa...</div>
+<button id="centerRouteBtn" onclick="centerRoute()" style="position:absolute;bottom:8px;right:8px;z-index:10;background:var(--bg2);border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);display:none;color:var(--text)">🎯 Centrar</button>
+</div>
+
+<!-- MAP HINT -->
+<div class="map-hint" id="mapHint">🗺️ Ruta en mapa · Arrastrá para cambiar</div>
+
+<!-- ROUTE CARDS -->
+<div class="cards" id="cardsContainer"></div>
+
+<!-- FOOTER -->
+<div class="footer">VOY Lite · Asistente de movilidad Santa Fe · Datos informativos</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ANALYTICS DASHBOARD (hidden, 5 taps on header) -->
+<div id="vaDash"></div>
+
+<script>
+// ===================== GLOBAL ERROR HANDLERS =====================
+window.onerror=function(msg,src,line,col,err){
+  console.error('[GLOBAL ERROR]',msg,src+':'+line+':'+col,err);
+};
+window.onunhandledrejection=function(ev){
+  console.error('[UNHANDLED REJECTION]',ev.reason);
+};
+
+// ===================== DATA =====================
+var BUS_STOPS=[
+  {linea:'1',nombre:'Terminal',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
+  {linea:'1',nombre:'Plaza Mayor',lat:-31.6313,lon:-60.7008,calles:'San Martín y Rivadavia'},
+  {linea:'4',nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {linea:'4',nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'},
+  {linea:'8',nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {linea:'8',nombre:'Avenida Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {linea:'11',nombre:'Centro Cívico',lat:-31.6354,lon:-60.6999,calles:'25 de Mayo y San Martín'},
+  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y España'},
+  {linea:'16',nombre:'Plaza Pueyrredón',lat:-31.6445,lon:-60.7087,calles:'Cándido Pujato y Aristóbulo'},
+  {linea:'16',nombre:'Belgrano',lat:-31.6312,lon:-60.6945,calles:'Belgrano y Rivadavia'}
+];
+
+var BIKE_STATIONS=[
+  {nombre:'Municipalidad',lat:-31.6349,lon:-60.7007,calles:'25 de Mayo y San Martín'},
+  {nombre:'Plaza 25 de Mayo',lat:-31.6311,lon:-60.6990,calles:'San Martín y Rivadavia'},
+  {nombre:'Teatro Municipal',lat:-31.6325,lon:-60.7012,calles:'San Martín y Córdoba'},
+  {nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Estación Mitre',lat:-31.6356,lon:-60.7089,calles:'Bvd. Pellegrini y Rivadavia'},
+  {nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {nombre:'Av. Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {nombre:'Plaza Constituyentes',lat:-31.6401,lon:-60.7001,calles:'Rivadavia y Tucumán'},
+  {nombre:'Legislatura',lat:-31.6298,lon:-60.6955,calles:'Amenábar y 25 de Mayo'},
+  {nombre:'Plaza del Soldado',lat:-31.6337,lon:-60.6978,calles:'San Jerónimo y Tucumán'},
+  {nombre:'Hospital Iturraspe',lat:-31.6445,lon:-60.6934,calles:'Bvd. Gálvez y Francia'},
+  {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'}
+];
+
+var LANDMARKS=[
+  {nombre:'Puente Colgante',lat:-31.6230,lon:-60.6850,calles:'Av. Costanera y Av. del Valle'},
+  {nombre:'Catedral Metropolitana',lat:-31.6315,lon:-60.7010,calles:'San Martín y San Jerónimo'},
+  {nombre:'Universidad Nacional del Litoral',lat:-31.6340,lon:-60.6990,calles:'9 de Julio y San Jerónimo'},
+  {nombre:'Parque del Encuentro',lat:-31.6270,lon:-60.6800,calles:'Av. Costanera Oeste'},
+  {nombre:'Museo Histórico',lat:-31.6330,lon:-60.7015,calles:'San Martín y 25 de Mayo'},
+  {nombre:'Puente Oroño',lat:-31.6190,lon:-60.6820,calles:'Av. Costanera y Bvd. Pellegrini'},
+  {nombre:'Mercado Norte',lat:-31.6360,lon:-60.6980,calles:'San Martín y Tucumán'},
+  {nombre:'Iglesia San Francisco',lat:-31.6320,lon:-60.7030,calles:'San Martín y Ameghino'},
+  {nombre:'Shopping La Estación',lat:-31.6290,lon:-60.6895,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Barrio Candioti',lat:-31.6080,lon:-60.6900,calles:'Norte de la ciudad'},
+  {nombre:'Barrio Guadalupe',lat:-31.6380,lon:-60.6800,calles:'Noreste de la ciudad'},
+  {nombre:'Barrio Centenario',lat:-31.6140,lon:-60.7100,calles:'Oeste de la ciudad'}
+];
+
+// Slimmed PROVIDERS: uber, didi, maxim, taxi, remis, taxiapp only.
+// Removed: cabify, indriver, bolt, uber_moto, didi_moto.
+var PROVIDERS={
+  uber:{name:'Uber',available:true,color:'#000',confirmed:true,source:'uber.com + operadores locales'},
+  didi:{name:'DiDi',available:true,color:'#f97316',confirmed:true,source:'DiDi Argentina - operativo desde Nov 2024'},
+  maxim:{name:'Maxim',available:true,color:'#8b5cf6',confirmed:true,source:'maxim.taxi + noticias locales'},
+  taxi:{name:'Radiotaxi',available:true,color:'#d97706',confirmed:true,source:'wa.link/n7u2e7 servicio local'},
+  remis:{name:'Remises Real',available:true,color:'#6b7280',confirmed:true,source:'wa.link/rqov56 servicio local'},
+  taxiapp:{name:'TaxiApp',available:true,color:'#25d366',confirmed:true,source:'@taxiapp_santafe app local'}
+};
+
+// ===================== FARE REGISTRY (slimmed — no moto, no cabify) =====================
+var FareRegistry={
+  taxi:{
+    diurno:{bajada:1600,ficha:160,distFicha:130},
+    nocturno:{bajada:1840,ficha:184,distFicha:130},
+    source:'Resolución N°217/2026',
+    updated_at:'2026-01-01'
+  },
+  bus:{
+    sube:1900,
+    cash:2111,
+    source:'SUBE tariff table Argentina',
+    updated_at:'2025-06-01'
+  },
+  apps:{
+    uber:{base:1000,km:500,min:65,minFare:3000,source:'Uber app estimate range',updated_at:'2025-12-01'},
+    didi:{base:900,km:440,min:55,minFare:2500,source:'DiDi app estimate range',updated_at:'2025-12-01'},
+    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'}
+  }
+};
+
+// ===================== UTILS =====================
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function hideMapLoader(){
+  var ml=document.getElementById('mapLoading');
+  if(ml)ml.style.display='none';
+}
+function showFatalError(msg){
+  hideMapLoader();
+  var mapEl=document.getElementById('map');
+  if(mapEl){
+    mapEl.style.background='#fee2e2';
+    mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;padding:16px;text-align:center"><span style="font-size:32px">⚠️</span><span style="font-size:14px;font-weight:600;color:#dc2626">'+escapeHtml(msg)+'</span><span style="font-size:12px;color:#71717a">Recargá la página para reintentar</span></div>';
+  }
+}
+
+// ===================== BOOTSTRAP GUARD =====================
+if(typeof MobilityController==='undefined'){
+  console.error('[FATAL] MobilityController is not defined — ui/mobilityController.js failed to load');
+  showFatalError('Error cargando aplicación');
+  throw new Error('MobilityController is not defined');
+}
+var MC=MobilityController;
+
+if(typeof MobilityEngine==='undefined'){
+  console.error('[FATAL] MobilityEngine is not defined — core/mobilityEngine.js failed to load');
+  showFatalError('Motor de movilidad no disponible');
+  throw new Error('MobilityEngine is not defined');
+}
+
+// ===================== UI-ONLY STATE (map/DOM) =====================
+var _manualOriginMode=false;
+var _manualDestMode=false;
+var _searchVersion=0; // stale-search protection token
+var _gpsWatch=null;
+var _map=null;
+var _originMarker=null;
+var _destMarker=null;
+var _originPopup=null;
+var _destPopup=null;
+var _historyClearConfirmPending=false;
+
+// ===================== VISITOR ANALYTICS (local-first, <10KB) =====================
+var _VA_KEY='voy_va';
+var _VA_MAX=300; // FIFO cap
+var _VA_GRID=0.0072; // ~800m geo cluster
+var _vaS={o:0,os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0}; // current session
+
+function _vaCluster(lat,lon){return(lat/_VA_GRID).toFixed(0)+'_'+(lon/_VA_GRID).toFixed(0)}
+
+function va_open(){
+  _vaS={o:Date.now(),os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0};
+}
+
+function va_origin(src){
+  if(!_vaS.o)return;
+  var m={gps:'g',cache:'c',map:'m',search:'s'};
+  _vaS.os=m[src]||'n';
+}
+
+function va_dest(name,lat,lon){
+  if(!_vaS.o||_vaS.dt)return; // solo primer destino por sesión
+  _vaS.dt=Date.now();
+  _vaS.dn=(name||'').substring(0,25);
+  _vaS.dc=_vaCluster(lat,lon);
+}
+
+function va_cards(modes){
+  if(!_vaS.o)return;
+  if(!_vaS.ct)_vaS.ct=Date.now();
+  var modeMap={bus:'b',bike:'i',auto:'a'};
+  _vaS.ms=(modes||[]).map(function(e){return modeMap[e]||'?'}).join(',');
+}
+
+function va_cta(mode){
+  if(!_vaS.o)return;
+  _vaS.cm=mode||'';
+  _vaS.ct2=Date.now();
+}
+
+function va_close(){
+  if(!_vaS.o)return;
+  _vaS.x=Date.now();
+  if(_vaS.x-_vaS.o<500)return; // descarta bounces <500ms
+  try{
+    var raw=localStorage.getItem(_VA_KEY);
+    var arr=raw?JSON.parse(raw):[];
+    if(!Array.isArray(arr))arr=[];
+    arr.push(_vaS);
+    if(arr.length>_VA_MAX)arr=arr.slice(arr.length-_VA_MAX);
+    localStorage.setItem(_VA_KEY,JSON.stringify(arr));
+  }catch(e){}
+}
+
+function va_load(){
+  try{var r=localStorage.getItem(_VA_KEY);return r?JSON.parse(r):[]}catch(e){return[]}
+}
+
+function va_metrics(){
+  var s=va_load();
+  var n=s.length;
+  if(!n)return{total:0};
+  var m={total:n,ctaRate:0,abandonRate:0,avgToCTA:0,avgDecision:0,topDest:[],providerWins:{},deadCards:{}};
+  var ctaCount=0,abandonCount=0,sumToCTA=0,sumDecision=0;
+  var destCounts={},provCounts={},modeShown={},modeChosen={};
+  s.forEach(function(r){
+    if(!r.dt)abandonCount++;
+    if(r.ct2>0){ctaCount++;if(r.ct2>r.o)sumToCTA+=r.ct2-r.o;if(r.ct2>r.ct&&r.ct>0)sumDecision+=r.ct2-r.ct}
+    if(r.cm)provCounts[r.cm]=(provCounts[r.cm]||0)+1;
+    if(r.dc){var dk=r.dc+(r.dn?'|'+r.dn:'');destCounts[dk]=(destCounts[dk]||0)+1}
+    if(r.ms){r.ms.split(',').forEach(function(c){modeShown[c]=(modeShown[c]||0)+1})}
+    if(r.cm){var ck={uber:'a',didi:'a',maxim:'a',taxi:'a',remis:'a',taxiapp:'a',bus:'b',bike:'i'}[r.cm]||'?';modeChosen[ck]=(modeChosen[ck]||0)+1}
+  });
+  m.ctaRate=ctaCount/n;m.abandonRate=abandonCount/n;
+  if(ctaCount){m.avgToCTA=Math.round(sumToCTA/ctaCount);m.avgDecision=Math.round(sumDecision/ctaCount)}
+  var sorted=Object.keys(destCounts).sort(function(a,b){return destCounts[b]-destCounts[a]});
+  m.topDest=sorted.slice(0,5).map(function(k){return{name:k.split('|')[1]||k.split('|')[0],count:destCounts[k]}});
+  m.providerWins=provCounts;
+  var modeNames={b:'Colectivo',i:'Bicicleta',a:'Auto'};
+  Object.keys(modeShown).forEach(function(k){if(!modeChosen[k]&&modeShown[k]>=2)m.deadCards[modeNames[k]||k]=modeShown[k]});
+  return m;
+}
+
+function va_dashboard(){
+  var m=va_metrics();
+  var el=document.getElementById('vaDash');
+  if(!el)return;
+  if(!m.total){
+    el.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;color:#fff;font-size:13px;padding:16px;overflow-y:auto;font-family:monospace"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><b style="font-size:16px">📊 VOY Analytics</b><span style="cursor:pointer;font-size:20px" onclick="document.getElementById(\'vaDash\').innerHTML=\'\'">✕</span></div><div style="color:#94a3b8;margin-top:20px;text-align:center">Sin datos de sesiones aún.<br>Usá la app para generar analytics.</div><div style="margin-top:16px;font-size:10px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
+    return;
+  }
+  var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;color:#fff;font-size:13px;padding:16px;overflow-y:auto;font-family:monospace">';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:12px"><b style="font-size:16px">📊 VOY Analytics</b><span style="cursor:pointer;font-size:20px" onclick="document.getElementById(\'vaDash\').innerHTML=\'\'">✕</span></div>';
+  h+='<div style="margin-bottom:12px">Sesiones: <b>'+m.total+'</b></div>';
+  h+='<table style="width:100%;border-collapse:collapse;margin-bottom:12px">';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Conversión CTA</td><td style="padding:4px;text-align:right"><b>'+(m.ctaRate*100).toFixed(1)+'%</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Abandono sin destino</td><td style="padding:4px;text-align:right"><b>'+(m.abandonRate*100).toFixed(1)+'%</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Tiempo medio→CTA</td><td style="padding:4px;text-align:right"><b>'+(m.avgToCTA?((m.avgToCTA/1000).toFixed(1)+'s'):'—')+'</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Tiempo medio decisión</td><td style="padding:4px;text-align:right"><b>'+(m.avgDecision?((m.avgDecision/1000).toFixed(1)+'s'):'—')+'</b></td></tr>';
+  h+='</table>';
+  if(Object.keys(m.providerWins).length){
+    h+='<div style="margin-bottom:12px"><b>🏆 Proveedores elegidos</b>';
+    var sorted=Object.keys(m.providerWins).sort(function(a,b){return m.providerWins[b]-m.providerWins[a]});
+    sorted.forEach(function(k){var pct=(m.providerWins[k]/m.total*100).toFixed(0);h+='<div style="margin:2px 0">'+k+': '+m.providerWins[k]+' ('+pct+'%) <span style="background:#2563eb;height:8px;display:inline-block;width:'+(pct*1.5)+'px;border-radius:2px"></span></div>'});
+    h+='</div>';
+  }
+  if(m.topDest.length){
+    h+='<div style="margin-bottom:12px"><b>📍 Top destinos</b>';
+    m.topDest.forEach(function(d){h+='<div style="margin:2px 0">'+d.name+': '+d.count+'</div>'});
+    h+='</div>';
+  }
+  if(Object.keys(m.deadCards).length){
+    h+='<div style="margin-bottom:12px"><b>👻 Cards vistas nunca elegidas</b>';
+    Object.keys(m.deadCards).forEach(function(k){h+='<div style="margin:2px 0;color:#f97316">'+k+': vista '+m.deadCards[k]+'x, nunca elegida</div>'});
+    h+='</div>';
+  }
+  h+='<div style="margin-top:16px;font-size:10px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div>';
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// Hidden dashboard trigger: 5 taps on header
+var _vaTapCount=0,_vaTapTimer=null;
+
+// Close session on page unload / hide
+window.addEventListener('beforeunload',function(){va_close()});
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden')va_close();
+});
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded',function(){
+  // Initialize controller with data config (no prefs — engine/controller refactored)
+  MC.init({
+    busStops:BUS_STOPS,
+    bikeStations:BIKE_STATIONS,
+    landmarks:LANDMARKS,
+    fareRegistry:FareRegistry,
+    providers:PROVIDERS,
+    recentKey:'voy_recent_searches',
+    favsKey:'voy_favorites',
+    favMetricsKey:'voy_fav_metrics'
+  });
+  MC.loadMemory();
+  renderMemoryBlock();
+
+  va_open();
+  initMap();
+  initGPS();
+  initDarkMode();
+  renderCards();
+  // Close dropdowns on outside click/touch
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('.search-field'))closeAllDropdowns();
+  });
+  document.addEventListener('touchstart',function(e){
+    if(!e.target.closest('.search-field'))closeAllDropdowns();
+  },{passive:true});
+  // VA: 5 taps on header → dashboard
+  document.querySelector('.header h1').addEventListener('click',function(){
+    _vaTapCount++;clearTimeout(_vaTapTimer);
+    _vaTapTimer=setTimeout(function(){_vaTapCount=0},1500);
+    if(_vaTapCount>=5){_vaTapCount=0;va_dashboard()}
+  });
+});
+
+// ===================== MAP =====================
+var CARTO_STYLE='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+var FALLBACK_STYLE={
+  version:8,
+  sources:{
+    osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}
+  },
+  layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]
+};
+
+var _mapLoadTimeout=null;
+function initMap(){
+  if(typeof maplibregl==='undefined'){
+    console.error('[MAP] maplibregl is not defined — CDN script failed to load');
+    showFatalError('Librería de mapa no disponible');
+    return;
+  }
+  try{
+    _map=new maplibregl.Map({
+      container:'map',
+      style:CARTO_STYLE,
+      center:[-60.7087,-31.6256],
+      zoom:13,
+      attributionControl:false
+    });
+    _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+    _map.on('click',onMapClick);
+    _map.on('error',function(e){
+      clearTimeout(_mapLoadTimeout);
+      console.warn('[MAP] CARTO style error, switching to OSM fallback:',e);
+      _map.setStyle(FALLBACK_STYLE);
+      hideMapLoader();
+    });
+    _map.on('load',function(){
+      clearTimeout(_mapLoadTimeout);
+      _map.resize();
+      hideMapLoader();
+    });
+    _mapLoadTimeout=setTimeout(function(){
+      console.error('[MAP] Timeout: map did not load within 10 seconds');
+      var ml=document.getElementById('mapLoading');
+      if(ml&&ml.style.display!=='none'){
+        hideMapLoader();
+        var mapEl=document.getElementById('map');
+        if(mapEl){
+          mapEl.style.background='#fef3c7';
+          mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;padding:16px;text-align:center"><span style="font-size:32px">🗺️</span><span style="font-size:14px;font-weight:600;color:#92400e">Mapa no disponible</span><span style="font-size:12px;color:#71717a">No se pudo cargar el mapa. Recargá la página.</span></div>';
+        }
+      }
+    },10000);
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){if(_map)_map.resize()});
+    });
+  }catch(e){
+    console.error('[MAP] Init failed:',e);
+    showFatalError('Error al inicializar el mapa');
+  }
+}
+
+function initDarkMode(){
+  if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
+    document.body.setAttribute('data-theme','dark');
+  }
+  if(window.matchMedia){
+    window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){
+      document.body.setAttribute('data-theme',e.matches?'dark':'light');
+    });
+  }
+}
+
+// ===================== GPS: silent, cache, retry =====================
+var _gpsRetryCount=0;
+var _gpsMaxRetries=3;
+var _gpsRetryTimer=null;
+
+function initGPS(){
+  if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
+  _gpsWatch=navigator.geolocation.watchPosition(function(pos){
+    _gpsRetryCount=0;
+    updateGPSStatus(true);
+    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    if(!MC.isOriginManual()){
+      var origin=MC.getOrigin();
+      if(!origin||origin.source==='gps'||origin.source==='cache'){
+        MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
+        va_origin('gps');
+        updateOriginUI();
+        updateMapMarkers();
+        if(MC.getDest())runEstimations();
+      }
+    }
+  },function(err){
+    updateGPSStatus(false);
+    loadCachedPosition();
+    if(_gpsRetryCount<_gpsMaxRetries){
+      _gpsRetryCount++;
+      clearTimeout(_gpsRetryTimer);
+      _gpsRetryTimer=setTimeout(function(){
+        navigator.geolocation.getCurrentPosition(function(pos){
+          _gpsRetryCount=0;
+          updateGPSStatus(true);
+          cachePosition(pos.coords.latitude,pos.coords.longitude);
+          if(!MC.isOriginManual()){
+            var origin=MC.getOrigin();
+            if(!origin||origin.source==='gps'||origin.source==='cache'){
+              MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
+              va_origin('gps');
+              updateOriginUI();
+              updateMapMarkers();
+              if(MC.getDest())runEstimations();
+            }
+          }
+        },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+      },_gpsRetryCount*5000);
+    }
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+}
+
+function updateGPSStatus(ok){
+  var el=document.getElementById('gpsStatus');
+  if(el)el.textContent=ok?'📍🟢':'📍❌';
+}
+
+function cachePosition(lat,lon){
+  try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon}))}catch(e){}
+}
+
+function loadCachedPosition(){
+  try{
+    var cached=localStorage.getItem('voy_last_pos');
+    if(cached){
+      var pos=JSON.parse(cached);
+      if(!MC.getOrigin()){
+        MC.setOrigin(pos.lat,pos.lon,'Ubicación guardada','cache');
+        va_origin('cache');
+        updateOriginUI();
+        updateMapMarkers();
+      }
+    }
+  }catch(e){}
+}
+
+function locateMe(){
+  if(!navigator.geolocation){return}
+  navigator.geolocation.getCurrentPosition(function(pos){
+    MC.setOriginManual(false);
+    MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
+    va_origin('gps');
+    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    updateOriginUI();
+    updateMapMarkers();
+    var origin=MC.getOrigin();
+    if(_map)_map.flyTo({center:[origin.lon,origin.lat],zoom:15});
+    if(MC.getDest())runEstimations();
+  },function(){
+    loadCachedPosition();
+  },{enableHighAccuracy:true,timeout:10000});
+}
+
+// ===================== MAP CLICK / MANUAL PIN =====================
+function activateMapOrigin(){
+  _manualOriginMode=true;
+  _manualDestMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el origen','info');
+}
+
+function activateMapDest(){
+  _manualDestMode=true;
+  _manualOriginMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el destino','info');
+}
+
+function onMapClick(e){
+  if(!_manualOriginMode&&!_manualDestMode)return;
+  var lat=e.lngLat.lat;
+  var lon=e.lngLat.lng;
+
+  if(_manualDestMode){
+    _manualDestMode=false;
+    document.getElementById('map').classList.remove('crosshair');
+    MC.setDest(lat,lon,'','map');
+    va_dest('',lat,lon);
+    reverseGeocodeDest(lat,lon);
+    updateMapMarkers();
+    if(MC.getOrigin())runEstimations();
+    return;
+  }
+
+  if(_manualOriginMode){
+    _manualOriginMode=false;
+    MC.setOriginManual(true);
+    document.getElementById('map').classList.remove('crosshair');
+    MC.setOrigin(lat,lon,'','map');
+    va_origin('map');
+    reverseGeocodeOrigin(lat,lon);
+    updateOriginUI();
+    updateMapMarkers();
+    if(MC.getDest())runEstimations();
+  }
+}
+
+function reverseGeocodeOrigin(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));
+        updateOriginUI();
+        refreshOriginLabel();
+      }
+    }).catch(function(){});
+}
+
+function reverseGeocodeDest(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        MC.setDestName(d.display_name.split(',').slice(0,2).join(', '));
+        updateDestUI();
+        refreshDestLabel();
+      }
+    }).catch(function(){});
+}
+
+// ===================== MAP MARKERS =====================
+function updateMapMarkers(){
+  if(!_map)return;
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+
+  if(_originMarker){_originMarker.remove();_originMarker=null}
+  if(_destMarker){_destMarker.remove();_destMarker=null}
+  if(_originPopup){_originPopup.remove();_originPopup=null}
+  if(_destPopup){_destPopup.remove();_destPopup=null}
+
+  if(origin){
+    var el=document.createElement('div');
+    el.style.cssText='width:18px;height:18px;background:#16a34a;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    _originMarker=new maplibregl.Marker({element:el}).setLngLat([origin.lon,origin.lat]).addTo(_map);
+    var oLabel=origin.name||'Origen';
+    _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([origin.lon,origin.lat])
+      .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
+      .addTo(_map);
+  }
+  if(dest){
+    var el2=document.createElement('div');
+    el2.style.cssText='width:18px;height:18px;background:#dc2626;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    _destMarker=new maplibregl.Marker({element:el2}).setLngLat([dest.lon,dest.lat]).addTo(_map);
+    var dLabel=dest.name||'Destino';
+    _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([dest.lon,dest.lat])
+      .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
+      .addTo(_map);
+  }
+
+  if(origin&&dest){
+    var bounds=new maplibregl.LngLatBounds();
+    bounds.extend([origin.lon,origin.lat]);
+    bounds.extend([dest.lon,dest.lat]);
+    _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:800});
+  } else if(origin){
+    _map.flyTo({center:[origin.lon,origin.lat],zoom:15});
+  }
+
+  drawRouteLine();
+
+  var cBtn=document.getElementById('centerRouteBtn');
+  if(cBtn)cBtn.style.display=(origin&&dest)?'block':'none';
+}
+
+function drawRouteLine(){
+  if(!_map)return;
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return;
+  if(_map.getSource('route-src')){
+    if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
+    if(_map.getLayer('route-line'))_map.removeLayer('route-line');
+    _map.removeSource('route-src');
+  }
+  var geojson={
+    type:'Feature',
+    geometry:{type:'LineString',coordinates:[[origin.lon,origin.lat],[dest.lon,dest.lat]]}
+  };
+  _map.addSource('route-src',{type:'geojson',data:geojson});
+  _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
+  _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.8}});
+}
+
+function centerRoute(){
+  if(!_map)return;
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return;
+  var bounds=new maplibregl.LngLatBounds();
+  bounds.extend([origin.lon,origin.lat]);
+  bounds.extend([dest.lon,dest.lat]);
+  _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
+}
+
+function refreshOriginLabel(){
+  if(!_map)return;
+  var origin=MC.getOrigin();
+  if(!origin||!_originMarker)return;
+  if(_originPopup){_originPopup.remove();_originPopup=null}
+  var oLabel=origin.name||'Origen';
+  _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+    .setLngLat([origin.lon,origin.lat])
+    .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
+    .addTo(_map);
+}
+
+function refreshDestLabel(){
+  if(!_map)return;
+  var dest=MC.getDest();
+  if(!dest||!_destMarker)return;
+  if(_destPopup){_destPopup.remove();_destPopup=null}
+  var dLabel=dest.name||'Destino';
+  _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+    .setLngLat([dest.lon,dest.lat])
+    .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
+    .addTo(_map);
+}
+
+// ===================== MEMORY BLOCK (history only) =====================
+function renderMemoryBlock(){
+  var block=document.getElementById('memoryBlock');
+  var history=MC.getHistory();
+  var hasHist=history.length>0;
+
+  block.classList.toggle('show',hasHist);
+
+  var memHistory=document.getElementById('memHistory');
+  var historyList=document.getElementById('historyList');
+  if(hasHist){
+    memHistory.style.display='';
+    var hhtml='';
+    history.forEach(function(h){
+      var oName=h.origin.name?h.origin.name.split(',')[0]:'Origen';
+      var dName=h.dest.name?h.dest.name.split(',')[0]:'Destino';
+      var relTime=formatRelativeTime(h.ts);
+      var icon=getProviderIcon(h.provider,h.mode);
+      hhtml+='<div class="history-item" onclick="selectHistoryItem(\''+escapeHtml(h.id)+'\')">';
+      hhtml+='<span class="history-item-icon">'+icon+'</span>';
+      hhtml+='<div class="history-item-text">';
+      hhtml+='<div class="history-item-route">'+escapeHtml(oName)+' → '+escapeHtml(dName)+'</div>';
+      hhtml+='<div class="history-item-time">'+escapeHtml(relTime)+'</div>';
+      hhtml+='</div></div>';
+    });
+    historyList.innerHTML=hhtml;
+    var btn=document.getElementById('historyClearBtn');
+    if(btn){btn.textContent='Borrar';btn.className='history-clear';}
+  }else{
+    memHistory.style.display='none';
+    historyList.innerHTML='';
+  }
+}
+
+function selectHistoryItem(id){
+  var entry=MC.getHistoryEntry(id);
+  if(!entry)return;
+  MC.setOriginManual(true);
+  MC.setOrigin(entry.origin.lat,entry.origin.lon,entry.origin.name,'history');
+  va_origin('search');
+  MC.setDest(entry.dest.lat,entry.dest.lon,entry.dest.name,'history');
+  va_dest(entry.dest.name,entry.dest.lat,entry.dest.lon);
+  document.getElementById('originInput').value=entry.origin.name?entry.origin.name.split(',')[0]:'';
+  document.getElementById('destInput').value=entry.dest.name?entry.dest.name.split(',')[0]:'';
+  updateMapMarkers();
+  runEstimations();
+  MC.trackHistoryReuse();
+  showToast('Viaje restaurado','success');
+}
+
+function confirmClearHistory(){
+  if(_historyClearConfirmPending){
+    _historyClearConfirmPending=false;
+    MC.clearHistory();
+    renderMemoryBlock();
+    showToast('Historial borrado','info');
+  }else{
+    _historyClearConfirmPending=true;
+    var btn=document.getElementById('historyClearBtn');
+    if(btn){btn.textContent='¿Confirmar?';btn.className='history-clear-confirm';}
+    setTimeout(function(){
+      if(_historyClearConfirmPending){
+        _historyClearConfirmPending=false;
+        if(btn){btn.textContent='Borrar';btn.className='history-clear';}
+      }
+    },3000);
+  }
+}
+
+function getProviderIcon(provider,mode){
+  if(mode==='bus'||provider==='colectivo')return '🚌';
+  if(provider==='uber')return '🚗';
+  if(provider==='didi')return '🟠';
+  if(provider==='maxim')return '🟣';
+  if(provider==='taxi'||provider==='radiotaxi')return '🚕';
+  if(provider==='remis')return '🚙';
+  if(provider==='taxiapp')return '📱';
+  if(mode==='bike')return '🚲';
+  if(mode==='auto')return '🚗';
+  return '📍';
+}
+
+function formatRelativeTime(ts){
+  var now=Date.now();
+  var diff=now-ts;
+  var seconds=Math.floor(diff/1000);
+  if(seconds<60)return 'hace un momento';
+  var minutes=Math.floor(seconds/60);
+  if(minutes<60)return 'hace '+minutes+' min';
+  var hours=Math.floor(minutes/60);
+  if(hours<24)return 'hace '+hours+' h';
+  var days=Math.floor(hours/24);
+  if(days===1)return 'ayer';
+  if(days<7)return 'hace '+days+' días';
+  var d=new Date(ts);
+  return d.getDate()+'/'+(d.getMonth()+1);
+}
+
+/**
+ * Save trip to history when user confirms a provider tap.
+ * Called from requestRide() after double-tap confirmation.
+ */
+function saveTripToHistory(action){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return;
+  var mode='auto';
+  var provider=action;
+  MC.addToHistory(origin,dest,mode,provider);
+  MC.trackProviderTrip();
+  renderMemoryBlock();
+}
+
+// ===================== SEARCH =====================
+function renderSearchDropdown(results,field,isRecent){
+  var id=field==='origin'?'originDropdown':'destDropdown';
+  var dropdown=document.getElementById(id);
+  if(!dropdown)return;
+  dropdown.innerHTML='';
+
+  if(!results.length){
+    dropdown.innerHTML='<div class="search-item search-item--empty">Sin resultados en Santa Fe</div>';
+    dropdown.classList.remove('hidden');
+    return;
+  }
+
+  results.forEach(function(r){
+    var lat=parseFloat(r.lat||r.latitude);
+    var lon=parseFloat(r.lon||r.longitude);
+    var displayName=r.display_name||r.display||r.name||'';
+    var name=displayName.split(',')[0];
+    var sub=displayName.split(',').slice(1,3).join(',').trim();
+    var icon=r.type==='bus'?'🚌':r.type==='bike'?'🚲':'📍';
+
+    var item=document.createElement('div');
+    item.className='search-item'+(isRecent?' search-item--recent':'');
+    item.innerHTML=
+      (isRecent?'<span class="search-item-icon">🕐</span>':'<span class="search-item-icon">'+icon+'</span>')+
+      '<div class="search-item-text">'+
+      '<strong>'+escapeHtml(name)+'</strong>'+
+      (sub?'<br><small>'+escapeHtml(sub)+'</small>':'')+
+      '</div>';
+
+    item.addEventListener('click',function(){
+      selectSearchResult(field,lat,lon,displayName);
+      if(!isRecent)MC.saveRecentSearch({lat:lat,lon:lon,display_name:displayName});
+    });
+
+    dropdown.appendChild(item);
+  });
+
+  dropdown.classList.remove('hidden');
+}
+
+function selectSearchResult(field,lat,lon,name){
+  if(field==='origin'){
+    MC.setOriginManual(true);
+    MC.setOrigin(lat,lon,name,'search');
+    va_origin('search');
+    document.getElementById('originInput').value=name.split(',')[0];
+    updateMapMarkers();
+    if(MC.getDest())runEstimations();
+  }else{
+    MC.setDest(lat,lon,name,'search');
+    va_dest(name,lat,lon);
+    document.getElementById('destInput').value=name.split(',')[0];
+    updateMapMarkers();
+    if(MC.getOrigin())runEstimations();
+  }
+  closeAllDropdowns();
+}
+
+function closeAllDropdowns(){
+  document.querySelectorAll('.search-dropdown').forEach(function(d){d.classList.add('hidden')});
+}
+
+async function onSearchInput(val,field){
+  MC.setSearchTimer(null);
+  var id=field==='origin'?'originDropdown':'destDropdown';
+  var dropdown=document.getElementById(id);
+
+  if(!val||val.trim().length<2){
+    dropdown.classList.add('hidden');
+    if(!val||val.trim().length===0){
+      if(field==='origin'){
+        var origin=MC.getOrigin();
+        if(origin&&origin.source!=='gps'&&origin.source!=='cache'){
+          MC.clearOrigin();
+          renderCards();
+          updateMapMarkers();
+        }
+      }else{
+        MC.clearDest();
+        renderCards();
+        updateMapMarkers();
+      }
+      var recent=MC.getRecentSearches();
+      if(recent.length){
+        renderSearchDropdown(
+          recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),
+          field,true
+        );
+      }
+    }
+    return;
+  }
+
+  var version=++_searchVersion;
+  var timer=setTimeout(async function(){
+    var results=await MC.searchNominatim(val.trim());
+    if(version!==_searchVersion){
+      return; // stale response
+    }
+    renderSearchDropdown(results,field,false);
+  },400);
+  MC.setSearchTimer(timer);
+}
+
+function onSearchFocus(field){
+  var inputId=field==='origin'?'originInput':'destInput';
+  var input=document.getElementById(inputId);
+  if(!input||input.value.trim().length>=2)return;
+  var recent=MC.getRecentSearches();
+  if(recent.length){
+    renderSearchDropdown(
+      recent.slice(0,3).map(function(r){return{lat:r.lat,lon:r.lon,display_name:r.display||r.name}}),
+      field,true
+    );
+  }
+}
+
+// Legacy aliases for compatibility
+function hideAc(field){closeAllDropdowns()}
+function hideAllAc(){closeAllDropdowns()}
+
+// ===================== ENGINE ALIASES =====================
+// MobilityEngine already guarded at bootstrap. Safe to alias here.
+var haversine=MobilityEngine.haversine;
+var formatPrice=MobilityEngine.formatPrice;
+var formatMin=MobilityEngine.formatMin;
+var normalize=MobilityEngine.normalize;
+var fuzzyScore=MobilityEngine.fuzzyScore;
+function escapeStr(s){return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;')}
+
+// ===================== ESTIMATION ORCHESTRATION =====================
+function runEstimations(){
+  if(!MC.getOrigin()||!MC.getDest())return;
+  MC.runEstimations();
+  var est=MC.getEstimations();
+  if(est&&est.length)va_cards(est.map(function(e){return e.mode}));
+  renderCards();
+  updateMapHint();
+}
+
+// ===================== MAP HINT =====================
+function updateMapHint(){
+  var el=document.getElementById('mapHint');
+  var estimations=MC.getEstimations();
+  if(!estimations||!estimations.length){el.classList.remove('show');return}
+  el.classList.add('show');
+  var modeNames={bus:'colectivo',bike:'bicicleta',auto:'auto'};
+  var first=estimations[0];
+  var modeLabel=modeNames[first.mode]||first.mode;
+  el.textContent='🗺️ Ruta en mapa: '+modeLabel+' · Arrastrá para cambiar';
+}
+
+// ===================== RENDER CARDS =====================
+function renderCards(){
+  var container=document.getElementById('cardsContainer');
+  var html='';
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  var estimations=MC.getEstimations();
+
+  if(!origin||!dest){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
+      'Elegí origen y destino</div>';
+  }else if(!estimations||!estimations.length){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
+      'Calculando rutas...</div>';
+  }else{
+    estimations.forEach(function(est,idx){
+      html+=renderActiveCard(est,idx);
+    });
+  }
+
+  container.innerHTML=html;
+  attachButtonEvents();
+}
+
+function renderActiveCard(est,idx){
+  // No draggable, no drag-handle (removed in VOY Lite)
+  var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'">';
+
+  if(est.mode==='bus'){
+    // Bus card — spec format: "Línea {linea} - {totalMin} min - {stopOrigenCalles}"
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">Colectivo</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    var busLine='Línea '+est.linea+' - '+est.totalMin+' min - '+(est.stopOrigenCalles||'');
+    if(est.walkToStopMin<2){
+      busLine+='<span class="apurate-badge">¡Apurate!</span>';
+    }
+    h+='<div class="rc-subtitle">'+busLine+'</div>';
+    // Price row (SUBE fare, no Pedir button — no deep link for bus)
+    h+='<div class="provider-row">';
+    h+='<div class="provider-color" style="background:#2563eb"></div>';
+    h+='<span class="provider-name">SUBE</span>';
+    h+='<div class="card-action-row">';
+    h+='<span class="card-price">'+(est.price!=null?formatPrice(est.price):'Consultar')+'</span>';
+    h+='</div></div>';
+  }
+
+  else if(est.mode==='bike'){
+    // Bike card — last priority
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle" style="white-space:pre-line">'+est.distance.toFixed(1)+' km · GRATIS';
+    if(est.nearStation){
+      h+='\n📍 Retirar en: '+est.nearStation.nombre+' ('+est.nearStation.calles+')';
+    }
+    if(est.nearDestStation){
+      h+='\n📍 Dejar en: '+est.nearDestStation.nombre+' ('+est.nearDestStation.calles+')';
+    }
+    h+='</div>';
+    h+='<div class="rc-actions">';
+    var bikeLink=buildBikeLink();
+    h+='<a href="'+bikeLink+'" class="rc-action bike" target="_blank">Bicicleta</a>';
+    h+='</div>';
+  }
+
+  else if(est.mode==='auto'){
+    // Rideshare card — 6 providers, sorted by price ascending
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
+    var autoProvidersList=[
+      {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
+      {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
+      {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
+      {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
+      {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
+      {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
+    ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available})
+     .sort(function(a,b){return a.price-b.price});
+    autoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url);
+    });
+  }
+
+  h+='</div>';
+  return h;
+}
+
+function renderProviderRow(key,name,price,colorKey,timeOverride,waLink){
+  var provider=PROVIDERS[key];
+  if(!provider||!provider.available)return'';
+  var color=provider.color||'#666';
+  var t=timeOverride?formatMin(timeOverride):'';
+  var url='';
+  if(key==='uber')url=buildUberLink();
+  else if(key==='didi')url=buildDiDiLink();
+  else if(key==='maxim')url=buildMaximLink();
+  else if(waLink)url=waLink;
+
+  var h='<div class="provider-row">';
+  h+='<div class="provider-color" style="background:'+color+'"></div>';
+  h+='<span class="provider-name">'+name+'</span>';
+  h+='<div class="card-action-row">';
+  if(url){
+    h+='<button class="btn-pedir" data-action="'+key+'" data-url="'+url+'">Pedir</button>';
+  }
+  h+='<span class="card-price">'+(price!=null?formatPrice(price):'Consultar')+'</span>';
+  if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
+  h+='</div></div>';
+  return h;
+}
+
+// ===================== LINK BUILDERS =====================
+function buildUberLink(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return '#';
+  return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+
+    '&pickup[formatted_address]=Origen&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon;
+}
+
+function buildDiDiLink(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest)return '#';
+  return 'https://web.didiglobal.com/ar/passenger/ride/?pickup_lat='+origin.lat+'&pickup_lng='+origin.lon+
+    '&dropoff_lat='+dest.lat+'&dropoff_lng='+dest.lon;
+}
+
+function buildMaximLink(){
+  var origin=MC.getOrigin();
+  var dest=MC.getDest();
+  if(!origin||!dest||!origin.lat||!dest.lat)return 'https://taximaxim.com/ar/';
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  var isIOS=/iPhone|iPad/i.test(navigator.userAgent);
+  if(isAndroid){
+    var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';
+    return 'intent://order?'+
+      'startLat='+Number(origin.lat).toFixed(6)+
+      '&startLon='+Number(origin.lon).toFixed(6)+
+      '&finishLat='+Number(dest.lat).toFixed(6)+
+      '&finishLon='+Number(dest.lon).toFixed(6)+
+      '#Intent'+
+      ';scheme=taxsee'+
+      ';package=com.taxsee.taxsee'+
+      ';S.browser_fallback_url='+encodeURIComponent(playStore)+
+      ';end';
+  }
+  if(isIOS){
+    return 'https://apps.apple.com/app/maxim/id893663029';
+  }
+  return 'https://taximaxim.com/ar/';
+}
+
+function buildBikeLink(){
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  if(isAndroid)return 'intent://#Intent;scheme=lasbicis;package=com.santafe.lasbicis;end';
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS)return 'https://apps.apple.com/ar/app/id6444962582';
+  return 'https://www.santafe.gob.ar/index.php/educacionycultura/content/download/55027/283898/file/Las%20Bicis.pdf';
+}
+
+// ===================== DOUBLE TAP TO CONFIRM =====================
+var _confirmState={};
+function requestRide(mode,url){
+  var now=Date.now();
+  var last=_confirmState[mode]||0;
+  var DOUBLE_TAP_MS=2000;
+  if(now-last<DOUBLE_TAP_MS){
+    _confirmState[mode]=0;
+    va_cta(mode);
+    window.open(url,'_blank');
+    saveTripToHistory(mode);
+  }else{
+    _confirmState[mode]=now;
+    showToast('Tocá de nuevo para confirmar','info');
+    setTimeout(function(){_confirmState[mode]=0},DOUBLE_TAP_MS+100);
+  }
+}
+
+// ===================== BUTTON EVENTS =====================
+function attachButtonEvents(){
+  document.querySelectorAll('.btn-pedir').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var action=btn.getAttribute('data-action');
+      var url=btn.getAttribute('data-url');
+      if(url&&url!=='#'){
+        requestRide(action,url);
+      }
+    });
+  });
+
+  document.querySelectorAll('.rc-action.bike').forEach(function(a){
+    a.addEventListener('click',function(e){
+      e.stopPropagation();
+      va_cta('bike');
+      saveTripToHistory('bike');
+    });
+  });
+}
+
+// ===================== UI UPDATES =====================
+function updateOriginUI(){
+  var origin=MC.getOrigin();
+  var el=document.getElementById('originInput');
+  if(el)el.value=origin?origin.name:'';
+}
+
+function updateDestUI(){
+  var dest=MC.getDest();
+  var el=document.getElementById('destInput');
+  if(el)el.value=dest?dest.name:'';
+}
+
+// ===================== TOAST =====================
+function showToast(msg,type){
+  type=type||'info';
+  var container=document.getElementById('toastContainer');
+  if(!container)return;
+  var el=document.createElement('div');
+  el.className='toast '+type;
+  el.textContent=msg;
+  container.appendChild(el);
+  setTimeout(function(){
+    el.style.opacity='0';
+    el.style.transition='opacity .3s';
+    setTimeout(function(){if(el.parentNode)el.remove()},300);
+  },2500);
+}
+</script>
+</body>
+</html>

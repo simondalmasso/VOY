@@ -2,18 +2,18 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * VOY Runtime Middleware
+ * VOY Lite Runtime Middleware
  *
- * Single Source of Truth: public/VOYv2.html
+ * Single Source of Truth: public/VOY-Lite.html
  *
  * Architecture:
- *   / → middleware rewrite → /VOYv2.html (served as static file)
+ *   / → middleware rewrite → /VOY-Lite.html (served as static file)
  *   Browser URL stays as / — no iframe, no React shell, no duplicate HTML
  *
  * All VOY assets get no-cache headers to prevent stale versions.
  */
 
-const VOY_HTML = '/VOYv2.html';
+const VOY_HTML = '/VOY-Lite.html';
 const NO_CACHE_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-cache, no-store, must-revalidate',
   'Pragma': 'no-cache',
@@ -47,5 +47,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/VOYv2.html', '/core/:path*', '/ui/:path*'],
+  matcher: ['/', '/VOY-Lite.html', '/core/:path*', '/ui/:path*'],
 };

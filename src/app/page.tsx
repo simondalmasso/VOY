@@ -1,20 +1,6 @@
-'use client'
-
+// VOY Lite is served directly via middleware rewrite: / → /VOY-Lite.html
+// This page component is never rendered for the root route.
+// Kept as a no-op to satisfy Next.js app router requirements.
 export default function Home() {
-  return (
-    <iframe
-      src="/movilidad.html"
-      style={{
-        width: '100%',
-        height: '100vh',
-        border: 'none',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-      }}
-      title="VOY – Asistente de Movilidad Santa Fe"
-    />
-  )
+  return null
 }

@@ -4,13 +4,11 @@
  * Orchestration layer between DOM/UI and core/mobilityEngine.
  *
  * RESPONSIBILITIES:
- *   1. UI State:        _origin, _dest, _estimations, _prefs, search cache/timers
+ *   1. UI State:        _origin, _dest, _estimations, search cache/timers
  *   2. Estimation:      calls MobilityEngine.runAllEstimations(), stores result
- *   3. Recommendation:  calls MobilityEngine.computeRecommendation(), passes prefs
- *   4. Search:          coordinates searchLocal + searchNominatim + dedup + recent
- *   5. Prefs:           load/save/toggle with localStorage persistence
- *   6. Bridge:          setOrigin, setDest, getEstimation, getRecommendation, clearState
- *   7. Memory Layer:    unified favorites + history in single voy_memory localStorage key
+ *   3. Search:          coordinates searchLocal + searchNominatim + dedup + recent
+ *   4. Bridge:          setOrigin, setDest, getEstimation, clearState
+ *   5. Memory Layer:    unified favorites + history in single voy_memory localStorage key
  *
  * THIS FILE DOES NOT:
  *   - Calculate or estimate anything (delegates to MobilityEngine)
@@ -33,16 +31,6 @@
   var _dest = null;             // {lat, lon, name, source}
   var _originManual = false;    // true = user typed/searched origin manually (GPS won't override)
   var _estimations = null;      // Array of estimation objects from MobilityEngine
-
-  var _prefs = {
-    avoidMoto: false,
-    prioritizePrice: false,
-    prioritizeSpeed: false,
-    avoidLongWalks: false,
-    avoidTransfers: false,
-    withLuggage: false,
-    withChildren: false
-  };
 
   // Search state
   var _searchCache = {};        // cache Nominatim results: key=query, value=results
@@ -131,7 +119,6 @@
   function getEstimations() { return _estimations; }
 
   function setEstimations(estimations) { _estimations = estimations; }
-  function getPrefs() { return _prefs; }
   function isOriginManual() { return _originManual; }
 
   // =====================================================================
@@ -179,15 +166,7 @@
   }
 
   // =====================================================================
-  //  5. RECOMMENDATION ORCHESTRATION
-  // =====================================================================
-
-  function computeRecommendation() {
-    return MobilityEngine.computeRecommendation(_estimations, _prefs, _config.providers);
-  }
-
-  // =====================================================================
-  //  6. SEARCH COORDINATION
+  //  5. SEARCH COORDINATION
   // =====================================================================
 
   function searchLocal(q) {
@@ -259,40 +238,7 @@
   function clearSearchCache() { _searchCache = {}; }
 
   // =====================================================================
-  //  7. PREFERENCES MANAGEMENT
-  // =====================================================================
-
-  function loadPrefs() {
-    try {
-      var saved = localStorage.getItem(_config.prefsKey);
-      if (saved) {
-        var parsed = JSON.parse(saved);
-        Object.keys(_prefs).forEach(function (k) {
-          if (k in parsed) _prefs[k] = !!parsed[k];
-        });
-      }
-    } catch (e) { /* silent */ }
-  }
-
-  function savePrefs() {
-    try { localStorage.setItem(_config.prefsKey, JSON.stringify(_prefs)); }
-    catch (e) { /* silent */ }
-  }
-
-  function togglePref(key) {
-    if (!(key in _prefs)) return _prefs;
-    _prefs[key] = !_prefs[key];
-    if (key === 'prioritizePrice' && _prefs.prioritizePrice) _prefs.prioritizeSpeed = false;
-    if (key === 'prioritizeSpeed' && _prefs.prioritizeSpeed) _prefs.prioritizePrice = false;
-    savePrefs();
-    return _prefs;
-  }
-
-  function hasActivePrefs() { return Object.keys(_prefs).some(function (k) { return _prefs[k]; }); }
-  function countActivePrefs() { return Object.keys(_prefs).filter(function (k) { return _prefs[k]; }).length; }
-
-  // =====================================================================
-  //  8. MEMORY LAYER — Core (unified storage)
+  //  6. MEMORY LAYER — Core (unified storage)
   // =====================================================================
 
   /**
@@ -414,7 +360,7 @@
   }
 
   // =====================================================================
-  //  9. MEMORY LAYER — Favorites API
+  //  7. MEMORY LAYER — Favorites API
   // =====================================================================
 
   function getFavorites() { return _memory.favorites; }
@@ -510,7 +456,7 @@
   }
 
   // =====================================================================
-  //  10. MEMORY LAYER — History API
+  //  8. MEMORY LAYER — History API
   // =====================================================================
 
   function getHistory() { return _memory.history; }
@@ -570,7 +516,7 @@
   }
 
   // =====================================================================
-  //  11. MEMORY LAYER — Metrics
+  //  9. MEMORY LAYER — Metrics
   // =====================================================================
 
   function _trackFavCreation(type) {
@@ -693,7 +639,6 @@
     getDest: getDest,
     getEstimations: getEstimations,
     setEstimations: setEstimations,
-    getPrefs: getPrefs,
     isOriginManual: isOriginManual,
 
     // State mutators (Bridge)
@@ -709,9 +654,6 @@
     // Estimation orchestration
     runEstimations: runEstimations,
 
-    // Recommendation orchestration
-    computeRecommendation: computeRecommendation,
-
     // Search coordination
     searchLocal: searchLocal,
     dedupResults: dedupResults,
@@ -721,13 +663,6 @@
     saveRecentSearch: saveRecentSearch,
     getRecentSearches: getRecentSearches,
     clearSearchCache: clearSearchCache,
-
-    // Preferences management
-    loadPrefs: loadPrefs,
-    savePrefs: savePrefs,
-    togglePref: togglePref,
-    hasActivePrefs: hasActivePrefs,
-    countActivePrefs: countActivePrefs,
 
     // Memory Layer — unified
     loadMemory: loadMemory,
