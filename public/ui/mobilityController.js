@@ -301,10 +301,29 @@
     if (!_config.busStops) return [];
     var stops = _config.busStops.filter(function (s) { return String(s.linea) === String(linea); });
     if (stops.length < 2) return [];
-    // Sort by lon (west→east) then lat (south→north) to form a rough path.
-    // This is an approximation — real route shapes require GTFS data we don't have.
-    stops.sort(function (a, b) { return a.lon - b.lon || a.lat - b.lat; });
-    return stops.map(function (s) { return [s.lon, s.lat]; });
+    // V7.1 (Gemini AC-8): nearest-neighbor chain seeded from the stop closest to the
+    // user's origin. Replaces the old lon/lat zigzag with a coherent path approximation.
+    var origin = getOrigin();
+    var remaining = stops.slice();
+    var seedIdx = 0;
+    if (origin) {
+      var best = Infinity;
+      for (var i = 0; i < remaining.length; i++) {
+        var dSeed = Math.hypot(remaining[i].lat - origin.lat, remaining[i].lon - origin.lon);
+        if (dSeed < best) { best = dSeed; seedIdx = i; }
+      }
+    }
+    var ordered = [remaining.splice(seedIdx, 1)[0]];
+    while (remaining.length) {
+      var last = ordered[ordered.length - 1];
+      var bi = 0, bd = Infinity;
+      for (var j = 0; j < remaining.length; j++) {
+        var dd = Math.hypot(remaining[j].lat - last.lat, remaining[j].lon - last.lon);
+        if (dd < bd) { bd = dd; bi = j; }
+      }
+      ordered.push(remaining.splice(bi, 1)[0]);
+    }
+    return ordered.map(function (s) { return [s.lon, s.lat]; });
   }
 
   function getBusLineStops(linea) {

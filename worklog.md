@@ -1062,3 +1062,49 @@ Stage Summary:
 - The deploy gap is now MINIMIZED to exactly one thing the user must do:
   set 2 env vars + run ./scripts/deploy.sh
 - No more features will be built. The code is done. The ball is in the user's court.
+
+---
+Task ID: 21
+Agent: Main (Gemini audit — 8 atomic fixes, UI hardening)
+Task: Implement Gemini's 4 P0 bug fixes + 8 atomic changes (AC-1..AC-8) to harden VOY V7 UI before deploy
+
+Work Log:
+- Read Gemini audit JSON: 4 P0 bugs (walk sheet collapse, bus confidence, zero-fare events, straight-line routing) + 8 atomic changes (AC-1..AC-8) + 3 magic suggestions.
+- Verified all 4 P0 bugs at cited line numbers in public/VOY-Lite.html (lines 948, 1203, 1253, 1328) — all confirmed present in V7 local code.
+- Computed REAL SRI hashes for maplibre-gl@4.7.1 (Gemini provided a FAKE hash that would have broken the map):
+  * JS:   sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj
+  * CSS:  sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V
+  (computed via curl + openssl dgst -sha384 | base64, NOT a placeholder)
+- AC-1 (Walk Mode Hero, P0-1): In renderSheet(), when _activeMode==='walk' && no ride-hailing hero, inject a walking hero {id:'walk', name:'A pie', price:0, timeMin=distKm*12}. Rendered standalone with arrival-clock magic ("Llegás HH:MM"). Confidence/surge/fareRange bypassed (walk is deterministic → confidence=1). Added .walk-hero CSS (green gradient + success-colored price).
+- AC-2 (OSRM Routing, P0-4): Replaced straight-line coordinates in drawRouteLine() with OSRM fetch. Straight line renders instantly as placeholder; OSRM refines to street-level geometry when available. Uses 'foot' profile in walk mode, 'driving' otherwise. Cached per O/D pair in sessionStorage (battery/latency magic). fitBounds to route on success. Graceful fallback on fetch failure (keeps straight line).
+- AC-3 (Bus Confidence, P0-2): Replaced PricingEngineV2.fareConfidence('taxi',...) with constant 0.98 for bus (fare is fixed/public SUBE — bypasses Bayesian variance).
+- AC-4 (SRI Integrity): Added integrity="" + crossorigin="anonymous" to BOTH maplibre-gl.js and maplibre-gl.css <link>/<script> tags (real computed hashes, not Gemini's fake).
+- AC-5 (UA Guard): isMaximSupported() now tests (navigator.userAgent||'') — prevents crash on empty UA.
+- AC-6 (Event Fare, P0-3): ride_estimated event now uses autoEst.rankedProviders[0].price (was autoEst.providers[0].price — providers is undefined → fare:0). Added fare_captured + lost_conversion analytics signals (Gemini magic: capture lost-conversion when fare=0).
+- AC-7 (Service Worker): Created public/sw.js — conservative design: (1) network-first for navigations, NEVER serve stale HTML (cache only as offline fallback), (2) stale-while-revalidate for same-origin static assets, (3) cache-first for pinned unpkg libs, (4) passthrough cross-origin map tiles (no cache — quota safety). Registered in VOY-Lite.html on window load. Version-pinned cache 'voy-v7-1' with auto-cleanup of old caches on activate.
+- AC-8 (Bus Stop TSP): Replaced stops.sort(lon,lat zigzag) in getBusLineGeometry() with nearest-neighbor chain seeded from stop closest to user origin. Forms a coherent path instead of zigzag. (Note: dataset has only 2 stops/line near test area, so zigzag elimination can't be visually demoed — data gap is BUG-11/GTFS.)
+- Bumped core/ui script cache-busters ?v=9 → ?v=10 to ensure browser fetches the patched mobilityController.js.
+- Added .walk-hero CSS (green gradient bg + success-colored hero-price/hero-range).
+
+Verification (agent-browser, 360px + 390px, Santa Fe geo -31.61/-60.70):
+  * Page loads: title "VOY — Movilidad Santa Fe", 0 console errors throughout full flow ✓
+  * Version pin: window.VOY_VERSION=V7.0.0 ✓
+  * Mode selector: display=flex, 6 pills, _activeMode='all' on mount ✓
+  * No horizontal scroll: body.scrollWidth=390=innerWidth at 390px ✓
+  * AC-1 walk hero: set origin/dest (2.16km), switch to walk mode → walk_hero_present=true, hero_name="A pie", hero_price="Gratis", hero_meta="26 min · 2.2 km · Llegás 12:13" (arrival-clock magic works, 2.16km*12≈26min ✓) ✓
+  * AC-2 OSRM route: route_source_exists=true, route_coords_count=58 (NOT straight), route_is_straight=false, foot profile used (osrm_cache_key="osrm_foot_..."), cached in sessionStorage ✓
+  * AC-3 bus confidence: bus_badge="Estimado · 98%" (was taxi Bayesian logic) ✓
+  * AC-6 event fare: autoEst.rankedProviders[0].price=2375 (Maxim), autoEst.providers=undefined (proves old code path was broken) ✓
+  * AC-7 SW: navigator.serviceWorker.controller="http://localhost:3000/sw.js" (registered + active) ✓
+  * AC-8 bus geometry: getBusLineGeometry() executes, returns valid coords (dataset sparse: 2 stops/line, TSP trivial — code correct, demo needs denser data) ✓
+  * Footer sticky (empty state, 360px): footer_bottom=740=viewport_h, body_scroll_height=740, scrolls=false ✓
+  * Footer natural push (with estimations, 390px): footer_bottom=890>844 (content overflows → footer pushed down, no overlap) ✓
+  * Screenshots: v71-walk-hero-osrm.png, v71-final-walk-osrm.png (390x844)
+
+Stage Summary:
+- ALL 8 Gemini atomic changes (AC-1..AC-8) implemented + browser-verified. 4 P0 bugs fixed.
+- Lint: 0 errors, 0 warnings. Preflight: 22/22 PASS, "READY TO DEPLOY" (28 assets now — sw.js added one).
+- Bundle integrity preserved: SRI now protects the CDN maplibre dependency (supply-chain hardening).
+- No regression: footer behavior, mode selector, 6 providers all still green.
+- The deploy blocker remains UNCHANGED and is purely credential ownership (no CLOUDFLARE_API_TOKEN in sandbox). Code is now MORE deploy-ready: UI hardened, routing real, analytics correct, offline-capable.
+- Next: user runs `export CLOUDFLARE_API_TOKEN=...; export CLOUDFLARE_ACCOUNT_ID=...; ./scripts/deploy.sh` — the V7.1 bundle (with Gemini's hardening) ships to edge in one command.

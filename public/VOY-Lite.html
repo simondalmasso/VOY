@@ -34,7 +34,7 @@ Constraints honored:
 <meta name="voy-version" content="V7.0.0">
 <meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -45,11 +45,11 @@ Constraints honored:
 <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-touch-152.png">
 <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-120.png">
 <link rel="apple-touch-icon" sizes="1024x1024" href="/icons/apple-touch-1024.png">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="core/mobilityEngine.js?v=9"></script>
-<script src="core/pricingEngine.js?v=9"></script>
-<script src="core/eventBus.js?v=9"></script>
-<script src="ui/mobilityController.js?v=9"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
+<script src="core/mobilityEngine.js?v=10"></script>
+<script src="core/pricingEngine.js?v=10"></script>
+<script src="core/eventBus.js?v=10"></script>
+<script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
    VOY V7.0.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
@@ -245,6 +245,9 @@ button{font-family:inherit;letter-spacing:inherit}
 .hero-price-block{text-align:right;flex-shrink:0}
 .hero-price{font-size:var(--font-display);font-weight:var(--fw-display);color:var(--text);letter-spacing:-0.03em;line-height:1}
 .hero-range{font-size:var(--font-micro);color:var(--text3);font-weight:var(--fw-body);margin-top:3px}
+.walk-hero{background:linear-gradient(90deg,rgba(52,199,89,0.10) 0%,var(--bg2) 40%)}
+.walk-hero .hero-price{color:var(--success)}
+.walk-hero .hero-range{color:var(--success);opacity:0.8}
 .conf-badge{font-size:var(--font-micro);font-weight:700;color:var(--text2);background:var(--bg3);padding:2px 7px;border-radius:999px;letter-spacing:0.02em}
 .conf-badge.high{color:var(--success);background:rgba(52,199,89,0.12)}
 .conf-badge.mid{color:var(--orange);background:rgba(255,149,0,0.12)}
@@ -759,7 +762,7 @@ window.addEventListener('beforeunload',function(){va_close()});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')va_close()});
 
 // ===================== MAXIM OS GATE =====================
-function isMaximSupported(){return /android/i.test(navigator.userAgent)}
+function isMaximSupported(){return /android/i.test(navigator.userAgent||'')}
 
 // ===================== INIT =====================
 document.addEventListener('DOMContentLoaded',function(){
@@ -948,10 +951,30 @@ function updateMapMarkers(){
 function drawRouteLine(){
   if(!_map)return;var origin=MC.getOrigin(),dest=MC.getDest();if(!origin||!dest)return;
   if(_map.getSource('route-src')){if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');if(_map.getLayer('route-line'))_map.removeLayer('route-line');_map.removeSource('route-src')}
+  var _straight=[[origin.lon,origin.lat],[dest.lon,dest.lat]];
+  var _setCoords=function(coords){try{_map.getSource('route-src').setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}})}catch(e){}};
   try{
-    _map.addSource('route-src',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[[origin.lon,origin.lat],[dest.lon,dest.lat]]}}});
+    _map.addSource('route-src',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:_straight}}});
     _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#00D4FF','line-width':12,'line-opacity':0.18,'line-blur':2}});
     _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#00D4FF','line-width':4,'line-opacity':0.9}});
+  }catch(e){}
+  // V7.1 (Gemini AC-2): real street routing via OSRM (foot profile in walk mode).
+  // Straight line renders instantly; OSRM refines it when available. Cached per O/D pair.
+  var profile=(_activeMode==='walk')?'foot':'driving';
+  var ck='osrm_'+profile+'_'+origin.lat.toFixed(4)+'_'+origin.lon.toFixed(4)+'_'+dest.lat.toFixed(4)+'_'+dest.lon.toFixed(4);
+  try{
+    var cached=sessionStorage.getItem(ck);
+    if(cached){var cc=JSON.parse(cached);if(cc&&cc.length>2){_setCoords(cc);return}}
+    var osrmUrl='https://router.project-osrm.org/route/v1/'+profile+'/'+origin.lon+','+origin.lat+';'+dest.lon+','+dest.lat+'?overview=full&geometries=geojson';
+    fetch(osrmUrl).then(function(r){return r.json()}).then(function(d){
+      if(d&&d.routes&&d.routes[0]&&d.routes[0].geometry&&d.routes[0].geometry.coordinates&&d.routes[0].geometry.coordinates.length>1){
+        var coords=d.routes[0].geometry.coordinates;
+        try{sessionStorage.setItem(ck,JSON.stringify(coords))}catch(e){}
+        _setCoords(coords);
+        var lats=coords.map(function(p){return p[1]}),lons=coords.map(function(p){return p[0]});
+        _map.fitBounds([[Math.min.apply(null,lons),Math.min.apply(null,lats)],[Math.max.apply(null,lons),Math.max.apply(null,lats)]],{padding:60,duration:600});
+      }
+    }).catch(function(){});
   }catch(e){}
 }
 
@@ -1200,7 +1223,7 @@ function renderSheet(){
     clearBusRoute();showModeSelector(false);return;
   }
   showModeSelector(true);
-  if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:autoEst.providers?autoEst.providers[0]&&autoEst.providers[0].price:0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
+  if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();var _fare=(autoEst.rankedProviders&&autoEst.rankedProviders[0])?autoEst.rankedProviders[0].price:0;VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:_fare,fare_captured:_fare>0,lost_conversion:_fare<=0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
 
   // V7: Build hero/alts respecting _activeMode (transport selector is functional, not decorative).
   // all|car|custom → ride-hailing apps (uber/didi/maxim); taxi → taxi providers;
@@ -1229,14 +1252,27 @@ function renderSheet(){
   if(!hero&&alts.length)hero=alts.shift();
 
   var distKm=autoEst.distance||0;
+  // V7.1 (Gemini AC-1): Walk mode — no ride-hailing hero applies. Build a walking hero
+  // with ETA at 5 km/h (12 min/km) + free fare. Prevents empty sheet UX in walk mode.
+  var _isWalkHero=(_activeMode==='walk'&&!hero);
+  if(_isWalkHero){
+    var walkMin=Math.max(1,Math.round(distKm*12));
+    hero={id:'walk',name:'A pie',price:0,timeMin:walkMin,url:''};
+  }
   // V6.2: prefer bayesian PricingEngineV2 (multi_variable_bayes_estimation) with v6 fallback.
   var heroProvider=hero?hero.id:'didi';
-  var confidence=(window.PricingEngineV2)?PricingEngineV2.fareConfidence(heroProvider,{distanceKm:distKm,timeMin:hero?hero.timeMin:0,fare:hero?hero.price:0}):MC.v6FareConfidence(heroProvider,distKm,hero?hero.timeMin:0);
-  var confClass=confidence>=0.8?'high':confidence>=0.65?'mid':'';
   var surgeCtx={now:Date.now()};
-  var surgeLabel=(window.PricingEngineV2)?PricingEngineV2.surgeLabel(heroProvider,surgeCtx):MC.v6SurgeLabel(heroProvider);
-  var surgeMult=(window.PricingEngineV2)?PricingEngineV2.surgeMultiplier(heroProvider,surgeCtx):MC.v6SurgeMultiplier(heroProvider);
-  var fareRange=hero?((window.PricingEngineV2)?PricingEngineV2.fareRange(hero.price,confidence,surgeMult):MC.v6FareRange(hero.price,confidence,surgeMult)):{low:0,high:0};
+  var confidence,surgeLabel,surgeMult,fareRange;
+  if(_isWalkHero){
+    // V7.1: walking is deterministic — bypass Bayesian pricing variance entirely.
+    confidence=1;surgeLabel='';surgeMult=1;fareRange={low:0,high:0};
+  }else{
+    confidence=(window.PricingEngineV2)?PricingEngineV2.fareConfidence(heroProvider,{distanceKm:distKm,timeMin:hero?hero.timeMin:0,fare:hero?hero.price:0}):MC.v6FareConfidence(heroProvider,distKm,hero?hero.timeMin:0);
+    surgeLabel=(window.PricingEngineV2)?PricingEngineV2.surgeLabel(heroProvider,surgeCtx):MC.v6SurgeLabel(heroProvider);
+    surgeMult=(window.PricingEngineV2)?PricingEngineV2.surgeMultiplier(heroProvider,surgeCtx):MC.v6SurgeMultiplier(heroProvider);
+    fareRange=hero?((window.PricingEngineV2)?PricingEngineV2.fareRange(hero.price,confidence,surgeMult):MC.v6FareRange(hero.price,confidence,surgeMult)):{low:0,high:0};
+  }
+  var confClass=confidence>=0.8?'high':confidence>=0.65?'mid':'';
 
   var h='';
   // Sheet head: route summary + save favorite
@@ -1251,7 +1287,22 @@ function renderSheet(){
   h+='</div>';
 
   // Hero
-  if(hero){
+  // V7.1 (Gemini AC-1): Walk hero — rendered standalone with arrival clock (ETD magic),
+  // then the ride-hailing hero block is skipped.
+  if(_isWalkHero){
+    var _arr=new Date(Date.now()+hero.timeMin*60000);
+    var _arrH=_arr.getHours(),_arrM=_arr.getMinutes();
+    var _arrStr=(_arrH<10?'0':'')+_arrH+':'+(_arrM<10?'0':'')+_arrM;
+    h+='<div class="hero walk-hero">';
+    h+='<div class="hero-color" style="background:#34C759"></div>';
+    h+='<div class="hero-info">';
+    h+='<div class="hero-name">'+escapeHtml(hero.name)+'</div>';
+    h+='<div class="hero-meta">'+formatMin(hero.timeMin)+' · '+distKm.toFixed(1)+' km · <span class="conf-badge high">Llegás '+_arrStr+'</span></div>';
+    h+='</div>';
+    h+='<div class="hero-price-block"><div class="hero-price">Gratis</div><div class="hero-range">a 5 km/h</div></div>';
+    h+='</div>';
+  }
+  if(hero&&!_isWalkHero){
     h+='<div class="hero">';
     h+='<div class="hero-color" style="background:'+(PROVIDERS[hero.id]?PROVIDERS[hero.id].color:'#666')+'"></div>';
     h+='<div class="hero-info">';
@@ -1325,7 +1376,7 @@ function renderSheet(){
   if(!rankedBus.length&&busEst)rankedBus=[busEst];
   if(rankedBus.length){
     var mainBus=rankedBus[0],otherBus=rankedBus.slice(1);
-    var busConf=(window.PricingEngineV2)?PricingEngineV2.fareConfidence('taxi',{distanceKm:distKm,timeMin:mainBus.totalMin||0,fare:mainBus.price}):MC.v6FareConfidence('taxi',distKm,mainBus.totalMin||0);
+    var busConf=0.98; // V7.1 (Gemini AC-3): bus fare is fixed/public (SUBE) — bypass Bayesian variance.
     h+='<div class="bus-block">';
     h+='<div class="block-title"><span class="bt-ic">'+svg('bus',15)+'</span> Colectivo <span class="est-badge">Estimado · '+Math.round(busConf*100)+'%</span></div>';
     var busText='Lin. '+escapeHtml(mainBus.linea)+' por '+escapeHtml(shortenStop(mainBus.stopOrigenCalles));
@@ -1529,6 +1580,15 @@ function showToast(msg,type){
   var el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
   c.appendChild(el);
   setTimeout(function(){el.style.opacity='0';el.style.transition='opacity .3s';setTimeout(function(){if(el.parentNode)el.remove()},300)},2500);
+}
+
+// ===================== SERVICE WORKER (V7.1 / Gemini AC-7) =====================
+// Conservative offline shell: network-first navigations (NEVER stale HTML),
+// stale-while-revalidate for same-origin static assets. See /sw.js.
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('/sw.js').then(function(){}).catch(function(){});
+  });
 }
 </script>
 </body>
