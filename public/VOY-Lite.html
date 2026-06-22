@@ -550,22 +550,52 @@ var _gpsRetryCount=0;
 var _gpsMaxRetries=3;
 var _gpsRetryTimer=null;
 
+// GPS_REFRESH: debounce 3s + 30m minimum movement to avoid UI recompute storms
+var _gpsLastUpdate=0;
+var _gpsLastLat=null;
+var _gpsLastLon=null;
+var GPS_DEBOUNCE_MS=3000;
+var GPS_MIN_MOVE_M=30;
+
+function _haversineMeters(lat1,lon1,lat2,lon2){
+  var R=6371000;
+  var dLat=(lat2-lat1)*Math.PI/180;
+  var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+    Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function _handleGpsPosition(lat,lon){
+  if(MC.isOriginManual())return;
+  var origin=MC.getOrigin();
+  if(origin&&origin.source!=='gps'&&origin.source!=='cache')return;
+  var now=Date.now();
+  // Debounce: skip if updated <3s ago
+  if(_gpsLastUpdate && now-_gpsLastUpdate< GPS_DEBOUNCE_MS)return;
+  // Hysteresis: skip if moved <30m from last accepted fix
+  if(_gpsLastLat!=null){
+    var dist=_haversineMeters(_gpsLastLat,_gpsLastLon,lat,lon);
+    if(dist< GPS_MIN_MOVE_M)return;
+  }
+  _gpsLastUpdate=now;
+  _gpsLastLat=lat;
+  _gpsLastLon=lon;
+  MC.setOrigin(lat,lon,'Mi ubicación','gps');
+  va_origin('gps');
+  updateOriginUI();
+  updateMapMarkers();
+  if(MC.getDest())runEstimations();
+}
+
 function initGPS(){
   if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
   _gpsWatch=navigator.geolocation.watchPosition(function(pos){
     _gpsRetryCount=0;
     updateGPSStatus(true);
     cachePosition(pos.coords.latitude,pos.coords.longitude);
-    if(!MC.isOriginManual()){
-      var origin=MC.getOrigin();
-      if(!origin||origin.source==='gps'||origin.source==='cache'){
-        MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
-        va_origin('gps');
-        updateOriginUI();
-        updateMapMarkers();
-        if(MC.getDest())runEstimations();
-      }
-    }
+    _handleGpsPosition(pos.coords.latitude,pos.coords.longitude);
   },function(err){
     updateGPSStatus(false);
     loadCachedPosition();
@@ -577,16 +607,7 @@ function initGPS(){
           _gpsRetryCount=0;
           updateGPSStatus(true);
           cachePosition(pos.coords.latitude,pos.coords.longitude);
-          if(!MC.isOriginManual()){
-            var origin=MC.getOrigin();
-            if(!origin||origin.source==='gps'||origin.source==='cache'){
-              MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');
-              va_origin('gps');
-              updateOriginUI();
-              updateMapMarkers();
-              if(MC.getDest())runEstimations();
-            }
-          }
+          _handleGpsPosition(pos.coords.latitude,pos.coords.longitude);
         },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
       },_gpsRetryCount*5000);
     }
@@ -710,6 +731,7 @@ function updateMapMarkers(){
 
   if(_originMarker){_originMarker.remove();_originMarker=null}
   if(_destMarker){_destMarker.remove();_destMarker=null}
+  // FAVORITOS_OVERLAY: no popups/labels on map; only real markers.
   if(_originPopup){_originPopup.remove();_originPopup=null}
   if(_destPopup){_destPopup.remove();_destPopup=null}
 
@@ -717,32 +739,15 @@ function updateMapMarkers(){
     var el=document.createElement('div');
     el.style.cssText='width:18px;height:18px;background:#16a34a;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
     _originMarker=new maplibregl.Marker({element:el}).setLngLat([origin.lon,origin.lat]).addTo(_map);
-    var oLabel=origin.name||'Origen';
-    _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
-      .setLngLat([origin.lon,origin.lat])
-      .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
-      .addTo(_map);
   }
   if(dest){
     var el2=document.createElement('div');
     el2.style.cssText='width:18px;height:18px;background:#dc2626;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
     _destMarker=new maplibregl.Marker({element:el2}).setLngLat([dest.lon,dest.lat]).addTo(_map);
-    var dLabel=dest.name||'Destino';
-    _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
-      .setLngLat([dest.lon,dest.lat])
-      .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
-      .addTo(_map);
   }
 
-  if(origin&&dest){
-    var bounds=new maplibregl.LngLatBounds();
-    bounds.extend([origin.lon,origin.lat]);
-    bounds.extend([dest.lon,dest.lat]);
-    _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:800});
-  } else if(origin){
-    _map.flyTo({center:[origin.lon,origin.lat],zoom:15});
-  }
-
+  // MAP_STATE: do NOT auto-center; only update markers + route line.
+  // User retains zoom/position. Explicit centering via centerRoute() / locateMe().
   drawRouteLine();
 
   var cBtn=document.getElementById('centerRouteBtn');
@@ -779,29 +784,9 @@ function centerRoute(){
   _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
 }
 
-function refreshOriginLabel(){
-  if(!_map)return;
-  var origin=MC.getOrigin();
-  if(!origin||!_originMarker)return;
-  if(_originPopup){_originPopup.remove();_originPopup=null}
-  var oLabel=origin.name||'Origen';
-  _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
-    .setLngLat([origin.lon,origin.lat])
-    .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
-    .addTo(_map);
-}
-
-function refreshDestLabel(){
-  if(!_map)return;
-  var dest=MC.getDest();
-  if(!dest||!_destMarker)return;
-  if(_destPopup){_destPopup.remove();_destPopup=null}
-  var dLabel=dest.name||'Destino';
-  _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
-    .setLngLat([dest.lon,dest.lat])
-    .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
-    .addTo(_map);
-}
+// FAVORITOS_OVERLAY: label refresh is a no-op; no popups/labels on map.
+function refreshOriginLabel(){}
+function refreshDestLabel(){}
 
 // ===================== MEMORY BLOCK (history only) =====================
 function renderMemoryBlock(){
@@ -1236,7 +1221,14 @@ function requestRide(mode,url){
   if(now-last<DOUBLE_TAP_MS){
     _confirmState[mode]=0;
     va_cta(mode);
-    window.open(url,'_blank');
+    // MAXIM_ANDROID: intent:// URLs must use location.href (not window.open)
+    // so Android resolves the intent. The intent's S.browser_fallback_url
+    // handles the Play Store fallback; taximaxim.com is the final web fallback.
+    if(url && url.indexOf('intent://')===0){
+      window.location.href=url;
+    }else{
+      window.open(url,'_blank');
+    }
     saveTripToHistory(mode);
   }else{
     _confirmState[mode]=now;
