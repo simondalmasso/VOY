@@ -89,7 +89,7 @@ fi
 
 # ── 3. Health endpoint ──────────────────────────────────────
 hdr "3. /api/health (worker version + build hash)"
-HEALTH=$(curl -fsS -m 10 "$CANONICAL/api/health" 2>/dev/null || echo "")
+HEALTH=$(curl -fsS -m 10 "$CANONICAL/api/health?_=$(date +%s)" 2>/dev/null || echo "")
 if [ -n "$HEALTH" ]; then
   LIVE_VER=$(echo "$HEALTH" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "")
   LIVE_HASH=$(echo "$HEALTH" | grep -o '"build_hash":"[^"]*"' | cut -d'"' -f4 || echo "")
