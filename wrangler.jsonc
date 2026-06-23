@@ -38,13 +38,12 @@
   // El worker escribe data points via ctx.waitUntil(env.VOY_METRICS.writeDataPoint()).
   // Si el binding está ausente (dry-run), /api/events devuelve 202 gracefully.
   //
-  // ⚠️ PENDIENTE: habilitar Analytics Engine en el dashboard de Cloudflare:
-  //   https://dash.cloudflare.com/b21fa81d12acb663798f9f7c51801955/workers/analytics-engine
-  // Error 10089 si se deploya sin habilitar. Una vez habilitado, descomentar el
-  // bloque de abajo y redeploy (./scripts/deploy.sh).
-  // "analytics_engine_datasets": [
-  //   { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
-  // ],
+  // ✅ Dataset creado en el dashboard CF (account b21fa81d12acb663798f9f7c51801955):
+  //   binding = VOY_METRICS, dataset = voy_metrics.
+  // Habilitado el 2026-06-23. /api/health ahora reporta analytics:true.
+  "analytics_engine_datasets": [
+    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
+  ],
 
   // V7.8: Durable Object + /api/reports eliminados (analytics V2 dual-store removido).
   // WAE es el único store. Simplificación: 3 eventos, 0 código muerto.
