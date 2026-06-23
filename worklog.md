@@ -2373,3 +2373,20 @@ Stage Summary:
 - Files changed: public/navigator/navigator.js (full rewrite v2), public/VOY-Lite.html (CSS .vnp-mode accent + startNavigation comment + phase label). No backend/worker changes.
 - NOT DEPLOYED: local only. Screenshots: v710-nav-panel-mobile.png, v710-nav-desktop.png.
 - Backward compatible: Phase 1 public API (start/stop/recenter/toggleVoice/isRunning) preserved; startNavigation() caller unchanged. New APIs (cycleMode/getMode/isVoiceOn) are additive.
+
+---
+Task ID: 40
+Agent: Main
+Task: GOVERNANCE_DECISION — NO_ASSISTANT_FLOAT. Reason: early-stage UX already overloaded by routing + provider system. Allowed future condition: only_if_user_navigation_adoption > 40%.
+
+Work Log:
+- Received governance decision NO_ASSISTANT_FLOAT: explicitly declining to add an AI assistant floating button/widget to the UI.
+- Audited codebase for any pre-existing assistant float that would need removing: searched public/ + src/ for selectors/identifiers (assistant, chatbot, asistente, chat-float, ai-float, aiButton, assistant-float, floatingChat, helpBubble, gemini, glbutton). ZERO matches in UI markup. The single hit (src/lib/estimate-helpers.ts:3) is a code comment ("mobility assistant price estimation system" = domain concept, not a UI float). → No removal required; nothing violates the decision today.
+- Confirmed the decision is a forward-looking guardrail: no build action, no code change. Recorded so the assistant-float proposal is NOT re-surfaced in future sessions.
+
+Stage Summary:
+- DECISION: NO_ASSISTANT_FLOAT — recorded and binding for all future work.
+- REASON: early-stage UX already overloaded by routing + provider system (floating input v2 + sheet hero/CTAs + bus block + taxi/remis accordions + navigator panel + share button — adding an assistant float now would exceed the user's cognitive budget).
+- ALLOWED FUTURE CONDITION (re-evaluation gate): only_if_user_navigation_adoption > 40%. Until analytics show >40% of sessions use the "Navegar" navigation module (Task 39, metric = navigation_start events / unique sessions), the assistant float must NOT be built. Metric source: Cloudflare Analytics Engine dataset voy_metrics, event navigation_start (already normalized server-side per Task 37/38).
+- COMPLIANCE: ✓ — no assistant float exists in the codebase; nothing to remove.
+- ACTION REQUIRED: none. This is a documentation/governance entry only. Future agents proposing an assistant float MUST first check this worklog entry AND verify the adoption metric before proceeding.
