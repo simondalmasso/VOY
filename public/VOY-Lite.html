@@ -75,6 +75,10 @@ Constraints honored:
   --header-bg:rgba(255,255,255,0.92);
   --footer-bg:rgba(255,255,255,0.96);
   --top-scrim:linear-gradient(180deg,rgba(255,255,255,0.92) 0%,rgba(255,255,255,0.55) 60%,rgba(255,255,255,0) 100%);
+  /* UX_CORE_REDESIGN — floating_input_v2: dark focal pill (FOCUS_SINGLE_ACTION_DESTINATION).
+     Spec bg #0F0F0F honored in light theme; lifted to #1A1A1A in dark theme for legibility
+     (on pure-black --bg, #0F0F0F would be near-invisible). Intent (dark focal pill) preserved. */
+  --fi-bg:#0F0F0F;--fi-text:#FFFFFF;--fi-sub:rgba(255,255,255,0.55);--fi-border:rgba(255,255,255,0.08);--fi-hover:rgba(255,255,255,0.06);
   --ease-spring:320ms cubic-bezier(0.22,1.2,0.36,1);
   --ease-out:200ms cubic-bezier(0.22,0.61,0.36,1);
   --ease-sheet:380ms cubic-bezier(0.22,1.1,0.36,1);
@@ -86,6 +90,7 @@ Constraints honored:
   --border:rgba(255,255,255,0.10);--border-subtle:rgba(255,255,255,0.06);--border-strong:rgba(255,255,255,0.15);
   --header-bg:rgba(0,0,0,0.92);--footer-bg:rgba(0,0,0,0.96);
   --top-scrim:linear-gradient(180deg,rgba(0,0,0,0.92) 0%,rgba(0,0,0,0.55) 60%,rgba(0,0,0,0) 100%);
+  --fi-bg:#1A1A1A;--fi-text:#FFFFFF;--fi-sub:rgba(255,255,255,0.50);--fi-border:rgba(255,255,255,0.10);--fi-hover:rgba(255,255,255,0.08);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;height:100%}
@@ -113,54 +118,69 @@ button{font-family:inherit;letter-spacing:inherit}
 /* === APP (z-2) === */
 .app{position:relative;z-index:2;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0}
 
-/* === HEADER / FLOATING SEARCH (VOY_UI_FOCUS_V1 UI-002: floats over map, not stuck to top) === */
+/* === FLOATING INPUT v2 (UX_CORE_REDESIGN_LIGHT_TOUCH) ===========================
+   Principles: NO_COLOR_EXPLOSION · FOCUS_SINGLE_ACTION_DESTINATION · MOBILE_FIRST_9_16 ·
+   FLOATING_INPUT_PRIORITY. The destination input is THE single action: a dark focal pill
+   floating at lower_top_third over the ambient map, topmost ambient z, first visual
+   attention element on load. Mic is inside_input_right (continuous push-to-talk).
+   Map/Locate retained as muted secondary actions per LIGHT_TOUCH (removing would break
+   pick-on-map + locate-me flows). =========================================================== */
 .topbar{
-  position:sticky;top:0;z-index:20;
-  padding:calc(10px + env(safe-area-inset-top,0px)) var(--sp-4) var(--sp-2);
-  background:transparent; /* UI-002: no header bg — search floats over the map */
-  backdrop-filter:none;
-  -webkit-backdrop-filter:none;
+  /* floating_center_lower_top_third — floats over the map, not stuck to top.
+     20vh ≈ lower bound of the top third on 9:16 (top third = 0–33vh). */
+  position:absolute;top:calc(20vh + env(safe-area-inset-top,0px));left:0;right:0;
+  z-index:50; /* topmost_ui_priority — above ambient UI (nav=5, footer=2), below modals (dialog=9000, toast=9500, splash=99998) */
+  padding:0 var(--sp-4);
+  background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
 }
-/* UI-004 wake_animation: search bar enters with a 900ms wake (opacity + translateY + shadow) */
+/* floating_input_v2 — dark focal pill. Replaces the old light wake (900ms) with a
+   crisp fade_up_soft_wake (420ms ease-out) that is the first visual attention element. */
 .search-bar{
-  position:relative;display:flex;align-items:center;gap:var(--sp-2);
-  background:var(--surface);border:1px solid var(--border-strong);
-  border-radius:var(--radius-card);
-  /* UI-003 reduce_height -18%: 56px→46px, padding 8/12→6/10 */
-  padding:6px var(--sp-3);min-height:46px;
-  box-shadow:0 1px 3px rgba(0,0,0,0.04); /* soft shadow (wake start) */
-  animation:wake 900ms cubic-bezier(0.22,1.2,0.36,1) both;
+  position:relative;display:flex;align-items:center;gap:var(--sp-1);
+  background:var(--fi-bg);border:1px solid var(--fi-border);
+  border-radius:14px; /* spec border_radius */
+  padding:0 var(--sp-2);height:48px;min-height:48px; /* spec height */
+  box-shadow:0 4px 16px rgba(0,0,0,0.12),0 1px 3px rgba(0,0,0,0.08); /* soft_low shadow */
+  animation:fadeUpSoftWake 420ms ease-out both; /* spec animation: fade_up_soft_wake, 420ms, ease-out */
 }
-@keyframes wake{
-  0%{opacity:0;transform:translateY(-8px);box-shadow:0 1px 3px rgba(0,0,0,0.04)}
-  100%{opacity:1;transform:translateY(0);box-shadow:0 2px 12px rgba(0,0,0,0.10)}
+@keyframes fadeUpSoftWake{
+  0%{opacity:0;transform:translateY(10px)}
+  100%{opacity:1;transform:translateY(0)}
 }
 @media(prefers-reduced-motion:reduce){.search-bar{animation:none;opacity:1;transform:none}}
-.search-bar .sb-icon{color:var(--text3);flex-shrink:0;display:flex;align-items:center}
-.search-bar .sb-icon.sb-locate{color:var(--primary)}
+.search-bar .sb-icon{color:var(--fi-sub);flex-shrink:0;display:flex;align-items:center;padding-left:var(--sp-1)}
 #destInput{
   flex:1;border:none;background:transparent;outline:none;
-  font-size:var(--font-body);font-weight:var(--fw-body);color:var(--text);
-  min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;min-height:32px; /* UI-003: 40→32 */
+  font-size:calc(var(--font-body) * 1.05); /* spec font_scale 1.05em */
+  font-weight:var(--fw-body);color:var(--fi-text);
+  min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;min-height:32px;
 }
-#destInput::placeholder{color:var(--text3)}
+#destInput::placeholder{color:var(--fi-sub)}
 .sb-btn{
   border:none;background:transparent;cursor:pointer;flex-shrink:0;
-  width:44px;height:44px;border-radius:var(--radius-sm); /* UI-003: 48→44 */
-  display:flex;align-items:center;justify-content:center;color:var(--text2);
-  transition:transform var(--ease-out),background var(--ease-out);
+  width:40px;height:40px;border-radius:var(--radius-sm);
+  display:flex;align-items:center;justify-content:center;color:var(--fi-sub);
+  transition:transform var(--ease-out),background var(--ease-out),opacity var(--ease-out);
+  -webkit-tap-highlight-color:transparent;
 }
-.sb-btn:active{transform:scale(0.9);background:var(--bg3)}
-.sb-btn[disabled]{opacity:0.4;cursor:not-allowed}
-/* VOY_VOICE_SEARCH_V1: mic button + listening state */
-.sb-btn.sb-mic{color:var(--text2)}
-.sb-btn.sb-mic.listening{color:var(--red);background:rgba(255,59,48,0.10);animation:micPulse 1.1s ease-in-out infinite}
+.sb-btn:active{transform:scale(0.9);background:var(--fi-hover)}
+.sb-btn[disabled]{opacity:0.3;cursor:not-allowed}
+/* Secondary actions (map-pick, locate) — muted so the INPUT is the single action focus.
+   Lift to full opacity on hover/focus (desktop) and active (mobile). */
+.sb-btn.sb-sec{opacity:0.55}
+.sb-btn.sb-sec:hover,.sb-btn.sb-sec:focus-visible{opacity:1;background:var(--fi-hover)}
+.sb-btn.sb-sec:active{opacity:1}
+/* Mic (inside_input_right) — primary voice action, full opacity, push-to-talk.
+   touch-action:none so pointerdown isn't hijacked by scroll/pan during hold. */
+.sb-btn.sb-mic{color:var(--fi-text);touch-action:none;order:99 /* rightmost = inside_input_right */}
+.sb-btn.sb-mic.listening{color:var(--red);background:rgba(255,59,48,0.18);animation:micPulse 1.1s ease-in-out infinite}
 @keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,48,0.35)}50%{box-shadow:0 0 0 6px rgba(255,59,48,0)}}
 @media(prefers-reduced-motion:reduce){.sb-btn.sb-mic.listening{animation:none}}
 
-/* Origin pill — shows GPS origin, tap to recenter */
+/* Origin pill — shows GPS origin, tap to recenter. Now floats at top of flow (topbar is
+   absolute), so respect safe-area-inset-top to clear the status bar. */
 .origin-pill{
-  display:none;align-items:center;gap:var(--sp-2);margin:var(--sp-2) var(--sp-4) 0;
+  display:none;align-items:center;gap:var(--sp-2);margin:calc(env(safe-area-inset-top,0px) + var(--sp-2)) var(--sp-4) 0;
   padding:8px 12px;background:var(--surface);border:1px solid var(--border);
   border-radius:999px;width:fit-content;max-width:calc(100% - 32px);
   cursor:pointer;transition:transform var(--ease-out);min-height:36px;
@@ -172,32 +192,34 @@ button{font-family:inherit;letter-spacing:inherit}
 .origin-pill .op-text{font-size:var(--font-caption);color:var(--text2);font-weight:var(--fw-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* === SEARCH DROPDOWN === */
+/* Dropdown — dark surface matching the focal pill (NO_COLOR_EXPLOSION: monochrome cluster) */
 .search-dropdown{
   position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:30;
-  background:var(--surface);border:1px solid var(--border-strong);
-  border-radius:var(--radius-card);overflow:hidden;
+  background:var(--fi-bg);border:1px solid var(--fi-border);
+  border-radius:14px;overflow:hidden;
   max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  box-shadow:0 8px 24px rgba(0,0,0,0.18);
 }
 .search-dropdown.hidden{display:none}
 .sd-section{padding:var(--sp-1) 0}
-.sd-section-title{font-size:var(--font-micro);font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;padding:var(--sp-2) var(--sp-4) var(--sp-1)}
+.sd-section-title{font-size:var(--font-micro);font-weight:700;color:var(--fi-sub);text-transform:uppercase;letter-spacing:0.04em;padding:var(--sp-2) var(--sp-4) var(--sp-1)}
 .search-item{
   display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);cursor:pointer;
   border:none;background:transparent;width:100%;text-align:left;
   font-size:var(--font-body);line-height:1.35;min-height:52px;
-  transition:background var(--ease-out);color:var(--text);
+  transition:background var(--ease-out);color:var(--fi-text);
 }
-.search-item:active,.search-item:hover{background:var(--bg3)}
-.search-item-icon{color:var(--text3);flex-shrink:0;width:24px;display:flex;justify-content:center}
+.search-item:active,.search-item:hover{background:var(--fi-hover)}
+.search-item-icon{color:var(--fi-sub);flex-shrink:0;width:24px;display:flex;justify-content:center}
 .search-item-icon.ic-fav{color:var(--orange)}
-.search-item-icon.ic-recent{color:var(--text3)}
+.search-item-icon.ic-recent{color:var(--fi-sub)}
 .search-item-icon.ic-home{color:var(--primary)}
 .search-item-icon.ic-work{color:var(--primary)}
 .search-item-text{flex:1;min-width:0}
-.search-item-text strong{display:block;font-weight:var(--fw-bold);font-size:var(--font-body);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em}
-.search-item-text small{color:var(--text2);font-size:var(--font-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:2px}
-.search-item-tag{font-size:var(--font-micro);font-weight:700;color:var(--text3);background:var(--bg3);padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:0.03em;flex-shrink:0}
-.search-item--empty{padding:var(--sp-5);color:var(--text2);font-size:14px;cursor:default;text-align:center;min-height:auto}
+.search-item-text strong{display:block;font-weight:var(--fw-bold);font-size:var(--font-body);color:var(--fi-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em}
+.search-item-text small{color:var(--fi-sub);font-size:var(--font-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:2px}
+.search-item-tag{font-size:var(--font-micro);font-weight:700;color:var(--fi-sub);background:var(--fi-hover);padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:0.03em;flex-shrink:0}
+.search-item--empty{padding:var(--sp-5);color:var(--fi-sub);font-size:14px;cursor:default;text-align:center;min-height:auto}
 
 /* === MEMORY CHIPS (favorites/recents quick access) === */
 .memory-row{display:none;padding:var(--sp-2) var(--sp-4) 0;gap:var(--sp-2);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -613,14 +635,14 @@ button{cursor:pointer}
 <!-- APP (z-2) -->
 <div class="app">
 
-  <!-- FLOATING SEARCH (persistent, centered) -->
+  <!-- FLOATING INPUT v2 (UX_CORE_REDESIGN) — dark focal pill, lower_top_third, first visual attention element -->
   <header class="topbar">
     <div class="search-bar" role="search">
       <span class="sb-icon" aria-hidden="true" id="sbSearchIcon"></span>
       <input type="text" id="destInput" placeholder="¿A dónde vas?" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Buscar destino" enterkeyhint="search">
-      <button class="sb-btn sb-mic" id="sbMicBtn" aria-label="Buscar por voz" title="Buscar por voz"></button>
-      <button class="sb-btn" id="sbMapBtn" aria-label="Elegir destino en el mapa" title="Elegir en mapa"></button>
-      <button class="sb-btn sb-locate" id="sbLocateBtn" aria-label="Usar mi ubicación" title="Mi ubicación"></button>
+      <button class="sb-btn sb-sec" id="sbMapBtn" aria-label="Elegir destino en el mapa" title="Elegir en mapa"></button>
+      <button class="sb-btn sb-sec sb-locate" id="sbLocateBtn" aria-label="Usar mi ubicación" title="Mi ubicación"></button>
+      <button class="sb-btn sb-mic" id="sbMicBtn" aria-label="Buscar por voz (mantener para hablar)" title="Mantener para hablar"></button>
       <div id="destDropdown" class="search-dropdown hidden" role="listbox" aria-label="Sugerencias de destino"></div>
     </div>
   </header>
@@ -1233,19 +1255,22 @@ function bindSearchInput(){
   inp.addEventListener('focus',function(){onSearchFocus()});
   document.getElementById('sbMapBtn').addEventListener('click',activatePickDest);
   document.getElementById('sbLocateBtn').addEventListener('click',locateMe);
-  document.getElementById('sbMicBtn').addEventListener('click',toggleVoiceSearch);
+  // UX_CORE_REDESIGN — mic = continuous push-to-talk (pointerdown=start, pointerup=stop).
+  bindMicPushToTalk(document.getElementById('sbMicBtn'));
 }
 function closeAllDropdowns(){var dd=document.getElementById('destDropdown');if(dd)dd.classList.add('hidden')}
 
 // ===================== VOICE SEARCH (Web Speech API, no dependencies) =====================
-// Spec VOY_VOICE_SEARCH_V1: tap mic → speech recognition → insert transcript → launch search.
-// Failback: browser_not_supported + permission_denied → toast, field stays a normal input.
-var _speechRec=null,_speechListening=false;
+// UX_CORE_REDESIGN: continuous PUSH-TO-TALK. Hold mic (pointerdown / Space / Enter) →
+// recognition starts (continuous:true, es-AR, interimResults). Release (pointerup /
+// keyup / blur / pointercancel) → recognition stops, final transcript inserted → search.
+// Failback: browser_not_supported / permission_denied → toast, field stays a normal input.
+var _speechRec=null,_speechListening=false,_pttHeld=false;
 function initSpeechRecognition(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR)return null; // browser_not_supported — mic button stays but no-ops gracefully
   var rec=new SR();
-  rec.lang='es-AR';rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
+  rec.lang='es-AR';rec.interimResults=true;rec.continuous=true;rec.maxAlternatives=1;
   rec.onstart=function(){_speechListening=true;var b=document.getElementById('sbMicBtn');if(b)b.classList.add('listening')};
   rec.onend=function(){_speechListening=false;var b=document.getElementById('sbMicBtn');if(b)b.classList.remove('listening')};
   rec.onerror=function(ev){
@@ -1263,16 +1288,51 @@ function initSpeechRecognition(){
   };
   return rec;
 }
-function toggleVoiceSearch(){
+// Start push-to-talk. Lazy-inits SpeechRecognition on first use.
+function startVoicePTT(){
   if(!_speechRec)_speechRec=initSpeechRecognition();
   if(!_speechRec){showToast('Voz no soportada en este navegador','info');return}
-  if(_speechListening){try{_speechRec.stop()}catch(e){};return}
+  if(_speechListening)return; // already listening (e.g. rapid re-press)
   // V7.7 VOY_ANALYTICS_V2: voice_search event (one of the 6 canonical V2 events)
   v5event('voice_search',{});
   try{_speechRec.start()}catch(e){
     // start() throws if already started or not allowed — silent failback
     if(e&&e.name==='not-allowed')showToast('Permiso de micrófono denegado','info');
   }
+}
+// Stop push-to-talk on release.
+function stopVoicePTT(){
+  if(!_speechRec||!_speechListening)return;
+  try{_speechRec.stop()}catch(e){};
+}
+// Bind pointer (touch/mouse/pen) + keyboard push-to-talk on the mic button.
+function bindMicPushToTalk(btn){
+  if(!btn)return;
+  // Pointer PTT — setPointerCapture so pointerup fires on the button even if the
+  // finger/cursor slides off during the hold.
+  btn.addEventListener('pointerdown',function(e){
+    e.preventDefault();_pttHeld=true;
+    try{btn.setPointerCapture(e.pointerId)}catch(_){}
+    startVoicePTT();
+  });
+  function _release(e){
+    if(!_pttHeld)return;_pttHeld=false;
+    try{btn.releasePointerCapture(e.pointerId)}catch(_){}
+    stopVoicePTT();
+  }
+  btn.addEventListener('pointerup',_release);
+  btn.addEventListener('pointercancel',_release);
+  btn.addEventListener('pointerleave',function(e){if(_pttHeld&&btn.hasPointerCapture(e.pointerId))_release(e)});
+  // Keyboard PTT — Space/Enter hold. keydown repeat suppressed.
+  btn.addEventListener('keydown',function(e){
+    if((e.key===' '||e.key==='Spacebar'||e.key==='Enter')&&!_pttHeld&&!e.repeat){e.preventDefault();_pttHeld=true;startVoicePTT()}
+  });
+  btn.addEventListener('keyup',function(e){
+    if(e.key===' '||e.key==='Spacebar'||e.key==='Enter'){e.preventDefault();_release({pointerId:-1})}
+  });
+  btn.addEventListener('blur',function(){if(_pttHeld){_pttHeld=false;stopVoicePTT()}});
+  // Suppress the synthetic click that follows pointerup/keyup (PTT already handled it).
+  btn.addEventListener('click',function(e){e.preventDefault()});
 }
 async function onSearchInput(val){
   // Stop idle drift permanently on first real character

@@ -2273,3 +2273,50 @@ Stage Summary:
   · geo_approximation_only: ✓ (~500m coarse grid cluster; worker never sees raw lat/lon)
 - Files changed: worker.js (filter logic + /api/whoami + /api/health enrichment + comments), wrangler.jsonc (3 new vars + docs). No frontend/HTML changes.
 - NOT DEPLOYED: changes are local only. To activate in production: `wrangler deploy` (or push to trigger CI). After deploy, owner should visit https://voy-app.simondalmasso44.workers.dev/api/whoami to detect their IP/hash and populate VOY_OWNER_IPS or VOY_OWNER_IP_HASHES, then redeploy. Verify on /api/health (filter counts) and /api/whoami (excluded field).
+
+---
+Task ID: 38
+Agent: Main
+Task: UX_CORE_REDESIGN_LIGHT_TOUCH — REPLACE #destination_input → floating_input_v2 (floating_center_lower_top_third, 48px, #0F0F0F, 14px, fade_up_soft_wake 420ms, topmost z) + ADD mic inside_input_right (WebSpeechAPI, es-AR, continuous push-to-talk) + ANIMATION first-visual-attention. Principles: NO_COLOR_EXPLOSION, FOCUS_SINGLE_ACTION_DESTINATION, MOBILE_FIRST_9_16, FLOATING_INPUT_PRIORITY.
+
+Work Log:
+- Audited current state: `.topbar` was `position:sticky; top:0; z-index:20`; `.search-bar` was light (--surface #FFF) with `@keyframes wake 900ms`; 4 buttons in order [mic][map][locate]; mic bound to `toggleVoiceSearch` (click-to-toggle, `continuous:false`). Z-index hierarchy mapped: ambient (topbar=20, nav=5, footer=2) vs modals (footer-menu=9100, dialog=9000, toast=9500, splash=99998) → "topmost_ui_priority" = z-50 (above ambient, below modals).
+- CSS redesign (public/VOY-Lite.html):
+  · Added `--fi-bg/--fi-text/--fi-sub/--fi-border/--fi-hover` vars to :root (#0F0F0F) and [data-theme=dark] (#1A1A1A — lifted from #0F0F0F for legibility on pure-black bg; documented rationale: spec #0F0F0F invisible on dark theme, intent preserved).
+  · `.topbar`: sticky→absolute, `top:calc(20vh + env(safe-area-inset-top))` (floating_center_lower_top_third — 20vh ≈ lower bound of top third on 9:16), z-index:50 (topmost_ui_priority), transparent bg.
+  · `.search-bar` → floating_input_v2: `background:var(--fi-bg)`, `height:48px`, `border-radius:14px`, `box-shadow:0 4px 16px rgba(0,0,0,0.12),0 1px 3px rgba(0,0,0,0.08)` (soft_low), `animation:fadeUpSoftWake 420ms ease-out both` (replaces wake 900ms). Reduced-motion guard.
+  · `@keyframes fadeUpSoftWake`: opacity 0→1 + translateY(10px→0).
+  · `#destInput`: `color:#FFFFFF`, `font-size:calc(var(--font-body) * 1.05)` (1.05em), placeholder `rgba(255,255,255,0.55)`.
+  · `.sb-icon`/`.sb-btn`: white/sub colors for dark pill.
+  · Map + Locate buttons: `.sb-sec` class → `opacity:0.55` muted (FOCUS_SINGLE_ACTION_DESTINATION), lift to 1 on hover/focus/active. Retained (not removed) per LIGHT_TOUCH — removing would break pick-on-map + locate-me flows.
+  · Mic (`.sb-mic`): `color:#FFFFFF` full opacity (primary voice action), `touch-action:none` (PTT hold without scroll hijack), `order:99` (rightmost = inside_input_right). Listening state: red on `rgba(255,59,48,0.18)`.
+  · `.search-dropdown` + items: restyled to dark surface (var(--fi-bg)) matching the pill — monochrome cluster (NO_COLOR_EXPLOSION). Item text white, semantic icon colors retained (fav=orange, home/work=primary — functional anchors, not decorative).
+  · `.origin-pill`: margin-top now includes `env(safe-area-inset-top)` since topbar is absolute and origin-pill is first in-flow child.
+- HTML markup: reordered buttons to [search-icon][input][map][locate][mic] (mic rightmost via both DOM order + CSS order:99). Added `sb-sec` class to map+locate. Mic aria-label updated to "Buscar por voz (mantener para hablar)".
+- JS — continuous push-to-talk:
+  · `initSpeechRecognition`: `continuous:false` → `continuous:true` (captures multi-word utterances during hold).
+  · Replaced `toggleVoiceSearch` with `startVoicePTT()`/`stopVoicePTT()` + `bindMicPushToTalk(btn)`.
+  · Pointer PTT: `pointerdown` → preventDefault + setPointerCapture + start; `pointerup`/`pointercancel`/`pointerleave`(if captured) → releasePointerCapture + stop. setPointerCapture ensures pointerup fires even if finger slides off.
+  · Keyboard PTT (accessibility): `keydown` Space/Enter (no repeat) → start; `keyup` Space/Enter → stop; `blur` → stop.
+  · `click` → preventDefault (suppress synthetic click after pointer/keyboard PTT).
+  · Graceful no-op when SpeechRecognition unsupported (toast "Voz no soportada en este navegador").
+  · `bindSearchInput`: mic binding changed from `click→toggleVoiceSearch` to `bindMicPushToTalk(micBtn)`.
+
+Verification (Agent Browser + VLM):
+- Mobile 390×844 (9:16): topbar z=50, top=169px (20vh) ✓; searchbar height=48px ✓; bg=rgb(15,15,15)=#0F0F0F ✓; radius=14px ✓; animation=fadeUpSoftWake 0.42s ✓; input color=white ✓; font-size=15.75px (=15×1.05) ✓; placeholder=rgba(255,255,255,0.55) ✓; mic rightmost (order:99, touch-action:none) ✓; map muted opacity=0.55 ✓; children order [icon,input,map,locate,mic,dropdown] ✓; 0 console errors.
+- Mic PTT binding: pointerdown→_pttHeld=true (startVoicePTT called, no crash without mic permission — graceful); pointerup→_pttHeld=false (listening class removed). Keyboard PTT + blur handlers wired.
+- Dropdown: opens dark (bg=rgb(15,15,15), radius=14px), 3 items, item text white. Monochrome cluster.
+- Route-flow regression: share-link restore `/?from=…&to=…&dn=UTN%20Santa%20Fe` → destInput populated "UTN Santa Fe", sheet hero renders, #sheetShareBtn PRESENT. No regressions.
+- Footer sticky: mobile 844=844 ✓, desktop 800=800 ✓.
+- Desktop 1280×800: searchbar top=160px, height=48px, centered (sb.left>50), input white. Responsive.
+- VLM (glm-4.6v): "dark (black) floating search pill in the upper-middle, mic icon on its right, minimal and monochrome (predominantly black, white, light gray)." Confirms all 4 principles visually.
+- `bun run lint` clean. Old `toggleVoiceSearch` + `@keyframes wake` fully removed (0 occurrences).
+
+Stage Summary:
+- REPLACE_COMPONENT (#destination_input → floating_input_v2): ✓ — dark focal pill, floating_center_lower_top_third (20vh), 48px, #0F0F0F, 14px radius, soft_low shadow, z-50 topmost.
+- ADD_MICROPHONE_BUTTON (inside_input_right, WebSpeechAPI, es-AR, continuous_push_to_talk): ✓ — mic rightmost in pill, continuous:true, pointer+keyboard PTT with pointer capture, graceful no-op fallback.
+- ANIMATION_RULE (first visual attention element on load): ✓ — fadeUpSoftWake 420ms ease-out, topmost z-50, highest-contrast dark pill on light map → naturally first visual attention.
+- Principles: NO_COLOR_EXPLOSION (monochrome dark cluster + semantic icon anchors only) ✓; FOCUS_SINGLE_ACTION_DESTINATION (input is full-opacity focal, map/locate muted to 0.55) ✓; MOBILE_FIRST_9_16 (20vh lower_top_third, 48px thumb-reachable, touch-action PTT) ✓; FLOATING_INPUT_PRIORITY (absolute float over map, topmost ambient z) ✓.
+- Deviation: spec bg #0F0F0F → var(--fi-bg) with dark-theme override #1A1A1A (legibility on pure-black; intent preserved; documented inline).
+- Files changed: public/VOY-Lite.html only (CSS vars + topbar/search-bar/dropdown/origin-pill rules + HTML button reorder + JS PTT rewrite). No worker/backend changes.
+- NOT DEPLOYED: local only. Screenshots: v79-floating-input-mobile.png, v79-floating-input-desktop.png.
