@@ -72,7 +72,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Purge Cloudflare cache (if zone owned)
-        if: ${{ secrets.CLOUDFLARE_ZONE_ID != '' }}
+        # NOTE: the `secrets` context is NOT available in `if:` conditions
+        # (GitHub Actions parser rejects it → "No jobs were run" workflow failure).
+        # Standard pattern: bind the secret to an env var, then test the env var.
+        if: env.ZONE_ID != ''
+        env:
+          ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
           curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
