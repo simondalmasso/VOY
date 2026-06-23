@@ -1,11 +1,11 @@
 <!--
-VOY V7.6.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.7.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.6.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.7.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
@@ -33,7 +33,7 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.6.0">
+<meta name="voy-version" content="V7.7.0">
 <meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
@@ -54,7 +54,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.6.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.7.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -672,7 +672,7 @@ button{cursor:pointer}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.6.0';
+window.VOY_VERSION='V7.7.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -865,7 +865,15 @@ function v5event(type,data){
   // Maps legacy v5 event names → spec v1.4 names where they differ.
   if(window.VoyEventBus){
     var map={search:'search_performed',destination_selected:'destination_selected',provider_selected:'provider_clicked',deeplink_opened:'deeplink_opened',favorite_added:'favorite_saved'};
-    try{VoyEventBus.emit(map[type]||type,data||{})}catch(e){}
+    // V7.7 VOY_ANALYTICS_V2: attach coarse origin geo so the cities report has data.
+    // ONLY enrichs the eventBus payload (server analytics) — the v5 local log above
+    // keeps the original data unchanged (no metric pollution). eventBus._coarseGeo
+    // converts lat/lon to a ~500m cluster string; the worker never sees raw coords.
+    try{
+      var _eData=data||{};
+      if(typeof MC!=='undefined'&&MC.getOrigin){var _o=MC.getOrigin();if(_o)_eData=Object.assign({},_eData,{lat:_o.lat,lon:_o.lon});}
+      VoyEventBus.emit(map[type]||type,_eData);
+    }catch(e){}
   }
 }
 
@@ -1239,6 +1247,8 @@ function toggleVoiceSearch(){
   if(!_speechRec)_speechRec=initSpeechRecognition();
   if(!_speechRec){showToast('Voz no soportada en este navegador','info');return}
   if(_speechListening){try{_speechRec.stop()}catch(e){};return}
+  // V7.7 VOY_ANALYTICS_V2: voice_search event (one of the 6 canonical V2 events)
+  v5event('voice_search',{});
   try{_speechRec.start()}catch(e){
     // start() throws if already started or not allowed — silent failback
     if(e&&e.name==='not-allowed')showToast('Permiso de micrófono denegado','info');

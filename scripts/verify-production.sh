@@ -5,8 +5,8 @@
 #  Checks the FULL production stack is live and consistent:
 #    1. DNS:        voy.is-a.dev CNAME → workers.dev  (SKIPPED if target ≠ voy.is-a.dev)
 #    2. HTTPS:      target → 200 (not 302 is-a.dev fallback)
-#    3. Health:     /api/health → version V7.6.0 + build_hash == local git SHA
-#    4. UI version: / contains <meta name="voy-version" content="V7.6.0">
+#    3. Health:     /api/health → version V7.7.0 + build_hash == local git SHA
+#    4. UI version: / contains <meta name="voy-version" content="V7.7.0">
 #    5. Cache-bust: / response has Cache-Control: no-store
 #    6. Entrypoint: /VOY-Lite.html → 301 (internal path hidden)
 #    7. Mode selector: / contains modeSelector (transport selector mounted)
@@ -95,10 +95,10 @@ if [ -n "$HEALTH" ]; then
   LIVE_HASH=$(echo "$HEALTH" | grep -o '"build_hash":"[^"]*"' | cut -d'"' -f4 || echo "")
   printf "  version:    %s\n" "${LIVE_VER:-<missing>}"
   printf "  build_hash: %s\n" "${LIVE_HASH:-<missing>}"
-  if [ "$LIVE_VER" = "V7.6.0" ]; then
-    ok "Worker version is V7.6.0"
+  if [ "$LIVE_VER" = "V7.7.0" ]; then
+    ok "Worker version is V7.7.0"
   else
-    bad "Worker version is '$LIVE_VER' (expected V7.6.0) — STALE WORKER deployed"
+    bad "Worker version is '$LIVE_VER' (expected V7.7.0) — STALE WORKER deployed"
   fi
   if [ -n "$LIVE_HASH" ] && [ "$LIVE_HASH" != "__BUILD_HASH__" ]; then
     ok "Build hash injected: $LIVE_HASH"
@@ -117,12 +117,12 @@ fi
 # ── 4. UI version pin ───────────────────────────────────────
 hdr "4. UI version pin (<meta voy-version>)"
 # HTML already fetched in check 2.
-if echo "$HTML" | grep -q 'voy-version" content="V7.6.0"'; then
-  ok "UI HTML contains V7.6.0 version pin"
+if echo "$HTML" | grep -q 'voy-version" content="V7.7.0"'; then
+  ok "UI HTML contains V7.7.0 version pin"
 else
   if echo "$HTML" | grep -q 'voy-version'; then
     LIVE_UI_VER=$(echo "$HTML" | grep -o 'voy-version" content="[^"]*"' | cut -d'"' -f4 || echo "")
-    bad "UI version is '$LIVE_UI_VER' (expected V7.6.0) — STALE HTML on edge"
+    bad "UI version is '$LIVE_UI_VER' (expected V7.7.0) — STALE HTML on edge"
   else
     bad "UI HTML has NO voy-version meta tag — OLD build (pre-V7) still serving"
   fi
@@ -147,10 +147,10 @@ elif [ "$ENTRY_CODE" = "200" ]; then
   # CF Workers Assets may serve /VOY-Lite.html directly (bypassing the worker).
   # Accept 200 IF the content is V7 (not stale V4). The canonical URL / works
   # regardless; this just means the internal path is also browseable.
-  if echo "$ENTRY_HTML" | grep -q 'voy-version" content="V7.6.0"'; then
-    ok "/VOY-Lite.html → 200 (CF Assets direct serve, V7.6.0 content verified — path not hidden but app correct)"
+  if echo "$ENTRY_HTML" | grep -q 'voy-version" content="V7.7.0"'; then
+    ok "/VOY-Lite.html → 200 (CF Assets direct serve, V7.7.0 content verified — path not hidden but app correct)"
   else
-    bad "/VOY-Lite.html → 200 but content is NOT V7.6.0 (stale V4 serving from this path)"
+    bad "/VOY-Lite.html → 200 but content is NOT V7.7.0 (stale V4 serving from this path)"
   fi
 else
   bad "/VOY-Lite.html → $ENTRY_CODE (expected 301 or 200) — worker.js not deployed or unreachable"

@@ -52,6 +52,30 @@
   //   { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
   // ],
 
+  // V7.7 VOY_ANALYTICS_V2 — Durable Object for the aggregate store (dual store).
+  // This DO maintains the hot aggregates that back /api/reports (5 reports).
+  // Store 1 = Analytics Engine (raw data points, above); Store 2 = this DO.
+  // The worker handles a missing VOY_AGG binding gracefully (503 on /api/reports,
+  // 202 on /api/events). Requires `wrangler` >= 3.60 + a Workers paid plan for DO.
+  // TO RE-ENABLE: (1) ensure Workers Paid plan, (2) uncomment the block below,
+  // (3) ./scripts/deploy.sh  (the first deploy with a new class name creates the
+  // migration automatically via the `migrations` block below).
+  // "durable_objects": {
+  //   "bindings": [{ "name": "VOY_AGG", "class_name": "VoyAnalytics" }]
+  // },
+  // "migrations": [{ "tag": "v77_voy_analytics", "new_classes": ["VoyAnalytics"] }],
+
+  // V7.7 VOY_ANALYTICS_V2 — 5 exclusion filters are configured via vars (not
+  // secrets) so the owner can tune them without redeploying logic. Set these in
+  // the CF dashboard or a .dev.vars file for local `wrangler dev`.
+  // "vars": {
+  //   "VOY_OWNER_IPS": "",           // comma-separated, e.g. "190.0.0.1"
+  //   "VOY_DEV_IPS": "",             // comma-separated developer IPs
+  //   "VOY_EXCLUDE_LOCALHOST": "true",
+  //   "VOY_EXCLUDE_HEADLESS": "true",
+  //   "VOY_EXCLUDE_BOT": "true"
+  // },
+
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 }

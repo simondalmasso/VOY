@@ -1,11 +1,13 @@
 /**
- * VOY Event Bus + Transport — Event Spec v1.4
+ * VOY Event Bus + Transport — Event Spec v1.4 + V2 (VOY_ANALYTICS_V2)
  *
- * Spec:
- *   version: 1.4
- *   events: app_boot (critical), search_performed, destination_selected,
- *           route_calculated, vehicle_viewed, provider_clicked,
- *           deeplink_opened, ride_estimated
+ * V2 canonical events (6): search, provider_click, route_selected,
+ *   voice_search, share, navigation_start. The worker normalizes legacy
+ *   v1.4 names → these 6 names so reports use a single namespace.
+ *
+ * Spec v1.4 events (kept for back-comat): app_boot (critical),
+ *   search_performed, destination_selected, route_calculated,
+ *   vehicle_viewed, provider_clicked, deeplink_opened, ride_estimated
  *   transport: cloudflare (worker endpoint), posthog (stub), local_fallback (always)
  *
  * Privacy:
@@ -92,10 +94,22 @@
    * @param {object} data   event payload (no PII)
    */
   function emit(name, data) {
+    // V7.7 VOY_ANALYTICS_V2: expanded allow-list. The 6 V2 canonical events
+    // (search, provider_click, route_selected, voice_search, share,
+    // navigation_start) are accepted natively. Legacy v1.4 names are kept for
+    // back-comat; the worker normalizes BOTH families to the 6 V2 canonical
+    // names before storage so reports use a single namespace.
     var allowed = {
+      // V2 canonical (VOY_ANALYTICS_V2)
+      search: true, provider_click: true, route_selected: true,
+      voice_search: true, share: true, navigation_start: true,
+      // v1.4 legacy (kept for back-comat; worker normalizes these → V2 names)
       app_boot: true, search_performed: true, destination_selected: true,
       route_calculated: true, vehicle_viewed: true, provider_clicked: true,
-      deeplink_opened: true, ride_estimated: true, favorite_saved: true
+      deeplink_opened: true, ride_estimated: true, favorite_saved: true,
+      // v5 legacy names that pass through v5event() unmapped
+      share_app: true, support_alias_copied: true, navigation_stop: true,
+      navigation_voice_toggled: true
     };
     if (!allowed[name]) {
       // Unknown events are dropped (spec compliance) but logged in debug.
