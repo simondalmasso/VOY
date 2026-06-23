@@ -2223,3 +2223,53 @@ Stage Summary:
     4. Once CI is green, wait for maintainer review (1–3 days); optionally send PR #41619 once in #pull-requests on the is-a.dev Discord.
 - ALTERNATIVE if user owns no other domain: is-a.dev offers no workaround for workers.dev CNAMEs. Options: (a) register a cheap custom domain and bind it to the Worker, (b) use a `URL` redirect record (voy.is-a.dev → https://voy-app.simondalmasso44.workers.dev) — but this is a 302 redirect, not the app served at the apex subdomain (different UX). (a) is preferred.
 - No code changes made to VOY repo this task (audit-only). Token used from session context; not persisted.
+
+---
+Task ID: 37
+Agent: Main
+Task: ANALYTICS_SYSTEM_SETUP — DEFINE source=cloudflare_analytics_engine (already active) + EXCLUDE_IPS (SIMON_DEVICE hash/ip, GLM_AGENT ua_filter) + DATA_POLICY (no PII, route-only aggregation, geo approximation)
+
+Work Log:
+- Confirmed DEFINE_ANALYTICS_SOURCE already satisfied: WAE binding `VOY_METRICS` / dataset `voy_metrics` active since V7.8.0 deploy (Task 34). `/api/health` reports analytics:true. No change needed for this action.
+- Audited DATA_POLICY compliance by reading public/core/eventBus.js + VOY-Lite.html v5event:
+  · no_personal_identifiable_storage: eventBus uses anon_id only (random `a_<ts>_<rand>`, persisted localStorage, never tied to PII). WAE blobs = [anon_id, provider, mode]; doubles = [price, time_min, distance_km]. No email/name/raw-coords stored server-side. Owner email (simondalmasso44@gmail.com) appears ONLY in is-a-dev/register PR body + wrangler.jsonc comments — never in event payloads. ✓
+  · route_only_event_aggregation: worker EVENT_NORMALIZE maps 13 legacy names → 3 canonical (estimation, provider_tap, search). Non-canonical events (app_boot, share, favorite_saved, etc.) are dropped server-side (`if (!canonical) continue`). Favorites/recents stored client-side only (IndexedDB AES-GCM). ✓
+  · geo_approximation_only: eventBus._coarseGeo clusters lat/lon to ~500m grid (`grid=0.0045`, stores `"cellX_cellY"` string, max 60 chars). Worker never sees raw coordinates. ✓
+- Implemented EXCLUDE_IPS rules in worker.js (V7.8.1):
+  · GLM_AGENT (user_agent_filter, value GLM_*): added `GLM_UA = /^GLM[\s\/\-_:]/i` regex + `exclude_glm` config flag (env `VOY_EXCLUDE_GLM`, default true). Matches GLM/4.6, GLM-agent, GLM_bot, GLM scanner; does NOT match real browser UAs or UAs merely containing "glm" mid-string (avoids false positives). Returns reason `'glm_agent'`.
+  · SIMON_DEVICE (hash_based_or_ip_exclusion, value USER_IP_DETECTED):
+    - Direct mode: `VOY_OWNER_IPS` env (comma-separated IPs) — existing, returns `'owner_ip'`.
+    - Hash mode (NEW): `VOY_OWNER_IP_HASHES` env (comma-separated SHA-256 hex). Worker computes `await crypto.subtle.digest('SHA-256', ip)` per request ONLY when owner_ip_hashes is configured (avoids digest cost otherwise). Config normalizes to lowercase so uppercase user-pasted hashes still match. Returns `'owner_ip_hash'`. More privacy-friendly: config stores only the hash, never the raw IP.
+    - USER_IP_DETECTED resolution: added `/api/whoami` endpoint — returns caller's own `{ip, ip_sha256, ua, excluded, note}`. Owner visits it from their device, copies `ip` (→ VOY_OWNER_IPS) or `ip_sha256` (→ VOY_OWNER_IP_HASHES), pastes into wrangler.jsonc vars / CF dashboard, redeploys. Returns ONLY the caller's own info (no cross-user data, no server-side storage).
+  · Extensible: added `VOY_EXCLUDE_UA_PATTERNS` env (comma-separated regex, case-insensitive, compiled+cached per config signature) for future UA filters. Returns `'ua_pattern:<pattern>'`.
+- Enriched `/api/health`: now exposes `filters` object with COUNTS (owner_ips, owner_ip_hashes, dev_ips, exclude_localhost/headless/bot/glm, exclude_ua_patterns) — not raw values, so no PII leak. Enables instant verification of active exclusion config.
+- Updated wrangler.jsonc `vars` block: added `VOY_OWNER_IP_HASHES`, `VOY_EXCLUDE_GLM`, `VOY_EXCLUDE_UA_PATTERNS` (all default empty/false-safe). Added inline documentation block explaining the SIMON_DEVICE setup workflow (visit /api/whoami → copy ip or hash → paste → redeploy → verify).
+- Updated worker.js top-of-file comment block to document all 8 exclusion rules + DATA_POLICY + new endpoints.
+
+Verification:
+- `node --check worker.js` → SYNTAX OK.
+- `python3` JSON validation of wrangler.jsonc (comment-stripped) → 8 vars keys, valid JSON.
+- `bun run lint` → clean (0 errors/warnings).
+- Standalone logic test (18 cases, node + Web Crypto): 
+  · GLM UA matching: 4 PASS (GLM/4.6, GLM-agent, GLM_bot, GLM scanner excluded)
+  · False-positive avoidance: 2 PASS (real iPhone Safari NOT excluded; "glm" mid-string NOT excluded)
+  · SIMON_DEVICE direct IP: 2 PASS (owner excluded, non-owner not)
+  · SIMON_DEVICE hash-based: 3 PASS (owner hash excluded, non-owner not, uppercase-env-hash matches lowercase-computed-hash via config-side normalization)
+  · Custom UA patterns: 2 PASS (curl, python-requests excluded)
+  · localhost: 2 PASS (127.0.0.1 + empty IP)
+  · bot + headless: 2 PASS (Googlebot, HeadlessChrome)
+  · Disable flag: 1 PASS (VOY_EXCLUDE_GLM=false → GLM UA NOT excluded)
+  All 18 PASS.
+- Browser smoke test: page renders (title OK, 0 console errors, decisionSheet mounted, footer present). Page byte-identical to pre-change (132389 bytes) — changes are production-runtime only (worker.js + wrangler.jsonc), not served by Next.js dev preview.
+
+Stage Summary:
+- DEFINE_ANALYTICS_SOURCE (cloudflare_analytics_engine): ✓ already active (WAE binding VOY_METRICS / dataset voy_metrics, live since V7.8.0).
+- EXCLUDE_IPS:
+  · SIMON_DEVICE: ✓ dual-mode (VOY_OWNER_IPS direct + VOY_OWNER_IP_HASHES SHA-256). USER_IP_DETECTED resolved via new /api/whoami self-detection endpoint.
+  · GLM_AGENT: ✓ user_agent_filter `GLM_*` via GLM_UA regex + VOY_EXCLUDE_GLM flag (default on). Plus extensible VOY_EXCLUDE_UA_PATTERNS for future rules.
+- DATA_POLICY:
+  · no_personal_identifiable_storage: ✓ (anon_id only; no email/name/raw-coords in WAE)
+  · route_only_event_aggregation: ✓ (3 canonical route events only; non-canonical dropped server-side)
+  · geo_approximation_only: ✓ (~500m coarse grid cluster; worker never sees raw lat/lon)
+- Files changed: worker.js (filter logic + /api/whoami + /api/health enrichment + comments), wrangler.jsonc (3 new vars + docs). No frontend/HTML changes.
+- NOT DEPLOYED: changes are local only. To activate in production: `wrangler deploy` (or push to trigger CI). After deploy, owner should visit https://voy-app.simondalmasso44.workers.dev/api/whoami to detect their IP/hash and populate VOY_OWNER_IPS or VOY_OWNER_IP_HASHES, then redeploy. Verify on /api/health (filter counts) and /api/whoami (excluded field).
