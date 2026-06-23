@@ -137,15 +137,28 @@ jobs:
             echo "⚠️ WARNING: HTML Cache-Control header does not contain no-store. Edge may cache stale UI."
           fi
 
-      - name: Verify single entrypoint (/VOY-Lite.html → 301 → /)
+      - name: Verify entrypoint (/VOY-Lite.html)
+        # CF Workers Assets may serve /VOY-Lite.html directly (200) before the
+        # worker's redirect runs. Accept 301/308 (redirect) OR 200 with V7.8.0
+        # content. This matches verify-production.sh's logic.
         run: |
           set -e
           WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
           [ -z "$WORKER_URL" ] && WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -I "$WORKER_URL/VOY-Lite.html")
-          echo "GET /VOY-Lite.html → HTTP $CODE (expected 301)"
-          if [ "$CODE" != "301" ] && [ "$CODE" != "308" ]; then
-            echo "::error::/VOY-Lite.html should 301 to / (hide internal path). Got $CODE."
+          echo "GET /VOY-Lite.html → HTTP $CODE"
+          if [ "$CODE" = "301" ] || [ "$CODE" = "308" ]; then
+            echo "✅ /VOY-Lite.html → $CODE (redirects to /, internal path hidden)"
+          elif [ "$CODE" = "200" ]; then
+            BODY=$(curl -fsS "$WORKER_URL/VOY-Lite.html")
+            if echo "$BODY" | grep -q 'voy-version" content="V7.8.0"'; then
+              echo "✅ /VOY-Lite.html → 200 (CF Assets direct serve, V7.8.0 content verified)"
+            else
+              echo "::error::/VOY-Lite.html → 200 but content is NOT V7.8.0 (stale)"
+              exit 1
+            fi
+          else
+            echo "::error::/VOY-Lite.html → $CODE (expected 301 or 200). Worker not deployed."
             exit 1
           fi
-          echo "✅ Single entrypoint confirmed: /VOY-Lite.html redirects to /."
+          echo "✅ Entrypoint verified."
