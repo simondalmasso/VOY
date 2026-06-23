@@ -2192,3 +2192,34 @@ Stage Summary:
 - Deviation noted: spec color #FFFFFF replaced with var(--text3) for cross-theme legibility; intent (subtle/minimal) preserved. Documented inline in CSS comment.
 - Files touched: public/VOY-Lite.html only (single source of truth). No version metadata changed (app stays V7.8.0; this is a UI patch within that line).
 - Browser-verified end-to-end: render ✓, golden path (dest→share button→toast) ✓, restore ✓, footer sticky mobile+desktop ✓, 0 console errors ✓, lint clean ✓.
+
+---
+Task ID: 36
+Agent: Main
+Task: DOMAIN_APPROVAL_AUDIT — is-a-dev/register PR for voy.is-a.dev (check PR status, CI, merge state; infer APPROVED/PENDING/REJECTED/UNKNOWN + explicit next step)
+
+Work Log:
+- Queried GitHub API (token-authenticated) for PRs by simonkey888 in is-a-dev/register → exactly 1 PR: #41619 "Register voy.is-a.dev" (created 2026-06-23T10:28:40Z, updated 15:31:55Z).
+- Verified domains/voy.json does NOT exist on main (raw.githubusercontent → 404). Confirmed commit 5bec40f exists in the repo but is NOT merged into main (it's the first PR commit on branch add-voy-domain).
+- PR #41619 state: OPEN, merged=False, merged_at=null, mergeable=unknown, 3 commits, 1 comment, 0 reviews, 1 changed file (domains/voy.json, +1 −0).
+- Commit progression on branch add-voy-domain:
+    5bec40f (Jun 22 10:03) "Add voy.is-a.dev domain for VOY app" — no check-runs (superseded before CI completed)
+    17f6e8f (Jun 23 10:28) "Register voy.is-a.dev" — CI Tests = FAILURE
+    daacdbd (Jun 23 15:31) "fix(voy): record → records (plural) per is-a-dev schema" [HEAD] — CI Tests = FAILURE
+- Final file content (daacdbd): {"owner":{"username":"simonkey888","email":"simondalmasso44@gmail.com"},"records":{"CNAME":"voy-app.simondalmasso44.workers.dev"}} (no trailing newline; schema field name fixed in this commit).
+- Fetched job logs for CI run 28037259538 / job 82993835011. Exact failing test:
+    ✘ [fail]: records › All files should have valid records voy.json: CNAME cannot end with .workers.dev
+  → is-a.dev hard policy rule: CNAME targets ending in .workers.dev are REJECTED by the test suite. NOT a formatting/newline issue.
+- is-a-dev-reviewbot[bot] left the standard welcome comment (check CI, validate JSON, fill PR template, wait 1–3 days, optional single ping in #pull-requests Discord). No human review yet.
+
+Stage Summary:
+- STATUS = PENDING (open PR, blocked on CI failure — NOT maintainer-rejected, hence PENDING not REJECTED).
+- ROOT CAUSE = is-a.dev test rule: "CNAME cannot end with .workers.dev". The records.CNAME value `voy-app.simondalmasso44.workers.dev` violates this policy. The `record→records` schema fix (daacdbd) was correct but insufficient — the PR is still red.
+- voy.is-a.dev is NOT active (not merged, not resolvable).
+- NEXT STEP (explicit, required): The author must change the CNAME target to a hostname that does NOT end in .workers.dev. Recommended path:
+    1. In Cloudflare dashboard → Workers & Pages → voy-app → Settings → Domains & Routes → add a Custom Domain the user OWNS (e.g. voy.<user-domain>) so the Worker also serves at that non-workers.dev hostname.
+    2. Update domains/voy.json on branch add-voy-domain: records.CNAME → that custom hostname.
+    3. Push (amend or new commit) to add-voy-domain; CI re-runs automatically.
+    4. Once CI is green, wait for maintainer review (1–3 days); optionally send PR #41619 once in #pull-requests on the is-a.dev Discord.
+- ALTERNATIVE if user owns no other domain: is-a.dev offers no workaround for workers.dev CNAMEs. Options: (a) register a cheap custom domain and bind it to the Worker, (b) use a `URL` redirect record (voy.is-a.dev → https://voy-app.simondalmasso44.workers.dev) — but this is a 302 redirect, not the app served at the apex subdomain (different UX). (a) is preferred.
+- No code changes made to VOY repo this task (audit-only). Token used from session context; not persisted.
