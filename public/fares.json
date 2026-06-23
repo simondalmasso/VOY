@@ -1,5 +1,60 @@
 {
-  "uber": { "base": 1000, "km": 500, "min": 65, "minFare": 3000 },
-  "didi": { "base": 900,  "km": 440, "min": 55, "minFare": 2500 },
-  "surge": { "weather": 1.15, "rush": 1.20, "night": 1.30 }
+  "_meta": {
+    "version": "2026-06-23",
+    "fuente": "Resolución N°217/2026 - Municipalidad Santa Fe",
+    "proxima_revision": "2026-07-01",
+    "notas": "Tarifas vigentes junio 2026. Julio 2026 ya definido (ver taxi.julio_2026). Actualizar fares.json + FareRegistry en VOY-Lite.html el 01/07."
+  },
+  "colectivo": {
+    "sube": 1900,
+    "efectivo": 2111,
+    "fuente": "SUBE Argentina 2026",
+    "updated_at": "2025-06-01"
+  },
+  "taxi": {
+    "diurno": {
+      "bajada": 1600,
+      "ficha_cada_130m": 160,
+      "horario": "06:00-22:00"
+    },
+    "nocturno": {
+      "bajada": 1840,
+      "ficha_cada_130m": 184,
+      "horario": "22:00-06:00"
+    },
+    "distFicha": 130,
+    "fuente": "Resolución N°217/2026",
+    "updated_at": "2026-01-01",
+    "julio_2026": {
+      "diurno_bajada": 1790,
+      "diurno_ficha": 179,
+      "nocturno_bajada": 2059,
+      "nocturno_ficha": 205,
+      "vigencia": "2026-07-01"
+    }
+  },
+  "uber": {
+    "base": 1000,
+    "km": 500,
+    "min": 65,
+    "minFare": 3000,
+    "fuente": "Uber app estimate range",
+    "updated_at": "2025-12-01"
+  },
+  "didi": {
+    "base": 900,
+    "km": 440,
+    "min": 55,
+    "minFare": 2500,
+    "fuente": "DiDi app estimate range",
+    "updated_at": "2025-12-01"
+  },
+  "maxim": {
+    "base": 855,
+    "km": 418,
+    "min": 52,
+    "minFare": 2375,
+    "fuente": "Maxim app estimate range",
+    "updated_at": "2025-12-01"
+  }
 }

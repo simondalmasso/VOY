@@ -54,8 +54,8 @@ echo "  ✅ lint clean"
 # ── 1b. Tests (gate — deploy aborts if tests fail) ──────────
 echo ""
 echo "── 1b. Tests ──"
-if [ -f "__tests__/estimateTaxi.test.js" ]; then
-  node --test __tests__/ 2>&1 | tail -12
+if ls __tests__/*.test.js >/dev/null 2>&1; then
+  node --test "__tests__/**/*.test.js" 2>&1 | tail -15
   TEST_EXIT=${PIPESTATUS[0]}
   if [ "$TEST_EXIT" -ne 0 ]; then
     echo "❌ Tests FAILED — deploy aborted."
