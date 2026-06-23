@@ -259,6 +259,25 @@ button{font-family:inherit;letter-spacing:inherit}
 .icon-btn:active{transform:scale(0.9)}
 .icon-btn.active{color:var(--orange);background:rgba(255,149,0,0.12)}
 
+/* VOY_UI_FOCUS_V1 UI-003 — Route share (sheet-bottom-right, subtle).
+   Rendered only in the full sheet path ⇒ visible solely when a destination
+   is selected. Minimal ghost button: transparent bg, muted text, lifts to
+   full opacity on hover/focus. Spec asked for #FFFFFF; we use var(--text3)
+   so the button stays legible on the light sheet surface too (default theme
+   has a white sheet — #FFFFFF would be invisible). Intent preserved: subtle,
+   low-opacity, full-opacity on hover. */
+.sheet-share-row{display:flex;justify-content:flex-end;margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:0.5px solid var(--border-subtle)}
+.sheet-share-btn{
+  display:inline-flex;align-items:center;gap:6px;border:none;background:transparent;cursor:pointer;
+  color:var(--text3);opacity:0.6;font-size:var(--font-caption);font-weight:var(--fw-body);
+  padding:8px 4px;min-height:36px;border-radius:var(--radius-xs);transition:opacity var(--ease-out),transform var(--ease-out);
+  -webkit-tap-highlight-color:transparent;
+}
+.sheet-share-btn:hover{opacity:1}
+.sheet-share-btn:focus-visible{opacity:1;outline:2px solid var(--primary);outline-offset:2px}
+.sheet-share-btn:active{opacity:1;transform:scale(0.96)}
+@media (prefers-reduced-motion:reduce){.sheet-share-btn{transition:none}}
+
 /* HERO ride-hailing option */
 .hero{
   display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) 0 var(--sp-3);
@@ -957,6 +976,7 @@ document.addEventListener('DOMContentLoaded',function(){
   initGPS();
   initDarkMode();
   renderMemoryRow();
+  restoreRouteFromUrl(); // VOY_UI_FOCUS_V1 UI-003: load route from a shared deep-link (?from=&to=&dn=)
   renderSheet();
   bindSearchInput();
   bindDialogButtons();
@@ -1661,6 +1681,13 @@ function renderSheet(){
     h+='</div></div>';
   }
 
+  // VOY_UI_FOCUS_V1 UI-003 — Route share (sheet-bottom-right, subtle).
+  // visibility_rule: only_when_destination_selected — this full-render path is
+  // reached solely when origin+dest+estimations exist; the empty / calculating
+  // states early-return above, so the button never appears without a route.
+  // scope: current_route_context_only — see shareRoute().
+  h+='<div class="sheet-share-row"><button type="button" class="sheet-share-btn" id="sheetShareBtn" aria-label="Compartir viaje">'+svg('share',15)+'<span>Compartir viaje</span></button></div>';
+
   container.innerHTML=h;
   attachSheetEvents();
 }
@@ -1727,6 +1754,9 @@ function attachSheetEvents(){
   // Bike toggle
   var bikeBtn=document.getElementById('bikeLineBtn');
   if(bikeBtn)bikeBtn.addEventListener('click',function(){_bikeDetailExpanded=!_bikeDetailExpanded;var d=document.getElementById('bikeDetail');if(d)d.classList.toggle('expanded',_bikeDetailExpanded)});
+  // VOY_UI_FOCUS_V1 UI-003 — Route share → navigator.share with copy_link fallback
+  var sheetShareBtn=document.getElementById('sheetShareBtn');
+  if(sheetShareBtn)sheetShareBtn.addEventListener('click',shareRoute);
 }
 
 // ===================== DEEP-LINK CONFIRMATION DIALOG =====================
@@ -1949,6 +1979,68 @@ function toggleFooterMenu(force){
 function closeFooterMenu(){toggleFooterMenu(false)}
 function _fallbackCopy(text){
   try{var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-9999px';ta.setAttribute('readonly','');document.body.appendChild(ta);ta.select();var ok=document.execCommand('copy');ta.remove();return ok}catch(e){return false}
+}
+// VOY_UI_FOCUS_V1 UI-003 — Share CURRENT ROUTE context only (not the generic app share).
+// Builds a route deep-link (?from=lat,lon&to=lat,lon&dn=name) + a compact text summary,
+// then uses navigator.share → clipboard → execCommand fallback chain.
+// scope: current_route_context_only — payload carries origin+dest, never memory/prefs.
+function shareRoute(){
+  var origin=MC.getOrigin(),dest=MC.getDest();
+  if(!origin||!dest){showToast('Elegí un destino para compartir','info');return}
+  var base=window.location.origin+window.location.pathname;
+  var params='?from='+origin.lat.toFixed(6)+','+origin.lon.toFixed(6)
+            +'&to='+dest.lat.toFixed(6)+','+dest.lon.toFixed(6)
+            +'&dn='+encodeURIComponent((dest.name||'Destino').split(',')[0]);
+  var url=base+params;
+  var oName=(origin.name||'Mi ubicación').split(',')[0];
+  var dName=(dest.name||'Destino').split(',')[0];
+  var text='VOY — '+oName+' → '+dName;
+  var shareData={title:'VOY — viaje',text:text,url:url};
+  var onDone=function(via){v5event('share_route',{via:via});closeFooterMenu()};
+  if(navigator.share){
+    navigator.share(shareData).then(function(){onDone('native')}).catch(function(e){
+      if(e&&e.name==='AbortError')return; // user cancelled the share sheet — silent
+      _copyRouteLink(url,onDone);
+    });
+  }else{
+    _copyRouteLink(url,onDone);
+  }
+}
+function _copyRouteLink(url,onDone){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){showToast('Enlace del viaje copiado','success');onDone('clipboard')}).catch(function(){
+      if(_fallbackCopy(url)){showToast('Enlace del viaje copiado','success');onDone('copy_fallback')}else{showToast('No se pudo copiar el enlace','error')}
+    });
+  }else{
+    if(_fallbackCopy(url)){showToast('Enlace del viaje copiado','success');onDone('copy_fallback')}else{showToast('No se pudo copiar el enlace','error')}
+  }
+}
+// VOY_UI_FOCUS_V1 UI-003 — Restore a shared route from a deep-link URL on boot.
+// scope: current_route_context_only — reads only from/to/dn, never touches memory/prefs.
+// If `from` is present it becomes the origin (marked manual so GPS won't override the
+// shared context); otherwise dest is set and GPS/cache will supply origin and trigger
+// runEstimations via _handleGpsPosition. Malformed links fail silently → normal boot.
+function restoreRouteFromUrl(){
+  try{
+    var q=new URLSearchParams(window.location.search);
+    var to=q.get('to'),from=q.get('from'),dn=q.get('dn');
+    if(!to)return;
+    var tp=to.split(',');if(tp.length<2)return;
+    var dLat=parseFloat(tp[0]),dLon=parseFloat(tp[1]);
+    if(!isFinite(dLat)||!isFinite(dLon))return;
+    var name=dn?decodeURIComponent(dn):'Destino';
+    if(from){
+      var fp=from.split(',');if(fp.length>=2){
+        var oLat=parseFloat(fp[0]),oLon=parseFloat(fp[1]);
+        if(isFinite(oLat)&&isFinite(oLon)){MC.setOrigin(oLat,oLon,'Origen compartido','share');MC.setOriginManual(true);va_origin('share');updateOriginUI();updateMapMarkers()}
+      }
+    }
+    MC.setDest(dLat,dLon,name,'share');va_dest(name,dLat,dLon);
+    var di=document.getElementById('destInput');if(di){di.value=name.split(',')[0]}
+    updateMapMarkers();checkFavActive();v5event('destination_selected',{source:'share_link'});
+    if(MC.getOrigin())runEstimations();
+    if(_map)_map.flyTo({center:[dLon,dLat],zoom:14});
+  }catch(e){/* malformed share link — silent, normal boot continues */}
 }
 function shareApp(){
   var url=window.location.href;
