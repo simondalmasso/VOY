@@ -1,21 +1,14 @@
 {
   // ============================================================
-  //  VOY — Cloudflare Workers config (FINAL: voy-core + Analytics)
+  //  VOY — Cloudflare Workers config (V7.8: WAE analytics + cron tarifas)
   //
-  //  Canonical domain:  https://voy.is-a.dev  (NOT YET LIVE — is-a.dev PR pending)
+  //  Canonical domain:  https://voy.is-a.dev  (is-a.dev PR #41619 open, pending merge)
   //  Worker name:       voy-app  (the EXISTING production worker at
   //                    voy-app.simondalmasso44.workers.dev — deploying updates it)
   //
-  //  deployment_mode: safe_production, strategy: blue_green
-  //  predeploy_checks: lint, dry_run, asset_binding_check
-  //  rollback: enabled (trigger: error_rate > 1%) — handled via Cloudflare
-  //            dashboard version rollback (Workers keep last N versions).
-  //
-  //  workers_dev MUST stay true:
-  //    The is-a.dev CNAME target will be the workers.dev URL (once registered).
-  //    Disabling workers_dev would break the CNAME path entirely.
-  //    V7.1: the workers.dev → voy.is-a.dev redirect in worker.js is DISABLED
-  //    until voy.is-a.dev is registered. Re-enable after is-a.dev PR merges.
+  //  workers_dev MUST stay true (is-a.dev CNAME resolves to the workers.dev URL).
+  //  V7.1: the workers.dev → voy.is-a.dev redirect in worker.js is DISABLED
+  //  until voy.is-a.dev is registered. Re-enable after is-a.dev PR merges.
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-01-01",
@@ -40,44 +33,36 @@
     "not_found_handling": "none"
   },
 
-  // Cloudflare Analytics Engine — event_spec v1.4 transport.
-  // V7.1: TEMPORARILY DISABLED. Deploy failed with code 10089 — Analytics Engine
-  // must be enabled in the CF dashboard first:
-  //   https://dash.cloudflare.com/<account>/workers/analytics-engine
-  // The worker.js code handles a missing VOY_METRICS binding gracefully (returns
-  // 202 "analytics_unavailable" — app works, events just aren't persisted).
-  // TO RE-ENABLE: (1) enable Analytics Engine in dashboard, (2) uncomment the
-  // block below, (3) ./scripts/deploy.sh
-  // "analytics_engine_datasets": [
-  //   { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
-  // ],
+  // Cloudflare Analytics Engine — 3 eventos (estimation / provider_tap / search).
+  // WAE Free tier = 100k data points/día gratis. VOY no lo supera.
+  // El worker escribe data points via ctx.waitUntil(env.VOY_METRICS.writeDataPoint()).
+  // Si el binding está ausente (dry-run), /api/events devuelve 202 gracefully.
+  "analytics_engine_datasets": [
+    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
+  ],
 
-  // V7.7 VOY_ANALYTICS_V2 — Durable Object for the aggregate store (dual store).
-  // This DO maintains the hot aggregates that back /api/reports (5 reports).
-  // Store 1 = Analytics Engine (raw data points, above); Store 2 = this DO.
-  // The worker handles a missing VOY_AGG binding gracefully (503 on /api/reports,
-  // 202 on /api/events). Requires `wrangler` >= 3.60 + a Workers paid plan for DO.
-  // TO RE-ENABLE: (1) ensure Workers Paid plan, (2) uncomment the block below,
-  // (3) ./scripts/deploy.sh  (the first deploy with a new class name creates the
-  // migration automatically via the `migrations` block below).
-  // "durable_objects": {
-  //   "bindings": [{ "name": "VOY_AGG", "class_name": "VoyAnalytics" }]
-  // },
-  // "migrations": [{ "tag": "v77_voy_analytics", "new_classes": ["VoyAnalytics"] }],
+  // V7.8: Durable Object + /api/reports eliminados (analytics V2 dual-store removido).
+  // WAE es el único store. Simplificación: 3 eventos, 0 código muerto.
 
-  // V7.7 VOY_ANALYTICS_V2 — 5 exclusion filters are configured via vars (not
-  // secrets) so the owner can tune them without redeploying logic. Set these in
-  // the CF dashboard or a .dev.vars file for local `wrangler dev`.
-  // "vars": {
-  //   "VOY_OWNER_IPS": "",           // comma-separated, e.g. "190.0.0.1"
-  //   "VOY_DEV_IPS": "",             // comma-separated developer IPs
-  //   "VOY_EXCLUDE_LOCALHOST": "true",
-  //   "VOY_EXCLUDE_HEADLESS": "true",
-  //   "VOY_EXCLUDE_BOT": "true"
-  // },
+  // V7.8 — Filtros de exclusión de analytics (configurables via dashboard/vars).
+  // 3 filtros activos: localhost, headless, bot. owner_ip/dev_ip opcionales.
+  "vars": {
+    "VOY_OWNER_IPS": "",
+    "VOY_DEV_IPS": "",
+    "VOY_EXCLUDE_LOCALHOST": "true",
+    "VOY_EXCLUDE_HEADLESS": "true",
+    "VOY_EXCLUDE_BOT": "true"
+  },
 
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 }
+  },
+
+  // Cron trigger — recordatorio semanal de revisión de tarifas municipales.
+  // Lunes 06:00 UTC (03:00 ART). Solo loguea; el hook queda listo para cuando
+  // exista una fuente oficial automática de tarifas.
+  "triggers": {
+    "crons": ["0 6 * * 1"]
   }
 }

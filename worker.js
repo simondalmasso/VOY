@@ -1,66 +1,61 @@
 // ============================================================
-//  VOY — Cloudflare Worker (FINAL DEPLOY ARCHITECTURE + Analytics)
+//  VOY — Cloudflare Worker (V7.8: WAE analytics + sessionID + cron)
 //
-//  Canonical origin:  https://voy.is-a.dev  (NOT YET LIVE — is-a.dev PR pending)
+//  Canonical origin:  https://voy.is-a.dev  (is-a.dev PR #41619 open)
 //  Worker name:       voy-app  (updates the EXISTING production worker)
-//  Strategy:          cloudflare_worker_static_assets + /api/events endpoint
-//  Internal entry:    /VOY-Lite.html  (rewritten from /, never user-facing)
 //
 //  Rules (evaluated in order):
 //   1. /VOY-Lite.html  → 301 → /  (same-host relative redirect; hides internal path)
 //   2. CANONICAL REDIRECT DISABLED until voy.is-a.dev is registered.
-//      Re-enable rule 2 (workers.dev → voy.is-a.dev) after the is-a.dev PR merges
-//      and DNS propagates. See DEPLOY_V7.md Step E + scripts/prepare-isadev-pr.mjs.
 //   3. /api/events  → POST → Analytics Engine (VOY_METRICS) + 202 (fire-and-forget)
 //   4. /  → internal rewrite → /VOY-Lite.html  (browser URL stays /)
-//   5. everything else → ASSETS binding (core/, ui/, icons/, manifest.json, logo.svg, …)
+//   5. everything else → ASSETS binding (core/, ui/, icons/, manifest.json, …)
 //
-//  Header cleanup (best-effort):
-//   - x-powered-by: deleted from the worker response.
-//   - server / cf-ray: injected by the Cloudflare edge AFTER the worker returns
-//     and CANNOT be removed from a Worker (documented platform limitation).
-//
-//  Analytics (event_spec v1.4 + cloudflare_analytics_engine):
-//   - Receives { events: [{name,data,anon_id,ts,geo}] } from the frontend eventBus.
-//   - Writes one Analytics Engine data point per event into the VOY_METRICS dataset.
-//   - Privacy: anon_id only (no PII), coarse geo cluster, no raw IP stored
-//     (CF Analytics Engine hashes/derives geo at the edge; we never log cf-ipcountry
-//     as a stored field — only the coarse client-supplied cluster).
-//   - If the VOY_METRICS binding is absent (e.g. local dry-run), events are still
-//     acknowledged with 202 so the frontend never blocks on analytics.
+//  Analytics (V7.8 — 3 eventos, WAE only):
+//   - 3 eventos canónicos: 'estimation', 'provider_tap', 'search'
+//   - Nombres legacy se normalizan a estos 3 (ver EVENT_NORMALIZE).
+//   - WAE writeDataPoint via ctx.waitUntil() — no bloquea la respuesta.
+//   - sessionID via cookie (voy_sid) — sin auth, distingue sesiones únicas.
+//   - 3 filtros de exclusión: localhost, headless, bot (configurables via vars).
+//   - Si VOY_METRICS está ausente (dry-run), devuelve 202 gracefully.
 // ============================================================
 
 const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
-const WORKER_VERSION = "V7.7.0"; // V7.7 = VOY_ANALYTICS_V2 (6 canonical events + 5 exclusion filters + dual store [Analytics Engine + Durable Object] + /api/reports with 5 reports). Frontend eventBus allow-list expanded; worker normalizes legacy v1.4 names → V2 names. MobilityEngine/PricingEngine/MobilityController untouched.
+const WORKER_VERSION = "V7.8.0"; // V7.8 = analytics simplificado (3 eventos WAE + sessionID cookie + cron tarifas). DO + /api/reports eliminados. 0 código muerto.
 // __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
 // verify-production.sh checks /api/health.build_hash === git short SHA.
 const BUILD_HASH = "__BUILD_HASH__";
 
-// VOY_ANALYTICS_V2 — 6 canonical event names. Legacy v1.4 names normalize to these.
-const V2_EVENTS = ['search', 'provider_click', 'route_selected', 'voice_search', 'share', 'navigation_start'];
-const NAME_NORMALIZE = {
-  // v1.4 → V2
+// V7.8 — 3 eventos canónicos. Nombres legacy se mapean a estos.
+const V2_EVENTS = ['estimation', 'provider_tap', 'search'];
+const EVENT_NORMALIZE = {
+  // → estimation
+  estimation: 'estimation',
+  route_calculated: 'estimation',
+  ride_estimated: 'estimation',
+  route_selected: 'estimation',
+  destination_selected: 'estimation',
+  // → provider_tap
+  provider_tap: 'provider_tap',
+  provider_click: 'provider_tap',
+  provider_clicked: 'provider_tap',
+  deeplink_opened: 'provider_tap',
+  vehicle_viewed: 'provider_tap',
+  // → search
+  search: 'search',
   search_performed: 'search',
-  provider_clicked: 'provider_click',
-  destination_selected: 'route_selected',
-  // v5 legacy → V2
-  share_app: 'share',
-  // already-canonical pass-through
-  search: 'search', provider_click: 'provider_click', route_selected: 'route_selected',
-  voice_search: 'voice_search', share: 'share', navigation_start: 'navigation_start'
+  voice_search: 'search',
 };
 
-// VOY_ANALYTICS_V2 — 5 exclusion filters. Each is configurable via env so the
-// owner can tune without redeploying logic. Unknown/non-V2 events are dropped
-// (they still get acknowledged with 202 so the client never blocks).
+// V7.8 — 3 filtros de exclusión (localhost, headless, bot). owner/dev IP opcionales.
 function _loadFilterConfig(env) {
   const list = (v) => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
   return {
-    owner_ips: list(env.VOY_OWNER_IPS),       // exclude_owner_ip
-    dev_ips: list(env.VOY_DEV_IPS),           // exclude_developer_ip
-    exclude_localhost: env.VOY_EXCLUDE_LOCALHOST !== 'false', // default true
-    exclude_headless: env.VOY_EXCLUDE_HEADLESS !== 'false',   // default true
-    exclude_bot: env.VOY_EXCLUDE_BOT !== 'false'              // default true
+    owner_ips: list(env.VOY_OWNER_IPS),
+    dev_ips: list(env.VOY_DEV_IPS),
+    exclude_localhost: env.VOY_EXCLUDE_LOCALHOST !== 'false',
+    exclude_headless: env.VOY_EXCLUDE_HEADLESS !== 'false',
+    exclude_bot: env.VOY_EXCLUDE_BOT !== 'false'
   };
 }
 
@@ -68,86 +63,78 @@ const BOT_UA = /googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|
 const HEADLESS_UA = /headlesschrome|phantomjs|slimerjs|puppeteer|playwright|webdriver|selenium|chrome-lighthouse|w3c_validator|nightmare|crawly|crawler/i;
 
 function _shouldExclude(ctx, cfg) {
-  // 1. exclude_localhost
   if (cfg.exclude_localhost && (ctx.ip === '127.0.0.1' || ctx.ip === '::1' || ctx.ip === '')) return 'localhost';
-  // 2. exclude_owner_ip
   if (cfg.owner_ips.length && cfg.owner_ips.indexOf(ctx.ip) > -1) return 'owner_ip';
-  // 3. exclude_developer_ip
   if (cfg.dev_ips.length && cfg.dev_ips.indexOf(ctx.ip) > -1) return 'developer_ip';
-  // 4. exclude_headless
   if (cfg.exclude_headless && HEADLESS_UA.test(ctx.ua)) return 'headless';
-  // 5. exclude_bot
   if (cfg.exclude_bot && BOT_UA.test(ctx.ua)) return 'bot';
   return null;
 }
 
+// V7.8 — sessionID via cookie. Sin auth, distingue sesiones únicas para retención.
+function _getOrCreateSessionId(request) {
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const match = cookieHeader.match(/voy_sid=([^;]+)/);
+  if (match) return { sid: match[1], isNew: false };
+  return { sid: crypto.randomUUID().slice(0, 8), isNew: true };
+}
+
 const worker = {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const host = url.hostname.toLowerCase();
     const pathLower = url.pathname.toLowerCase();
 
     // 1) Hide internal entry path → same-host root (relative 301).
-    //    V7.1: was CANONICAL_ORIGIN + "/"; now relative so it works on any host
-    //    (workers.dev OR voy.is-a.dev once live). Bookmark cleanup, not domain hop.
     if (pathLower === "/voy-lite.html" || pathLower === "/voy-lite") {
       return Response.redirect("/", 301);
     }
 
-    // 2) CANONICAL REDIRECT — DISABLED.
-    //    Was: workers.dev / simondalmasso hosts → 301 → voy.is-a.dev.
-    //    Reason: voy.is-a.dev is NOT registered yet (is-a.dev PR not merged).
-    //    Deploying the redirect would break voy-app.simondalmasso44.workers.dev.
-    //    Re-enable this block AFTER scripts/prepare-isadev-pr.mjs completes + DNS.
+    // 2) CANONICAL REDIRECT — DISABLED until voy.is-a.dev is registered.
     // if (host.endsWith(".workers.dev") || host.includes("simondalmasso")) {
     //   const target = CANONICAL_ORIGIN + url.pathname + url.search;
     //   return Response.redirect(target, 301);
     // }
 
-    // 3) Analytics ingestion endpoint (event_spec v1.4 transport: cloudflare).
+    // 3) Analytics ingestion endpoint — 3 eventos → WAE.
     if (pathLower === "/api/events" && request.method === "POST") {
-      return _handleEvents(request, env);
+      return _handleEvents(request, env, ctx);
     }
     if (pathLower === "/api/events" && request.method === "OPTIONS") {
-      return _cors(new Response(null, { status: 204 }));
-    }
-    // VOY_ANALYTICS_V2 — /api/reports: 5 reports from the Durable Object aggregate store.
-    if (pathLower === "/api/reports" && request.method === "GET") {
-      return _handleReports(request, env);
-    }
-    if (pathLower === "/api/reports" && request.method === "OPTIONS") {
       return _cors(new Response(null, { status: 204 }));
     }
     if (pathLower === "/api/health") {
       return _cors(new Response(JSON.stringify({
         ok: true, service: "voy-app", version: WORKER_VERSION, build_hash: BUILD_HASH,
-        analytics: !!(env.VOY_METRICS), aggregate: !!(env.VOY_AGG), time: new Date().toISOString()
+        analytics: !!(env.VOY_METRICS), time: new Date().toISOString()
       }), { headers: { "Content-Type": "application/json" } }));
     }
 
-    // 4) Root → internal rewrite to VOY-Lite.html (browser URL stays /).
-    //    V7: Cache-Control: no-store on HTML ONLY so the edge never serves a
-    //    stale UI build. Static assets (JS/CSS/icons) keep their own cache
-    //    headers + are cache-busted via ?v=9 query strings.
+    // 4) Root → internal rewrite to VOY-Lite.html.
+    //    Cache-Control: no-store on HTML so edge never serves stale UI.
+    //    Set-Cookie: voy_sid on first visit (sessionID for analytics).
     if (url.pathname === "/" || url.pathname === "") {
       url.pathname = "/VOY-Lite.html";
       const resp = await env.ASSETS.fetch(new Request(url, request));
-      return _htmlNoStore(resp);
+      return _htmlNoStore(resp, request);
     }
 
     // 5) All other paths → static assets (with header cleanup).
     const resp = await env.ASSETS.fetch(request);
     return _cleanHeaders(resp);
+  },
+
+  // V7.8 — Cron trigger: recordatorio semanal de revisión de tarifas.
+  // Lunes 06:00 UTC. Solo loguea; el hook queda listo para fuente oficial futura.
+  async scheduled(event, env, ctx) {
+    console.log('[VOY CRON] Recordatorio: verificar tarifas municipales (Resolución N°217/2026). Próxima revisión: ver fares.json _meta.proxima_revision.');
   }
 };
 
 export default worker;
-export { VoyAnalytics } from './analytics-do.js';
 
-// ---------------- Analytics handler (V7.7 VOY_ANALYTICS_V2) ----------------
-// 5 exclusion filters + name normalization → 6 V2 canonical events + dual store
-// (Analytics Engine raw data points + Durable Object hot aggregates).
-async function _handleEvents(request, env) {
+// ---------------- Analytics handler (V7.8 — 3 eventos, WAE only) ----------------
+async function _handleEvents(request, env, ctx) {
   let body;
   try {
     body = await request.json();
@@ -164,27 +151,28 @@ async function _handleEvents(request, env) {
     }));
   }
 
-  // --- 5 exclusion filters (owner_ip, developer_ip, localhost, headless, bot) ---
+  // --- 3 filtros de exclusión ---
   const cfg = _loadFilterConfig(env);
   const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
   const ua = request.headers.get("user-agent") || "";
   const excludeReason = _shouldExclude({ ip, ua }, cfg);
   if (excludeReason) {
-    // Excluded traffic is acknowledged (202) so the client never blocks, but
-    // nothing is written to either store. excluded_count is returned for observability.
     return _cors(new Response(JSON.stringify({
       ok: true, received: events.length, written: 0, excluded: events.length, reason: excludeReason
     }), { status: 202, headers: { "Content-Type": "application/json" } }));
   }
 
-  // --- name normalization: legacy v1.4 / v5 names → 6 V2 canonical names ---
+  // --- sessionID (cookie-based, sin auth) ---
+  const { sid } = _getOrCreateSessionId(request);
+
+  // --- normalización: legacy → 3 eventos canónicos ---
   const normalized = [];
   for (const e of events) {
-    const canonical = NAME_NORMALIZE[e.name];
-    if (!canonical) continue; // drop non-V2 events (spec compliance)
+    const canonical = EVENT_NORMALIZE[e.name];
+    if (!canonical) continue; // drop non-canonical events
     normalized.push({
       name: canonical,
-      anon_id: String(e.anon_id || "").slice(0, 64),
+      anon_id: String(e.anon_id || sid).slice(0, 64),
       ts: Number(e.ts) || Date.now(),
       geo: String(e.geo || "").slice(0, 60),
       data: e.data || {}
@@ -196,80 +184,35 @@ async function _handleEvents(request, env) {
     }));
   }
 
-  // --- dual store ---
-  // Store 1: Analytics Engine (raw data points, long-term, SQL-queryable).
+  // --- WAE write (fire-and-forget via ctx.waitUntil) ---
   let aeWritten = 0;
-  try {
-    if (env.VOY_METRICS && typeof env.VOY_METRICS.writeDataPoint === "function") {
+  if (env.VOY_METRICS && typeof env.VOY_METRICS.writeDataPoint === "function") {
+    ctx.waitUntil((async () => {
       for (const e of normalized) {
-        env.VOY_METRICS.writeDataPoint({
-          index1: e.name,
-          blob1: e.anon_id,
-          blob2: e.geo,
-          doubles: [
-            Number(e.data && e.data.session_age_ms) || 0,
-            Number(e.data && e.data.estimated_fare) || 0,
-            Number(e.data && e.data.route_distance) || 0
-          ]
-        });
-        aeWritten++;
+        try {
+          env.VOY_METRICS.writeDataPoint({
+            indexes: [e.name],              // 'estimation' | 'provider_tap' | 'search'
+            blobs: [
+              e.anon_id,                     // sessionID o anon_id
+              String(e.data && e.data.provider || ''),  // uber|didi|maxim|taxi|bus|...
+              String(e.data && e.data.mode || '')       // auto|moto|bus|walk|bike
+            ],
+            doubles: [
+              Number(e.data && e.data.price) || 0,      // precio estimado
+              Number(e.data && e.data.time_min) || 0,   // tiempo estimado
+              Number(e.data && e.data.distance_km) || 0 // distancia
+            ]
+          });
+          aeWritten++;
+        } catch (_) { /* WAE failure never breaks the app */ }
       }
-    }
-  } catch (e) {
-    // Analytics Engine failure must NEVER break the app.
-  }
-
-  // Store 2: Durable Object (hot aggregates for /api/reports).
-  let aggWritten = 0;
-  try {
-    if (env.VOY_AGG) {
-      const id = env.VOY_AGG.idFromName("voy-analytics-singleton");
-      const stub = env.VOY_AGG.get(id);
-      const r = await stub.fetch(new Request("https://do/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events: normalized })
-      }));
-      if (r.ok) {
-        const j = await r.json();
-        aggWritten = (j && j.ingested) || 0;
-      }
-    }
-  } catch (e) {
-    // DO failure must NEVER break the app.
+    })());
   }
 
   return _cors(new Response(JSON.stringify({
     ok: true, received: events.length, normalized: normalized.length,
-    written: Math.max(aeWritten, aggWritten),
-    stores: { analytics_engine: aeWritten, durable_object: aggWritten }
+    written: aeWritten, session_id: sid
   }), { status: 202, headers: { "Content-Type": "application/json" } }));
-}
-
-// ---------------- Reports handler (V7.7 VOY_ANALYTICS_V2) ----------------
-// 5 reports: daily_users, provider_usage, searches, cities, retention.
-// Reads from the Durable Object aggregate store (instant; no SQL API hit).
-async function _handleReports(request, env) {
-  const url = new URL(request.url);
-  const type = url.searchParams.get("type") || "summary";
-  const days = url.searchParams.get("days") || "30";
-  if (!env.VOY_AGG) {
-    return _cors(new Response(JSON.stringify({
-      ok: false, error: "aggregate_store_unavailable",
-      note: "VOY_AGG Durable Object binding not configured. See wrangler.jsonc."
-    }), { status: 503, headers: { "Content-Type": "application/json" } }));
-  }
-  try {
-    const id = env.VOY_AGG.idFromName("voy-analytics-singleton");
-    const stub = env.VOY_AGG.get(id);
-    const r = await stub.fetch(new Request("https://do/report?type=" + encodeURIComponent(type) + "&days=" + encodeURIComponent(days)));
-    const body = await r.text();
-    return _cors(new Response(body, { status: r.status, headers: { "Content-Type": "application/json" } }));
-  } catch (e) {
-    return _cors(new Response(JSON.stringify({ ok: false, error: "report_failed", detail: String(e && e.message || e) }), {
-      status: 500, headers: { "Content-Type": "application/json" }
-    }));
-  }
 }
 
 function _cors(resp) {
@@ -283,18 +226,13 @@ function _cors(resp) {
 function _cleanHeaders(resp) {
   try {
     resp.headers.delete("x-powered-by");
-    // Best-effort: the edge re-adds its own `server` after the worker returns.
     resp.headers.delete("server");
   } catch (_) {}
   return resp;
 }
 
-// V7: HTML responses get Cache-Control: no-store so the edge NEVER serves a
-// stale UI build. This is the core fix for the "local ≠ edge" desync: even if
-// CF cache has a HIT for the HTML, no-store forces revalidation on every request.
-// We rebuild the Response with a fresh mutable Headers object (ASSETS responses
-// may have immutable headers).
-function _htmlNoStore(resp) {
+// V7.8: HTML responses get Cache-Control: no-store + sessionID cookie.
+function _htmlNoStore(resp, request) {
   const headers = new Headers(resp.headers);
   headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
   headers.set("Vary", "Accept-Encoding");
@@ -302,6 +240,13 @@ function _htmlNoStore(resp) {
   headers.set("X-VOY-Build", BUILD_HASH);
   headers.delete("x-powered-by");
   headers.delete("server");
+
+  // Set-Cookie: voy_sid on first visit (30-day retention window).
+  const { sid, isNew } = _getOrCreateSessionId(request);
+  if (isNew) {
+    headers.append("Set-Cookie", `voy_sid=${sid}; Max-Age=2592000; SameSite=Lax; Path=/`);
+  }
+
   return new Response(resp.body, {
     status: resp.status,
     statusText: resp.statusText,

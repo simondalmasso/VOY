@@ -1,11 +1,11 @@
 <!--
-VOY V7.7.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.8.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.7.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.8.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
@@ -33,7 +33,7 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.7.0">
+<meta name="voy-version" content="V7.8.0">
 <meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
@@ -54,7 +54,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.7.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.8.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -672,7 +672,7 @@ button{cursor:pointer}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.7.0';
+window.VOY_VERSION='V7.8.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -1270,7 +1270,7 @@ async function onSearchInput(val){
   // response. Previously the threshold was 2 chars → on mobile the field felt dead
   // after typing the first letter. Now we immediately show a "Buscando…" state,
   // then local results, then remote (debounced 150ms for snappier mobile feel).
-  v5event('search',{q:val.substring(0,40)});
+  v5event('search',{q:val.substring(0,40),mode:typeof _activeMode!=='undefined'?_activeMode:''});
   var version=++_searchVersion;
   var gpsOrigin=MC.getOrigin();
   // Instant feedback: show the dropdown with a searching state right away
@@ -1476,7 +1476,7 @@ function renderSheet(){
     clearBusRoute();showModeSelector(false);return;
   }
   showModeSelector(true);
-  if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();var _fare=(autoEst.rankedProviders&&autoEst.rankedProviders[0])?autoEst.rankedProviders[0].price:0;VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:_fare,fare_captured:_fare>0,lost_conversion:_fare<=0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
+  if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();var _winner=(autoEst.rankedProviders&&autoEst.rankedProviders[0])?autoEst.rankedProviders[0]:null;var _fare=_winner?_winner.price:0;VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:_fare,price:_fare,time_min:autoEst.timeMin||0,provider:_winner?_winner.id:'',mode:'auto',fare_captured:_fare>0,lost_conversion:_fare<=0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
 
   // V7: Build hero/alts respecting _activeMode (transport selector is functional, not decorative).
   // all|car|custom → ride-hailing apps (uber/didi/maxim); taxi → taxi providers;
@@ -1736,7 +1736,7 @@ function bindDialogButtons(){
   document.getElementById('dgConfirm').addEventListener('click',function(){
     if(!_pendingDeepLink)return;
     var p=_pendingDeepLink;
-    va_cta(p.action);v5event('deeplink_opened',{provider:p.action});
+    va_cta(p.action);v5event('deeplink_opened',{provider:p.action,mode:modeForAction(p.action)});
     MC.v5LogTrip(MC.getOrigin(),MC.getDest(),modeForAction(p.action),p.action);
     closeDeepLinkDialog();
     if(p.url&&p.url!=='#'){

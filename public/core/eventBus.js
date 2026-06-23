@@ -1,22 +1,13 @@
 /**
- * VOY Event Bus + Transport — Event Spec v1.4 + V2 (VOY_ANALYTICS_V2)
+ * VOY Event Bus + Transport — V7.8 (3 eventos canónicos: estimation / provider_tap / search)
  *
- * V2 canonical events (6): search, provider_click, route_selected,
- *   voice_search, share, navigation_start. The worker normalizes legacy
- *   v1.4 names → these 6 names so reports use a single namespace.
- *
- * Spec v1.4 events (kept for back-comat): app_boot (critical),
- *   search_performed, destination_selected, route_calculated,
- *   vehicle_viewed, provider_clicked, deeplink_opened, ride_estimated
- *   transport: cloudflare (worker endpoint), posthog (stub), local_fallback (always)
+ * El worker normaliza nombres legacy → estos 3 nombres antes de escribir a WAE.
+ * Eventos no canónicos se aceptan localmente pero se dropean server-side.
  *
  * Privacy:
  *   - anonymous_id_only (no PII, no user accounts)
- *   - no_pii: true, anonymization: hash_ip (handled server-side at the worker)
- *   - local_fallback: events always persist locally (IndexedDB) even if transport fails
- *
- * This module is the single event surface for the VOY frontend.
- * It does NOT depend on the DOM; it works in any JS context.
+ *   - sessionID via cookie voy_sid (set by worker, sin auth)
+ *   - local_fallback: events always persist locally (localStorage) even if transport fails
  *
  * @module EventBus
  * @version 1.4.0
@@ -94,25 +85,23 @@
    * @param {object} data   event payload (no PII)
    */
   function emit(name, data) {
-    // V7.7 VOY_ANALYTICS_V2: expanded allow-list. The 6 V2 canonical events
-    // (search, provider_click, route_selected, voice_search, share,
-    // navigation_start) are accepted natively. Legacy v1.4 names are kept for
-    // back-comat; the worker normalizes BOTH families to the 6 V2 canonical
-    // names before storage so reports use a single namespace.
+    // V7.8 — allow-list expandida. El worker normaliza todo a 3 eventos
+    // canónicos (estimation / provider_tap / search). Los nombres legacy
+    // se aceptan aquí y se mapean server-side.
     var allowed = {
-      // V2 canonical (VOY_ANALYTICS_V2)
-      search: true, provider_click: true, route_selected: true,
-      voice_search: true, share: true, navigation_start: true,
-      // v1.4 legacy (kept for back-comat; worker normalizes these → V2 names)
-      app_boot: true, search_performed: true, destination_selected: true,
-      route_calculated: true, vehicle_viewed: true, provider_clicked: true,
-      deeplink_opened: true, ride_estimated: true, favorite_saved: true,
-      // v5 legacy names that pass through v5event() unmapped
-      share_app: true, support_alias_copied: true, navigation_stop: true,
-      navigation_voice_toggled: true
+      // 3 canónicos V7.8
+      estimation: true, provider_tap: true, search: true,
+      // legacy que el worker normaliza → canónicos
+      search_performed: true, destination_selected: true, route_selected: true,
+      route_calculated: true, ride_estimated: true, vehicle_viewed: true,
+      provider_click: true, provider_clicked: true, deeplink_opened: true,
+      voice_search: true,
+      // v5 legacy (no canónicos — se dropean server-side pero se guardan local)
+      app_boot: true, share: true, share_app: true, navigation_start: true,
+      navigation_stop: true, navigation_voice_toggled: true,
+      support_alias_copied: true, favorite_saved: true
     };
     if (!allowed[name]) {
-      // Unknown events are dropped (spec compliance) but logged in debug.
       if (global.console && console.debug) console.debug('[eventBus] unknown event:', name);
       return;
     }
