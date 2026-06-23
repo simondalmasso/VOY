@@ -1851,3 +1851,30 @@ Stage Summary:
 - Privacy: anonymous_id only (no PII), coarse geo cluster (~500m, no raw lat/lon stored server-side), no raw IP stored (CF Analytics Engine hashes/derives geo at edge). Excluded traffic (owner/dev/localhost/headless/bot) is acknowledged with 202 but never written.
 - Files: worker.js (V7.7.0 + V2 logic), analytics-do.js (NEW — Durable Object), src/lib/voy-analytics-store.ts (NEW — dev store), src/app/api/events/route.ts (NEW — dev mirror), src/app/api/reports/route.ts (NEW — dev mirror), public/core/eventBus.js (V2 allow-list + sendBeacon), public/VOY-Lite.html (geo enrichment fix), wrangler.jsonc (DO + vars config), scripts/preflight.sh + verify-production.sh (V7.7.0), .env.local (dev filter config).
 - Production deploy pending: V7.1.0 (prod) → V7.7.0 (local). 7 version batches now pending. Blocked on CF credentials (CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID). Analytics Engine + Durable Object bindings require dashboard enablement (documented in wrangler.jsonc comments).
+
+---
+Task ID: 32
+Agent: main (Z.ai Code)
+Task: VOY_DEPLOY_AUDIT — audit deployment state across is-a.dev PR, DNS, workers route, Cloudflare DNS, and redeploy-latest capability. Output: DNS status, PR status, live version, build hash, deployment status.
+
+Work Log:
+- Read worklog tail (Tasks 29-31): local at V7.7.0, prod at V7.1.0, "blocked on CF credentials".
+- Confirmed project root = /home/z/my-project (summary's "/home/z-project" was shorthand; only /home/z/my-project exists).
+- Inspected wrangler.jsonc: name=voy-app, workers_dev=true, routes=[] (intentional — no owned zone), Analytics Engine + DO bindings commented out (dashboard prerequisites), 5 filter vars commented out.
+- Inspected scripts: deploy.sh (6-step: creds→lint→dry-run→inject-hash→deploy→verify), verify-production.sh (7-point check, expects V7.7.0), prepare-isadev-pr.mjs (generates domains/voy.json, requires real email arg), inject-build-hash.mjs (git SHA → worker.js BUILD_HASH + HTML).
+- Git state: branch=main, remote=github.com/simonkey888/VOY.git, local HEAD=05b203a (V7.7.0), deployed commit=8966b66 (V7.1.0). 8966b66 IS ancestor of HEAD; HEAD is 11 commits AHEAD of deployed. Working tree dirty (analytics V2 + navigator + screenshots uncommitted).
+- Remote main HEAD=4193e02 ("verify: cache-bust /api/health") → local is 10 commits AHEAD of remote (unpushed). Deployed 8966b66 is 1 commit behind remote main.
+- is-a.dev PR file (domains/voy.json): EXISTS but email="TU_EMAIL" (placeholder) → prepare script was run WITHOUT a real email arg; PR never properly prepared.
+- GitHub Search API (is-a-dev/register, type:pr, q=voy): total_count=0 → NO PR in any state (not merged, not closed, not pending_review, not requested_changes). PR was NEVER opened.
+- DNS: voy.is-a.dev → A records 104.18.4.103 / 104.18.5.103 (is-a.dev Cloudflare wildcard), NO CNAME. HTTPS → 302 redirect to https://is-a.dev/?d=voy (is-a.dev "domain not registered" fallback). Definitive: subdomain NOT registered.
+- workers.dev: https://voy-app.simondalmasso44.workers.dev → HTTP 200. /api/health → {"ok":true,"service":"voy-app","version":"V7.1.0","build_hash":"8966b66","analytics":false}. HTML voy-version meta=V7.1.0. Cache-Control: no-store ✓. /VOY-Lite.html → 200 (not 301; redirect-to-hide-path not active in V7.1.0 build, but content is V7 so acceptable).
+- Credentials: .env has only DATABASE_URL (no CF token/account). No .env.local, no .dev.vars. → Cannot redeploy locally.
+- CI (.github/workflows/deploy.yml): requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID secrets (NOT set). GUARDRAIL BUG: hardcodes expected version "V7.0.0" (lines 108, 120) — would REJECT a V7.7.0 deploy even if creds were present. Stale guardrail must be fixed before redeploy.
+
+Stage Summary:
+- DNS status: voy.is-a.dev NOT registered (is-a.dev fallback 302 → is-a.dev/?d=voy); workers.dev LIVE (200). Canonical domain dead; only the workers.dev subdomain serves VOY.
+- PR status: NO is-a.dev PR exists (GitHub search total_count=0 across all states: not merged/closed/pending_review/requested_changes). Local domains/voy.json is a non-functional stub (email="TU_EMAIL" placeholder). PR was never opened.
+- Live version: V7.1.0 (prod workers.dev). Local V7.7.0. 6 version batches pending (V7.1→V7.2→...→V7.7); 11 git commits ahead of deployed build.
+- Build hash: LIVE=8966b66, LOCAL HEAD=05b203a. MISMATCH — deploy is 11 commits behind local, 10 commits behind remote main (remote=4193e02, also unpushed-to from local).
+- Deployment status: BLOCKED on 4 independent blockers: (1) CF credentials absent (.env has no token/account; CI secrets unset); (2) CI guardrail stale (deploy.yml expects V7.0.0, would hard-fail V7.7.0); (3) local commits unpushed (remote 10 behind); (4) working tree dirty (8 modified files incl. analytics V2). Plus: analytics bindings (Analytics Engine + DO) disabled in prod (analytics:false) awaiting dashboard enablement — non-blocking for app function.
+- Remediation path (ordered): (1) commit+push local → remote main; (2) fix deploy.yml guardrail V7.0.0→V7.7.0; (3) set CF secrets (CLOUDFLARE_API_TOKEN+ACCOUNT_ID) in repo or env; (4) run ./scripts/deploy.sh (deploys V7.7.0 to voy-app worker); (5) separately, complete is-a.dev PR: run prepare-isadev-pr.mjs with a REAL email, open PR to is-a-dev/register, await merge+propagation; (6) post-merge run verify-production.sh https://voy.is-a.dev.
