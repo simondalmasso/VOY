@@ -367,6 +367,11 @@ button{font-family:inherit;letter-spacing:inherit}
 .voy-nav-panel button:active{transform:scale(0.94)}
 .voy-nav-panel button:hover{background:var(--bg3)}
 .voy-nav-panel button.vnp-exit{background:var(--bg3)}
+/* NAVIGATION_MODULE_MINIMAL_V1 — mode selector button. Uses the navigator's own
+   magenta accent (NOT blue/indigo) to signal "this is the mode control", tying
+   it visually to the user-dot + pulse animation. Icon alone conveys the mode. */
+.voy-nav-panel button.vnp-mode{border-color:rgba(255,45,146,0.35);color:#FF2D92}
+.voy-nav-panel button.vnp-mode:active{background:rgba(255,45,146,0.10)}
 @media(max-width:380px){.voy-nav-panel .vnp-status{display:none}.voy-nav-panel{padding:6px}} /* ultra-narrow: icons only */
 
 /* Navigator "you are here" marker (magenta, distinct from green origin + red dest) */
@@ -1138,11 +1143,15 @@ function locateMe(){
 }
 function reverseGeocodeOrigin(lat,lon){fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es').then(function(r){return r.json()}).then(function(d){if(d&&d.display_name){MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));updateOriginUI()}}).catch(function(){})}
 
-// ===================== VOY_NAVIGATOR_MVP (isolated + lazy-loaded) =====================
-// Phase 1: GPS tracking + camera follow + recenter. The navigator lives in
-// /navigator/navigator.js and is injected on first "Navegar" tap (never blocks
-// initial load). It owns its OWN geolocation watch — independent of the origin
-// watch above — and never touches MobilityEngine / PricingEngine / MobilityController.
+// ===================== VOY_NAVIGATOR (NAVIGATION_MODULE_MINIMAL_V1) =====================
+// OPTIONAL_TOGGLE_MODULE — lazy-loaded on first "Navegar" tap (do_not_auto_enable).
+// The navigator lives in /navigator/navigator.js and is injected on demand (never
+// blocks initial load). ADD_LAYER_ONLY: it overlays GPS tracking + a mode state
+// machine (walking/driving/transit_light_inference) + step-based voice guidance
+// (WebSpeechAPI, muted by default). It owns its OWN geolocation watch — independent
+// of the origin watch above — and never touches MobilityEngine / PricingEngine /
+// MobilityController, nor the existing OSRM route-src/line/shadow layers.
+// Core rules: NO_BREAK_EXISTING_OSRM, NO_REPLACE_ROUTE_ENGINE, ADD_LAYER_ONLY.
 function loadNavigatorModule(cb){
   if(window.VoyNavigator){cb();return}
   var s=document.createElement('script');
@@ -1153,9 +1162,11 @@ function loadNavigatorModule(cb){
 }
 function startNavigation(){
   var d=MC.getDest();
-  v5event('navigation_start',{provider:'voy_navigator',phase:1,has_dest:!!d});
+  v5event('navigation_start',{provider:'voy_navigator',phase:'minimal_v1',has_dest:!!d});
   loadNavigatorModule(function(){
     if(!window.VoyNavigator){showToast('Navegador no disponible','error');return}
+    // mode is inferred inside VoyNavigator.start() from window._activeMode;
+    // transit_light_inference is NEVER auto-selected (do_not_auto_enable).
     VoyNavigator.start({map:_map,dest:d});
   });
 }

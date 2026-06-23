@@ -2320,3 +2320,56 @@ Stage Summary:
 - Deviation: spec bg #0F0F0F → var(--fi-bg) with dark-theme override #1A1A1A (legibility on pure-black; intent preserved; documented inline).
 - Files changed: public/VOY-Lite.html only (CSS vars + topbar/search-bar/dropdown/origin-pill rules + HTML button reorder + JS PTT rewrite). No worker/backend changes.
 - NOT DEPLOYED: local only. Screenshots: v79-floating-input-mobile.png, v79-floating-input-desktop.png.
+
+---
+Task ID: 39
+Agent: Main
+Task: NAVIGATION_MODULE_MINIMAL_V1 — OPTIONAL_TOGGLE_MODULE (do_not_auto_enable). Core rules: NO_BREAK_EXISTING_OSRM, NO_REPLACE_ROUTE_ENGINE, ADD_LAYER_ONLY. Features: VOY_NAV_MODE (overlay_state_machine, user_opt_in_button_only), VOICE_GUIDANCE (WebSpeechAPI, step_based, muted_default), MODES (walking/driving/transit_light_inference). UI injection: nav_button (sheet_primary_actions, minimal_secondary, label "Navegar").
+
+Work Log:
+- Read worklog.md (Task 35–38 context): existing navigator.js was Phase 1 MVP (GPS follow + recenter + drag-pause + voice toggle, generic announcements only). "Navegar" button already in .hero-cta-row (sheet_primary_actions) with .cta-navigate style (surface bg + border, minimal_secondary). Voice was speechSynthesis (WebSpeechAPI) but NOT step_based — only "Navegación iniciada" generic. No mode state machine. No transit inference.
+- Audited isolation contract compliance: navigator.js owns its own geolocation watch (independent of VOY's _gpsWatch origin watch), never imports MobilityEngine/PricingEngine/MobilityController, never touches drawRouteLine() / route-src / route-line / route-shadow. NO_BREAK_EXISTING_OSRM + NO_REPLACE_ROUTE_ENGINE + ADD_LAYER_ONLY already satisfied by Phase 1 design. MINIMAL_V1 extends WITHIN the same isolation contract.
+- Rewrote public/navigator/navigator.js (v2, NAVIGATION_MODULE_MINIMAL_V1):
+  · Added MODES map: walking (osrmProfile:'foot', threshold 50m, icon 'walk'), driving (osrmProfile:'driving', threshold 150m, icon 'car'), transit_light_inference (osrmProfile:null — no turn-by-turn fetch, threshold 60m for bus-stop proximity, icon 'bus'). MODE_ORDER = ['walking','driving','transit_light_inference'].
+  · VOY_NAV_MODE state machine: _state.mode tracks current mode. start() infers initial mode from window._activeMode (walk→walking, car/taxi/remis→driving, default→walking). transit_light_inference is NEVER auto-selected (do_not_auto_enable for transit). cycleMode() public API: (idx+1)%3. _setMode() resets steps/stepIdx/announcedStops, re-fetches OSRM steps for new profile, fires navigation_mode_changed event, speaks "Modo {label}" if voice on.
+  · VOICE_GUIDANCE step_based: _fetchSteps() makes its OWN read-only OSRM fetch (steps=true, overview=false) for the current mode's profile — does NOT touch the existing route-src source or render any competing route layer. Stores steps[{location:[lng,lat], type, modifier, name, announced}]. _maybeAnnounceStep(lat,lng) on each GPS fix: advances stepIdx past announced steps, computes haversine distance to next step, speaks _maneuverPhrase(st) when within threshold. _maneuverPhrase maps OSRM maneuver type+modifier to es-AR phrases ("Girá a la izquierda por San Martín", "Llegaste a destino", etc.). muted_default: voiceOn=false on start(); _speak() early-returns when !voiceOn. toggleVoice() cancels speech when off; when toggled on mid-route, immediately announces next step (step_based, not generic).
+  · Transit light inference: _maybeAnnounceTransitStop(lat,lng) in transit mode only. Reads window.BUS_STOPS (global), computes distance to each stop, speaks "Cerca de parada de línea X: {nombre}" when within 60m. Uses _state.announcedStops["linea|nombre"] to avoid repeating the same stop. Does NOT call MC.rankBusLines() or modify the bus block — pure read-only proximity hints. Light = no turn-by-turn, just stop awareness.
+  · Added mode button to _buildPanel(): [.vnp-status] [.vnp-mode] [.vnp-recenter] [.vnp-voice] [.vnp-exit]. _refreshModeButton() updates icon (walk/car/bus) + aria-label ("Modo: {label} (tocá para cambiar)") + data-mode attr. cycleMode bound to mode button click.
+  · Extended _svg() local icon set: added walk (person), car (car with wheels), bus (rect with windows) icons. Kept self-contained (no dependency on VOY's svg() helper).
+  · Public API: start, stop, recenter, toggleVoice, cycleMode (NEW), isRunning, getMode (NEW), isVoiceOn (NEW). Backward-compatible with Phase 1 callers (startNavigation() in VOY-Lite.html unchanged — still calls VoyNavigator.start({map,dest})).
+  · GPS callback _onFix: updates status label to "Siguiendo · {mode label}", moves user marker, camera follow, then calls _maybeAnnounceStep + _maybeAnnounceTransitStop.
+  · stop(): cancels speechSynthesis, resets all step/transit state, removes panel + marker, fires navigation_stop.
+- Updated public/VOY-Lite.html:
+  · CSS: added .vnp-mode accent rule — border-color rgba(255,45,146,0.35) + color #FF2D92 (navigator's magenta accent, NOT blue/indigo) + active bg rgba(255,45,146,0.10). Ties mode button visually to user-dot/pulse. Comment documents the deliberate color choice (respects NO_BLUE rule).
+  · Updated startNavigation() comment block: documents OPTIONAL_TOGGLE_MODULE, do_not_auto_enable, ADD_LAYER_ONLY, the 3 core rules, and that mode is inferred inside VoyNavigator.start() from window._activeMode. Changed phase label 1→'minimal_v1' in v5event.
+  · "Navegar" button (line ~1656) already correct: in .hero-cta-row (sheet_primary_actions), .cta-navigate class (minimal_secondary: var(--surface) bg, var(--text) color, var(--border-strong) border, 52px height), label "Navegar". No change needed — verified.
+
+Verification (Agent Browser, mobile 390×844 + desktop 1280×800):
+- Route-restore URL /?from=-31.610,-60.696&to=-31.628,-60.705&dn=UTN%20Santa%20Fe → page loads, sheet renders hero (DiDi $2.500) + Navegar button. 0 console errors.
+- #navStartBtn: textContent="Navegar", inside #decisionSheet (sheet_primary_actions ✓). Computed style: bg=rgb(255,255,255) (surface, not primary → secondary ✓), color=rgb(11,11,11) (dark text ✓), border=rgba(0,0,0,0.12) (border-strong ✓), height=52px ✓ → minimal_secondary ✓.
+- Clicked Navegar (via startNavigation()) → VoyNavigator.start() → nav panel appears. voy-nav-panel computed: display=flex, visible, opacity=1, z-index=5, bg=white, text=dark. Position y=72 (top:calc(72px+safe-area)), right-aligned, 317×50px.
+- Panel has 5 children: status (dot + "Siguiendo · Manejando" label), mode button, recenter, voice, exit. ✓
+- Mode button (.vnp-mode): color=rgb(255,45,146)=#FF2D92 (magenta, NOT blue ✓), border=rgba(255,45,146,0.35) (magenta tint ✓). Icon = car SVG paths (driving mode inferred from _activeMode='car').
+- Mode state machine cycle (via VoyNavigator.cycleMode()): driving → transit_light_inference → walking → driving. Correct (MODE_ORDER[(idx+1)%3]). aria-label + data-mode update per mode. ✓
+- Voice muted_default: VoyNavigator.isVoiceOn()=false on start ✓. Voice icon SVG = volumeOff paths (slash). toggleVoice() → isVoiceOn()=true, icon switches to volume (sound-wave paths "M16 9a4..." + "M19.5 6.5..."). speechSynthesis.cancel on toggle off. ✓
+- Status label reflects mode: "Siguiendo · Manejando" / "Siguiendo · Caminando" / "Siguiendo · Colectivo". ✓
+- stop(): VoyNavigator.isRunning()→false, .voy-nav-panel removed from DOM. ✓
+- OSRM NOT broken: after nav start, map sources = [carto, bus-route-src, bus-board-src, bus-alight-src] (bus line 4 active — pre-existing drawBusRoute replaces route-src with bus-route-src, NOT caused by navigator). Navigator's own OSRM steps fetch (read-only, overview=false) did NOT interfere with bus route rendering. ✓
+- do_not_auto_enable confirmed: after page reload, window.VoyNavigator=undefined (lazy-loaded only on first "Navegar" tap). ✓
+- Footer sticky: mobile footer bottom=844=viewport 844 ✓; desktop footer bottom=800=viewport 800 ✓.
+- VLM (glm-4.6v) mobile screenshot: confirms dark floating search bar (UTN Santa Fe + mic), bottom sheet with "Navegar" button (white, right-aligned), no visible errors. (VLM missed the small nav panel at top-right and the thin 39px footer, but DOM eval confirmed both present and correctly positioned.)
+- bun run lint → clean (0 errors/warnings).
+
+Stage Summary:
+- OPTIONAL_TOGGLE_MODULE + do_not_auto_enable: ✓ — VoyNavigator undefined until first "Navegar" tap (lazy <script> injection); start() only on user opt-in.
+- NO_BREAK_EXISTING_OSRM: ✓ — navigator makes its own read-only OSRM fetch (steps=true, overview=false) solely for voice maneuver data; never touches drawRouteLine() / route-src / route-line / route-shadow. Bus route rendering confirmed intact after nav start.
+- NO_REPLACE_ROUTE_ENGINE: ✓ — navigator never imports/modified MobilityEngine, PricingEngine, or MobilityController. Reads window.MC.getOrigin() + window.BUS_STOPS read-only only.
+- ADD_LAYER_ONLY: ✓ — adds .voy-nav-panel (floating controls) + .voy-nav-userdot (magenta marker) + voice (no visual). Zero competing route layers.
+- VOY_NAV_MODE (overlay_state_machine, user_opt_in_button_only): ✓ — mode state machine with 3 modes, cycleMode() API, mode button in panel. Initial mode inferred from _activeMode; transit never auto-selected.
+- VOICE_GUIDANCE (WebSpeechAPI, step_based, muted_default): ✓ — speechSynthesis (part of WebSpeechAPI), step-based maneuvers from OSRM steps fetch, voiceOn=false on start (muted_default). toggleVoice() immediately announces next step when toggled on.
+- MODES (walking, driving, transit_light_inference): ✓ — walking (foot profile, 50m threshold), driving (driving profile, 150m threshold), transit_light_inference (no OSRM fetch, 60m bus-stop proximity hints from window.BUS_STOPS).
+- ui_injection.nav_button (sheet_primary_actions, minimal_secondary, "Navegar"): ✓ — #navStartBtn in .hero-cta-row inside #decisionSheet; .cta-navigate style (surface bg, text color, border-strong border, 52px); label "Navegar".
+- Color rule: mode button uses navigator's magenta accent #FF2D92 (NOT blue/indigo), documented inline.
+- Files changed: public/navigator/navigator.js (full rewrite v2), public/VOY-Lite.html (CSS .vnp-mode accent + startNavigation comment + phase label). No backend/worker changes.
+- NOT DEPLOYED: local only. Screenshots: v710-nav-panel-mobile.png, v710-nav-desktop.png.
+- Backward compatible: Phase 1 public API (start/stop/recenter/toggleVoice/isRunning) preserved; startNavigation() caller unchanged. New APIs (cycleMode/getMode/isVoiceOn) are additive.
