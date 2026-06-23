@@ -105,8 +105,8 @@ jobs:
             echo "::error::VERSION MISMATCH — live build_hash ($LIVE_HASH) ≠ git SHA ($SHORT_SHA). Deploy FAILED the V7 guardrail."
             exit 1
           fi
-          if [ "$LIVE_VER" != "V7.0.0" ]; then
-            echo "::error::VERSION MISMATCH — live version ($LIVE_VER) ≠ V7.0.0. Stale worker deployed."
+          if [ "$LIVE_VER" != "V7.7.0" ]; then
+            echo "::error::VERSION MISMATCH — live version ($LIVE_VER) ≠ V7.7.0. Stale worker deployed."
             exit 1
           fi
           echo "✅ V7 guardrail passed: live build_hash matches git SHA."
@@ -117,10 +117,10 @@ jobs:
           WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
           [ -z "$WORKER_URL" ] && WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
           HTML=$(curl -fsS "$WORKER_URL/")
-          if echo "$HTML" | grep -q 'voy-version" content="V7.0.0"'; then
-            echo "✅ UI HTML contains V7.0.0 version pin."
+          if echo "$HTML" | grep -q 'voy-version" content="V7.7.0"'; then
+            echo "✅ UI HTML contains V7.7.0 version pin."
           else
-            echo "::error::UI HTML does NOT contain V7.0.0 version pin — stale HTML served."
+            echo "::error::UI HTML does NOT contain V7.7.0 version pin — stale HTML served."
             exit 1
           fi
           # Verify cache-bust header
