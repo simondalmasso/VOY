@@ -51,6 +51,21 @@ echo "── 1. Lint ──"
 bun run lint
 echo "  ✅ lint clean"
 
+# ── 1b. Tests (gate — deploy aborts if tests fail) ──────────
+echo ""
+echo "── 1b. Tests ──"
+if [ -f "__tests__/estimateTaxi.test.js" ]; then
+  node --test __tests__/ 2>&1 | tail -12
+  TEST_EXIT=${PIPESTATUS[0]}
+  if [ "$TEST_EXIT" -ne 0 ]; then
+    echo "❌ Tests FAILED — deploy aborted."
+    exit 1
+  fi
+  echo "  ✅ tests passed"
+else
+  echo "  ⏭️  no tests found — skipping"
+fi
+
 # ── 2. Dry-run (config + asset binding) ─────────────────────
 echo ""
 echo "── 2. Dry-run (config + asset binding) ──"
@@ -107,9 +122,11 @@ bash scripts/verify-production.sh "$TARGET_URL" || {
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
+# Dynamic version: extracted from worker.js WORKER_VERSION constant.
+DEPLOY_VER=$(grep -oE 'WORKER_VERSION = "[^"]+"' worker.js | head -1 | cut -d'"' -f2)
 echo "  🎉 V7 DEPLOY SUCCESSFUL"
 echo "  Worker: $TARGET_URL"
-echo "  Version: V7.0.0"
+echo "  Version: ${DEPLOY_VER:-unknown}"
 echo "  Build:   $(git rev-parse --short HEAD)"
 echo "═══════════════════════════════════════════════════════════"
 echo ""

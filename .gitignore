@@ -50,5 +50,14 @@ test
 prompt
 
 server.log
+
+# Runtime PID files (never commit runtime state)
+*.pid
+.zscripts/*.pid
+.zscripts/dev.pid
+
+# Cloudflare local dev vars (may contain secrets)
+.dev.vars
+
 # Skills directory
 /skills/
