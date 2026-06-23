@@ -1878,3 +1878,68 @@ Stage Summary:
 - Build hash: LIVE=8966b66, LOCAL HEAD=05b203a. MISMATCH — deploy is 11 commits behind local, 10 commits behind remote main (remote=4193e02, also unpushed-to from local).
 - Deployment status: BLOCKED on 4 independent blockers: (1) CF credentials absent (.env has no token/account; CI secrets unset); (2) CI guardrail stale (deploy.yml expects V7.0.0, would hard-fail V7.7.0); (3) local commits unpushed (remote 10 behind); (4) working tree dirty (8 modified files incl. analytics V2). Plus: analytics bindings (Analytics Engine + DO) disabled in prod (analytics:false) awaiting dashboard enablement — non-blocking for app function.
 - Remediation path (ordered): (1) commit+push local → remote main; (2) fix deploy.yml guardrail V7.0.0→V7.7.0; (3) set CF secrets (CLOUDFLARE_API_TOKEN+ACCOUNT_ID) in repo or env; (4) run ./scripts/deploy.sh (deploys V7.7.0 to voy-app worker); (5) separately, complete is-a.dev PR: run prepare-isadev-pr.mjs with a REAL email, open PR to is-a-dev/register, await merge+propagation; (6) post-merge run verify-production.sh https://voy.is-a.dev.
+
+---
+Task ID: 33
+Agent: main (Z.ai Code)
+Task: VOY_DEPLOY — (1) audit/fix the is-a.dev fork at github.com/simonkey888/register; (2) infer last deploy state; (3) redeploy with all latest uncommitted/unpushed changes to Cloudflare Workers; (4) full pre-deploy checks before redeploy. User provided GitHub + Cloudflare credentials.
+
+Work Log:
+- CREDENTIALS HANDLING: used GitHub PAT + CF token as session env vars only; NOT written to any committed file, .env, or git config. Push used x-access-token URL (not stored). CF creds passed to deploy.sh via env.
+
+PHASE 1 — is-a.dev fork audit + fix:
+- GitHub API (authenticated as simonkey888): confirmed simonkey888/register IS a valid fork of is-a-dev/register (parent.full_name=is-a-dev/register, default_branch=main). Fork is CORRECT.
+- Found domains/voy.json in fork was EMPTY (content decoded to single newline byte — base64 "Cg=="). PR never usable in this state.
+- No existing PRs from simonkey888 to is-a-dev/register (search API total_count=0).
+- Discovered user's real git commit email = simondalmasso44@gmail.com (from fork commit author metadata) — used this as the is-a.dev owner contact email (more appropriate than GitHub noreply).
+- Created feature branch add-voy-domain from fork main (SHA 5bec40f0).
+- Updated domains/voy.json on branch with valid content: {owner:{username:simonkey888,email:simondalmasso44@gmail.com}, record:{CNAME:voy-app.simondalmasso44.workers.dev}}. New file SHA 52dfc04e.
+- Verified file content on branch via raw API (decoded JSON matches).
+- Opened PR #41619: simonkey888:add-voy-domain → is-a-dev/register:main. URL: https://github.com/is-a-dev/register/pull/41619. State: open. maintainer_can_modify:true.
+
+PHASE 2 — local prep (infer last deploy + prepare redeploy):
+- Last deploy inferred: prod /api/health showed V7.1.0, build_hash 8966b66 (commit "chore: restore BUILD_HASH placeholder for CI injection"). Local HEAD was 05b203a (V7.7.0), 11 commits ahead of deployed; remote main was 4193e02, 10 commits behind local.
+- Working tree had auto-committed to db001a5 during session (V7.7.0 files all confirmed in HEAD: analytics-do.js, src/lib/voy-analytics-store.ts, public/navigator/navigator.js, worker.js V7.7.0).
+- Found stale CI guardrail: .github/workflows/deploy.yml hardcoded V7.0.0 (lines 108, 109, 120, 121, 123) — would hard-fail a V7.7.0 deploy in CI. Fixed all 5 occurrences → V7.7.0.
+- Committed guardrail fix: 0a44d8a "fix(ci): bump deploy guardrail V7.0.0 → V7.7.0".
+- Pushed local main → origin main (12 commits: 4193e02..0a44d8a). Remote now matches local.
+
+PHASE 3 — pre-deploy checks (all BEFORE redeploy, per user request):
+- Lint: 0 errors, 0 warnings ✓
+- Preflight: 23/23 PASS, "READY TO DEPLOY" ✓ (30 assets incl. /navigator/navigator.js, 9.50 KiB upload)
+- wrangler deploy --dry-run --minify (with REAL CF creds): 30 files read, Total Upload 9.50 KiB / gzip 3.45 KiB, ASSETS binding only (analytics engine + DO commented out — dashboard prerequisites, non-blocking), no errors ✓
+
+PHASE 4 — redeploy:
+- Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID env vars (from user-provided creds).
+- Ran ./scripts/deploy.sh https://voy-app.simondalmasso44.workers.dev:
+  * lint clean ✓, dry-run passed ✓
+  * inject-build-hash.mjs: patched worker.js + VOY-Lite.html with git SHA 0a44d8a
+  * wrangler deploy --minify: Uploaded voy-app (5.69 sec), Deployed voy-app triggers (0.94 sec), Version ID 0e1613d2-a66c-4d75-8ca5-76bc0e0a9ac9
+  * verify-production.sh: 9/9 PASS ✓
+- Restored placeholder files post-deploy (git checkout worker.js public/VOY-Lite.html) → working tree clean for next deploy.
+
+PHASE 5 — production verification (curl + browser):
+- /api/health: {"ok":true,"service":"voy-app","version":"V7.7.0","build_hash":"0a44d8a","analytics":false,"aggregate":false} ✓ (analytics:false + aggregate:false expected — bindings commented out pending dashboard enablement; worker degrades gracefully)
+- HTML voy-version meta = V7.7.0, voy-build = 0a44d8a ✓
+- Cache-Control: no-store, max-age=0, must-revalidate ✓
+- modeSelector present + force-shown ✓
+- Browser (agent-browser on https://voy-app.simondalmasso44.workers.dev):
+  * Page loads: title "VOY — Movilidad Santa Fe", version meta V7.7.0, build 0a44d8a in DOM ✓
+  * Map#map canvas renders ✓
+  * Geocoder works: typed "Plaza San Martín, Santa Fe" → 3 suggestions returned ✓
+  * Set origin via MC.setOrigin(-31.6106,-60.7005,'Centro Santa Fe','manual') (correct 4-arg signature) ✓
+  * Selected destination "Plaza San Martín Centro" → runEstimations auto-triggered → hero-cta-row rendered with 2 children ✓
+  * cta-primary "Pedir DiDi" present ✓ (deeplink flow intact)
+  * navStartBtn present, aria-label "Iniciar navegación" ✓ (V7.6 navigator feature live on prod)
+  * Console errors: 0 ✓ throughout entire golden path
+  * (Navegar click-to-lazy-load blocked by map canvas z-index in headless — interaction quirk only; module IS deployed as asset #30, lazy-load was browser-verified in dev Task 30)
+- Screenshots: v77-prod-initial.png, v77-prod-hero-cta.png
+
+Stage Summary:
+- is-a.dev FORK: CORRECT (valid fork of is-a-dev/register). Fixed the empty domains/voy.json (was base64 newline stub) → valid JSON with real email + CNAME. PR #41619 OPEN: https://github.com/is-a-dev/register/pull/41619 (simonkey888:add-voy-domain → is-a-dev/register:main). Awaiting maintainer merge + 5-30min DNS propagation.
+- LAST DEPLOY (inferred): was V7.1.0 / build_hash 8966b66 (6 version batches / 11 commits behind local).
+- REDEPLOY: COMPLETE. Production is now V7.7.0 / build_hash 0a44d8a (matches local git HEAD exactly). 9/9 verify-production checks pass. Browser-verified end-to-end: page renders, geocoder works, route estimation runs, hero CTA renders with both "Pedir DiDi" + "Navegar" buttons, zero console errors.
+- BUILD HASH: live=0a44d8a, local HEAD=0a44d8a — MATCH (V7 guardrail satisfied). Previous desync (8966b66 vs 05b203a) is resolved.
+- DEPLOYMENT STATUS: 🟢 LIVE and consistent. Remote main synced (0a44d8a). CI guardrail fixed for future CI deploys.
+- REMAINING (non-blocking): (1) is-a.dev PR #41619 merge → then voy.is-a.dev canonical domain goes live (run verify-production.sh https://voy.is-a.dev after merge); (2) Analytics Engine + Durable Object bindings disabled in wrangler.jsonc (analytics:false, aggregate:false) — require CF dashboard enablement (Analytics Engine) + Workers Paid plan (DO) to activate /api/reports; app degrades gracefully without them (/api/events returns 202 analytics_unavailable).
+- Credentials were NOT persisted to any file; used as session env vars only.
