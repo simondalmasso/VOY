@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // Test: estimateTaxi() — Resolución N°217/2026 (tarifa taxi Santa Fe)
 // Protege el cálculo de tarifa regulada más crítico del sistema.
 // Runner: node:test (0 dependencias, viene con Node 18+).
