@@ -45,8 +45,8 @@ export function middleware(request: NextRequest) {
     return response;
   }
 
-  // NO-CACHE: Force fresh copies of all VOY runtime assets
-  if (pathname.startsWith('/core/') || pathname.startsWith('/ui/')) {
+  // NO-CACHE: Force fresh copies of all VOY runtime assets (incl. lazy-loaded navigator)
+  if (pathname.startsWith('/core/') || pathname.startsWith('/ui/') || pathname.startsWith('/navigator/')) {
     const response = NextResponse.next();
     for (const [k, v] of Object.entries(NO_CACHE_HEADERS)) {
       response.headers.set(k, v);
@@ -58,5 +58,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/VOY-Lite.html', '/core/:path*', '/ui/:path*'],
+  matcher: ['/', '/VOY-Lite.html', '/core/:path*', '/ui/:path*', '/navigator/:path*'],
 };

@@ -1665,3 +1665,115 @@ Stage Summary:
 - Engine (mobilityEngine.js) and controller (mobilityController.js) UNTOUCHED — all changes are view-layer (HTML/CSS/JS in VOY-Lite.html).
 - Files changed: public/VOY-Lite.html (coffee icon + CSS + HTML disclosure + JS functions + version bump V7.4.0→V7.5.0), worker.js (WORKER_VERSION + comment), scripts/preflight.sh + scripts/verify-production.sh (version checks).
 - Production deploy pending: V7.1.0 (prod) → V7.5.0 (local). 5 version batches now pending (V7.2.0 UI + Colectivo V1 + V7.3.0 Router + V7.4.0 Focus/Voice + V7.5.0 Share/Support). User runs: export CLOUDFLARE_API_TOKEN=...; export CLOUDFLARE_ACCOUNT_ID=...; ./scripts/deploy.sh https://voy-app.simondalmasso44.workers.dev
+
+---
+Task ID: 29
+Agent: main (Z.ai Code)
+Task: VOY_AUTH_DECISION — Record formal decision to DEFER authentication implementation (no code changes; decision record only).
+
+Work Log:
+- Received VOY_AUTH_DECISION task: DECISION=DEFER, 4 REASONs, 4 REVISIT_AFTER triggers.
+- Audited current auth surface BEFORE recording the decision (so the record is factually accurate):
+  * Grep across whole repo for next-auth|NextAuth|signIn|signOut|useSession|/api/auth → only matches in package.json + bun.lock (the dependency declaration), ZERO in source code.
+  * Grep prisma/schema.prisma for `model User|model Session|model Account` → 0 matches. Only `Ride` and `TransportLog` models exist.
+  * Read src/middleware.ts → pure routing/caching (308 redirect /VOY-Lite.html→/, rewrite /→/VOY-Lite.html, no-cache headers for /core + /ui). NO auth gate, NO session check.
+  * Conclusion: `next-auth@4.24.11` is a DORMANT dependency — available but 100% unwired. Zero login UI, zero session provider, zero /api/auth/* routes, zero User/Session/Account models.
+- Confirmed the deferral is a clean no-op: nothing to remove, nothing to break, zero migration cost. Adoption later requires wiring only (no install).
+- Recorded decision (this entry). No code changes made — DEFER is by definition a no-op.
+- No version bump (decision record, not a release). Lint/preflight untouched (still V7.5.0, 22/22 PASS).
+
+Stage Summary:
+- DECISION: DEFER authentication. Status = explicitly DEFERRED (NOT "won't do" — revisit triggers exist).
+- REASONS (verbatim from spec):
+  1. "Todavía no existe necesidad." — no current feature requires an identity.
+  2. "Reduce conversión." — login friction before the first fare comparison kills first-use conversion.
+  3. "Complica privacidad." — storing identities/PII expands the privacy surface unnecessarily.
+  4. "No aporta valor hoy." — VOY's core loop (search → compare → deeplink out to provider apps) is fully anonymous.
+- REVISIT_AFTER (resume the auth decision the moment ANY of these features is requested):
+  1. favoritos (saved places) — needs cross-device persistence tied to identity.
+  2. historial (search/trip history) — needs per-user storage.
+  3. sincronización (multi-device sync) — needs an account to sync across.
+  4. cloud profile — needs identity by definition.
+- AUDIT FACTS (for future agents / future me):
+  * next-auth v4.24.11 already in package.json → adopting auth later needs NO install, only wiring.
+  * Prisma schema is clean (no User/Session/Account) → future auth models add cleanly, no migration of existing user data.
+  * middleware.ts has no auth gate → no removal work when revisited.
+  * VOY-Lite.html has no login/session UI → zero removal work when revisited.
+- GUARDRAIL for future tasks: Do NOT add auth, login UI, session middleware, /api/auth/* routes, or User/Session/Account Prisma models until a REVISIT_AFTER trigger fires. If a future task implies ANY of the 4 triggers (favoritos / historial / sincronización / cloud profile), STOP and resume this auth decision BEFORE implementing — the deferral is conditional, not permanent.
+- Files changed: NONE (decision record only). worklog.md updated with this entry.
+- Pending tasks (unchanged by this decision):
+  * VOY_NAVIGATOR_MVP — Phase 1 navigator (isolated + lazy-loaded module, "Navegar" button beside provider CTA in hero, GPS+camera follow+recenter). NOT yet started. RULE: do not touch pricingEngine.js / mobilityEngine.js.
+  * VOY_ANALYTICS_V2 — real analytics with 5 exclusion filters + dual store. Deferred.
+  * Production deploy V7.1.0 (prod) → V7.5.0 (local) — 5 batches pending, blocked on CF credentials (CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID).
+
+---
+Task ID: 30
+Agent: main (Z.ai Code)
+Task: VOY_NAVIGATOR_MVP — Add in-app navigation (own navigator) Phase 1 without breaking VOY. Architecture: isolated + lazy_loaded. UI: "Navegar" button in hero beside provider CTA. Phase 1 scope: GPS tracking, follow user, camera follow, recenter, voice optional. RULE: do NOT touch pricingEngine.js nor mobilityEngine.js.
+
+Work Log:
+- Read worklog tail (Task 29 VOY_AUTH_DECISION recorded; Task 28 V7.5.0 Share/Support complete).
+- Located landmarks in public/VOY-Lite.html:
+  * Hero CTA built at line 1496: `<button class="cta-primary" data-action=...>Pedir {name}</button>` (single full-width button).
+  * CTA click handler at line 1625: `document.querySelectorAll('.cta-primary,.acc-head[data-action]').forEach(...)` → openDeepLinkDialog.
+  * Map instance: `_map` (MapLibre GL, init at line 981, center [-60.7087,-31.6256], zoom 13).
+  * Existing GPS: `_gpsWatch` via watchPosition (line 1037, enableHighAccuracy:true) — used for ORIGIN detection. Navigator needs its OWN independent watch (isolation).
+  * Marker pattern (line 1071): `new maplibregl.Marker({element:el}).setLngLat([lon,lat]).addTo(_map)`.
+  * ICONS object (lines 741-773): 'route' icon available (distinct from 'navigate' used by Pedir) → use for Navegar button. 'locate' → recenter. 'close' → exit.
+  * v5event (line 815): `map[type]||type` fallback → `v5event('navigation_start',...)` works WITHOUT modifying the analytics map (clean isolation).
+  * CSS vars: --accent is black/white (safe, not blue/indigo). --primary is blue but pre-existing (not my addition).
+  * Topbar: sticky z-20, ~64px tall + safe-area → nav panel needs top:calc(72px + safe-area) to clear it.
+- Created isolated module: public/navigator/navigator.js (IIFE exposing window.VoyNavigator). Phase 1 only:
+  * start({map,dest}) — builds floating panel (.voy-nav-panel) appended into #map, binds drag-pause, starts INDEPENDENT watchPosition(enableHighAccuracy:true,timeout:10000,maximumAge:3000).
+  * _onFix — creates/moves magenta "you are here" marker (.voy-nav-userdot, #FF2D92 — distinct from green origin #34C759 + red dest #FF3B30, NOT blue/indigo), camera follow via map.easeTo({center:[lng,lat],duration:800}).
+  * recenter() — re-enables follow + easeTo to last fix (zoom≥15).
+  * toggleVoice() — speechSynthesis (es-AR), toggles volume/volumeOff icon.
+  * drag-pause — map.on('dragstart') sets follow=false + status "Pausado · tocá recentrar"; Recenter re-enables.
+  * stop() — clearWatch, remove marker, detach panel, running=false. Full teardown.
+  * ISOLATION CONTRACT: does NOT import/modify MobilityEngine/PricingEngine/MobilityController. Receives map+dest as params. Owns its own watch. All DOM namespaced .voy-nav-*.
+- Added "Navegar" button beside provider CTA in hero (VOY-Lite.html):
+  * CSS: .hero-cta-row (flex), .cta-navigate (outline secondary, --surface/--border-strong), .voy-nav-panel + .voy-nav-userdot styles, @media(max-width:380px) icons-only fallback.
+  * Hero CTA (line 1538): wrapped cta-primary + new cta-navigate#navStartBtn in .hero-cta-row. cta-primary stays flex:1, Navegar is flex:0 0 auto beside it.
+  * Click wiring (line 1677): navStartBtn.addEventListener('click',startNavigation).
+  * startNavigation() + loadNavigatorModule() (line 1091): lazy-loads /navigator/navigator.js via <script> injection on first tap (guard: if window.VoyNavigator exists, skip inject). Fires v5event('navigation_start').
+- Version bump V7.5.0 → V7.6.0: VOY-Lite.html (5 occurrences via replace_all), worker.js (WORKER_VERSION + comment), scripts/preflight.sh + scripts/verify-production.sh (all occurrences).
+- Middleware (src/middleware.ts): added /navigator/:path* to no-cache matcher + path check (consistent with /core/ + /ui/). Fixes dev HTTP-cache staleness for the lazy-loaded module.
+- ROBUSTNESS FIX in navigator.js: moved _status('Buscando señal GPS…') BEFORE watchPosition call so a synchronous first fix (or test mock) correctly overwrites with 'Siguiendo tu ubicación'. Strict improvement, no downside in async reality.
+
+RULE VERIFICATION (git diff --stat on engine files):
+- public/core/pricingEngine.js → 0 changes (empty diff) ✓
+- public/core/mobilityEngine.js → 0 changes (empty diff) ✓
+- public/ui/mobilityController.js → 0 changes (empty diff) ✓
+- Files changed: public/VOY-Lite.html, public/navigator/navigator.js (NEW), src/middleware.ts, worker.js, scripts/preflight.sh, scripts/verify-production.sh.
+
+BROWSER VERIFICATION (agent-browser, mandatory self-verification):
+- Page loads at V7.6.0 (meta voy-version = "V7.6.0") ✓
+- Golden path: set origin+dest → estimations run → hero renders with "Pedir DiDi" (cta-primary) AND "Navegar" (cta-navigate, aria-label "Iniciar navegación") inside .hero-cta-row ✓ (screenshot: v76-hero-navegar-btn.png)
+- LAZY-LOAD: pre-click window.VoyNavigator === undefined (module NOT loaded initially) ✓; post-click window.VoyNavigator defined + <script src=navigator.js> in DOM ✓
+- Panel renders inside #map with 3 controls (recenter/voice/exit) ✓
+- GPS watch called with EXACT Phase 1 opts: {enableHighAccuracy:true,timeout:10000,maximumAge:3000} ✓
+- Camera follow: fired 2nd position at [-31.6238,-60.7087] → mapCenter moved to [-60.70870,-31.62380] (movedToNewPos:true) ✓
+- Drag-pause: fired 'dragstart' → statusLabel="Pausado · tocá recentrar"; while paused, 3rd position did NOT move camera (stayedPut:true) ✓
+- Recenter: click → camera moved to last fix [-60.71000,-31.63000] (recentersToLastFix:true), status back to "Siguiendo tu ubicación" ✓
+- Voice toggle: aria-label "Activar voz" → "Desactivar voz" ✓ (speechSynthesis called)
+- Exit teardown: running=false, panelRemoved=true, userMarkerRemoved=true, watchCleared=true, toast "Navegación detenida" ✓
+- Graceful GPS error path (headless denied geo): dot class "vnp-dot err", status "GPS no disponible" ✓
+- Status-order fix verified: after cache-bust, first fix shows "Siguiendo tu ubicación" (runningStartHasFix:true) ✓
+- Panel position: mobile 390px panelTop=72 searchBarBottom=68 clearsSearchBar=true; desktop 1280px clearsSearchBar=true visible=true ✓
+- REGRESSION: "Pedir DiDi" cta-primary still opens deep-link dialog after wrapping (dialogVisible=true, dgTitle="Abrir aplicación externa", confirmBtn=true) ✓ — wrapper did NOT break existing deeplink flow
+- Console errors: 0 ✓. Console logs: only [eventBus] unknown event: navigation_start/stop/voice_toggled (debug-level, expected — eventBus typed schema is VOY_ANALYTICS_V2 scope; events ARE recorded in v5 localStorage log + forwarded, forward-compatible)
+- dev.log: clean. Only pre-existing POST /api/events 404 (analytics pings; /api/events is a worker.js route, 404 in dev is pre-existing). No fatal/hydration/compile errors.
+- Screenshots: v76-hero-navegar-btn.png, v76-navigator-panel-active.png
+
+- Lint: 0 errors, 0 warnings ✓
+- Preflight: 22/22 PASS, "READY TO DEPLOY" ✓ (30 assets now, includes /navigator/navigator.js)
+
+Stage Summary:
+- VOY_NAVIGATOR_MVP Phase 1: COMPLETE and browser-verified end-to-end.
+- Architecture: ISOLATED (separate module public/navigator/navigator.js, no coupling to MobilityEngine/PricingEngine/MobilityController — git-verified 0 diffs) + LAZY_LOADED (module injected via <script> on first "Navegar" tap; pre-click window.VoyNavigator===undefined proves zero initial-load cost).
+- UI: "Navegar" button (route icon) placed in hero BESIDE provider CTA ("Pedir {name}") inside .hero-cta-row flex container. Does not touch topbar, does not touch the cta-primary deeplink flow (regression-verified).
+- Phase 1 features all working: GPS tracking (own high-accuracy watch), follow user (magenta marker), camera follow (map.easeTo on each fix), recenter (re-enables follow + recenters), drag-pause (don't fight user for camera), voice optional (speechSynthesis toggle, es-AR), exit (full teardown).
+- Phase 2 (turn instructions, voice guidance, arrival) and Phase 3 (offline cache, rerouting, lane guidance) are future scope — NOT implemented (documented in module header as out-of-scope).
+- RULE satisfied: pricingEngine.js + mobilityEngine.js (and mobilityController.js) UNTOUCHED — git diff empty on all three.
+- Analytics: navigator fires v5event('navigation_start'/'navigation_stop'/'navigation_voice_toggled') via the existing v5event() channel (map[type]||type fallback handles unmapped names). Forward-compatible with VOY_ANALYTICS_V2 (which will add these to the typed eventBus schema). No analytics code modified.
+- Production deploy pending: V7.1.0 (prod) → V7.6.0 (local). 6 version batches now pending. Blocked on CF credentials (CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID).

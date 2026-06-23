@@ -31,7 +31,7 @@
 // ============================================================
 
 const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
-const WORKER_VERSION = "V7.5.0"; // V7.5 = VOY_SHARE_SUPPORT_V1 (footer disclosure: share via navigator.share + copy-link fallback; support: copy alias SIMON.BI; low visibility, footer only, not always shown)
+const WORKER_VERSION = "V7.6.0"; // V7.6 = VOY_NAVIGATOR_MVP (in-app navigator Phase 1: isolated lazy-loaded /navigator/navigator.js — GPS watch + camera follow + recenter + optional voice; "Navegar" button beside provider CTA in hero; MobilityEngine/PricingEngine/MobilityController untouched)
 // __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
 // verify-production.sh checks /api/health.build_hash === git short SHA.
 const BUILD_HASH = "__BUILD_HASH__";

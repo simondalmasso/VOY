@@ -1,11 +1,11 @@
 <!--
-VOY V7.5.0 — Single source of truth (atomic deploy + cache bust + version pin)
+VOY V7.6.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
 Architecture: floating_search + ambient_interactive_map + bottom_decision_sheet + transport_mode_selector
 Engine: core/mobilityEngine.js (UNTOUCHED — pure functions)
 Controller: ui/mobilityController.js (V5 extensions: IndexedDB AES-GCM + inference + fare confidence)
 V7 deploy fixes:
-  - HARD VERSION PIN: <meta name="voy-version" content="V7.5.0"> + window.VOY_BUILD_HASH
+  - HARD VERSION PIN: <meta name="voy-version" content="V7.6.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
@@ -33,7 +33,7 @@ Constraints honored:
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="voy-version" content="V7.5.0">
+<meta name="voy-version" content="V7.6.0">
 <meta name="voy-build" content="__BUILD_HASH__">
 <title>VOY — Movilidad Santa Fe</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
@@ -54,7 +54,7 @@ Constraints honored:
 <script src="ui/mobilityController.js?v=10"></script>
 <style>
 /* ============================================================
-   VOY V7.5.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
+   VOY V7.6.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
    Brand: #FFFFFF / #0B0B0B / #000000 (light) · #000 / #F5F5F5 / #FFF (dark)
    Typography: Inter
    No shadows — borders + spacing only
@@ -288,6 +288,48 @@ button{font-family:inherit;letter-spacing:inherit}
 }
 .cta-primary:active{transform:scale(0.97);opacity:0.85}
 .cta-primary[disabled]{background:var(--bg3);color:var(--text3);cursor:not-allowed}
+
+/* VOY_NAVIGATOR_MVP — "Navegar" button beside provider CTA (Phase 1: GPS follow) */
+.hero-cta-row{display:flex;gap:var(--sp-2);margin-top:var(--sp-3)}
+.hero-cta-row .cta-primary{flex:1;margin-top:0}
+.cta-navigate{
+  display:flex;align-items:center;justify-content:center;gap:8px;flex:0 0 auto;
+  background:var(--surface);color:var(--text);border:1.5px solid var(--border-strong);
+  border-radius:var(--radius-button);padding:0 18px;height:52px;min-height:52px;
+  font-size:var(--font-body);font-weight:var(--fw-title);cursor:pointer;letter-spacing:-0.01em;
+  transition:transform var(--ease-out),opacity var(--ease-out),background var(--ease-out);
+}
+.cta-navigate:active{transform:scale(0.97);opacity:0.85}
+.cta-navigate:hover{background:var(--surface2)}
+.cta-navigate[disabled]{opacity:0.5;cursor:not-allowed}
+
+/* Navigator floating panel + user dot (appended by lazy-loaded /navigator/navigator.js) */
+.voy-nav-panel{
+  position:absolute;top:calc(72px + env(safe-area-inset-top,0px));right:var(--sp-3);z-index:5;
+  display:flex;align-items:center;gap:var(--sp-2);
+  background:var(--surface);border:0.5px solid var(--border-strong);
+  border-radius:var(--radius-card);padding:6px 10px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  font-size:var(--font-caption);font-weight:var(--fw-body);color:var(--text);
+  max-width:calc(100vw - 24px);
+}
+.voy-nav-panel .vnp-status{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+.voy-nav-panel .vnp-label{overflow:hidden;text-overflow:ellipsis}
+.voy-nav-panel .vnp-dot{width:8px;height:8px;border-radius:50%;background:#FF2D92;box-shadow:0 0 0 0 rgba(255,45,146,0.6);animation:voyNavPulse 1.6s infinite;flex-shrink:0}
+.voy-nav-panel .vnp-dot.err{background:#FF3B30;animation:none}
+@keyframes voyNavPulse{0%{box-shadow:0 0 0 0 rgba(255,45,146,0.55)}70%{box-shadow:0 0 0 8px rgba(255,45,146,0)}100%{box-shadow:0 0 0 0 rgba(255,45,146,0)}}
+.voy-nav-panel button{
+  display:flex;align-items:center;justify-content:center;width:36px;height:36px;flex-shrink:0;
+  border-radius:var(--radius-button);border:0.5px solid var(--border-strong);background:var(--surface2);color:var(--text);
+  cursor:pointer;transition:background var(--ease-out),transform var(--ease-out);
+}
+.voy-nav-panel button:active{transform:scale(0.94)}
+.voy-nav-panel button:hover{background:var(--bg3)}
+.voy-nav-panel button.vnp-exit{background:var(--bg3)}
+@media(max-width:380px){.voy-nav-panel .vnp-status{display:none}.voy-nav-panel{padding:6px}} /* ultra-narrow: icons only */
+
+/* Navigator "you are here" marker (magenta, distinct from green origin + red dest) */
+.voy-nav-userdot{width:18px;height:18px;background:#FF2D92;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 6px rgba(255,45,146,0.18),0 2px 6px rgba(0,0,0,0.5)}
 
 /* More options accordion */
 .more-opts{margin-top:var(--sp-4);border-top:0.5px solid var(--border-subtle);padding-top:var(--sp-3)}
@@ -630,7 +672,7 @@ button{cursor:pointer}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.5.0';
+window.VOY_VERSION='V7.6.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -1045,6 +1087,28 @@ function locateMe(){
   navigator.geolocation.getCurrentPosition(function(pos){MC.setOriginManual(false);MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');va_origin('gps');cachePosition(pos.coords.latitude,pos.coords.longitude);updateOriginUI();updateMapMarkers();var origin=MC.getOrigin();if(_map)_map.flyTo({center:[origin.lon,origin.lat],zoom:15});if(MC.getDest())runEstimations()},function(){loadCachedPosition()},{enableHighAccuracy:true,timeout:10000});
 }
 function reverseGeocodeOrigin(lat,lon){fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es').then(function(r){return r.json()}).then(function(d){if(d&&d.display_name){MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));updateOriginUI()}}).catch(function(){})}
+
+// ===================== VOY_NAVIGATOR_MVP (isolated + lazy-loaded) =====================
+// Phase 1: GPS tracking + camera follow + recenter. The navigator lives in
+// /navigator/navigator.js and is injected on first "Navegar" tap (never blocks
+// initial load). It owns its OWN geolocation watch — independent of the origin
+// watch above — and never touches MobilityEngine / PricingEngine / MobilityController.
+function loadNavigatorModule(cb){
+  if(window.VoyNavigator){cb();return}
+  var s=document.createElement('script');
+  s.src='/navigator/navigator.js';s.async=true;
+  s.onload=function(){cb()};
+  s.onerror=function(){showToast('No se pudo cargar el navegador','error')};
+  document.head.appendChild(s);
+}
+function startNavigation(){
+  var d=MC.getDest();
+  v5event('navigation_start',{provider:'voy_navigator',phase:1,has_dest:!!d});
+  loadNavigatorModule(function(){
+    if(!window.VoyNavigator){showToast('Navegador no disponible','error');return}
+    VoyNavigator.start({map:_map,dest:d});
+  });
+}
 
 // ===================== ORIGIN UI =====================
 function updateOriginUI(){
@@ -1493,7 +1557,10 @@ function renderSheet(){
     h+='<div class="hero-range">'+formatPrice(fareRange.low)+' – '+formatPrice(fareRange.high)+'</div>';
     h+='</div>';
     h+='</div>';
+    h+='<div class="hero-cta-row">';
     h+='<button class="cta-primary" data-action="'+hero.id+'" data-url="'+hero.url+'" data-name="'+escapeAttr(hero.name)+'">'+svg('navigate',20)+' Pedir '+escapeHtml(hero.name)+'</button>';
+    h+='<button class="cta-navigate" id="navStartBtn" type="button" aria-label="Iniciar navegación">'+svg('route',20)+' Navegar</button>';
+    h+='</div>';
     if(alts.length){
       h+='<div class="more-opts">';
       alts.forEach(function(p){
@@ -1629,6 +1696,9 @@ function attachSheetEvents(){
       openDeepLinkDialog(action,url,name);
     });
   });
+  // VOY_NAVIGATOR_MVP — "Navegar" button → lazy-load isolated navigator module + start GPS-follow
+  var navStartBtn=document.getElementById('navStartBtn');
+  if(navStartBtn)navStartBtn.addEventListener('click',startNavigation);
   // Taxi/Remis company actions → deep-link dialog
   document.querySelectorAll('.co-action').forEach(function(btn){
     btn.addEventListener('click',function(e){
