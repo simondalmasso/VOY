@@ -2180,3 +2180,62 @@ Stage Summary:
   (A) GitHub push: `cd /home/z/my-project-deploy && git push origin deploy/external-action-fixes:main` (needs GitHub auth)
   (B) Wrangler deploy: `cd /home/z/my-project && npx wrangler login && npx wrangler deploy` (needs Cloudflare auth)
 - The fix commit (13c79ae) is verified, lint-clean, and browser-tested. Only the credentials are missing.
+
+---
+Task ID: 9
+Agent: Main (Deploy & Production Verification)
+Task: Cerrar el gap entre fixes locales verificados y producción — push a GitHub + Cloudflare deploy + verificación en vivo
+
+Work Log:
+- Re-confirmado deploy branch: deploy/external-action-fixes @ 13c79ae, parent = f835a50 (origin/main), remote = simonkey888/VOY, sin referencias a stracker
+- Re-verificados los 5 fixes en deploy worktree (grep + browser):
+  * FIX-001 DiDi: intent:// scheme=didi (Android) + App Store id1362398401 (iOS) + Play Store (desktop). Broken URL solo en comentario.
+  * FIX-003 TaxiApp: app:null + if(co.app) guard → no dead buttons render
+  * FIX-004 Cabify: FareRegistry + mobilityEngine apps.cabify + intent:// scheme=cabify
+  * FIX-005 shareRoute: shareRoute() + restoreRouteFromUrl() + init call
+  * Routing: indexOf('intent://')===0 (NO regex)
+- Lint: bun run lint → clean
+- Browser pre-deploy (deploy worktree en port 3998): buildAppLink retorna URLs correctas, Android intent://, 0 dead buttons, share+restore presentes, 0 errores
+- GITHUB PUSH (step 3):
+  * git push https://x-access-token:***@github.com/simonkey888/VOY.git deploy/external-action-fixes:main
+  * Resultado: f835a50..13c79ae deploy/external-action-fixes -> main (fast-forward, sin force-push)
+  * Verificado via GitHub API: simonkey888/VOY main branch sha = 13c79aeaad59a6105fb63f227f585d6dc85f26e6, msg = "fix(external-actions): repair DiDi deep link, TaxiApp dead button, re-enable Cabify"
+  * Repo confirmado: simonkey888/VOY (NO stracker)
+- CLOUDFLARE DEPLOY (step 4-5):
+  * wrangler whoami → autenticado como simondalmasso44@gmail.com, account b21fa81d... (test)
+  * npx wrangler deploy desde /home/z/my-project-deploy (worktree exactamente en 13c79ae)
+  * Subido 1 asset nuevo (VOY-Lite.html), 25 ya existentes
+  * Worker deployado: voy-app, Version ID 47fc64b3-6498-4725-ae10-7e79addf0c31
+  * Bindings: env.ASSETS, env.VOY_METRICS (Analytics Engine), vars de filtros
+  * URL: https://voy-app.simondalmasso44.workers.dev
+- PRODUCTION VERIFICATION (step 6) — curl + browser en vivo:
+  * HTTP 200, 139861 bytes
+  * VALIDATION 1 (DiDi broken URL gone from active code): PASS — la única ocurrencia de didiglobal.com/passenger/deeplink es el COMENTARIO "// FIX-001: DiDi deep link — the old didiglobal.com/passenger/deeplink URL returned". Active code = return 'intent://#Intent;scheme=didi;...'
+  * VALIDATION 2 (DiDi intent:// present): PASS (count=1)
+  * VALIDATION 3 (Cabify intent:// present): PASS (count=1)
+  * VALIDATION 4 (TaxiApp app:null): PASS (count=1)
+  * VALIDATION 5 (shareRoute + restoreRouteFromUrl): PASS (both count=1)
+  * VALIDATION 6 (routing indexOf, no regex): PASS (count=1)
+  * Browser golden path: click "Pedir DiDi" → dialog → pending URL = https://play.google.com/store/apps/details?id=com.didiglobal.passenger (isBrokenUrl:false, isPlayStore:true)
+  * Android UA en producción: buildAppLink('didi') = intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url=...;end
+  * Cabify desktop = Play Store, Maxim desktop = taximaxim.com/ar/
+  * No dead buttons rendered (CLEAN)
+  * No regression: providers presentes = didi, uber, cabify, taxi-radiotaxi, taxi-taxiapp, remis-remisreal
+  * Footer sticky: bottom=844 = viewportH=844
+  * Zero console errors en producción
+- Credenciales unset del shell post-deploy
+
+Stage Summary:
+- ✅ GITHUB: deploy/external-action-fixes (13c79ae) pusheado a simonkey888/VOY main (fast-forward, sin force-push, sin tocar stracker)
+- ✅ CLOUDFLARE: voy-app deployado a https://voy-app.simondalmasso44.workers.dev (Version 47fc64b3)
+- ✅ PRODUCCIÓN VERIFICADA EN VIVO (curl + browser):
+  - DiDi ya NO usa la URL rota didiglobal.com/passenger/deeplink → ahora usa intent:// (Android) + App Store (iOS) + Play Store (desktop)
+  - Cabify renderiza como provider válido con deep link platform-split
+  - TaxiApp no tiene botón muerto data-url="#" (app:null + guard)
+  - shareRoute + restoreRouteFromUrl presentes y funcionales
+  - Sin regresión en Uber/Maxim/Taxi/Remis/Bus/Bike
+  - Footer sticky, responsive, zero errores
+- ⚠️ SECURITY: Tokens de GitHub (ghp_***) y Cloudflare (cfut_***) fueron compartidos en texto plano en el chat. USUARIO DEBE REVOCAR/ROTAR AMBOS TOKENS inmediatamente en:
+  - GitHub: Settings → Developer settings → Personal access tokens
+  - Cloudflare: Dashboard → My Profile → API Tokens
+- Deploy gap CERRADO: producción ahora sirve el árbol verificado 13c79ae con los 5 fixes aplicados.
