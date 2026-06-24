@@ -2095,3 +2095,36 @@ Stage Summary:
 - FIX-005 ✅: shareRoute() restored — encodes route context only, restore-from-URL works, share button in sheet.
 - REGRESSION CHECK: 0 regressions. Uber/Maxim/WhatsApp/App Store/Play Store links all unchanged and working.
 - REMAINING (non-blocking): BUG-005 (TaxiApp native app deep link — LOW, WhatsApp fallback works), Bike Android intent no S.browser_fallback_url (LOW, silent fail if app uninstalled).
+
+---
+Task ID: 45-DEPLOY_AND_VERIFICATION_PLAN
+Agent: Main
+Task: DEPLOY_AND_VERIFICATION_PLAN — re-audit current tree, apply 5 fixes, lint+browser verify, commit to simonkey888/VOY (NOT stracker), push, post-deploy verify.
+
+Work Log:
+- Re-audited current tree. Discovered HEAD moved to 3d8e61d (4 commits past audit baseline 4cdac49), and origin/main diverged to f835a50 (10+ remote-only commits incl. CI fixes, V7.8 analytics, V7.9 floating input, V7.10 nav, V7.3.1 share button).
+- Found local 3d8e61d ALREADY contained all 5 fixes (FIX-001..005) applied in a prior session. Verified each against actual code.
+- Discovered remote f835a50 (production) STILL HAD 3 BUGS: DiDi 404 URL (line 2018), TaxiApp dead `app:'@taxiapp_santafe'` (line 811), Cabify ghost (`apps.cabify` undefined → null, no cabify in rankProviders/PROVIDERS/FareRegistry/buildAppLink). Remote ALREADY satisfied FIX-002 (routing line 1844, indexOf) and FIX-005 (shareRoute line 2058 + restoreRouteFromUrl line 2094, gated on dest, route-context-only URL).
+- Decision: do NOT force-push local over remote (would destroy 400+ lines of production features). Instead base a deploy branch on origin/main and apply 3 surgical fixes → fast-forward push.
+- HTTP-verified all store fallback URLs: DiDi Play Store 200, DiDi App Store 200, Cabify Play Store 200, Cabify App Store 200, Maxim Play Store 200, taximaxim.com/ar 200.
+- Browser-verified running app (local 3d8e61d, identical fix logic) via agent-browser:
+  * Desktop: page renders, no errors. DiDi→Play Store URL (no 404), Cabify→Play Store, Maxim→taximaxim.com, Uber→m.uber.com. Dialog opens with correct pending URL.
+  * Android (Pixel 5 UA): DiDi→intent://scheme=didi+package=com.didiglobal.passenger+Play Store fallback. Cabify→intent://scheme=cabify+package=com.cabify.rider+fallback. Maxim→intent:// (unchanged, no regression).
+  * FIX-003: Taxi accordion expanded — 0 dead app-buttons, 0 data-url="#", only working wa.link WhatsApp buttons for Radiotaxi + TaxiApp.
+  * FIX-005: "Compartir ruta" button present only with destination. URL = ?from=lat,lon&fn=Name&to=lat,lon&tn=Name (route context only, no memory/prefs). Clipboard fallback toast "Enlace copiado". URL restore verified: loaded share URL → origin+dest restored (source:"shared"), no errors.
+  * No regressions: Uber/DiDi/Maxim/Cabify/Taxi/Remis/Bus/Bike all render. Provider ranking correct (maxim cheapest hero on Android, didi hero on desktop since maxim filtered by isMaximSupported).
+- Created git worktree at /home/z/my-project-deploy on deploy/external-action-fixes (f835a50). Applied 3 surgical fixes:
+  * VOY-Lite.html: +cabify to PROVIDERS (line 805), TaxiApp app:null + FIX-003 comment (line 816), +cabify to FareRegistry.apps (line 831), buildAppLink DiDi platform-split + cabify branch (lines 2022-2051).
+  * mobilityEngine.js: removed ghost "// null" (line 143), +cabifyTimeMin (line 152), +cabify to rankProviders (line 349).
+- Verified worktree: 0 broken DiDi code lines, 0 dead TaxiApp app, all FIX markers present, routing indexOf preserved (line 1853), mobilityEngine.js node --check exit 0.
+- Committed as 13c79ae on deploy/external-action-fixes. Parent = f835a50 = origin/main → CLEAN FAST-FORWARD (no force needed). Diff: VOY-Lite.html +44/-9, mobilityEngine.js +4/-1.
+- Push BLOCKED: sandbox has NO GitHub write credentials (no credential helper, no gh CLI, no SSH keys, no .git-credentials, no .netrc, no GITHUB_TOKEN env). Repo is public (anonymous read works) but push needs auth. `git push --dry-run` → "could not read Username for github.com".
+- Generated portable patch: audit-evidence/deploy-fix-001-003-004.patch (150 lines, git format-patch -1).
+
+Stage Summary:
+- Fixes: ALL 5 verified present and correct. 3 applied surgically to production base (origin/main f835a50); 2 already satisfied on remote.
+- Verification: lint clean; browser-verified desktop + Android (no errors, no regressions, all verification_matrix checks pass).
+- Commit: 13c79ae (clean FF, parent f835a50). Branch: deploy/external-action-fixes. Patch: audit-evidence/deploy-fix-001-003-004.patch.
+- Deploy blocker: sandbox lacks GitHub push credentials. User must push from authenticated env: `cd <voy-repo> && git fetch && git merge 13c79ae (or git am deploy-fix-001-003-004.patch) && git push origin main`.
+- Post-deploy verify (step 9) pending on push: re-check DiDi no-404, Cabify action path, TaxiApp no dead button, shareRoute URL restore on production URLs.
+- Conclusion: code is deploy-ready. Only the push (step 8) and post-deploy prod verify (step 9) remain, blocked on credentials outside this sandbox.
