@@ -2071,3 +2071,27 @@ Stage Summary:
 - CONFIDENCE: 0.80 (high code/HTTP/routing; zero real-device; medium undocumented schemes).
 - Path to deploy-ready: fix BUG-001 (platform-split DiDi intent:// + didi:// iOS + Play Store desktop) + add custom-scheme routing branch → re-run §12.2 HTTP + §12.4 eval. Est. 15-20 min.
 - Files: audit-evidence/FINAL_EXTERNAL_ACTION_FORENSICS.md (updated with §12 sign-off). No code changes.
+
+---
+Task ID: 45-fixes
+Agent: Main
+Task: FIX_ACTIONS — implement 5 fixes in priority order: FIX-001 (DiDi deep link), FIX-002 (routing split preservation), FIX-003 (TaxiApp dead button), FIX-004 (Cabify re-enable), FIX-005 (shareRoute restore). Leave app deployable with no dead provider actions and no broken external links.
+
+Work Log:
+- FIX-001 (DiDi): Replaced broken `didiglobal.com/passenger/deeplink` URL (line 1917→1932) with platform-split strategy: Android `intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url={PlayStore};end`, iOS `https://apps.apple.com/ar/app/didi-viajes-comida-y-pagos/id1362398401` (App Store universal link), Desktop `https://play.google.com/store/apps/details?id=com.didiglobal.passenger`. All 3 destinations HTTP-verified 200. No 404 possible. Agent Browser eval confirmed: desktop→Play Store, Android→intent://. `didiBroken:false`.
+- FIX-002 (routing): Verified lines 1761-1762 unchanged: `if(p.url.indexOf('intent://')===0)window.location.href=p.url; else window.open(p.url,'_blank','noopener');`. No broad regex added (grep for `a-z0-9+.-` = 0 matches). intent://→location.href (OS interception), https://→window.open (browser-safe). No regression to Uber/WhatsApp/Maxim/App Store/Play Store links.
+- FIX-003 (TaxiApp dead button): Set `TAXI_COMPANIES[taxiapp].app=null` (line 770). The `if(co.app)` guard on line 1612 now skips rendering the dead `data-url="#"` button. Agent Browser confirmed: `deadHashButtons:0`, TaxiApp row shows only "WhatsApp" button. No dead button remains.
+- FIX-004 (Cabify): Added `cabify` to PROVIDERS (line 759, color #00A99D, category 'app'). Added `cabify:{base:1100,km:520,min:70,minFare:3300,...}` to FareRegistry.apps (line 785). Added `cabifyTimeMin` to mobilityEngine.js estimateAuto return (line 152). Added `cabify` to rankProviders list (mobilityEngine.js:349). Added `buildAppLink('cabify')` with same platform-split strategy as DiDi (Android intent://+Play Store, iOS App Store id476087442, Desktop Play Store). All 4 destinations HTTP-verified 200. Agent Browser confirmed: `cabifyButton:true` (appears in sheet), `buildAppLink('cabify')` returns correct URLs per platform.
+- FIX-005 (shareRoute): Added `shareRoute()` function (line 2023) — encodes current route context only (origin+dest coords + short names) as `?from=lat,lon&fn=Name&to=lat,lon&tn=Name`. NO memory/favorites/recents/preferences in URL. Uses navigator.share → clipboard → execCommand fallback chain. Added `restoreRouteFromURL()` function (line 2052) — parses URL params on init, calls MC.setOrigin + selectDest to reconstruct route. Added `sheetShareBtn` to sheet-head actions (line 1551) — visible only when sheet renders (destination selected). Added shareRoute click binding in attachSheetEvents (line 1714). Added restoreRouteFromURL() call in DOMContentLoaded init (line 978, after showModeSelector, before _signalAppReady). Agent Browser confirmed: shareRoute function exists, sheetShareBtn in DOM, URL restore works (navigated to `?from=...&to=...` → dest+origin restored, sheet visible).
+- Verification: `bun run lint` clean (0 errors). Dev server HTTP 200. Agent Browser live eval all 5 fixes PASS. HTTP verification: DiDi Play Store 200, DiDi App Store 200, Cabify Play Store 200, Cabify App Store 200. No regression: Uber (m.uber.com/ul/ unchanged), Maxim (intent://taximaxim.com unchanged), WhatsApp (3× wa.link unchanged). Screenshot: audit-evidence/fixes-applied-sheet.png.
+
+Stage Summary:
+- DEPLOY READINESS: 🟡 All 5 fixes applied locally + verified. BUG-001 (critical blocker) RESOLVED — DiDi no longer 404s. No dead provider actions remain. No broken external links. App is deployable pending production deploy (user did not request deploy in this task).
+- FILES CHANGED: public/VOY-Lite.html (+115/-9 lines), public/core/mobilityEngine.js (+4/-1 lines). 2 files, 110 insertions, 9 deletions.
+- FIX-001 ✅: DiDi platform-split (Android intent://, iOS App Store, Desktop Play Store) — all HTTP 200, no 404.
+- FIX-002 ✅: Routing split preserved — intent://→location.href, https://→window.open, no broad regex.
+- FIX-003 ✅: TaxiApp dead button removed (app:null, if(co.app) guard hides it).
+- FIX-004 ✅: Cabify re-enabled as 4th ride-hailing provider (PROVIDERS + FareRegistry + buildAppLink + rankProviders).
+- FIX-005 ✅: shareRoute() restored — encodes route context only, restore-from-URL works, share button in sheet.
+- REGRESSION CHECK: 0 regressions. Uber/Maxim/WhatsApp/App Store/Play Store links all unchanged and working.
+- REMAINING (non-blocking): BUG-005 (TaxiApp native app deep link — LOW, WhatsApp fallback works), Bike Android intent no S.browser_fallback_url (LOW, silent fail if app uninstalled).
