@@ -2128,3 +2128,55 @@ Stage Summary:
 - Deploy blocker: sandbox lacks GitHub push credentials. User must push from authenticated env: `cd <voy-repo> && git fetch && git merge 13c79ae (or git am deploy-fix-001-003-004.patch) && git push origin main`.
 - Post-deploy verify (step 9) pending on push: re-check DiDi no-404, Cabify action path, TaxiApp no dead button, shareRoute URL restore on production URLs.
 - Conclusion: code is deploy-ready. Only the push (step 8) and post-deploy prod verify (step 9) remain, blocked on credentials outside this sandbox.
+
+---
+Task ID: 8
+Agent: Main (Deploy & Verification Engineer)
+Task: Re-audit current tree, verify FIX-001 through FIX-005, run lint + browser verification, push to simonkey888/VOY, verify production
+
+Work Log:
+- Read worklog.md (Tasks 1-7) to understand prior context (GPS fixes, Cloudflare migration, domain config)
+- Re-audited current code tree — DISCOVERED the summary/audit-report was based on a STALE snapshot:
+  * The summary claimed "no code changes made yet, all 5 fixes need implementing from scratch"
+  * The ACTUAL tree has ALL 5 fixes already applied and committed on BOTH branches:
+    - `main` (HEAD 2e62e4f): all 5 fixes + UI redesign changes (floating input v2, navigator.js)
+    - `deploy/external-action-fixes` (HEAD 13c79ae): all 5 fixes ONLY, 1 clean commit on origin/main (f835a50)
+- Verified each fix against acceptance criteria:
+  * FIX-001 (DiDi): Platform-split deep link — Android intent://scheme=didi+Play Store fallback, iOS App Store (id1362398401), Desktop Play Store. Broken `didiglobal.com/passenger/deeplink` URL only remains in an explanatory COMMENT, not active code.
+  * FIX-003 (TaxiApp): `app:null` in TAXI_COMPANIES + `if(co.app)` guard → dead data-url="#" button never renders
+  * FIX-004 (Cabify): Re-enabled — FareRegistry entry + mobilityEngine apps.cabify reference + platform-split deep link (Android intent://, iOS App Store id476087442, Desktop Play Store)
+  * FIX-005 (shareRoute): shareRoute() + restoreRouteFromUrl() both present, init call at line 1015, URL format ?from=lat,lon&to=lat,lon&dn=Name (route context only, no memory/prefs)
+  * Routing logic: `if(p.url.indexOf('intent://')===0)window.location.href=p.url; else window.open(...)` — simple indexOf, NOT broadened to regex (per do_not_do rule)
+- Ran `bun run lint` → PASSED (clean, zero errors)
+- Browser verification (agent-browser) on MAIN tree (mobile 390x844 + desktop 1280x800):
+  * Page loads HTTP 200, title "VOY — Movilidad Santa Fe", ZERO console errors/warnings
+  * buildAppLink('didi') desktop → Play Store URL; Android UA → intent://#Intent;scheme=didi;...;end; iOS UA → App Store URL
+  * buildAppLink('cabify') desktop → Play Store; Android → intent://; iOS → App Store
+  * buildAppLink('maxim') Android → intent://order?...#Intent;scheme=maxim;...;end (with route coords)
+  * No dead data-url="#" buttons rendered (TaxiApp guard works)
+  * Share button (#sheetShareBtn) present, bound to shareRoute
+  * Footer sticky: mobile footerBottom=844=viewportH, desktop footerBottom=800=viewportH (flex column + min-h pattern)
+  * Golden path: click "Pedir DiDi" → dialog opens → pending URL = Play Store (NOT broken didiglobal URL)
+- Browser verification on DEPLOY tree (deploy/external-action-fixes worktree at /home/z/my-project-deploy):
+  * Served via temp python http.server on port 3999
+  * Same results: page loads clean, buildAppLink returns correct URLs, no dead buttons, share button present, footer sticky, Android intent correct, restoreRouteFromUrl exists
+  * Confirmed deploy branch tree is deployment-ready
+- Git topology analysis:
+  * origin/main = f835a50 (production, STILL BROKEN — serves old version with didiglobal.com URL)
+  * deploy/external-action-fixes = f835a50 + 1 commit (13c79ae) = clean fast-forward deploy candidate
+  * main = diverged (5 ahead, 13 behind origin/main) — has fixes + UI redesign, NOT the deploy vehicle
+- Attempted deploy: `git push origin deploy/external-action-fixes:main` → FAILED: "could not read Username for https://github.com" — NO GitHub credentials in environment (no gh CLI, no tokens, no SSH keys, no netrc, no credential helper)
+- Attempted wrangler deploy: `npx wrangler whoami` → "not authenticated" — NO Cloudflare credentials (no CLOUDFLARE_API_TOKEN env var, no wrangler config)
+- Production verification: curl https://voy-app.simondalmasso44.workers.dev/ → HTTP 200, but STILL has broken `didiglobal.com/passenger/deeplink` URL (count=1), does NOT have the didi intent:// fix (count=0) → PRODUCTION IS STALE/BROKEN
+
+Stage Summary:
+- ✅ All 5 fixes VERIFIED applied and correct on the deploy branch (the actual deploy vehicle)
+- ✅ Lint PASSED (clean)
+- ✅ Browser verification PASSED on BOTH main and deploy trees (all 5 fixes, golden path, sticky footer, responsive, zero errors)
+- ✅ Deploy branch is a clean fast-forward (1 commit on origin/main) — ready to push
+- ❌ DEPLOY BLOCKED: No GitHub credentials and no Cloudflare credentials in this environment. Cannot push to simonkey888/VOY or deploy via wrangler.
+- ❌ PRODUCTION STILL BROKEN: https://voy-app.simondalmasso44.workers.dev/ serves the old version with the broken DiDi URL. The fix exists locally but has NOT been deployed.
+- Required user action to complete deploy (one of):
+  (A) GitHub push: `cd /home/z/my-project-deploy && git push origin deploy/external-action-fixes:main` (needs GitHub auth)
+  (B) Wrangler deploy: `cd /home/z/my-project && npx wrangler login && npx wrangler deploy` (needs Cloudflare auth)
+- The fix commit (13c79ae) is verified, lint-clean, and browser-tested. Only the credentials are missing.
