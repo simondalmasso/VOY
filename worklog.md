@@ -2239,3 +2239,66 @@ Stage Summary:
   - GitHub: Settings → Developer settings → Personal access tokens
   - Cloudflare: Dashboard → My Profile → API Tokens
 - Deploy gap CERRADO: producción ahora sirve el árbol verificado 13c79ae con los 5 fixes aplicados.
+
+---
+Task ID: 10
+Agent: Main (Redeploy con reconciliación de branch divergente)
+Task: Inferir y reconocer cambios no desplegados, reconciliar branch divergente, redeploy con verificación completa
+
+Work Log:
+- Investigación git completa (con token para fetch real):
+  * origin/main = 13c79ae (deploy anterior, Task 9)
+  * local main = 19d0de2 (7 commits adelante, divergió de d3d9b40)
+  * main NO era fast-forward de origin/main (divergencia real)
+- Auditoría del diff origin/main..main (7 commits, mensajes auto-UUID):
+  * public/VOY-Lite.html: 359 líneas — PERO main tenía UI OLDER (sticky topbar, 2114 líneas) vs origin NUEVA (floating input v2, 2211 líneas, 12 marcadores fi-bg/fadeUpSoftWake)
+  * public/navigator/navigator.js: main OLDER (245 líneas Phase 1 MVP) vs origin NUEVA (473 líneas MINIMAL_V1 con voice guidance)
+  * worker.js: main REGRESIÓN (V7.8, 3 filtros) vs origin V7.8.1 (GLM filter, /api/whoami, owner_ip_hash, custom UA)
+  * wrangler.jsonc: main REGRESIÓN (WAE comentado/deshabilitado) vs origin WAE habilitado
+  * audit-evidence/, screenshots, deploy.yml: docs nuevos de main (no afectan runtime)
+- CONCLUSIÓN: main era una línea divergente OLDER en app code, con docs adicionales. origin/main ya tenía la versión más nueva.
+- Estrategia: merge origin/main into main, resolviendo conflictos para NO regresar nada:
+  * VOY-Lite.html → origin/main (UI floating input v2 más nueva, con los 5 fixes)
+  * navigator.js → origin/main (MINIMAL_V1 más nueva, auto-merge exitoso)
+  * worker.js → origin/main (V7.8.1, forzado con git checkout origin/main)
+  * wrangler.jsonc → origin/main (WAE habilitado, forzado)
+  * worklog.md, audit-evidence, screenshots → main (docs)
+- Merge commit: 90acd37 "Merge remote-tracking branch 'origin/main'"
+- Post-merge verification:
+  * VOY-Lite.html = 2211 líneas (floating input v2) ✅
+  * navigator.js = 473 líneas (MINIMAL_V1) ✅
+  * worker.js V7.8.1 (5 matches GLM_UA/api/whoami) ✅
+  * wrangler.jsonc WAE habilitado ✅
+  * 5 fixes intactos: DiDi intent=1, broken URL=0, TaxiApp app:null=1, Cabify=1, shareRoute=1, restoreRoute=1, indexOf=1 ✅
+- Lint: bun run lint → clean ✅
+- Browser (dev server, merged tree): 0 errores, floating input v2 activo (--fi-bg:#0F0F0F), buildAppLink correcto (desktop Play Store, Android intent://), 0 dead buttons, shareRoute+restore presentes, 6 providers sin regresión, footer sticky 844=844 ✅
+- GITHUB PUSH: git push main:main → 13c79ae..90acd37 (fast-forward, sin force-push)
+  * Verificado via API: simonkey888/VOY main = 90acd37 ✅
+- CLOUDFLARE DEPLOY: npx wrangler deploy desde /home/z/my-project (main worktree, merged tree)
+  * "No updated asset files to upload" — app files idénticos a 13c79ae (confirmado: merged tree usa origin's app files)
+  * Worker redeployado: Version 1b9614c9
+  * Bindings V7.8.1 presentes: VOY_METRICS, VOY_OWNER_IP_HASHES, VOY_EXCLUDE_GLM, VOY_EXCLUDE_UA_PATTERNS ✅
+- PRODUCCIÓN VERIFICADA (curl + browser, 10 validaciones):
+  1. DiDi broken URL active: 0 ✅
+  2. DiDi intent://: 1 ✅
+  3. Cabify intent://: 1 ✅
+  4. TaxiApp app:null: 1 ✅
+  5. shareRoute: 1 ✅
+  6. restoreRoute: 1 ✅
+  7. indexOf routing: 1 ✅
+  8. Floating input v2: 6 marcadores ✅
+  9. /api/health: analytics=True ✅
+  10. /api/whoami: HTTP 200 (V7.8.1 endpoint) ✅
+  * Browser golden path: click "Pedir DiDi" → dialog → Play Store URL (isBroken:false) ✅
+  * Footer sticky, 6 providers, 0 errores ✅
+- Credenciales unset del shell
+
+Stage Summary:
+- ✅ BRANCH RECONCILIADO: main (90acd37) ahora incluye origin/main como ancestro. Divergencia cerrada.
+- ✅ GITHUB: simonkey888/VOY main = 90acd37 (merge commit, fast-forward push, sin stracker)
+- ✅ CLOUDFLARE: voy-app Version 1b9614c9 deployado, V7.8.1 bindings activos
+- ✅ PRODUCCIÓN: todas las 10 validaciones pasan + browser golden path verificado
+- ✅ NO REGRESIÓN: app files = origin/main (más nuevos), main's docs integrados, worker V7.8.1 preservado, WAE habilitado, floating input v2 activo
+- HALLAZGO CLAVE: los 7 commits de main eran una línea divergente OLDER en app code (UI sticky topbar, worker V7.8, WAE deshabilitado). origin/main (13c79ae, del Task 9) ya tenía la versión más nueva. El merge tomó lo mejor de ambos: app code de origin + docs de main.
+- ⚠️ SECURITY: Tokens GitHub (ghp_***) y Cloudflare (cfut_***) compartidos en texto plano nuevamente. USUARIO DEBE REVOCAR/ROTAR AMBOS inmediatamente.
+- Producción ahora sirve 90acd37 (merge) = app code más nuevo (floating input v2 + 5 fixes + V7.8.1 analytics) + docs reconciliados.
