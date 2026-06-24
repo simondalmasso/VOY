@@ -1,0 +1,493 @@
+{
+  "_meta": {
+    "doc_id": "VOY-SAKANA-BRIEF-V7.18.1",
+    "timestamp": "2026-06-25T13:05:00Z",
+    "tz": "America/Buenos_Aires",
+    "author": "GLM AI Core (Surgical Mode)",
+    "recipient": "Sakana AI — Evolutionary Atomic Fix Engine",
+    "intent": "Request atomic, 100% functional, colossal patch suggestions for 3 critical issues: (A) black_squares CSS regression, (B) DiDi button deep-link failure, (C) CSS specificity debt (149 !important).",
+    "format": "single JSON, ASCII keys, ES-AR prose in human-readable fields",
+    "notation_legend": {
+      "L###": "line number in public/VOY-Lite.html",
+      "!i": "!important CSS declaration",
+      "↓": "cascades to / affects",
+      "→": "causes / produces",
+      "⊗": "blocking / critical",
+      "⚠": "warning / tradeoff",
+      "✅": "verified working",
+      "❌": "broken / regression",
+      "Δ": "delta / change",
+      "Σ": "cumulative / total",
+      "P0/P1/P2": "priority: critical/high/medium",
+      "UA": "user-agent",
+      "bg": "background",
+      "fg": "foreground",
+      "cmp": "computed style",
+      "rc": "root cause",
+      "fx": "fix",
+      "v": "version"
+    }
+  },
+
+  "project_context": {
+    "name": "VOY — Movilidad Inteligente Santa Fe",
+    "tagline": "Asistente de movilidad urbana — compará Uber, DiDi, Maxim, taxi, remis y colectivo en 1 sola pantalla.",
+    "domain_prod": "https://voy-app.simondalmasso44.workers.dev",
+    "domain_canonical_wip": "https://voy.is-a.dev (is-a.dev PR #41619 pending)",
+    "github": "https://github.com/simonkey888/VOY",
+    "city": "Santa Fe, Argentina (-31.6256, -60.7087)",
+    "user_persona": "parcero surero argentino, movilidad diaria, Android-first (Samsung Internet / Chrome mobile)",
+    "business_model": "freemium community app — 0 ads, 0 tracking, donation via MercadoPago alias SIMON.BI",
+    "deploy_target": "Cloudflare Workers (single worker `voy-app`, assets binding → ./public)",
+    "file_count_public": 35,
+    "total_loc": "~3192 (VOY-Lite.html) + ~800 (core/*.js) + ~400 (worker.js) ≈ 4400 LOC",
+    "current_version_ui": "V7.18.1",
+    "current_version_worker": "V7.8.0",
+    "version_convention_note": "2 independent version constants — worker.js WORKER_VERSION (API) bumped rarely; HTML window.VOY_VERSION (UI) bumped per hotfix. Pre-existing convention, NOT a bug.",
+    "pwa_status": "✅ installable (manifest.webmanifest + sw.js inline)",
+    "offline_support": "partial — service worker caches shell, map tiles require online"
+  },
+
+  "technology_stack": {
+    "frontend": {
+      "framework": "NONE — single-file HTML5 app (public/VOY-Lite.html, ~3192 LOC, self-contained)",
+      "styling": "CSS3 inline <style> block (~1150 LOC), 4 override layers by source order",
+      "js_pattern": "IIFE service modules (window.VoyXxxService), vanilla ES5-compatible, no bundler",
+      "map_engine": "MapLibre GL JS v4.x (vendored at public/libs/maplibre-gl.js)",
+      "map_styles": {
+        "primary": "CARTO dark-matter (https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json)",
+        "fallback": "OSM raster (openstreetmap.org) — auto-fallback on CARTO error via _map.on('error')"
+      },
+      "fonts": "system-ui native (V7.17 removed Google Fonts Inter — was triple-render path)",
+      "state_mgmt": "VoyMapContext state machine (EMPTY_MAP / FULL_MAP / ROUTE_DRAWN / SHEET_EXPANDED)",
+      "storage": {
+        "localStorage": "favorites, trip memory, user prefs",
+        "indexedDB": "NOT USED currently (planned V7.19+)",
+        "sessionStorage": "ephemeral route context"
+      }
+    },
+    "backend": {
+      "runtime": "Cloudflare Workers (single worker.js, ~400 LOC, 13.02 KiB gzip 3.95 KiB)",
+      "api_routes": ["/api/health", "/api/events", "/api/whoami", "/api/telemetry"],
+      "analytics": "Cloudflare Analytics Engine (dataset=voy_metrics, binding=VOY_METRICS)",
+      "cron": "0 6 * * 1 (Mon 06:00 UTC / 03:00 ART) — weekly tariff review reminder",
+      "cache_headers": "Cache-Control: no-store on HTML (edge never serves stale UI)"
+    },
+    "modules_core": {
+      "eventBus.js": "pub/sub + telemetry batch POST /api/events",
+      "telemetry.js": "Web Vitals (LCP/CLS/FID) + js_error capture",
+      "mobilityEngine.js": "travel estimation per mode (auto/taxi/remis/colectivo/bike/walk) + app price calc (uber/didi/maxim)",
+      "pricingEngine.js": "fare computation, surge multipliers, confidence scoring",
+      "mobilityController.js": "orchestrator: engine → pricing → UI render",
+      "ahorro.js": "savings calc vs alternatives + BadgeRenderer on mode-pills",
+      "trend.js": "historical savings chart",
+      "favorites.js": "saved places (LocalStorage)",
+      "feedback.js": "thumbs up/down UI"
+    },
+    "deploy_pipeline": {
+      "ci": ".github/workflows/deploy.yml — bun install → lint → inject-build-hash.mjs → wrangler deploy",
+      "build_hash_guardrail": "scripts/inject-build-hash.mjs replaces __BUILD_HASH__ placeholder in worker.js + VOY-Lite.html with git short SHA. scripts/verify-production.sh asserts prod /api/health.build_hash === local git HEAD.",
+      "current_prod_hash": "3d08faf",
+      "current_prod_version_id": "a0134d6a-45cb-441d-b3dd-01d9ee4c68e0"
+    }
+  },
+
+  "architecture_z_index_stack": {
+    "note": "single map_layer(z-0) + single ui_layer(z-10+) blueprint. NO intermediate z-indexes.",
+    "layers": {
+      "z-0": "#map (MapLibre canvas, position:fixed, full viewport)",
+      "z-0": "#mapGrid (decorative grid overlay, pointer-events:none)",
+      "z-0": "#scrim (V7.14 disabled — height:0, display:none)",
+      "z-10": ".app (flex column: topbar → origin-pill → memory-row → stage → category-wrapper → sheet-wrap)",
+      "z-20": ".mode-bar / .category-wrapper (transport mode pills)",
+      "z-30": ".search-bar (destination input + autocomplete dropdown)",
+      "z-40": ".map-floating-chip (edit route button)",
+      "z-50": ".ahorro-pill (savings badge)",
+      "z-60": ".fav-bar (favorites)",
+      "z-70": ".feedback-bar (feedback UI)",
+      "z-100": ".sheet-wrap > .sheet (bottom sheet, estimation cards)",
+      "z-200": ".cat-panel (full panel, route options)",
+      "z-300": ".dialog-overlay > .dialog (modal, deep-link confirmation)"
+    }
+  },
+
+  "version_timeline_advances": {
+    "summary": "18 minor versions in rapid iteration. Each version = 1 surgical fix layer. Override accumulation is the core technical debt.",
+    "timeline": [
+      { "v": "V7.0", "focus": "initial single-file PWA, MapLibre + CARTO, 6 modes" },
+      { "v": "V7.1", "focus": "workers.dev → voy.is-a.dev redirect (later disabled)" },
+      { "v": "V7.2", "focus": "ButtonRouterFix: DiDi universal link + Maxim scheme=maxim" },
+      { "v": "V7.3", "focus": "VOY_PROVIDER_ROUTER_V1: confirmation dialog split (message_short + message_extended), 5 providers verified" },
+      { "v": "V7.4", "focus": "on_map_drag → FULL_MAP state transition" },
+      { "v": "V7.5", "focus": "Ahorro_Inteligente: recompute comparative recommendation on every estimate" },
+      { "v": "V7.8", "focus": "WAE analytics + cron tarifas; Durable Object /api/reports eliminated" },
+      { "v": "V7.8.1", "focus": "ANALYTICS_SYSTEM_SETUP: exclusion filters (localhost/headless/bot/glm/owner_ip)" },
+      { "v": "V7.13", "focus": "fase_1: merge cat-tabs + mode-pills into single row" },
+      { "v": "V7.14", "focus": "HARDENED: z-index 5→10, flex column layout, rgba(0,0,0,0.42)→solid #000 bg" },
+      { "v": "V7.15", "focus": "Inter webfont + text-stroke:1px #000 (LATER REVERTED — made text blurry)" },
+      { "v": "V7.16", "focus": "LEGIBILITY_CORE: system-ui, #000 pure bg, 18px min font, 700 weight, +20% padding → ⚠ CAUSED BLACK SQUARES" },
+      { "v": "V7.17", "focus": "SURGICAL_FIX: .mp-lbl 11px→16px, removed Inter <link>, removed V7.15 dead code" },
+      { "v": "V7.18.0", "focus": "WEBGL_CONTEXT_GUARD: 100dvh canvas cap + will-change:transform + contain:strict + webglcontextlost listener → ⚠ contain:strict BROKE MAP" },
+      { "v": "V7.18.1", "focus": "HOTFIX (today): removed contain:strict, null-guarded _map.getCanvas() → ✅ map renders, 0 TypeErrors, 9/9 prod checks PASS" }
+    ]
+  },
+
+  "current_state_v7_18_1": {
+    "production_status": "✅ LIVE at https://voy-app.simondalmasso44.workers.dev",
+    "deploy_verified": "9/9 verify-production.sh checks PASS",
+    "version_id": "a0134d6a-45cb-441d-b3dd-01d9ee4c68e0",
+    "build_hash": "3d08faf (matches git HEAD)",
+    "verified_at": "2026-06-25T13:01:47Z",
+    "agent_browser_qa": {
+      "viewport": "390x844 (iPhone 14 mobile)",
+      "page_errors": 0,
+      "console_errors": 0,
+      "map_visible": true,
+      "map_dims": "390x844 (full viewport, no collapse)",
+      "map_contain_computed": "none (contain:strict removed ✅)",
+      "map_will_change": "transform (GPU accel preserved ✅)",
+      "canvas_backing_store": "390x844 (NOT 2399px — hard cap intact ✅)",
+      "splash_dismissed": "true (#splash removed from DOM by _signalAppReady ✅)",
+      "golden_path": "typed 'terminal' → 9 autocomplete suggestions → 0 errors ✅",
+      "lcp_range": "268ms–5456ms (median ~3s, one outlier 10s on cold compile)"
+    }
+  },
+
+  "urgent_fixes_ranked": [
+    {
+      "id": "UF-01",
+      "priority": "P0",
+      "title": "BLACK_SQUARES_CSS_REGRESSION",
+      "status": "❌ ACTIVE — user-visible visual regression",
+      "severity": "HIGH (UX degradation, perceived as broken UI)",
+      "root_cause": {
+        "location": "L983–L1001, V7.16_LEGIBILITY_CORE block",
+        "selector_list_11": [".search-bar", ".mode-pill", ".sheet-wrap", ".sheet", ".cat-panel", ".dialog-overlay", ".dialog", ".chip", ".origin-pill", ".map-floating-chip", ".search-dropdown"],
+        "offending_declaration": "background:#000000!important; (pure black, alpha=1.0, 0 transparency)",
+        "secondary_offenders": [
+          "border:1px solid rgba(255,255,255,0.6)!important;",
+          "text-shadow:0 0 4px rgba(0,0,0,1)!important;",
+          "font-weight:700!important;"
+        ],
+        "mechanism": "11 UI elements get opaque pure-black bg. Against the light CARTO map tiles, this creates stark black rectangles. Elements DO have border-radius (999px pills, 14px search-bar) so technically rounded — but perception is 'black squares' because alpha=1.0 vs map's varied luminance.",
+        "why_introduced": "V7.16 wanted max text legibility (white-on-pure-black). Correct intent, wrong execution — should have used semi-transparent bg + backdrop-filter blur, OR theme-aware bg.",
+        "confirmed_by": "FORENSIC_LOG_AUDIT_2026-06-25 — Agent Browser computed styles: .mode-pill bg=rgb(0,0,0), .search-bar bg=rgb(0,0,0), .origin-pill bg=rgb(0,0,0). VLM (glm-4.6v): black_squares_visible=true."
+      },
+      "impact_zones": ["search-bar (destination input)", "mode-pills (Auto/Taxi/Remis/Colectivo/A pie/Bicicleta)", "origin-pill (Mi ubicación)", "bottom-sheet (estimation cards)", "dialog (confirmation modal)"],
+      "current_bandaid": "NONE — V7.16 block is still active in production V7.18.1"
+    },
+    {
+      "id": "UF-02",
+      "priority": "P0",
+      "title": "DIDI_BUTTON_DEEP_LINK_FAILURE",
+      "status": "❌ PARTIAL — app opens but NO coordinates pre-filled",
+      "severity": "HIGH (core value prop broken — user opens DiDi to empty screen, must manually re-enter destination)",
+      "root_cause": {
+        "location": "L2858–L2865, buildAppLink('didi') function",
+        "current_code": "if(pid==='didi'){ var didiPlayStore='https://play.google.com/store/apps/details?id=com.didiglobal.passenger'; var didiAppStore='https://apps.apple.com/ar/app/didi-viajes-comida-y-pagos/id1362398401'; var _didiUA=navigator.userAgent||''; if(/Android/i.test(_didiUA))return 'intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url='+encodeURIComponent(didiPlayStore)+';end'; if(/iPad|iPhone|iPod/.test(_didiUA))return didiAppStore; return didiPlayStore; }",
+        "problem_1": "Android intent:// URL has NO path/action component — just 'intent://#Intent;scheme=didi;package=...;end'. Opens DiDi to default screen, NOT a pre-filled pickup/dropoff.",
+        "problem_2": "DiDi publishes NO public Universal Link, NO documented didi:// query params, NO MCP public access (verified V7.3, re-verified V7.17). Uber (m.uber.com/ul/?action=setPickup) and Maxim (intent://order?startLat=...&finishLat=...) DO pre-fill. DiDi is the only ride-hail app without a public deep-link API.",
+        "problem_3": "L2695–L2701 shows a route-hint UI shown ONLY for didi (not uber/maxim) — acknowledges the limitation but doesn't solve it.",
+        "problem_4": "launchDeepLink() at L2622 has a 1500ms visibilitychange race: if user has DiDi installed AND it opens fast, fallback timer may still fire on slow devices → double-redirect to Play Store.",
+        "problem_5": "heroProvider defaults to 'didi' at L2366 (var heroProvider=hero?hero.id:'didi') — DiDi is the FALLBACK hero provider when no recommendation wins. This means the MOST PROMINENT CTA often launches the WORST-deep-link app."
+      },
+      "user_experience": "User taps 'DiDi' CTA → confirmation dialog → 'Continuar' → DiDi opens to home screen (no destination loaded) → user must manually type destination → frustration → abandonment.",
+      "competitor_comparison": {
+        "uber": "✅ m.uber.com/ul/?action=setPickup&pickup[lat]&pickup[lon]&dropoff[lat]&dropoff[lon] — full pre-fill",
+        "maxim": "✅ intent://order?startLat&startLon&finishLat&finishLon#Intent;scheme=maxim — full pre-fill (Android)",
+        "didi": "❌ intent://#Intent;scheme=didi;package=... — NO pre-fill (opens to default screen)",
+        "cabify": "❌ same as didi — no public deep-link params documented"
+      }
+    },
+    {
+      "id": "UF-03",
+      "priority": "P1",
+      "title": "CSS_SPECIFICITY_DEBT_149_IMPORTANT",
+      "status": "⚠ ACTIVE — maintenance hazard, future regressions likely",
+      "severity": "MEDIUM (not user-visible today, but each new override risks !important escalation war)",
+      "root_cause": {
+        "count": 149,
+        "location": "4 override layers accumulated: Base (L79–L950) + V7.14 (L950–L965) + V7.16 LEGIBILITY_CORE (L966–L1010) + V7.17 SURGICAL_FIX (L1130–L1145)",
+        "mechanism": "Each version added !important to win specificity battles over the previous version. Now 149 declarations use !important. New CSS rules cannot override without escalating to !important + higher source order.",
+        "dead_code_example": "L687: .mode-pill .mp-lbl{font-size:11px} — this base 11px declaration is DEAD (overridden by V7.17 L1131 .mode-pill .mp-lbl{font-size:16px!important}) but still present, confusing future maintainers."
+      }
+    },
+    {
+      "id": "UF-04",
+      "priority": "P1",
+      "title": "DEAD_CODE_FONT_SIZE_11PX_BASE",
+      "status": "⚠ ACTIVE — L687 base declaration contradicts V7.17 override",
+      "location": "L687: .mode-pill .mp-lbl{font-size:11px;letter-spacing:0.02em}",
+      "conflict": "V7.17 L1131 forces 16px!important, winning by source order + !important. But L687 is dead code that misleads. Same pattern likely in other base declarations (L672 region)."
+    },
+    {
+      "id": "UF-05",
+      "priority": "P1",
+      "title": "LAUNCHDEEPLINK_1500MS_RACE_CONDITION",
+      "status": "⚠ ACTIVE — intermittent double-redirect on slow devices",
+      "location": "L2622–L2647",
+      "mechanism": "visibilitychange listener + 1500ms setTimeout fallback. If app opens in 1400ms but visibilitychange fires late, fallback triggers → user redirected to Play Store even though app opened."
+    },
+    {
+      "id": "UF-06",
+      "priority": "P2",
+      "title": "DEV_ONLY_API_EVENTS_404",
+      "status": "⚠ DEV-ONLY — production returns 202",
+      "location": "public/core/eventBus.js:23 POSTs to /api/events (exists in worker.js production, NOT in Next.js dev routes)",
+      "impact": "dev.log floods with POST /api/events 404. Non-blocking. Not user-visible."
+    },
+    {
+      "id": "UF-07",
+      "priority": "P2",
+      "title": "MAP_TIMEOUT_FALSE_POSITIVE",
+      "status": "⚠ ACTIVE (was) — V7.18.1 may have fixed via faster boot",
+      "location": "L1652: _mapLoadTimeout=setTimeout(function(){console.error('[MAP] timeout 10s')},10000)",
+      "mechanism": "10s hard timeout fires console.error regardless of whether map loaded. On slow networks style load can take >10s legitimately. clearTimeout only on _map.on('load').",
+      "v7_18_1_status": "Agent Browser V7.18.1 QA: timeout did NOT fire (map_style_loaded=true cleared it). But on slow networks it may still fire as false positive."
+    },
+    {
+      "id": "UF-08",
+      "priority": "P2",
+      "title": "LCP_VARIABILITY_268MS_TO_10S",
+      "status": "⚠ ACTIVE — no consistent perf floor",
+      "observed_range": "268ms (best, post-V7.18.1) to 10216ms (worst, cold compile)",
+      "median": "~3s",
+      "root_cause_candidates": ["cold MapLibre compile", "CARTO style JSON fetch", "no resource preload hints", "inline <style> + inline <script> blocks parse-blocking"]
+    },
+    {
+      "id": "UF-09",
+      "priority": "P2",
+      "title": "HERO_PROVIDER_DEFAULT_DIDI_MISMATCH",
+      "status": "⚠ ACTIVE — worst-deep-link app is the default hero",
+      "location": "L2366: var heroProvider=hero?hero.id:'didi'",
+      "mechanism": "When recommendation engine has no clear winner, falls back to 'didi'. But DiDi has the worst deep-link UX (UF-02). Should default to 'uber' (best deep-link) or 'maxim' (cheapest usually)."
+    }
+  ],
+
+  "black_squares_deep_dive": {
+    "issue_id": "UF-01",
+    "forensic_evidence": {
+      "method": "Agent Browser (mobile 390x844) + VLM glm-4.6v cross-validation",
+      "computed_styles_captured": {
+        "mode-pill_auto": { "bg": "rgb(0, 0, 0)", "border": "1px solid rgba(255, 255, 255, 0.6)", "border_radius": "999px", "width": "89px", "height": "46px" },
+        "mode-pill_taxi": { "bg": "rgb(0, 0, 0)", "border": "1px solid rgba(255, 255, 255, 0.6)", "width": "108px", "height": "46px" },
+        "search-bar": { "bg": "rgb(0, 0, 0)", "border_radius": "14px", "width": "358px", "height": "56px" },
+        "origin-pill": { "bg": "rgb(0, 0, 0)", "border_radius": "999px" }
+      },
+      "vlm_verdict": "black_squares_visible=true on search-bar + mode-pills (Auto, Taxi, Remis). overall_pass=false for visual_quality."
+    },
+    "css_block_offending": {
+      "location": "L982–L1001",
+      "block_name": "V7.16_LEGIBILITY_CORE FASE 2+3",
+      "exact_code": ".search-bar, .mode-pill, .sheet-wrap, .sheet, .cat-panel, .dialog-overlay, .dialog, .chip, .origin-pill, .map-floating-chip, .search-dropdown { background:#000000!important; border:1px solid rgba(255,255,255,0.6)!important; -webkit-text-stroke:0!important; text-stroke:0!important; text-shadow:0 0 4px rgba(0,0,0,1)!important; font-weight:700!important; line-height:1.5!important; }"
+    },
+    "design_intent_vs_execution": {
+      "intent": "max text legibility — white text on pure black bg, anti-blur text-shadow, bold weight",
+      "execution_flaw": "alpha=1.0 opaque bg kills the 'map-as-ambient-background' design. Should have been alpha=0.75–0.85 + backdrop-filter:blur(12px) for glassmorphism that's BOTH legible AND non-opaque."
+    },
+    "proposed_fix_axes": [
+      "AXIS-A: alpha reduction — #000000 → rgba(0,0,0,0.78) (keeps legibility, restores map visibility)",
+      "AXIS-B: backdrop-filter addition — backdrop-filter:blur(16px) saturate(1.2); (frosted glass, text pops without opaque bg)",
+      "AXIS-C: theme-aware — light map → rgba(10,10,15,0.82); dark map → rgba(0,0,0,0.92) (adaptive)",
+      "AXIS-D: per-element differentiation — search-bar blur(16px), mode-pills blur(8px), sheet blur(20px) (visual hierarchy via blur depth)",
+      "AXIS-E: border refinement — 1px solid rgba(255,255,255,0.6) → 1px solid rgba(255,255,255,0.18) (subtle, less 'drawn-around' look)"
+    ]
+  },
+
+  "didi_button_deep_dive": {
+    "issue_id": "UF-02",
+    "full_call_chain": {
+      "step_1_user_tap": "est-card CTA button → onclick handler → openDeepLinkDialog(action, url, name)",
+      "step_2_dialog": "L2674 openDeepLinkDialog() → sets _pendingDeepLink={action,url,name} → shows #dialogOverlay with provider name + icon",
+      "step_3_confirm": "L2653 dgConfirm click → va_cta(p.action) + v5event('deeplink_opened') + MC.v5LogTrip() → closeDeepLinkDialog() → launchDeepLink(p.url)",
+      "step_4_launch": "L2622 launchDeepLink(url) → if url.startsWith('intent://') → window.location.href=url → visibilitychange listener + 1500ms fallback timer",
+      "step_5_didi_specific": "url = 'intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2F...;end' → Android opens DiDi app → DiDi shows DEFAULT SCREEN (no destination loaded)"
+    },
+    "buildAppLink_didi_full_code": {
+      "location": "L2858–L2865",
+      "code": "if(pid==='didi'){\n  var didiPlayStore='https://play.google.com/store/apps/details?id=com.didiglobal.passenger';\n  var didiAppStore='https://apps.apple.com/ar/app/didi-viajes-comida-y-pagos/id1362398401';\n  var _didiUA=navigator.userAgent||'';\n  if(/Android/i.test(_didiUA))return 'intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url='+encodeURIComponent(didiPlayStore)+';end';\n  if(/iPad|iPhone|iPod/.test(_didiUA))return didiAppStore;\n  return didiPlayStore;\n}",
+      "line_by_line_analysis": {
+        "L2859": "didiPlayStore URL — ✅ verified HTTP 200, correct fallback",
+        "L2860": "didiAppStore URL (id1362398401) — ✅ verified HTTP 200",
+        "L2862": "Android intent:// — ❌ NO path/action after 'intent://', just '#Intent;scheme=didi'. Opens app to default screen. Compare Maxim L2883: 'intent://order?startLat=...&finishLat=...#Intent;scheme=maxim' — has path + query params.",
+        "L2863": "iOS App Store — ❌ no way to pre-fill even if app installed (Apple Universal Links require DiDi to publish them, which they don't)",
+        "L2864": "Desktop Play Store — fallback only"
+      }
+    },
+    "route_hint_acknowledgment": {
+      "location": "L2695–L2701",
+      "code": "if(action==='didi'){ var hintEl=document.getElementById('dgRouteHint'); if(hintEl){ hintEl.style.display='block'; var oName=(MC.getOrigin()&&MC.getOrigin().name)?MC.getOrigin().name.split(',')[0]:'Mi ubicación'; var dName=(MC.getDest()&&MC.getDest().name)?MC.getDest().name.split(',')[0]:'Destino'; hintEl.innerHTML='<div class=\"dgrh-label\">DiDi no admite pre-cargar la dirección. Ingresala manualmente:</div><div class=\"dgrh-route\"><span class=\"dgrh-from\">'+oName+'</span><span class=\"dgrh-arrow\">→</span><span class=\"dgrh-to\">'+dName+'</span></div>'; } var ms=document.getElementById('dgMsgShort');if(ms)ms.textContent='DiDi se abre sin la ruta cargada. Anotá el destino arriba.'; }",
+      "assessment": "Band-aid, not a fix. User still has to manually type destination in DiDi. The hint helps them remember the address but doesn't solve the core friction."
+    },
+    "proposed_fix_axes": [
+      "AXIS-1: clipboard pre-load — on confirm, copy destination address to clipboard + show toast 'Dirección copiada. Pegala en DiDi'. Reduces manual typing from scratch to paste.",
+      "AXIS-2: share-intent bridge — use navigator.share({text: dest.address}) before launching DiDi. Some Android share sheets can route to DiDi's search field.",
+      "AXIS-3: didi://scheme exploration — test undocumented didi://search?q=<address> or didi://dropoff?lat=<lat>&lon=<lon> params (reverse-engineer from DiDi app manifest). RISK: may not work, needs APK decompile.",
+      "AXIS-4: hero default swap — L2366 heroProvider default 'didi' → 'uber' (best deep-link). DiDi becomes secondary CTA, not hero.",
+      "AXIS-5: smart provider ordering — sort CTAs by deep-link quality (uber > maxim > didi). User sees best-pre-fill app first.",
+      "AXIS-6: universal clipboard with QR — generate QR code of destination in dialog, user scans in DiDi search. Overkill but 100% functional.",
+      "AXIS-7: Web Share Target API — register VOY as share target, user can share destination FROM DiDi back to VOY (reverse flow, doesn't solve forward launch).",
+      "AXIS-8: fallback to WhatsApp — if DiDi can't pre-fill, offer 'Enviar destino por WhatsApp' (user can send to themselves, copy-paste in DiDi). Lateral solution."
+    ]
+  },
+
+  "css_specificity_debt_analysis": {
+    "issue_id": "UF-03",
+    "total_important_count": 149,
+    "distribution_by_block": {
+      "Base_L79_L950": "~60 !important (initial defensive styling)",
+      "V7.14_L950_L965": "~5 !important (search-dropdown hardening)",
+      "V7.16_LEGIBILITY_CORE_L966_L1010": "~45 !important (the black-squares block + typography resets)",
+      "V7.17_SURGICAL_FIX_L1130_L1145": "~8 !important (mp-lbl + badge font-size overrides)",
+      "inline_misc": "~31 !important (scattered across component styles)"
+    },
+    "escalation_pattern": "V7.14 added !important to override Base → V7.16 added !important to override V7.14 → V7.17 added !important to override V7.16. Each layer escalates. Next override will need !important + higher source order + more specific selector.",
+    "dead_code_instances": [
+      "L687: .mode-pill .mp-lbl{font-size:11px} — dead, overridden by L1131 (16px!important)",
+      "L684: [data-theme='dark'] .mode-pill{background:rgba(0,0,0,0.95)!important} — dead, V7.16 forces #000000!important on .mode-pill globally regardless of theme",
+      "L683: .mode-pill.active{...background:#FFFFFF!important} — NOT dead, but V7.16 doesn't override .active state (correct, active stays white)"
+    ],
+    "refactor_risk": "HIGH — removing any !important may cascade-break dependent overrides. Must be done layer-by-layer with computed-style verification after each removal."
+  },
+
+  "all_known_issues_consolidated": [
+    { "id": "UF-01", "p": "P0", "title": "black_squares_css_regression", "status": "❌ active", "loc": "L983-L1001" },
+    { "id": "UF-02", "p": "P0", "title": "didi_button_no_prefill", "status": "❌ active", "loc": "L2858-L2865" },
+    { "id": "UF-03", "p": "P1", "title": "css_specificity_debt_149_important", "status": "⚠ active", "loc": "scattered" },
+    { "id": "UF-04", "p": "P1", "title": "dead_code_11px_base_mp_lbl", "status": "⚠ active", "loc": "L687" },
+    { "id": "UF-05", "p": "P1", "title": "launchdeeplink_1500ms_race", "status": "⚠ active", "loc": "L2622-L2647" },
+    { "id": "UF-06", "p": "P2", "title": "dev_only_api_events_404", "status": "⚠ dev-only", "loc": "core/eventBus.js:23" },
+    { "id": "UF-07", "p": "P2", "title": "map_timeout_false_positive", "status": "⚠ conditional", "loc": "L1652" },
+    { "id": "UF-08", "p": "P2", "title": "lcp_variability_268ms_to_10s", "status": "⚠ active", "loc": "global" },
+    { "id": "UF-09", "p": "P2", "title": "hero_default_didi_mismatch", "status": "⚠ active", "loc": "L2366" }
+  ],
+
+  "code_artifacts_for_sakana": {
+    "block_A_black_squares_offending": {
+      "file": "public/VOY-Lite.html",
+      "lines": "983-1001",
+      "language": "css",
+      "code": "/* FASE 2 + 3: pure black bg, 1px subtle border, no text-stroke, +20% padding */\n.search-bar,\n.mode-pill,\n.sheet-wrap,\n.sheet,\n.cat-panel,\n.dialog-overlay,\n.dialog,\n.chip,\n.origin-pill,\n.map-floating-chip,\n.search-dropdown{\n  background:#000000!important;\n  border:1px solid rgba(255,255,255,0.6)!important;\n  -webkit-text-stroke:0!important;\n  text-stroke:0!important;\n  text-shadow:0 0 4px rgba(0,0,0,1)!important;\n  font-weight:700!important;\n  line-height:1.5!important;\n}"
+    },
+    "block_B_didi_buildAppLink": {
+      "file": "public/VOY-Lite.html",
+      "lines": "2858-2865",
+      "language": "javascript",
+      "code": "if(pid==='didi'){\n  var didiPlayStore='https://play.google.com/store/apps/details?id=com.didiglobal.passenger';\n  var didiAppStore='https://apps.apple.com/ar/app/didi-viajes-comida-y-pagos/id1362398401';\n  var _didiUA=navigator.userAgent||'';\n  if(/Android/i.test(_didiUA))return 'intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url='+encodeURIComponent(didiPlayStore)+';end';\n  if(/iPad|iPhone|iPod/.test(_didiUA))return didiAppStore;\n  return didiPlayStore;\n}"
+    },
+    "block_C_launchDeepLink_race": {
+      "file": "public/VOY-Lite.html",
+      "lines": "2622-2647",
+      "language": "javascript",
+      "code": "function launchDeepLink(url){\n  if(!url||url==='#')return;\n  if(url.indexOf('intent://')!==0){ window.open(url,'_blank','noopener'); return; }\n  var fbMatch=url.match(/S\\.browser_fallback_url=([^;]+)/);\n  var fallback=fbMatch?decodeURIComponent(fbMatch[1]):null;\n  var appOpened=false;\n  function onVisChange(){if(document.hidden)appOpened=true;}\n  document.addEventListener('visibilitychange',onVisChange);\n  window.location.href=url;\n  setTimeout(function(){\n    document.removeEventListener('visibilitychange',onVisChange);\n    if(!appOpened&&!document.hidden&&fallback){\n      window.location.href=fallback;\n    }\n  },1500);\n}"
+    },
+    "block_D_hero_default": {
+      "file": "public/VOY-Lite.html",
+      "lines": "2366",
+      "language": "javascript",
+      "code": "var heroProvider=hero?hero.id:'didi';"
+    },
+    "block_E_uber_buildAppLink_reference": {
+      "file": "public/VOY-Lite.html",
+      "lines": "2846",
+      "language": "javascript",
+      "code": "if(pid==='uber')return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+'&pickup[formatted_address]=Origen&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon;",
+      "note": "REFERENCE — this is how a GOOD deep-link looks. Full coordinate pre-fill."
+    },
+    "block_F_maxim_buildAppLink_reference": {
+      "file": "public/VOY-Lite.html",
+      "lines": "2883",
+      "language": "javascript",
+      "code": "if(isAndroid){var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';return 'intent://order?startLat='+Number(origin.lat).toFixed(6)+'&startLon='+Number(origin.lon).toFixed(6)+'&finishLat='+Number(dest.lat).toFixed(6)+'&finishLon='+Number(dest.lon).toFixed(6)+'#Intent;scheme=maxim;package=com.taxsee.taxsee;S.browser_fallback_url='+encodeURIComponent(playStore)+';end'}",
+      "note": "REFERENCE — Android intent:// with path + query params. DiDi should mirror this structure if params existed."
+    }
+  },
+
+  "sakana_request": {
+    "recipient": "Sakana AI — Evolutionary Atomic Fix Engine",
+    "request_type": "atomic_colossal_patch_suggestions",
+    "constraints": {
+      "atomic": "each fix must be 1 self-contained change (1 selector, 1 function, or 1 declaration block). NO multi-file refactors.",
+      "functional_100pct": "each fix must be verifiably functional post-apply. No 'try this and see'. Predicted outcome must be deterministic.",
+      "colossal": "each fix must have outsized impact relative to LOC changed. Target: Δ1–Δ15 LOC → resolve 1 P0/P1 issue entirely.",
+      "non_regressive": "each fix must NOT break any currently-passing check in verify-production.sh (9/9 must remain PASS).",
+      "deploy_safe": "each fix must be hot-deployable via `wrangler deploy` without schema migration, DB change, or asset rebuild."
+    },
+    "targets_prioritized": [
+      {
+        "rank": 1,
+        "issue_id": "UF-01",
+        "title": "black_squares",
+        "desired_outcome": "UI elements remain legible (white text, bold, 16px+) BUT bg becomes semi-transparent + blurred. Map visible through UI. Zero 'black square' perception.",
+        "acceptance_criteria": [
+          "VLM (glm-4.6v): black_squares_visible=false",
+          "computed .mode-pill bg: rgba(0,0,0,X) where 0.6 ≤ X ≤ 0.85",
+          "computed .search-bar backdrop-filter: blur(Npx) where N ≥ 8",
+          "text contrast ratio ≥ 4.5:1 (WCAG AA) maintained",
+          "0 new !important declarations added (net Σ !important should DECREASE)"
+        ],
+        "proposed_axes_for_sakana": ["AXIS-A alpha reduction", "AXIS-B backdrop-filter", "AXIS-C theme-aware", "AXIS-D per-element blur depth", "AXIS-E border refinement"]
+      },
+      {
+        "rank": 2,
+        "issue_id": "UF-02",
+        "title": "didi_button",
+        "desired_outcome": "User taps DiDi → either (a) DiDi opens WITH destination pre-filled (if params discovered), OR (b) user has destination address in clipboard ready to paste, OR (c) hero provider swaps to uber/maxim so DiDi is not the default CTA.",
+        "acceptance_criteria": [
+          "DiDi launch: destination address IS in clipboard (verified via navigator.clipboard.readText post-launch)",
+          "Toast shown: 'Dirección copiada — pegala en DiDi'",
+          "heroProvider default changed from 'didi' to 'uber' (L2366)",
+          "0 regressions in uber/maxim deep-link flow"
+        ],
+        "proposed_axes_for_sakana": ["AXIS-1 clipboard pre-load", "AXIS-4 hero default swap", "AXIS-5 smart provider ordering", "AXIS-8 WhatsApp fallback"]
+      },
+      {
+        "rank": 3,
+        "issue_id": "UF-03",
+        "title": "css_specificity_debt",
+        "desired_outcome": "Reduce !important count from 149 → ≤100 (Δ ≥ -49). Dead code (L687 11px, L684 dark theme duplicate) removed.",
+        "acceptance_criteria": [
+          "rg -c '!important' public/VOY-Lite.html ≤ 100",
+          "L687 .mp-lbl 11px declaration REMOVED (dead code)",
+          "computed .mp-lbl font-size remains 16px (V7.17 override still wins)",
+          "0 visual regressions (Agent Browser screenshot diff = 0 pixels changed in rendered text)"
+        ]
+      }
+    ],
+    "output_format_requested": {
+      "per_fix": {
+        "fix_id": "string (e.g. SAKANA-FIX-01)",
+        "target_issue": "UF-XX",
+        "atomic_unit": "1 selector | 1 function | 1 declaration block",
+        "loc_delta": "integer (predicted LOC changed)",
+        "old_code": "exact string to find",
+        "new_code": "exact string to replace with",
+        "mechanism": "1-2 sentence WHY this works",
+        "collateral_risk": "what else might break (if nothing: 'NONE — isolated')",
+        "verification_command": "shell command to verify post-apply",
+        "rollback": "1-line revert instruction"
+      },
+      "bonus": "if Sakana can propose a SINGLE fix that resolves UF-01 + UF-03 simultaneously (black squares fix that ALSO reduces !important count), flag it as 'COLOSSAL_MERGE_FIX'."
+    }
+  },
+
+  "verification_protocols_available": {
+    "prod_check": "bash scripts/verify-production.sh https://voy-app.simondalmasso44.workers.dev (must exit 0, 9/9 PASS)",
+    "agent_browser_mobile": "agent-browser set viewport 390 844 && agent-browser open 'https://voy-app.simondalmasso44.workers.dev/?_bust=<ts>' && agent-browser errors (must be empty)",
+    "vlm_visual": "screenshot → VLM glm-4.6v → assert black_squares_visible=false, text_legible=true",
+    "css_audit": "rg -c '!important' public/VOY-Lite.html (track Σ trend)",
+    "computed_style": "agent-browser eval \"JSON.stringify({modePillBg:getComputedStyle(document.querySelector('.mode-pill')).backgroundColor, searchBarBackdrop:getComputedStyle(document.querySelector('.search-bar')).backdropFilter})\"",
+    "clipboard_verify": "agent-browser eval \"navigator.clipboard.readText().then(t=>t)\" (post-DiDi-launch, must contain destination address)",
+    "deep_link_dry_run": "agent-browser eval \"buildAppLink('didi')\" (inspect returned URL structure)"
+  },
+
+  "environment_for_reproduction": {
+    "repo_clone": "git clone https://github.com/simonkey888/VOY.git && cd VOY",
+    "dev_server": "bun run dev (starts Next.js dev :3000, / rewrites to /VOY-Lite.html)",
+    "deploy": "CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ACCOUNT_ID=b21fa81d12acb663798f9f7c51801955 npx wrangler deploy",
+    "prod_url": "https://voy-app.simondalmasso44.workers.dev",
+    "test_coords_santa_fe": { "origin": { "lat": -31.6256, "lon": -60.7087, "name": "Centro Santa Fe" }, "dest": { "lat": -31.5984, "lon": -60.6962, "name": "Terminal Santa Fe" } }
+  },
+
+  "closing_directive_to_sakana": "Produce N atomic fixes (N ≥ 3, one per P0/P1 target). Each fix must be deployable in isolation. Prefer fixes that REDUCE complexity (fewer !important, fewer LOC, fewer override layers) over fixes that ADD complexity. If a proposed fix requires new dependencies, reject it. If a proposed fix modifies > 15 LOC, split it. The ideal fix is 1–5 LOC, deterministic, and makes the codebase SIMPLER after apply than before. Think like evolution: small mutation, survival advantage, heritable. GO."
+}
