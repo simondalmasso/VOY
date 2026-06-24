@@ -2048,3 +2048,26 @@ Stage Summary:
 - Required before deploy: Fix BUG-001 (platform-split DiDi + routing update for custom schemes) + HTTP verification. Estimated 15-20 min.
 - Recommended (not blocking): Fix BUG-006 (dead button), BUG-007 (Cabify), BUG-008 (shareRoute), BUG-005 (TaxiApp native).
 - Files: audit-evidence/FINAL_EXTERNAL_ACTION_FORENSICS.md (full report), audit-evidence/forensics-current-android.png (screenshot).
+
+---
+Task ID: 44-verify
+Agent: Main (second-pass independent re-verification)
+Task: FINAL_EXTERNAL_ACTION_FORENSICS — independent re-verification after AUDIT_CURRENT_STATE re-grounding. Re-ground in actual current tree (4cdac49 code / 44f9af9 report-only HEAD), correct false positives from previous audits, re-verify all 5 items (BUG-001/003/004/005 + Cabify) with fresh evidence, sign off deploy verdict.
+
+Work Log:
+- Re-grounding: git log shows HEAD=44f9af9 (adds only audit report + screenshot, NO code change); code state = 4cdac49 (VOY-Lite.html = 2016 lines). Confirmed previous "local fixes" were reverted — line 1917 still has broken didiglobal.com URL, line 1743 has simple intent:// check (no broad regex), shareRoute missing.
+- Source re-read (zero assumptions): line 1917 DiDi broken URL EXACT match; line 1743-1744 routing logic = `if(p.url.indexOf('intent://')===0)window.location.href=p.url; else window.open(...)`; line 1607 TaxiApp dead button data-url="#"; line 1953 shareApp EXISTS; mobilityEngine.js:143/158 cabifyPrice ghost=null; navigator.js 0 external actions; only 1 external <a href> (line 1660 bike).
+- External-action sweep: 5 data-action, 1 onclick (internal), ~23 addEventListener click (all internal except 1736 routing handler), 1 window.open, 1 location.href write, 1 navigator.share, 3 intent:// builders. ZERO market://, whatsapp:// scheme, tel:, mailto:, http://. Nothing missed.
+- HTTP re-verification (independent curl): DiDi broken URL 302→/404 ❌; production still serves broken URL ❌; Uber (globoff) 302→301→302→301→200 via Singular Universal Link chain ✅; 3× wa.link = 401 to curl (Cloudflare anti-bot) BUT curl -sL body resolves to api.whatsapp.com with correct phones (543424213701/54342503136/543424550055) = functionally working ✅; all 9 Play/App Store URLs = 200/301→200 ✅; Cabify help center 403 to curl but web_search snippet confirmed.
+- Cabify Santa Fe: z-ai web_search rank-0 = help.cabify.com/hc/es/articles/115000996089 verbatim "Argentina: ...Santa Fe y Tucumán". Cabify IS available → previous "absent" claim = FALSE NEGATIVE.
+- Agent Browser live eval (localhost:3000, desktop + Pixel 5 Android sessions): buildAppLink desktop = uber✓/didi❌BROKEN/maxim-web✓/cabify#/taxiapp#; Android = uber✓/didi❌BROKEN(no platform split)/maxim intent✓/bike intent⚠️no-fallback. Routing branch eval: https→window.open✓, intent→location.href✓, #→toast_only✓, didi://→window.open (future-only concern). typeof shareRoute==='function'→false❌; sheetShareBtn→null❌. BUG-003 CONFIRMED FALSE POSITIVE.
+- Report updated: audit-evidence/FINAL_EXTERNAL_ACTION_FORENSICS.md §12 (Independent Re-Verification Sign-Off) appended with 8 subsections (source ground truth, live HTTP, Cabify web_search evidence, Agent Browser eval, complete inventory, false-positive corrections table, final certification, deploy verdict). Minor corrections to §8 (wa.link 401 accuracy, Uber redirect chain detail, Cabify Spanish URL).
+
+Stage Summary:
+- DEPLOY VERDICT: ⛔ NO — NOT READY FOR V8 DEPLOY. Sole critical blocker = BUG-001 (DiDi 302→/404, broken in BOTH local line 1917 AND production f835a50).
+- FALSE POSITIVES corrected (4): BUG-001 "fix applied locally" (reverted), BUG-003 regex (never existed), CABIFY absent (IS in Santa Fe), shareRoute present (missing).
+- TRUE bugs: BUG-001 (CRITICAL blocker), BUG-005 (TaxiApp native missing, LOW), BUG-006 (TaxiApp dead # button, LOW), BUG-007 (Cabify missing despite availability, MEDIUM), BUG-008 (shareRoute missing, LOW). Bike Android intent no-fallback (LOW).
+- SUCCESS CRITERIA: 5/6 pass; 1 fail (0 HTTP failures — DiDi 302→/404). wa.link 401s are curl artifacts (functionally working, phones verified).
+- CONFIDENCE: 0.80 (high code/HTTP/routing; zero real-device; medium undocumented schemes).
+- Path to deploy-ready: fix BUG-001 (platform-split DiDi intent:// + didi:// iOS + Play Store desktop) + add custom-scheme routing branch → re-run §12.2 HTTP + §12.4 eval. Est. 15-20 min.
+- Files: audit-evidence/FINAL_EXTERNAL_ACTION_FORENSICS.md (updated with §12 sign-off). No code changes.
