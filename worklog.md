@@ -2016,3 +2016,35 @@ Stage Summary:
 - ATÓMICAS: (1) deploy.sh version dinámico ✓, (2) .gitignore *.pid ✓, (3) cron trigger tarifas ✓, (4) sessionID cookie ✓, (5) fares.json dientes de león ✓.
 - PENDIENTE USUARIO: habilitar Analytics Engine en dashboard CF → https://dash.cloudflare.com/b21fa81d12acb663798f9f7c51801955/workers/analytics-engine → luego descomentar analytics_engine_datasets en wrangler.jsonc + redeploy.
 - RULE satisfied: mobilityEngine.js / pricingEngine.js / FareRegistry / estimadores / deep links NO tocados (git diff empty).
+
+---
+Task ID: 44
+Agent: Main
+Task: FINAL_EXTERNAL_ACTION_FORENSICS — STRICT_EVIDENCE_ONLY certification of every button, link, and external action before V8 deploy. Reverify BUG-001/003/004/005 + Cabify.
+
+Work Log:
+- Etapa 0 — STATE CORRECTION: Discovered the repository was RESET/REVERTED between Task 43 and now. Local source at commit 4cdac49 (VOY-Lite.html = 2016 lines, was 2207). Task 42's BUG-001 fix is GONE (line 1917 still has broken didiglobal.com URL). Task 43's BUG-003 fix is GONE (the regex never existed in this version). shareRoute() + sheetShareBtn are GONE. Git HEAD=4cdac49, production=f835a50 (f835a50 NOT in git log — was never committed or history was rewritten). Re-audited from scratch with zero assumptions.
+- Etapa 1 — EXHAUSTIVE SCAN: rg'd VOY-Lite.html + navigator.js for ALL <button>, <a href>, data-action, data-url, addEventListener('click'), onclick, window.open, location.href=, navigator.share, intent://, market://, whatsapp://, tel:, mailto:. Found 30+ actions total: 6 provider deep links (buildAppLink), 4 taxi/remis WhatsApp links, 3 bike links (platform-split), 2 share/support actions, 4 navigator panel buttons, 14 search/UI buttons. ZERO market://, whatsapp://, tel:, mailto:, http:// (all clean). Catalogued all in matrix with 13 fields each.
+- Etapa 2 — HTTP VERIFY (16 URLs): 14/16 return HTTP 200 ✓. 1 returns 302→/404 (DiDi broken URL = BUG-001) ✗. 1 returns 403 (Cabify help center anti-bot — but web search snippet extracted "Argentina... Santa Fe"). All wa.link short links redirect to api.whatsapp.com with correct phone numbers. All Play Store + App Store URLs return 200.
+- Etapa 3 — BROWSER TEST (Agent Browser, Pixel 7 Android UA): buildAppLink eval confirmed: uber=universal link ✓, didi=BROKEN URL (didi_is_broken=true) ✗, maxim=intent:// with coords ✓, cabify='#' (missing) ✗, taxiapp='#' (missing) ✗, bike=intent:// ✓. shareRoute function NOT found (typeof='function'→false). sheetShareBtn NOT found (getElementById→null). Console errors: 0.
+- Etapa 4 — ROUTING LOGIC VERIFY: Source extracted via eval: `if(p.url.indexOf('intent://')===0)window.location.href=p.url; else window.open(p.url,'_blank','noopener');`. Tested all 10 URL types: HTTPS→window.open ✓, intent://→window.location.href ✓, didi://→window.open (potential iOS issue if BUG-001 fix adds didi:// branch), #→toast only ✓. BUG-003 (regex regression) is a FALSE POSITIVE — the regex never existed in this version.
+- Etapa 5 — BUG REVERIFICATION:
+  · BUG-001 (DiDi 404): CONFIRMED BROKEN in both local (line 1917) AND production (f835a50). HTTP 302→/404 verified. Root cause: didiglobal.com is Chinese corporate site, /passenger/deeplink doesn't exist. Code comment (lines 1912-1916) falsely claims it's "DiDi's documented universal link". CRITICAL BLOCKER.
+  · BUG-003 (regex regression): FALSE POSITIVE. The regex was in a reverted version. Current code has no regex — only checks intent://. No fix needed.
+  · BUG-004 (iOS DiDi fallback): N/A in current code — there's no iOS branch. DiDi returns same broken URL for all platforms. App Store ID id1362398401 verified (HTTP 200) but unused.
+  · BUG-005 (TaxiApp native app): CONFIRMED MISSING. Play Store com.aniversario.pasajero verified (HTTP 200, "Santa Fe and surroundings"). URL scheme UNKNOWN (no public docs). Would need APK inspection or real-device test.
+  · BUG-006 (NEW — TaxiApp dead # button): Line 1607, data-url="#". Opens confirm dialog, shows toast "Abriendo...", never navigates. DEAD BUTTON.
+  · BUG-007 (NEW — Cabify false absence): FALSE POSITIVE in previous audits. Cabify DOES serve Santa Fe per official help center (help.cabify.com/hc/en-us/articles/115000996089: "Argentina... Santa Fe"). Instagram post confirms Santa Fe ordinance regulating Cabify. Code sets cabifyPrice:null + no deep link. Should be implemented.
+  · BUG-008 (NEW — shareRoute missing): Task 42 claimed shareRoute()+sheetShareBtn were verified working. Both are GONE from current file. Only shareApp() (generic) exists.
+- Etapa 6 — WEB RESEARCH (3 parallel z-ai web_search): Cabify Santa Fe=CONFIRMED available. TaxiApp scheme=UNKNOWN (no docs). DiDi deep link=NO official third-party docs.
+- Etapa 7 — DELIVERABLE: Full forensic report at audit-evidence/FINAL_EXTERNAL_ACTION_FORENSICS.md (11 sections: state correction, complete matrix with 13 fields per action, routing logic certification, BUG reverification, broken-only summary, deployment blockers, false positives, unknowns, HTTP summary, success criteria check, confidence score, deploy verdict).
+
+Stage Summary:
+- DEPLOY VERDICT: NO — BUG-001 (DiDi 404) is a critical blocker. Both local AND production broken.
+- FALSE POSITIVES corrected: BUG-003 (regex never existed), Cabify absence (Cabify IS in Santa Fe), shareRoute existence (missing).
+- NEW BUGS found: BUG-006 (TaxiApp dead # button), BUG-007 (Cabify missing despite availability), BUG-008 (shareRoute missing).
+- SUCCESS CRITERIA: 5/6 passed. 1 failure: 0 HTTP failures → 1 failure (DiDi 302→/404).
+- OVERALL CONFIDENCE: 0.80 (high for code/HTTP, zero for real-device behavior, medium for unknown schemes).
+- Required before deploy: Fix BUG-001 (platform-split DiDi + routing update for custom schemes) + HTTP verification. Estimated 15-20 min.
+- Recommended (not blocking): Fix BUG-006 (dead button), BUG-007 (Cabify), BUG-008 (shareRoute), BUG-005 (TaxiApp native).
+- Files: audit-evidence/FINAL_EXTERNAL_ACTION_FORENSICS.md (full report), audit-evidence/forensics-current-android.png (screenshot).
