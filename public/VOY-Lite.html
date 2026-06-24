@@ -802,13 +802,18 @@ var PROVIDERS={
   uber:{name:'Uber',available:true,color:'#111111',category:'app'},
   didi:{name:'DiDi',available:true,color:'#FF6B00',category:'app'},
   maxim:{name:'Maxim',available:true,color:'#7C3AED',category:'app'},
+  cabify:{name:'Cabify',available:true,color:'#00A99D',category:'app'},
   radiotaxi:{name:'Radiotaxi Santa Fe',available:true,color:'#F59E0B',category:'taxi'},
   taxiapp:{name:'TaxiApp',available:true,color:'#22C55E',category:'taxi'},
   remisreal:{name:'Remises Real',available:true,color:'#6B7280',category:'remis'}
 };
 var TAXI_COMPANIES=[
   {id:'radiotaxi',name:'Radiotaxi Santa Fe',whatsapp:'https://wa.link/n7u2e7',app:null,web:null,phone:null},
-  {id:'taxiapp',name:'TaxiApp',whatsapp:'https://wa.link/vavbcl',app:'@taxiapp_santafe',web:null,phone:null}
+  // FIX-003: app field set to null — the previous '@taxiapp_santafe' rendered a dead
+  // data-url="#" button that toasted but never navigated. No verified native deep link
+  // exists for TaxiApp (com.aniversario.pasajero). WhatsApp (wa.link/vavbcl) remains
+  // the single verified working contact path. Button hidden via the if(co.app) guard.
+  {id:'taxiapp',name:'TaxiApp',whatsapp:'https://wa.link/vavbcl',app:null,web:null,phone:null}
 ];
 var REMIS_COMPANIES=[
   {id:'remisreal',name:'Remises Real',whatsapp:'https://wa.link/rqov56',app:null,web:null,phone:null}
@@ -819,7 +824,11 @@ var FareRegistry={
   apps:{
     uber:{base:1000,km:500,min:65,minFare:3000,source:'Uber app estimate range',updated_at:'2025-12-01'},
     didi:{base:900,km:440,min:55,minFare:2500,source:'DiDi app estimate range',updated_at:'2025-12-01'},
-    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'}
+    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'},
+    // FIX-004: Cabify re-enabled — official help center (help.cabify.com/hc/es/articles/115000996089)
+    // confirms Cabify operates in Santa Fe. Fares are reference estimates (Mar del Plata
+    // tariff as proxy; Santa Fe-specific fares not publicly published). Marked as estimate range.
+    cabify:{base:1100,km:520,min:70,minFare:3300,source:'Cabify app estimate range (reference)',updated_at:'2025-12-01'}
   }
 };
 
@@ -2010,12 +2019,36 @@ function clearBusRoute(){
 function buildAppLink(pid){
   var origin=MC.getOrigin(),dest=MC.getDest();if(!origin||!dest)return '#';
   if(pid==='uber')return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+origin.lat+'&pickup[longitude]='+origin.lon+'&pickup[formatted_address]=Origen&dropoff[latitude]='+dest.lat+'&dropoff[longitude]='+dest.lon;
-  // UI-1: DiDi universal deep link — opens native app if installed (with prefilled
-  // pickup/dropoff coords), falls back to web booking if not. The old
-  // web.didiglobal.com/ar/passenger/ride/ URL was a web-app page that silently
-  // ignored the coord params → "coordenadas inconsistentes". The /passenger/deeplink
-  // endpoint is DiDi's documented universal link that reads pickup_lat/lng + dropoff_lat/lng.
-  if(pid==='didi')return 'https://www.didiglobal.com/passenger/deeplink?pickup_lat='+origin.lat+'&pickup_lng='+origin.lon+'&dropoff_lat='+dest.lat+'&dropoff_lng='+dest.lon;
+  // FIX-001: DiDi deep link — the old didiglobal.com/passenger/deeplink URL returned
+  // 302→/404 (didiglobal.com is DiDi's Chinese corporate site; /passenger/deeplink does
+  // not exist). Replaced with a platform-split verified strategy:
+  //   - Android: intent:// with scheme=didi + package=com.didiglobal.passenger + Play Store
+  //     fallback. Opens the installed DiDi app directly; falls back to Play Store if absent.
+  //   - iOS: App Store link (id1362398401, verified HTTP 200). If the app is installed,
+  //     the App Store shows an "Open" button; if not, "Get". This is the only iOS path
+  //     that is HTTP-verifiable (DiDi publishes no public Universal Link for third-party
+  //     use, and didi:// scheme has no safe fallback if the app is absent).
+  //   - Desktop: Play Store URL (verified HTTP 200).
+  // All three destinations are HTTP-verified 200 — no 404 possible.
+  if(pid==='didi'){
+    var didiPlayStore='https://play.google.com/store/apps/details?id=com.didiglobal.passenger';
+    var didiAppStore='https://apps.apple.com/ar/app/didi-viajes-comida-y-pagos/id1362398401';
+    var _didiUA=navigator.userAgent||'';
+    if(/Android/i.test(_didiUA))return 'intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url='+encodeURIComponent(didiPlayStore)+';end';
+    if(/iPad|iPhone|iPod/.test(_didiUA))return didiAppStore;
+    return didiPlayStore;
+  }
+  if(pid==='cabify'){
+    // FIX-004: Cabify deep link — Cabify is verified available in Santa Fe (official
+    // help center). Same platform-split strategy as DiDi: Android intent:// + Play Store
+    // fallback, iOS App Store, Desktop Play Store. All destinations HTTP-verified 200.
+    var cabifyPlayStore='https://play.google.com/store/apps/details?id=com.cabify.rider';
+    var cabifyAppStore='https://apps.apple.com/ar/app/cabify-viaja-seguro/id476087442';
+    var _cabUA=navigator.userAgent||'';
+    if(/Android/i.test(_cabUA))return 'intent://#Intent;scheme=cabify;package=com.cabify.rider;S.browser_fallback_url='+encodeURIComponent(cabifyPlayStore)+';end';
+    if(/iPad|iPhone|iPod/.test(_cabUA))return cabifyAppStore;
+    return cabifyPlayStore;
+  }
   if(pid==='maxim'){
     var isAndroid=/Android/i.test(navigator.userAgent);
     // UI-1: Maxim uses the `maxim://` scheme (NOT `taxsee://` — that was the parent

@@ -140,7 +140,7 @@
     var uberPrice = calcAppPrice(apps.uber, distKm, durCar);
     var didiPrice = calcAppPrice(apps.didi, distKm, durCar);
     var maximPrice = calcAppPrice(apps.maxim, distKm, durCar);
-    var cabifyPrice = calcAppPrice(apps.cabify, distKm, durCar); // null
+    var cabifyPrice = calcAppPrice(apps.cabify, distKm, durCar);
     var taxiPrice = estimateTaxi(distKm, fareRegistry.taxi, hour);
     var remisPrice = taxiPrice;
     var taxiappPrice = taxiPrice;
@@ -149,6 +149,7 @@
       uberTimeMin: Math.round(durCar * 1.00),
       didiTimeMin: Math.round(durCar * 1.03),
       maximTimeMin: Math.round(durCar * 1.05),
+      cabifyTimeMin: Math.round(durCar * 1.02),
       taxiTimeMin: Math.round(durCar * 1.10),
       remisTimeMin: Math.round(durCar * 1.08),
       taxiappTimeMin: Math.round(durCar * 1.07),
@@ -345,6 +346,7 @@
       { id: 'uber', name: 'Uber', price: autoResult.uberPrice, timeMin: autoResult.uberTimeMin },
       { id: 'didi', name: 'DiDi', price: autoResult.didiPrice, timeMin: autoResult.didiTimeMin },
       { id: 'maxim', name: 'Maxim', price: autoResult.maximPrice, timeMin: autoResult.maximTimeMin },
+      { id: 'cabify', name: 'Cabify', price: autoResult.cabifyPrice, timeMin: autoResult.cabifyTimeMin },
       { id: 'taxiapp', name: 'TaxiApp', price: autoResult.taxiappPrice, timeMin: autoResult.taxiappTimeMin },
       { id: 'taxi', name: 'Radiotaxi', price: autoResult.taxiPrice, timeMin: autoResult.taxiTimeMin },
       { id: 'remis', name: 'Remises Real', price: autoResult.remisPrice, timeMin: autoResult.remisTimeMin }
