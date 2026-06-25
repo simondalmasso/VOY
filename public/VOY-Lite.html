@@ -919,6 +919,63 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 }
 @keyframes spDotPulse{0%,100%{opacity:0.25;transform:scale(0.8)}50%{opacity:1;transform:scale(1.15)}}
 @media(prefers-reduced-motion:reduce){#splash .sp-logo{animation:none}#splash .sp-dot{animation:none;opacity:0.7}}
+
+/* ============================================================
+   V7.15_CRITICAL_HARDENING_OVERRIDE — Forced CSS Asset Purge
+   Kill Glass UI Final Pass: zero blur, zero transition, solid 0.95 black.
+   Target UI: .search-bar, .mode-pill, .sheet-wrap, .cat-panel, .dialog-overlay
+   + collateral: .sheet, .dialog, .chip, .origin-pill, .map-floating-chip, .search-dropdown
+   QA fail condition: any UI element with >5% transparency or blur = build fail.
+   Build hash: e9f7a2d (literal override, cache-bust verification).
+   ============================================================ */
+.search-bar,
+.mode-pill,
+.sheet-wrap,
+.sheet,
+.cat-panel,
+.dialog-overlay,
+.dialog,
+.chip,
+.origin-pill,
+.map-floating-chip,
+.search-dropdown{
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  box-shadow:none!important;
+  transition:none!important;
+  -webkit-transition:none!important;
+  background:rgba(0,0,0,0.95)!important;
+  border:2px solid #FFFFFF!important;
+}
+/* mode-pill.active stays inverse for max contrast (white bg + black text) */
+.mode-pill.active{
+  background:#FFFFFF!important;
+  color:#000000!important;
+  border:2px solid #FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  opacity:1!important;
+}
+/* chip-clear (red CTA variant) keeps red hue at 0.95 opacity */
+.chip.chip-clear{
+  background:rgba(255,59,48,0.95)!important;
+  border:2px solid #FFFFFF!important;
+}
+/* dark theme: same solid 0.95 black (no transparency tricks) */
+[data-theme="dark"] .search-bar,
+[data-theme="dark"] .mode-pill,
+[data-theme="dark"] .sheet,
+[data-theme="dark"] .chip,
+[data-theme="dark"] .dialog,
+[data-theme="dark"] .origin-pill,
+[data-theme="dark"] .map-floating-chip,
+[data-theme="dark"] .search-dropdown{
+  background:rgba(0,0,0,0.95)!important;
+}
+/* dialog-overlay scrim: 0.95 opaque black for max focus on modal */
+.dialog-overlay{
+  background:rgba(0,0,0,0.95)!important;
+}
 </style>
 </head>
 <body data-theme="light">
@@ -1041,7 +1098,7 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.14.0';
+window.VOY_VERSION='V7.15.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
