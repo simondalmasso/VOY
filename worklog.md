@@ -3645,3 +3645,36 @@ Stage Summary:
 - Production runtime: ONLY [MAP] timeout 10s console.error (false positive — map loads fine). 0 page errors, 0 network errors, full estimation flow works.
 - Black squares: root cause is V7.16 LEGIBILITY_CORE `background:#000000!important` on 11 selectors. Intentional design decision for legibility, but creates visual "black square" perception against the map. Reversible by switching to semi-transparent bg.
 - No code changes applied in this audit (user requested analysis only).
+
+---
+Task ID: V7.18.1_HOTFIX_2026-06-25
+Agent: Main (Surgical Patch Applier)
+Task: Apply V7.18.1 hotfix — remove CSS `contain:strict` regression on `#map` + add null-safety guard around `_map.getCanvas()` in initMap() + bump version to V7.18.1
+
+Work Log:
+- Read /home/z/my-project/worklog.md to review prior agent work (latest: FORENSIC_LOG_AUDIT_2026-06-25).
+- Read /home/z/my-project/public/VOY-Lite.html `#map` CSS block (lines 127-136) — confirmed `contain:strict` present (the CSS regression per patch RCA).
+- Read initMap() canvas-guard IIFE (lines 1651-1681) — found it already PARTIALLY null-safe (`_map.getCanvas&&_map.getCanvas()` + `if(!canvas)` guard + try/catch restore), but patch RCA required explicit `_map && typeof _map.getCanvas==='function'` guard.
+- Patch's `original_code` snapshots did NOT exactly match the live file (file had evolved: extra `opacity/filter`, dual `max-height:100vh;100dvh`, IIFE-wrapped canvas guard with try/catch). Applied patch INTENT surgically rather than blind string-replace:
+  * CSS: removed `contain:strict;` declaration (replaced with explanatory V7.18.1 HOTFIX comment). Kept `will-change:transform` (GPU accel preserved per RCA). Kept dual `max-height:100vh;max-height:100dvh` (progressive enhancement, already correct).
+  * JS: upgraded guard to `(_map && typeof _map.getCanvas==='function') ? _map.getCanvas() : null` (patch's stricter form) while PRESERVING the existing superior try/catch around the `webglcontextrestored` handler (strictly better than patch's corrected_code, which had no try/catch). Updated comment block to V7.18.1 HOTFIX explaining the blocking-TypeError RCA.
+  * Version: `window.VOY_VERSION='V7.18.0'` → `'V7.18.1'` (single occurrence at line 1268).
+- Verified no stray `contain:strict` (only inside explanatory comment line 132) and no `V7.18.0` references remain anywhere in the file.
+- Dev server confirmed alive on :3000; `/` rewrites to `/VOY-Lite.html` via middleware (page.tsx is a no-op per its inline comment).
+- Agent Browser verification (mobile 390x844, cache-bust `?_bust=v7181_hotfix`):
+  * Open `/` → wait 9s → **0 page errors, 0 console messages** (no `[MAP] timeout 10s`, no TypeError).
+  * Eval results: version="V7.18.1"; #map.checkVisibility()=true; #map dims=390x844; computed `contain`="none" (regression gone); `will-change`="transform" (GPU preserved); canvas backing store=390x844 (NOT 2399px); map_style_loaded=true; _map object exists.
+  * Splash: `#splash` element REMOVED from DOM → `_signalAppReady()` fired successfully (strongest app_ready signal; before hotfix the blocking TypeError prevented this). body dataset mapState="SEARCH_FOCUS".
+  * Golden path: filled "Buscar destino" input (`@e12`) with "terminal" → autocomplete dropdown rendered with 9 suggestions, 0 new errors.
+  * Screenshot saved: /tmp/voy_v7181_after_hotfix.png (123KB, consistent with full map+UI render at 390x844).
+
+Stage Summary:
+- ✅ CSS REGRESSION FIXED: `contain:strict` removed from `#map`. Computed style now `contain: none`. MapLibre's dynamic container-size calculation no longer isolated. Map renders at full 390x844 mobile viewport (no collapse).
+- ✅ JS REGRESSION FIXED: `_map.getCanvas()` now guarded by `(_map && typeof _map.getCanvas==='function') ? _map.getCanvas() : null`. Blocking TypeError path eliminated. Listeners attach only when canvas is ready; otherwise logs `[MAP] WebGL Canvas context guard bypassed...` warning and returns (no throw).
+- ✅ GPU ACCEL PRESERVED: `will-change:transform` retained on `#map` (computed value confirmed "transform").
+- ✅ CANVAS HARD CAP INTACT: backing store 390x844 on mobile (not 2399px — the original V7.18 cap still holds).
+- ✅ VERSION: V7.18.0 → V7.18.1 (single source of truth at window.VOY_VERSION).
+- ✅ APP BOOTS PAST SPLASH: `_signalAppReady()` executes, `#splash` removed from DOM within ~1s, body mapState="SEARCH_FOCUS".
+- ✅ GOLDEN PATH: destination search "terminal" → autocomplete dropdown (9 suggestions) renders with 0 errors.
+- 🔁 DEPLOY NOTE: `window.VOY_BUILD_HASH` still "__BUILD_HASH__" placeholder in dev (`scripts/inject-build-hash.mjs` runs in CI only). Production deploy via wrangler will inject real hash; `scripts/verify-production.sh` will assert `VOY_VERSION`===`/api/health` version.
+- 🔁 RE-AUDIT TRIGGERS: `#map` computed `contain`==="none"; canvas backingH ≤ viewport height on mobile; 0 TypeErrors in console during boot; `#splash` absent from DOM within ~1s of load.

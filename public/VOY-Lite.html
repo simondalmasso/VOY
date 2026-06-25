@@ -129,7 +129,10 @@ button{font-family:inherit;letter-spacing:inherit}
   max-height:100vh;max-height:100dvh; /* V7.18: hard cap — prevents GPU-killing 2399px canvas */
   opacity:1;filter:none;background:transparent!important;
   will-change:transform; /* V7.18: force GPU layer — browser won't discard canvas on memory pressure */
-  contain:strict; /* V7.18: isolate layout/paint — prevents canvas from inheriting inflated parent dims */
+  /* V7.18.1 HOTFIX: REMOVED `contain:strict` — it isolated the map subtree's layout/paint
+     from the rest of the document, which broke MapLibre GL's dynamic container-size
+     calculation on mobile devices, collapsing the drawing buffer to wrong/null dimensions
+     and freezing the map. GPU acceleration is preserved via `will-change:transform` above. */
 }
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
 .maplibregl-ctrl-attrib{display:none!important}
@@ -1262,7 +1265,7 @@ button{font-family:inherit!important}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.18.0';
+window.VOY_VERSION='V7.18.1';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -1648,14 +1651,20 @@ function initMap(){
     _map.on('load',function(){clearTimeout(_mapLoadTimeout);_mapStyleLoaded=true;_map.resize()});
     _mapLoadTimeout=setTimeout(function(){console.error('[MAP] timeout 10s')},10000);
     requestAnimationFrame(function(){requestAnimationFrame(function(){if(_map)_map.resize()})});
-    // V7.18: WebGL context loss recovery — the GPU can kill the canvas context
-    // when the backing store grows too large (e.g. 2399px canvas on mobile).
-    // preventDefault() signals the browser we'll handle restoration ourselves;
-    // on 'webglcontextrestored' we force a full repaint + resize so the map
-    // comes back instead of leaving a black rectangle.
+    // V7.18.1 HOTFIX: Safe WebGL context loss recovery — null-guard the canvas reference
+    // BEFORE attaching listeners. Earlier V7.18 called `_map.getCanvas()` unconditionally
+    // right after the constructor; if MapLibre's internal canvas wasn't ready on that clock
+    // cycle, getCanvas() returned null and `.addEventListener` threw a blocking TypeError
+    // that aborted the main thread before `_signalAppReady()` could fire — freezing the UI
+    // permanently on the splash screen. We now defensively verify BOTH `_map` AND that
+    // `getCanvas` is a function before invoking it.
+    // (Background: the GPU can kill the canvas context when the backing store grows too
+    // large, e.g. 2399px canvas on mobile. preventDefault() signals the browser we'll
+    // handle restoration ourselves; on 'webglcontextrestored' we force a full repaint +
+    // resize so the map comes back instead of leaving a black rectangle.)
     (function attachContextLossHandlers(){
-      var canvas=_map.getCanvas&&_map.getCanvas();
-      if(!canvas){console.warn('[MAP] no canvas — webglcontextlost handlers not attached');return}
+      var canvas=(_map && typeof _map.getCanvas==='function') ? _map.getCanvas() : null;
+      if(!canvas){console.warn('[MAP] WebGL Canvas context guard bypassed: canvas element not ready during initMap execution.');return}
       canvas.addEventListener('webglcontextlost',function(e){
         e.preventDefault(); // CRITICAL: without this the context is permanently lost
         console.warn('[MAP] WebGL context lost — waiting for restore event');
