@@ -2670,3 +2670,63 @@ Stage Summary:
 - ✅ Browser-verified 14/14 points. Zero console errors. Lint clean.
 - ⏳ Pending: commit + push (V7.3 + V7.4 + V7.5 batched into single deploy).
 - 🔁 RE-AUDIT TRIGGERS: user sees "Ahorro" tab at left with green dot when colectivo saves >50%; tapping tab shows Colectivo pill with "¡Ahorrá un X%!" badge; tapping pill shows bus routes; swipe still works across 4 tabs.
+
+---
+Task ID: V7_6_PREDICTIVE_TREND_ENGINE
+Agent: Main (GLM5.2 — TrendEngine + HistoryDB blueprint implementation)
+Task: Implement V7.6 "Predictive_Trend_Engine" — HistoryDB (IndexedDB async, 30-day retention) + TrendEngine (Simple_Moving_Average_Deviation, 3h window, STABLE/RISING/FALLING states) + PriceTrendBadge UI next to Uber/DiDi prices. QA: IndexedDB async (no main-thread block), badge only if ≥3 datapoints, responsive layout intact.
+
+Work Log:
+- Read prior worklog (V7_5_AHORRO_INTELIGENTE). Confirmed V7.5 deployed to production (build_hash=0751891). origin/main in sync. Dev server running on port 3000.
+- Verified VOY stack (vanilla JS PWA, no React). Confirmed VoyAhorroService + VoyMapContext are inline in VOY-Lite.html — decided to keep HistoryDB + TrendEngine inline too (same pattern, no new script tags).
+- Read renderSheet structure (lines 1714-2012): hero price at line 1921 `<div class="hero-price">`, alt prices at line 1935 `<span class="ah-meta">`. Identified insertion points for data-trend-provider attributes.
+- Read _vaCluster (line 1070): GRID=0.0072 (~800m). Reused same grid for routeKey zone clustering (consistency with analytics layer).
+- Designed V7.6 architecture:
+  * HistoryDB (IndexedDB wrapper): DB=voy-history v1, store=estimates {id(auto), timestamp, routeKey, origin_zone, destination_zone, price, mode}, indexes on routeKey/mode/timestamp. Methods: open()/add()/queryByRouteSince()/pruneOlderThan(). All async (Promises). RETENTION_DAYS=30.
+  * TrendEngine: WINDOW_MS=3h, MIN_DATAPOINTS=3 (QA gate), THRESHOLD_UP=1.05, THRESHOLD_DOWN=0.95. analyze()=query→filter by mode→SMA→ratio→state. record()=add entry (with 60s dedupe per route+provider). processEstimate()=sequential analyze→record per provider, generation counter for race safety. getTrend()=sync cache read.
+  * PriceTrendBadge: CSS .price-trend-badge (inline-flex, 14px icon, margin-left:4px, scale-in animation). renderTrendBadges()=idempotent mount on [data-trend-provider] elements.
+  * Hook in renderSheet: fire-and-forget VoyTrendEngine.processEstimate(autoEst, origin, dest) after VoyAhorroService.recompute(). Badges mount async via renderTrendBadges() when chain completes.
+- Applied 6 atomic edits to public/VOY-Lite.html via MultiEdit:
+  1. Added 3 SVG icons: trendingUp, trendingDown, minus (Lucide paths converted to path-only format)
+  2. V7.6 CSS block (~20 lines): .price-trend-badge, .trending-up (#FF5252), .trending-down (#00E676), .minus (#BDBDBD), price-trend-in animation, prefers-reduced-motion override
+  3. Hero price HTML: added data-trend-provider="{hero.id}" attribute
+  4. Alt meta HTML: wrapped price in inner <span data-trend-provider="{p.id}"> for clean badge placement (badge mounts right after price, before " · time")
+  5. renderSheet hook: VoyTrendEngine.processEstimate(autoEst, origin, dest) after VoyAhorroService.recompute block
+  6. Appended VoyHistoryDB IIFE + VoyTrendEngine IIFE + renderTrendBadges function before </script>
+- File grew 2752 → 2990 lines (+238). bun run lint → clean (0 errors). Dev server stable.
+- Agent Browser self-verification (viewport 390x844, 3 test scenarios, 15 verification points):
+  * BOOT CHECK:
+    1. ✅ Page loads, title="VOY — Movilidad Santa Fe", ZERO console errors
+    2. ✅ VoyHistoryDB defined with API: [RETENTION_DAYS, open, add, queryByRouteSince, pruneOlderThan]
+    3. ✅ VoyTrendEngine defined with API: [WINDOW_MS, MIN_DATAPOINTS, THRESHOLD_UP, THRESHOLD_DOWN, routeKey, analyze, record, processEstimate, getTrend]
+    4. ✅ indexedDB supported, WINDOW_MS=10800000 (3h), MIN_DATAPOINTS=3
+    5. ✅ 3 SVG icons render: trendingUp (M22 7L13.5...), trendingDown (M22 17L13.5...), minus (M5 12h14)
+  * TEST 1 (QA test 2 — gate ≥3 datapoints):
+    6. ✅ Cleared IndexedDB, ran estimate (Centro→Terminal): 3 providers (Maxim 2564, DiDi 2701, Uber 3065)
+    7. ✅ 2 data-trend-provider elements rendered (hero DiDi + alt Uber; Maxim filtered by isMaximSupported)
+    8. ✅ 0 badges rendered (gate not met — only 1 datapoint from current estimate)
+    9. ✅ Trend cache all null (analyze returned null for all providers)
+  * TEST 2 (RISING + STABLE states):
+    10. ✅ Inserted 3 historical DiDi entries (2200-2220) + 3 Uber entries (2900-2910) into IndexedDB
+    11. ✅ Re-ran estimate → 2 badges rendered (hero DiDi trending-up, alt Uber minus)
+    12. ✅ DiDi: state=RISING, SMA=2333, ratio=1.16 (>1.05 threshold), badge class=trending-up, aria-label="Tendencia rising (vs promedio 3h, 4 muestras)"
+    13. ✅ Uber: state=STABLE, SMA=2945, ratio=1.04 (0.95-1.05 range), badge class=minus
+  * TEST 3 (FALLING state + QA tests 1 & 3):
+    14. ✅ Inserted 3 HIGH-price DiDi entries (3500-3600) → DiDi: state=FALLING, SMA=2948, ratio=0.92 (<0.95 threshold), badge class=trending-down, color=rgb(0,230,118)=#00E676
+    15. ✅ Responsive: viewport 390x844, sheetWidth=358, heroPriceWidth=176, heroPriceOverflow=OK (no horizontal scroll), badge=14x14px inline-flex vertical-align middle
+    16. ✅ QA test 1 (async): processEstimate returns Promise, analyze returns Promise — IndexedDB operations never block main thread
+    17. ✅ V7.4/V7.5 regression: body[data-map-state]=SEARCH_FOCUS, categoryWrapper.show=true — no breakage
+  * FINAL: zero console errors across all 3 test scenarios. Screenshot: /tmp/v76-trend-badges.png
+
+Stage Summary:
+- ✅ HistoryDB (Step 1): native IndexedDB wrapper, async (Promises), schema {timestamp, routeKey, origin_zone, destination_zone, price, mode}, 30-day retention via pruneOlderThan(), 3 indexes (routeKey/mode/timestamp) for efficient queries.
+- ✅ TrendEngine.js (Step 2): Simple_Moving_Average_Deviation heuristic, calculation=current_price/SMA_3h, output_states STABLE(0.95-1.05)/RISING(>1.05)/FALLING(<0.95). Subscribes to MC.getEstimations() flow via processEstimate() hook in renderSheet. Generation counter prevents race conditions on rapid re-renders.
+- ✅ PriceTrendBadge (Step 3): injected in renderSheet next to hero price + alt prices via data-trend-provider attr. 3 visual states per blueprint (RISING #FF5252 trending-up, FALLING #00E676 trending-down, STABLE #BDBDBD minus). Inline-flex 14px, no layout impact.
+- ✅ QA test 1: IndexedDB async — all operations (open/add/query/prune) wrapped in Promises, processEstimate + analyze return Promises. Main thread never blocks.
+- ✅ QA test 2: Badge gate — analyze() returns null if <3 datapoints, renderTrendBadges() skips mounting. Verified: 0 badges with 1 datapoint, 2 badges with ≥3 datapoints.
+- ✅ QA test 3: Responsive intact — badge 14x14 inline-flex, heroPriceOverflow=OK, sheetWidth=358 fits 390 viewport. No layout breakage.
+- ✅ All 3 trend states verified (RISING ratio 1.16, STABLE ratio 1.04, FALLING ratio 0.92) with correct colors and icons.
+- ✅ V7.4/V7.5 regression: no breakage (map state, category wrapper, ahorro badges all intact).
+- ✅ Browser-verified 17/17 points. Zero console errors. Lint clean.
+- ⏳ Pending: commit + push (V7.6 batched).
+- 🔁 RE-AUDIT TRIGGERS: after 3+ trips on same route, trend badges appear next to Uber/DiDi prices showing if price is rising (red ↗), falling (green ↘), or stable (gray —); badges fade in async after estimate completes (no UI freeze).

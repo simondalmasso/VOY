@@ -699,6 +699,26 @@ button{cursor:pointer}
   .ahorro-pill-badge{animation:none}
 }
 
+/* === V7.6 PREDICTIVE TREND ENGINE ============================================================
+   Blueprint: PriceTrendBadge — mounts a trend icon next to ride-hailing prices.
+   States: RISING (#FF5252, trending-up) / FALLING (#00E676, trending-down) / STABLE (#BDBDBD, minus).
+   Placement: inside .hero-price and .ah-meta (inline, no layout impact).
+   Gate: badge only renders if ≥3 historical datapoints (TrendEngine returns null otherwise). */
+.price-trend-badge{
+  display:inline-flex;align-items:center;vertical-align:middle;
+  margin-left:4px;flex-shrink:0;
+  transition:opacity 200ms ease-out;
+  animation:price-trend-in 250ms ease-out;
+}
+.price-trend-badge svg{stroke-width:2.5}
+.price-trend-badge.trending-up{color:#FF5252}
+.price-trend-badge.trending-down{color:#00E676}
+.price-trend-badge.minus{color:#BDBDBD;opacity:0.7}
+@keyframes price-trend-in{from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){
+  .price-trend-badge{animation:none}
+}
+
 /* === V7.4 MAP STATE MANAGER (3-state machine + floating chip) ===========================
    Blueprint: MapStateManager — SEARCH_FOCUS / ROUTE_PREVIEW / FULL_MAP.
    body[data-map-state] is the single source of truth. CSS rules below handle
@@ -1034,6 +1054,9 @@ function svg(name,size){
     route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 6h6a4 4 0 0 1 0 8H10a4 4 0 0 0 0 8h6"/>',
     mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
     savings:'<circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15 9.5c0-1.4-1.3-2.3-3-2.3s-3 .9-3 2.3 1.3 2 3 2 3 .6 3 2-1.3 2.3-3 2.3-3-.9-3-2.3"/>',
+    trendingUp:'<path d="M22 7L13.5 15.5L8.5 10.5L2 17"/><path d="M16 7h6v6"/>',
+    trendingDown:'<path d="M22 17L13.5 8.5L8.5 13.5L2 7"/><path d="M16 17h6v-6"/>',
+    minus:'<path d="M5 12h14"/>',
     coffee:'<path d="M5 9h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9Z"/><path d="M16 10h2.5a2 2 0 0 1 0 4H16"/><path d="M8 2v3M12 2v3"/>'
   };
   return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[name]||'')+'</svg>';
@@ -1778,6 +1801,11 @@ function renderSheet(){
     }
     VoyAhorroService.recompute(_colP,_rhP);
   }
+  // V7.6 Predictive_Trend_Engine: async record + analyze price trends for ride-hailing providers.
+  // Fire-and-forget — badges mount via renderTrendBadges() when async completes (no main-thread block).
+  if(window.VoyTrendEngine){
+    VoyTrendEngine.processEstimate(autoEst, origin, dest);
+  }
   if(!autoEst){
     container.innerHTML='<div class="sheet-empty"><div class="se-icon">'+svg('car',40)+'</div>Sin tarifas de auto disponibles</div>';
     clearBusRoute();showModeSelector(false);return;
@@ -1918,7 +1946,7 @@ function renderSheet(){
     h+='<div class="hero-meta">'+formatMin(hero.timeMin)+' · '+distKm.toFixed(1)+' km'+_confBadge+(surgeLabel?' <span class="conf-badge mid">'+escapeHtml(surgeLabel)+'</span>':'')+'</div>';
     h+='</div>';
     h+='<div class="hero-price-block">';
-    h+='<div class="hero-price">'+formatPrice(hero.price)+'</div>';
+    h+='<div class="hero-price" data-trend-provider="'+escapeAttr(hero.id)+'">'+formatPrice(hero.price)+'</div>';
     h+='<div class="hero-range">'+formatPrice(fareRange.low)+' – '+formatPrice(fareRange.high)+'</div>';
     h+='</div>';
     h+='</div>';
@@ -1932,7 +1960,7 @@ function renderSheet(){
         h+='<button class="acc-head" style="width:100%" data-action="'+p.id+'" data-url="'+p.url+'" data-name="'+escapeAttr(p.name)+'">';
         h+='<span class="ah-ic" style="color:'+(PROVIDERS[p.id]?PROVIDERS[p.id].color:'#666')+'">'+svg('car',18)+'</span>';
         h+='<span class="ah-title">'+escapeHtml(p.name)+'</span>';
-        h+='<span class="ah-meta">'+formatPrice(p.price)+' · '+formatMin(p.timeMin)+'</span>';
+        h+='<span class="ah-meta"><span data-trend-provider="'+escapeAttr(p.id)+'">'+formatPrice(p.price)+'</span> · '+formatMin(p.timeMin)+'</span>';
         h+='<span class="ah-chev">'+svg('arrow',16)+'</span>';
         h+='</button>';
       });
@@ -2744,6 +2772,216 @@ function renderAhorroBadges(){
       if(!badge){badge=document.createElement('span');badge.className='ahorro-pill-badge';pill.appendChild(badge)}
       badge.textContent=txt;
     }else if(badge){badge.parentNode.removeChild(badge)}
+  }
+}
+
+// ===================== V7.6 PREDICTIVE TREND ENGINE ============================================
+// Blueprint: TrendEngine + HistoryDB — local historical estimates + Simple_Moving_Average_Deviation.
+//   storage: IndexedDB (voy-history / estimates store), schema {timestamp, routeKey, origin_zone,
+//            destination_zone, price, mode}, retention 30 days, async (no main-thread block).
+//   logic:   heuristic = Simple_Moving_Average_Deviation
+//            calculation = current_price / moving_average_3_hours
+//            output_states = STABLE (0.95≤ratio≤1.05) / RISING (ratio>1.05) / FALLING (ratio<0.95)
+//   gate:    badge only renders if ≥3 historical datapoints for that route+provider in 3h window.
+//   ui:      PriceTrendBadge mounts inline next to hero/alt prices (data-trend-provider attr).
+window.VoyHistoryDB=(function(){
+  var DB_NAME='voy-history';
+  var DB_VERSION=1;
+  var STORE='estimates';
+  var RETENTION_DAYS=30;
+  var _dbPromise=null;
+  function open(){
+    if(_dbPromise)return _dbPromise;
+    _dbPromise=new Promise(function(resolve,reject){
+      if(!window.indexedDB){reject(new Error('IndexedDB not supported'));return}
+      try{
+        var req=indexedDB.open(DB_NAME,DB_VERSION);
+        req.onupgradeneeded=function(e){
+          var db=e.target.result;
+          if(!db.objectStoreNames.contains(STORE)){
+            var store=db.createObjectStore(STORE,{keyPath:'id',autoIncrement:true});
+            store.createIndex('routeKey','routeKey',{unique:false});
+            store.createIndex('mode','mode',{unique:false});
+            store.createIndex('timestamp','timestamp',{unique:false});
+          }
+        };
+        req.onsuccess=function(e){resolve(e.target.result)};
+        req.onerror=function(e){reject(e.target.error)};
+      }catch(err){reject(err)}
+    });
+    return _dbPromise;
+  }
+  function add(entry){
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readwrite');
+          var store=tx.objectStore(STORE);
+          var req=store.add(entry);
+          req.onsuccess=function(){resolve(req.result)};
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    });
+  }
+  function queryByRouteSince(routeKeyVal,sinceMs){
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readonly');
+          var store=tx.objectStore(STORE);
+          var idx=store.index('routeKey');
+          var results=[];
+          var req=idx.openCursor(IDBKeyRange.only(routeKeyVal));
+          req.onsuccess=function(e){
+            var cursor=e.target.result;
+            if(cursor){
+              if(cursor.value.timestamp>=sinceMs)results.push(cursor.value);
+              cursor.continue();
+            }else{resolve(results)}
+          };
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    });
+  }
+  function pruneOlderThan(days){
+    var cutoff=Date.now()-(days*24*60*60*1000);
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readwrite');
+          var store=tx.objectStore(STORE);
+          var idx=store.index('timestamp');
+          var count=0;
+          var req=idx.openCursor(IDBKeyRange.upperBound(cutoff));
+          req.onsuccess=function(e){
+            var cursor=e.target.result;
+            if(cursor){cursor.delete();count++;cursor.continue()}
+            else{resolve(count)}
+          };
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    });
+  }
+  return {RETENTION_DAYS:RETENTION_DAYS,open:open,add:add,queryByRouteSince:queryByRouteSince,pruneOlderThan:pruneOlderThan};
+})();
+
+window.VoyTrendEngine=(function(){
+  var WINDOW_MS=3*60*60*1000; // 3 hours (blueprint: moving_average_3_hours)
+  var MIN_DATAPOINTS=3; // QA test 2: badge only if ≥3 historical datapoints
+  var THRESHOLD_UP=1.05; // >5% above SMA → RISING
+  var THRESHOLD_DOWN=0.95; // <5% below SMA → FALLING
+  var RECORD_DEDUPE_MS=60000; // skip record if same route+provider recorded <60s ago
+  var _cache={}; // providerId → {state, sma, ratio, datapoints, routeKey}
+  var _lastRecordTs={}; // routeKey|providerId → timestamp (dedupe)
+  var _gen=0; // generation counter — only latest processEstimate renders badges
+  function _zoneKey(lat,lon){
+    var GRID=0.0072; // ~800m, matches _VA_GRID (coarse geo cluster)
+    return (Math.round(lat/GRID))+'_'+(Math.round(lon/GRID));
+  }
+  function routeKey(origin,dest){
+    if(!origin||!dest||origin.lat==null||dest.lat==null)return null;
+    return _zoneKey(origin.lat,origin.lon)+'>'+_zoneKey(dest.lat,dest.lon);
+  }
+  function analyze(routeKeyVal,providerId,currentPrice){
+    if(!routeKeyVal||!providerId||!currentPrice||currentPrice<=0)return Promise.resolve(null);
+    var sinceMs=Date.now()-WINDOW_MS;
+    return VoyHistoryDB.queryByRouteSince(routeKeyVal,sinceMs).then(function(entries){
+      var filtered=[];
+      for(var i=0;i<entries.length;i++){
+        if(entries[i].mode===providerId)filtered.push(entries[i]);
+      }
+      if(filtered.length<MIN_DATAPOINTS)return null; // gate: insufficient historical data
+      var sum=0;
+      for(var j=0;j<filtered.length;j++)sum+=filtered[j].price;
+      var sma=sum/filtered.length;
+      var ratio=currentPrice/sma;
+      var state=ratio>THRESHOLD_UP?'RISING':ratio<THRESHOLD_DOWN?'FALLING':'STABLE';
+      return {state:state,sma:Math.round(sma),ratio:Math.round(ratio*100)/100,datapoints:filtered.length,routeKey:routeKeyVal};
+    }).catch(function(){return null});
+  }
+  function record(routeKeyVal,origin,dest,providerId,price){
+    if(!routeKeyVal||!providerId||!price||price<=0)return Promise.resolve();
+    var dedupeKey=routeKeyVal+'|'+providerId;
+    var now=Date.now();
+    if(_lastRecordTs[dedupeKey]&&(now-_lastRecordTs[dedupeKey])<RECORD_DEDUPE_MS)return Promise.resolve();
+    _lastRecordTs[dedupeKey]=now;
+    var entry={
+      timestamp:now,
+      routeKey:routeKeyVal,
+      origin_zone:_zoneKey(origin.lat,origin.lon),
+      destination_zone:_zoneKey(dest.lat,dest.lon),
+      price:price,
+      mode:providerId
+    };
+    return VoyHistoryDB.add(entry).catch(function(){});
+  }
+  function processEstimate(autoEst,origin,dest){
+    if(!autoEst||!origin||!dest||!autoEst.rankedProviders)return Promise.resolve();
+    var rk=routeKey(origin,dest);
+    if(!rk)return Promise.resolve();
+    var myGen=++_gen;
+    _cache={}; // clear stale trends from previous route (prevents wrong-route badge races)
+    var providers=[];
+    for(var i=0;i<autoEst.rankedProviders.length;i++){
+      var p=autoEst.rankedProviders[i];
+      if(p&&(p.id==='uber'||p.id==='didi'||p.id==='maxim')&&p.price>0){
+        providers.push({id:p.id,price:p.price});
+      }
+    }
+    if(!providers.length)return Promise.resolve();
+    // Sequential: analyze (read historical) → record (write current) per provider.
+    // Avoids write-before-read race on same route+provider.
+    var chain=Promise.resolve();
+    providers.forEach(function(pr){
+      chain=chain.then(function(){return analyze(rk,pr.id,pr.price)})
+        .then(function(trend){_cache[pr.id]=trend})
+        .then(function(){return record(rk,origin,dest,pr.id,pr.price)});
+    });
+    return chain.then(function(){
+      if(myGen===_gen){renderTrendBadges()} // only latest generation renders
+      // Opportunistic prune (fire-and-forget, 1/50 calls)
+      if(Math.random()<0.02){VoyHistoryDB.pruneOlderThan(VoyHistoryDB.RETENTION_DAYS).catch(function(){})}
+    });
+  }
+  function getTrend(providerId){return _cache[providerId]||null}
+  return {
+    WINDOW_MS:WINDOW_MS,MIN_DATAPOINTS:MIN_DATAPOINTS,THRESHOLD_UP:THRESHOLD_UP,THRESHOLD_DOWN:THRESHOLD_DOWN,
+    routeKey:routeKey,analyze:analyze,record:record,processEstimate:processEstimate,getTrend:getTrend
+  };
+})();
+
+// V7.6 PriceTrendBadge renderer — mounts trend icon next to every element with [data-trend-provider].
+// Idempotent: clears stale badges first, then mounts fresh based on VoyTrendEngine cache.
+// No-op if cache empty (badge never appears until ≥3 datapoints accumulated → analyze returns null).
+function renderTrendBadges(){
+  if(!window.VoyTrendEngine)return;
+  var els=document.querySelectorAll('[data-trend-provider]');
+  for(var i=0;i<els.length;i++){
+    var el=els[i];
+    var pid=el.getAttribute('data-trend-provider');
+    var trend=VoyTrendEngine.getTrend(pid);
+    var existing=el.querySelector('.price-trend-badge');
+    if(!trend){
+      if(existing)existing.parentNode.removeChild(existing);
+      continue;
+    }
+    var icon='minus',cls='minus';
+    if(trend.state==='RISING'){icon='trendingUp';cls='trending-up'}
+    else if(trend.state==='FALLING'){icon='trendingDown';cls='trending-down'}
+    if(existing){
+      existing.className='price-trend-badge '+cls;
+      existing.innerHTML=svg(icon,14);
+    }else{
+      var b=document.createElement('span');
+      b.className='price-trend-badge '+cls;
+      b.innerHTML=svg(icon,14);
+      b.setAttribute('aria-label','Tendencia '+trend.state.toLowerCase()+' (vs promedio 3h, '+trend.datapoints+' muestras)');
+      b.setAttribute('title','Tendencia: '+trend.state.toLowerCase()+' · promedio 3h: $'+trend.sma+' · ratio '+trend.ratio);
+      el.appendChild(b);
+    }
   }
 }
 </script>
