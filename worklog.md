@@ -2853,3 +2853,63 @@ Stage Summary:
 - ✅ Browser-verified 18/18 points. Zero console errors. Lint clean.
 - ⏳ Pending: commit + push V7.8 + verify production deployment.
 - 🔁 RE-AUDIT TRIGGERS: app loads from 3 external core modules (ahorro/trend/telemetry); offline → amber "Sin conexión" chip appears + search input dims; map tiles cache for offline rendering; konami code opens debug panel (foot="konami · V7.8"); SW cache bumped to voy-v7-8.
+
+---
+Task ID: V7_9_CRITICAL_UI_FIX_LAYOUT_RECOVERY
+Agent: Main (GLM5.2 — UI/UX Rationalization & Layout Recovery)
+Task: P0 CRITICAL_UI_FIX — (1) Eliminar background opaco del contenedor de búsqueda que bloquea el mapa, (2) Glassmorphism ligero (blur+rgba), (3) #map z-index:1 + pointer-events liberation para interacción nativa, (4) Ahorro como pestaña default, (5) Collapsible search en ROUTE_PREVIEW.
+
+Work Log:
+- Read prior worklog (V7_8_MODULAR_REFACTOR_AND_OFFLINE_PWA). Confirmed V7.8 complete + dev server running on port 3000.
+- Agent Browser diagnostic (viewport 390x844): VLM analysis of /tmp/voy-current-state.png confirmed map IS rendering (Santa Fe streets visible) but search bar opaque black (#0F0F0F), mode pills opaque white, bottom sheet opaque white — all blocking map visually. Root cause of non-interactivity: `.app` (z-2, pointer-events:auto) + transparent `.stage` child sit ABOVE `#map` (z-0) — stage intercepts ALL map pan/zoom gestures in center area. elementsFromPoint at center showed `.stage` + `.app` in stack BEFORE canvas.
+- Mapped 3 phases of work: (1) layout liberation + glassmorphism, (2) Ahorro default tab + auto-select mode on tab switch, (3) collapsible search bar in ROUTE_PREVIEW.
+- Phase 1 — Applied 11 CSS edits via MultiEdit to VOY-Lite.html:
+  * `#map` z-index: 0→1 (above body bg, below .app z-2)
+  * `.app` pointer-events: none (let map gestures pass through transparent gaps)
+  * `.app>.topbar,.origin-pill,.memory-row,.mode-selector,.category-wrapper,.sheet-wrap` pointer-events: auto (re-enable interactive children)
+  * `.stage` pointer-events: none (explicit — spacer never blocks)
+  * `.search-bar` background: var(--fi-bg)#0F0F0F → rgba(0,0,0,0.45) + backdrop-filter:blur(12px) saturate(1.2) — glassmorphism dark pill
+  * `.search-dropdown` background: var(--fi-bg) → rgba(0,0,0,0.55) + blur(14px) — glass dropdown
+  * `.origin-pill` background: var(--surface) → rgba(0,0,0,0.4) + blur(10px) — dark glass
+  * `.chip` background: var(--surface) → rgba(255,255,255,0.6) + blur(8px); [data-theme="dark"] .chip → rgba(40,40,40,0.6)
+  * `.mode-pill` background: var(--surface) → rgba(255,255,255,0.55) + blur(8px); [data-theme="dark"] → rgba(40,40,40,0.55); .active stays solid #000/#fff (backdrop-filter:none)
+  * `.sheet` background: var(--surface) → rgba(255,255,255,0.82) + blur(14px) saturate(1.1); [data-theme="dark"] → rgba(20,20,20,0.82) — 82% opacity keeps readability while map shows through
+  * `.chip-clear` + backdrop-filter added; dark override
+- Phase 2 — Applied 5 JS edits via MultiEdit:
+  * `var _activeMode='car'` → `'bus'` (Ahorro tab's mode is bus)
+  * `var _activeGroup=1` → `0` (Ahorro is group 0, now default)
+  * `setCategoryGroup()`: added auto-select first mode if current mode not in new group (smoother tab-switch UX — user sees relevant content immediately). Checks `g.modes.indexOf(_activeMode)>=0`; only calls `setMode(g.modes[0])` when mode mismatch. setMode() calls renderSheet() so sheet updates on tab switch.
+  * `renderSheet` guard: `if(!autoEst)` → `if(!autoEst&&_activeMode!=='bus'&&_activeMode!=='bike')` — bus/bike blocks now render even when ride-hailing (autoEst) is unavailable. Fixes latent bug: Ahorro default would show "Sin tarifas de auto" if no Uber/Didi, even when busEst available.
+  * `renderSheet` emit guard: `if(window.VoyEventBus)` → `if(autoEst&&window.VoyEventBus)` — prevents TypeError when autoEst is null (was caught by try/catch but wasteful).
+- Phase 3 — Added 4 CSS rules for ROUTE_PREVIEW collapse (after existing ROUTE_PREVIEW rules):
+  * `body[data-map-state="ROUTE_PREVIEW"] .search-bar` height: 40px (from 48px) — compact pill
+  * `.sb-btn.sb-sec, .sb-btn.sb-mic` display: none — hide map-pick/locate/mic buttons
+  * `#destInput` font-weight: bold — dest name stands out
+  * `.sb-icon` color: var(--primary) — blue search icon indicates "tap to edit"
+  * Re-expansion: tapping input fires onSearchFocus() → VoyMapContext.setState('SEARCH_FOCUS') → CSS transitions back to full 48px bar with all buttons visible.
+- bun run lint → clean (0 errors, 0 warnings).
+- Agent Browser self-verification (viewport 390x844, 12 verification points):
+  1. ✅ Map z-index: 1 (from 0). App pointer-events: none. Stage pointer-events: none.
+  2. ✅ elementsFromPoint at center (fy=0.12, 0.45): stack goes directly canvas→#map→body — NO .app/.stage intercepting. Map gestures now reach maplibre canvas.
+  3. ✅ Search bar: bg=rgba(0,0,0,0.45), backdrop-filter=blur(12px), height=48px, pointer-events=auto. Glassmorphism confirmed.
+  4. ✅ Sheet: bg=rgba(255,255,255,0.82), backdrop-filter=blur(14px). Map visible through panel.
+  5. ✅ Map interactive: drag test — center moved from [-60.7089,-31.6269] to [-60.7135,-31.6307]. Pan/zoom WORKS (was blocked before).
+  6. ✅ Ahorro tab active by default (textContent="Ahorro", _activeGroup=0, _activeMode='bus'). Bus pills active in both Ahorro + Público panels.
+  7. ✅ Tab switch Ahorro→Privados: auto-selected 'car' (first mode in group_private). _activeGroup=1, _activeMode='car'.
+  8. ✅ Tab switch Privados→Activos: auto-selected 'walk'. _activeGroup=2, _activeMode='walk'.
+  9. ✅ Tab switch Activos→Ahorro: auto-selected 'bus'. _activeGroup=0, _activeMode='bus'. Round-trip works.
+  10. ✅ Collapsible search: typed "Plaza San Martín" → selected result → state=ROUTE_PREVIEW, search-bar height=40px (collapsed from 48px), secondary buttons display=none, mic display=none, input font-weight=600 (bold), input value="Plaza San Martín".
+  11. ✅ Re-expansion: tapped input → state=SEARCH_FOCUS, height=48px (expanded), mic display=flex, font-weight=500 (normal). Full bar restored.
+  12. ✅ Zero console errors. Zero page errors. Footer sticky (bottom=844=viewportH).
+- VLM cross-verification (3 screenshots):
+  * /tmp/voy-current-state.png (before): "search bar opaque black, buttons opaque white, bottom card opaque — all block the map"
+  * /tmp/v79-glass.png (after glass): "translucent/glassmorphism design — map details visible through them. Active tab: Ahorro"
+  * /tmp/v79-final.png (final): "map is the main background, search bar and buttons are translucent, Ahorro tab is active, streets visible through UI panels"
+
+Stage Summary:
+- ✅ Phase 1 (Layout Liberation + Glassmorphism): #map z-index 0→1. .app pointer-events:none (transparent gaps let map gestures through). .stage pointer-events:none (spacer never blocks). 7 elements got glassmorphism: search-bar (rgba(0,0,0,0.45)+blur12), search-dropdown (rgba(0,0,0,0.55)+blur14), origin-pill (rgba(0,0,0,0.4)+blur10), chip (rgba(255,255,255,0.6)+blur8, dark override), mode-pill (rgba(255,255,255,0.55)+blur8, dark override, .active solid), sheet (rgba(255,255,255,0.82)+blur14, dark override). No patch styles — classes redesigned.
+- ✅ Phase 2 (Ahorro Default + Auto-select): _activeGroup 1→0 (Ahorro), _activeMode 'car'→'bus'. setCategoryGroup auto-selects first mode when current mode not in new group (bus→car on Privados, car→walk on Activos, walk→bus on Ahorro). renderSheet guard fixed: bus/bike render without autoEst (latent bug fixed — Ahorro default would've shown "Sin tarifas de auto" without this).
+- ✅ Phase 3 (Collapsible Search): ROUTE_PREVIEW collapses search-bar to 40px compact pill (secondary buttons + mic hidden, input bold, icon blue). Tap input → SEARCH_FOCUS → full 48px bar re-expands. Maximizes map area after destination selection.
+- ✅ Map is now the PROTAGONIST: visible + interactive (drag verified). Glassmorphism panels float over it without blocking.
+- ✅ Browser-verified 12/12 points. Zero console errors. Lint clean.
+- 🔁 RE-AUDIT TRIGGERS: map drag/zoom works in center area (was blocked); search bar is translucent dark glass (was opaque #0F0F0F); "Ahorro" tab is default on load (was "Privados"); selecting a destination collapses the search bar to a compact pill (tap to re-expand); switching tabs auto-selects the first mode in that group.

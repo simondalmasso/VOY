@@ -123,9 +123,12 @@ body{
 button{font-family:inherit;letter-spacing:inherit}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
 
-/* === AMBIENT MAP (z-0) — full-bleed, opacity 1, native gestures === */
+/* === AMBIENT MAP (z-1) — full-bleed, opacity 1, native gestures ================
+   V7.9 UI_FIX: z-index 0→1 so map sits above body background but below app(2).
+   .app gets pointer-events:none so map gestures pass through transparent gaps;
+   interactive children re-enable pointer-events:auto. ============================ */
 #map{
-  position:fixed;inset:0;z-index:0;width:100%;height:100%;
+  position:fixed;inset:0;z-index:1;width:100%;height:100%;
   opacity:1;filter:none;background:var(--bg3);
 }
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
@@ -134,8 +137,9 @@ button{font-family:inherit;letter-spacing:inherit}
 /* === TOP SCRIM (z-1) — only a top fade so the search bar is legible over the map === */
 #scrim{position:fixed;top:0;left:0;right:0;height:240px;z-index:1;background:var(--top-scrim);pointer-events:none}
 
-/* === APP (z-2) === */
-.app{position:relative;z-index:2;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0}
+/* === APP (z-2) — pointer-events:none on container, auto on interactive children === */
+.app{position:relative;z-index:2;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0;pointer-events:none}
+.app>.topbar,.app>.origin-pill,.app>.memory-row,.app>.mode-selector,.app>.category-wrapper,.app>.sheet-wrap{pointer-events:auto}
 
 /* === FLOATING INPUT v2 (UX_CORE_REDESIGN_LIGHT_TOUCH) ===========================
    Principles: NO_COLOR_EXPLOSION · FOCUS_SINGLE_ACTION_DESTINATION · MOBILE_FIRST_9_16 ·
@@ -152,11 +156,12 @@ button{font-family:inherit;letter-spacing:inherit}
   padding:0 var(--sp-4);
   background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
 }
-/* floating_input_v2 — dark focal pill. Replaces the old light wake (900ms) with a
-   crisp fade_up_soft_wake (420ms ease-out) that is the first visual attention element. */
+/* floating_input_v2 — dark focal pill. V7.9 UI_FIX: glassmorphism (rgba(0,0,0,0.45) +
+   backdrop-filter blur) replaces opaque var(--fi-bg) so the map shows through. */
 .search-bar{
   position:relative;display:flex;align-items:center;gap:var(--sp-1);
-  background:var(--fi-bg);border:1px solid var(--fi-border);
+  background:rgba(0,0,0,0.45);border:1px solid var(--fi-border);
+  backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);
   border-radius:14px; /* spec border_radius */
   padding:0 var(--sp-2);height:48px;min-height:48px; /* spec height */
   box-shadow:0 4px 16px rgba(0,0,0,0.12),0 1px 3px rgba(0,0,0,0.08); /* soft_low shadow */
@@ -196,11 +201,11 @@ button{font-family:inherit;letter-spacing:inherit}
 @keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,48,0.35)}50%{box-shadow:0 0 0 6px rgba(255,59,48,0)}}
 @media(prefers-reduced-motion:reduce){.sb-btn.sb-mic.listening{animation:none}}
 
-/* Origin pill — shows GPS origin, tap to recenter. Now floats at top of flow (topbar is
-   absolute), so respect safe-area-inset-top to clear the status bar. */
+/* Origin pill — V7.9: glassmorphism (dark glass, matches search-bar aesthetic). */
 .origin-pill{
   display:none;align-items:center;gap:var(--sp-2);margin:calc(env(safe-area-inset-top,0px) + var(--sp-2)) var(--sp-4) 0;
-  padding:8px 12px;background:var(--surface);border:1px solid var(--border);
+  padding:8px 12px;background:rgba(0,0,0,0.4);border:1px solid var(--border);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   border-radius:999px;width:fit-content;max-width:calc(100% - 32px);
   cursor:pointer;transition:transform var(--ease-out);min-height:36px;
 }
@@ -211,10 +216,11 @@ button{font-family:inherit;letter-spacing:inherit}
 .origin-pill .op-text{font-size:var(--font-caption);color:var(--text2);font-weight:var(--fw-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* === SEARCH DROPDOWN === */
-/* Dropdown — dark surface matching the focal pill (NO_COLOR_EXPLOSION: monochrome cluster) */
+/* Dropdown — dark glass matching the focal pill (V7.9: glassmorphism replaces opaque). */
 .search-dropdown{
   position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:30;
-  background:var(--fi-bg);border:1px solid var(--fi-border);
+  background:rgba(0,0,0,0.55);border:1px solid var(--fi-border);
+  backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
   border-radius:14px;overflow:hidden;
   max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
   box-shadow:0 8px 24px rgba(0,0,0,0.18);
@@ -246,8 +252,9 @@ button{font-family:inherit;letter-spacing:inherit}
 .memory-row::-webkit-scrollbar{display:none}
 .chip{
   display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
-  padding:8px 14px;border-radius:999px;background:var(--surface);
+  padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.6);
   border:1px solid var(--border);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
   font-size:var(--font-caption);font-weight:var(--fw-bold);color:var(--text);
   cursor:pointer;min-height:36px;transition:transform var(--ease-out);
   -webkit-tap-highlight-color:transparent;white-space:nowrap;
@@ -255,16 +262,18 @@ button{font-family:inherit;letter-spacing:inherit}
 .chip:active{transform:scale(0.95)}
 .chip .chip-ic{display:flex;align-items:center;color:var(--text2)}
 .chip.chip-fav .chip-ic{color:var(--orange)}
-.chip.chip-clear{color:var(--red);background:rgba(255,59,48,0.08);border-color:transparent}
+.chip.chip-clear{color:var(--red);background:rgba(255,59,48,0.12);border-color:transparent;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+[data-theme="dark"] .chip{background:rgba(40,40,40,0.6)}
+[data-theme="dark"] .chip.chip-clear{background:rgba(255,59,48,0.15)}
 .chip .chip-text{max-width:140px;overflow:hidden;text-overflow:ellipsis}
 
-/* === STAGE (transparent, shows map behind) === */
-.stage{flex:1;min-height:120px}
+/* === STAGE (transparent spacer — never blocks map gestures) === */
+.stage{flex:1;min-height:120px;pointer-events:none}
 
 /* === DECISION SHEET === */
 .sheet-wrap{padding:0 var(--sp-4);padding-bottom:var(--sp-3)}
 .sheet{
-  background:var(--surface);border-radius:var(--radius-card) var(--radius-card) 0 0;
+  background:rgba(255,255,255,0.82);backdrop-filter:blur(14px) saturate(1.1);-webkit-backdrop-filter:blur(14px) saturate(1.1);border-radius:var(--radius-card) var(--radius-card) 0 0;
   border:1px solid var(--border-strong);border-bottom:none;
   padding:var(--sp-4);
   padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
@@ -277,6 +286,7 @@ button{font-family:inherit;letter-spacing:inherit}
 }
 .sheet::-webkit-scrollbar{width:5px}
 .sheet::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:999px}
+[data-theme="dark"] .sheet{background:rgba(20,20,20,0.82)}
 .sheet::-webkit-scrollbar-track{background:transparent}
 @keyframes sheetIn{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
 .sheet-empty{text-align:center;padding:var(--sp-5) var(--sp-4);color:var(--text2);font-size:var(--font-body);font-weight:var(--fw-body)}
@@ -617,14 +627,16 @@ button{cursor:pointer}
 .mode-selector.show{display:flex}
 .mode-pill{
   display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
-  padding:9px 14px;border-radius:999px;background:var(--surface);
+  padding:9px 14px;border-radius:999px;background:rgba(255,255,255,0.55);
   border:1px solid var(--border);font-size:var(--font-caption);font-weight:var(--fw-bold);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
   color:var(--text2);cursor:pointer;min-height:40px;transition:transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out);
   -webkit-tap-highlight-color:transparent;white-space:nowrap;
 }
 .mode-pill:active{transform:scale(0.95)}
-.mode-pill.active{color:#fff;background:#000000;border-color:#000000}
-[data-theme="dark"] .mode-pill.active{color:#000;background:#fff;border-color:#fff}
+.mode-pill.active{color:#fff;background:#000000;border-color:#000000;backdrop-filter:none;-webkit-backdrop-filter:none}
+[data-theme="dark"] .mode-pill{background:rgba(40,40,40,0.55)}
+[data-theme="dark"] .mode-pill.active{color:#000;background:#fff;border-color:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
 .mode-pill .mp-ic{display:flex;align-items:center}
 .mode-pill .mp-lbl{font-size:11px;letter-spacing:0.02em}
 
@@ -829,6 +841,14 @@ body[data-map-state="ROUTE_PREVIEW"] .topbar{transform:translateY(0);opacity:1;p
 body[data-map-state="ROUTE_PREVIEW"] .sheet-wrap{transform:translateY(0);opacity:1;pointer-events:auto}
 body[data-map-state="ROUTE_PREVIEW"] .category-wrapper{transform:translateY(0);opacity:1}
 body[data-map-state="ROUTE_PREVIEW"] .map-floating-chip{transform:translateX(-50%) translateY(-160%);opacity:0;pointer-events:none}
+/* V7.9 COLLAPSIBLE_SEARCH — ROUTE_PREVIEW collapses the search bar to a compact pill.
+   Secondary buttons (map-pick, locate, mic) hide; input shows dest name in bold.
+   Tapping the input fires onSearchFocus() → SEARCH_FOCUS → full bar re-expands. */
+body[data-map-state="ROUTE_PREVIEW"] .search-bar{height:40px;min-height:40px}
+body[data-map-state="ROUTE_PREVIEW"] .sb-btn.sb-sec,
+body[data-map-state="ROUTE_PREVIEW"] .sb-btn.sb-mic{display:none}
+body[data-map-state="ROUTE_PREVIEW"] #destInput{font-weight:var(--fw-bold)}
+body[data-map-state="ROUTE_PREVIEW"] .sb-icon{color:var(--primary)}
 /* FULL_MAP: panels translated off-screen, floating chip slides in */
 body[data-map-state="FULL_MAP"] .topbar{transform:translateY(-160%);opacity:0;pointer-events:none}
 body[data-map-state="FULL_MAP"] .sheet-wrap{transform:translateY(160%);opacity:0;pointer-events:none}
@@ -1316,7 +1336,7 @@ function _signalAppReady(){
 }
 
 // ===================== TRANSPORT MODE SELECTOR (ui_system) =====================
-var _activeMode='car'; // VOY_UI_FOCUS_V1 UI-001: 'Todo' pill removed (visual noise). Default → 'car'.
+var _activeMode='bus'; // V7.9 UI_FIX: default → 'bus' (Ahorro tab is now the default group).
 var MODE_OPTIONS=[
   {id:'car',label:'Auto',icon:'car'},
   {id:'taxi',label:'Taxi',icon:'taxi'},
@@ -1883,12 +1903,14 @@ function renderSheet(){
   if(window.VoyTrendEngine){
     VoyTrendEngine.processEstimate(autoEst, origin, dest);
   }
-  if(!autoEst){
+  // V7.9 UI_FIX: guard only applies to car/taxi/remis modes. Bus/bike modes render
+  // even when autoEst is null (they use busEst/bikeEst respectively).
+  if(!autoEst&&_activeMode!=='bus'&&_activeMode!=='bike'){
     container.innerHTML='<div class="sheet-empty"><div class="se-icon">'+svg('car',40)+'</div>Sin tarifas de auto disponibles</div>';
     clearBusRoute();showModeSelector(false);return;
   }
   showModeSelector(true);
-  if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();var _winner=(autoEst.rankedProviders&&autoEst.rankedProviders[0])?autoEst.rankedProviders[0]:null;var _fare=_winner?_winner.price:0;VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:_fare,price:_fare,time_min:autoEst.timeMin||0,provider:_winner?_winner.id:'',mode:'auto',fare_captured:_fare>0,lost_conversion:_fare<=0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
+  if(autoEst&&window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();var _winner=(autoEst.rankedProviders&&autoEst.rankedProviders[0])?autoEst.rankedProviders[0]:null;var _fare=_winner?_winner.price:0;VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:_fare,price:_fare,time_min:autoEst.timeMin||0,provider:_winner?_winner.id:'',mode:'auto',fare_captured:_fare>0,lost_conversion:_fare<=0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
 
   // V7.4 CategoryManager: bike/bus modes show ONLY their respective block (no hero/taxi/remis).
   // Reduces cognitive load — user sees just the relevant transport info for the selected group.
@@ -2655,7 +2677,7 @@ var MODE_META={
   bike:{label:'Bicicleta',icon:'bike'},
   bus:{label:'Colectivo',icon:'bus'}
 };
-var _activeGroup=1; // V7.5: default to Privados (group 0 is Ahorro — entered only via tab tap when condition met)
+var _activeGroup=0; // V7.9 UI_FIX: default to Ahorro (group 0) — comparative Bus vs Privados view
 var _catTouchStartX=0,_catTouchStartT=0;
 function initCategoryManager(){
   if(!window.VOY_CATEGORY_MANAGER_ENABLED){initModeSelector();return}
@@ -2710,6 +2732,13 @@ function setCategoryGroup(idx,animate){
     var on=i===idx;
     tabs[i].classList.toggle('active',on);
     tabs[i].setAttribute('aria-selected',on);
+  }
+  // V7.9 UI_FIX: auto-select first mode if current mode isn't in this group.
+  // Smoother tab-switch UX — user sees relevant content immediately.
+  var g=CATEGORY_GROUPS[idx];
+  if(g&&g.modes&&g.modes.length){
+    var _curHasMode=g.modes.indexOf(_activeMode)>=0;
+    if(!_curHasMode){setMode(g.modes[0])} // setMode calls renderSheet()
   }
 }
 function setMode(modeId){
