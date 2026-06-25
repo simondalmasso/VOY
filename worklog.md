@@ -3463,3 +3463,30 @@ Stage Summary:
 - ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash 912dd7e matches git SHA. V7.17.0 deployed.
 - ✅ QA: VLM dev 5/5, VLM production 5/5. Agent Browser QA assertion passed (0 violations). Zero console errors. Lint clean.
 - 🔁 RE-AUDIT TRIGGERS: .mp-lbl renders at 16px (not 11px); all 6 mode labels legible; Google Fonts link absent (no Inter fetch); V7.15 block absent (no dead code); C2 targets all 16px; QA assertion .mp-lbl >= 16px passes.
+
+---
+Task ID: V7.17_FINAL_VERIFICATION
+Agent: Main (Audit Integrity)
+Task: V7.17_FINAL_VERIFICATION — AUDIT_INTEGRITY_CHECK (4-step read-only verification protocol, strict no-change)
+
+Work Log:
+- Step 1 FONT_SIZE_INTEGRITY: grepped VOY-Lite.html for all 5 targets (.mp-lbl, .est-badge, .ahorro-pill-badge, .search-item--empty, .bd-row). Collected base declarations + V7.17_SURGICAL_FIX override block (lines 1113-1128). Cascade analysis:
+  * .mp-lbl: base L670 = 11px (no !important) → V7.17 L1115 = 16px!important → computed 16px PASS
+  * .est-badge: base L489 = 10px (no !important) → V7.17 L1127 = 16px!important → computed 16px PASS
+  * .ahorro-pill-badge: base L707-709 = 9px (no !important) → V7.17 L1127 = 16px!important → computed 16px PASS
+  * .search-item--empty: base L251 = 14px (no !important) → V7.17 L1127 = 16px!important → computed 16px PASS
+  * .bd-row: base L492/L513 = no font-size (inherits) → V7.17 L1127 = 16px!important → computed 16px PASS
+  * ADVISORY (not a fail): L2701 injects inline style="font-size:11px" on one .bd-row. Per CSS cascade, stylesheet !important (V7.17) BEATS non-important inline. Computed remains 16px. Latent risk if !important ever removed.
+- Step 2 DEPENDENCY_AUDIT: grepped /home/z/my-project recursively for `fonts.googleapis.com`. 0 matches in source files (only 2 historical mentions in worklog.md L3432/L3434 documenting the deletion). PASS.
+- Step 3 DEAD_CODE_SCAN: grepped /home/z/my-project recursively for `V7.15_CRITICAL_HARDENING_OVERRIDE`. 0 matches in source files (only 2 historical mentions in worklog.md L3437/L3461 documenting the removal). PASS.
+- Step 4 CSS_OVERRIDE_VALIDATION: located .mode-pill .mp-lbl rule (V7.17 block L1114-1120). Declared: font-weight:700!important, -webkit-text-stroke:0!important. No competing .mode-pill .mp-lbl rule with !important exists (base L670 sets neither property). Computed: font-weight=700, -webkit-text-stroke-width=0px. PASS.
+- :root baseline note: L79 still carries legacy vars (--font-body:15px, --font-micro:11px), but L953 bumps --font-caption:16px. All 5 audit targets are overridden by literal 16px!important, so :root vars do not affect Step 1 outcome. Out of audit scope but flagged for future cleanup.
+
+Stage Summary:
+- ✅ ALL 4 STEPS PASSED. Result: CONFIRM_ALL_PASSED_WITH_EVIDENCE.
+- Step 1 (font-size >= 16px): 5/5 targets PASS via V7.17 !important overrides.
+- Step 2 (fonts.googleapis.com absent): PASS — 0 source matches.
+- Step 3 (V7.15_CRITICAL_HARDENING_OVERRIDE absent): PASS — 0 source matches.
+- Step 4 (.mode-pill .mp-lbl computed font-weight:700 + -webkit-text-stroke:0px): PASS.
+- 1 ADVISORY (non-blocking): inline font-size:11px on .bd-row at L2701 is masked only by !important. Recommend future cleanup to remove the inline 11px.
+- No changes applied (read-only audit per directive).
