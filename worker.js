@@ -161,6 +161,16 @@ const worker = {
     if (pathLower === "/api/events" && request.method === "OPTIONS") {
       return _cors(new Response(null, { status: 204 }));
     }
+    // V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — /api/telemetry: Beacon API ingestion (fire-and-forget).
+    //   Accepts {event, value, route, ts}. Receives LCP + JS errors + unhandled promise rejections
+    //   from VoyHealthMonitor (client). Same exclusion filters as /api/events (no bot/localhost/owner noise).
+    //   Logs to wrangler tail; writes a 'telemetry' WAE datapoint if VOY_METRICS is bound (queryable separately).
+    if (pathLower === "/api/telemetry" && request.method === "POST") {
+      return _handleTelemetry(request, env, ctx);
+    }
+    if (pathLower === "/api/telemetry" && request.method === "OPTIONS") {
+      return _cors(new Response(null, { status: 204 }));
+    }
     // ANALYTICS_SYSTEM_SETUP — /api/whoami: lets the OWNER detect their own IP + SHA-256
     // so they can populate VOY_OWNER_IPS (direct) or VOY_OWNER_IP_HASHES (hash-based).
     // Returns ONLY the caller's own info (no cross-user data, no PII stored server-side).
@@ -305,6 +315,50 @@ async function _handleEvents(request, env, ctx) {
     ok: true, received: events.length, normalized: normalized.length,
     written: aeWritten, session_id: sid
   }), { status: 202, headers: { "Content-Type": "application/json" } }));
+}
+
+// ---------------- V7.7 Telemetry handler (Beacon API: LCP + JS errors + promise rejections) ----------------
+// Fire-and-forget ingestion endpoint. Never blocks unload (sendBeacon). Schema: {event, value, route, ts}.
+// Reuses the same exclusion model as /api/events so owner/bot/localhost noise never reaches the log.
+async function _handleTelemetry(request, env, ctx) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return _cors(new Response(JSON.stringify({ ok: false, error: "bad_json" }), {
+      status: 400, headers: { "Content-Type": "application/json" }
+    }));
+  }
+  // Exclusion filters (same model as /api/events — never log bot/localhost/owner noise).
+  const cfg = _loadFilterConfig(env);
+  const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ua = request.headers.get("user-agent") || "";
+  const ipHash = (cfg.owner_ip_hashes.length && ip) ? await _sha256Hex(ip) : '';
+  const excludeReason = _shouldExclude({ ip, ua, ipHash }, cfg);
+  if (excludeReason) {
+    return _cors(new Response(JSON.stringify({ ok: true, excluded: true, reason: excludeReason }), {
+      status: 202, headers: { "Content-Type": "application/json" }
+    }));
+  }
+  const event = String(body && body.event || "").slice(0, 40);
+  const value = Number(body && body.value) || 0;
+  const route = String(body && body.route || "").slice(0, 140);
+  const ts = Number(body && body.ts) || Date.now();
+  // Fire-and-forget log (visible via `wrangler tail`).
+  try { console.log(JSON.stringify({ telemetry: true, event, value, route, ts })); } catch (_) {}
+  // Optional WAE persistence (index 'telemetry' keeps it queryable separately from product events).
+  if (env.VOY_METRICS && typeof env.VOY_METRICS.writeDataPoint === "function") {
+    ctx.waitUntil((async () => {
+      try {
+        env.VOY_METRICS.writeDataPoint({
+          indexes: ["telemetry"],
+          blobs: [event, route],
+          doubles: [value, ts]
+        });
+      } catch (_) { /* WAE failure never breaks telemetry */ }
+    })());
+  }
+  return _cors(new Response(JSON.stringify({ ok: true }), { status: 202, headers: { "Content-Type": "application/json" } }));
 }
 
 function _cors(resp) {

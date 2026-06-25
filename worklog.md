@@ -2730,3 +2730,56 @@ Stage Summary:
 - ✅ Browser-verified 17/17 points. Zero console errors. Lint clean.
 - ⏳ Pending: commit + push (V7.6 batched).
 - 🔁 RE-AUDIT TRIGGERS: after 3+ trips on same route, trend badges appear next to Uber/DiDi prices showing if price is rising (red ↗), falling (green ↘), or stable (gray —); badges fade in async after estimate completes (no UI freeze).
+
+---
+Task ID: V7_7_PERFORMANCE_AUDIT_AND_TELEMETRY
+Agent: Main (GLM5.2 — HealthMonitor + DebugPanel + Resource Hinting blueprint implementation)
+Task: Implement V7.7 "Performance_Audit_and_Telemetry" — (1) Global error telemetry via Beacon API + ErrorBoundary equivalent (vanilla JS), (2) preconnect link tags for third-party APIs, (3) hidden debug panel (FPS, Memory, Cache, SW, Latency, LCP, Trend, Ahorro) via konami code + 7-tap footer. QA: Beacon non-blocking, panel hidden by default, layout intact.
+
+Work Log:
+- Read prior worklog (V7_6_PREDICTIVE_TREND_ENGINE). Confirmed V7.6 committed + deployed (393ad6c, 0 ahead/0 behind origin/main). Dev server running on port 3000.
+- Verified VOY stack: vanilla JS PWA in public/VOY-Lite.html (2989 lines pre-V7.7). Worker.js has /api/events (POST→WAE, 3 canonical events) + /api/health + /api/whoami. Existing 5-tap analytics panel (va_dashboard) on #sbSearchIcon — must use DIFFERENT trigger for debug panel.
+- Explored HTML structure: <head> lines 27-797 (preconnect for fonts already present at lines 41-42). External domains actually used: unpkg.com (maplibre), basemaps.cartocdn.com + tile.openstreetmap.org (tiles), nominatim.openstreetmap.org (geocode), router.project-osrm.org (routing). core/mobilityEngine.js + pricingEngine.js + eventBus.js + ui/mobilityController.js loaded as classic scripts. Inline <script> at line 896. VoyAhorroService IIFE @2715, VoyTrendEngine IIFE @2871 (cache is closure-private; read via public getTrend(id)). V7.6 CSS block @707-720.
+- Designed V7.7 architecture (3 modules, all inline to match established IIFE pattern):
+  * VoyHealthMonitor: Beacon API wrapper. ENDPOINT=/api/telemetry, THROTTLE_MS=5000 (per event-type). _send(event,value,route)→JSON+Blob(application/json)+navigator.sendBeacon. _init() registers 3 listeners: window 'error' (capture, js_error), 'unhandledrejection' (capture, promise_rejection), PerformanceObserver LCP (buffered:true). Schema {event,value,route,ts}. _lastLCP stored + exposed via getLastLCP() for debug panel (observer drains getEntriesByType buffer).
+  * VoyDebugPanel: hidden diagnostic panel. 8 rows (FPS/Memory/Cache/SW/Latency/LCP/Trend/Ahorro). Triggers: konami code [38,38,40,40,37,39,37,39,66,65] (keyboard) + 7-tap on .footer text (mobile, excludes .footer-more button). FPS via requestAnimationFrame loop (500ms sample). Memory via performance.memory (Chrome). Cache via navigator.storage.estimate(). SW via navigator.serviceWorker.controller. Latency via fetch /api/health (5s throttle). LCP via VoyHealthMonitor.getLastLCP() fallback getEntriesByType. Trend via VoyTrendEngine.getTrend(['uber','didi','maxim']) count. Ahorro via VoyAhorroService.getState(). setInterval 2s refresh when visible; all timers cleared on hide.
+  * Worker /api/telemetry: POST handler (_handleTelemetry). Reuses _loadFilterConfig+_shouldExclude (same exclusion as /api/events — no bot/localhost/owner/glm noise). console.log for wrangler tail + optional WAE writeDataPoint (index 'telemetry', queryable separately). Returns 202. OPTIONS for CORS.
+  * Dev mirror: src/app/api/telemetry/route.ts (Next.js) — accepts POST, console.log, returns 202. Stops 404 spam in dev + enables full round-trip verification.
+  * Resource Hinting: 5 <link rel=preconnect> in <head> (unpkg crossorigin, cartocdn, osm tiles, nominatim, osrm) before maplibre CSS.
+- Applied 4 atomic edits via MultiEdit (worker.js) + MultiEdit (VOY-Lite.html) + Write (telemetry route):
+  1. worker.js: /api/telemetry POST+OPTIONS route (after /api/events OPTIONS) + _handleTelemetry function (after _handleEvents)
+  2. VOY-Lite.html head: 5 preconnect links after <title>, before maplibre CSS
+  3. VOY-Lite.html CSS: V7.7 debug panel styles (~27 lines) after V7.6 reduced-motion block — .voy-debug-panel (fixed top:48px right:8px z-index:100001, monospace, backdrop-filter blur), .vdp-grid (2-col dt/dd), voy-debug-in animation, prefers-reduced-motion override
+  4. VOY-Lite.html script: VoyHealthMonitor IIFE + VoyDebugPanel IIFE + boot init calls before </script>
+  5. LCP fix: _lastLCP stored in observer callback + getLastLCP() exposed; debug panel reads HM.getLastLCP() first (observer drains getEntriesByType buffer)
+  6. src/app/api/telemetry/route.ts: dev mirror of worker endpoint
+- File grew 2989 → 3253 lines (+264). worker.js +43 lines. bun run lint → clean (0 errors).
+- Agent Browser self-verification (viewport 390x844, 14 verification points):
+  1. ✅ Page loads, title="VOY — Movilidad Santa Fe", ZERO console errors on initial load
+  2. ✅ VoyHealthMonitor defined (object), sendBeacon supported=true
+  3. ✅ VoyDebugPanel defined (object)
+  4. ✅ VoyAhorroService + VoyTrendEngine intact (no V7.5/V7.6 regression)
+  5. ✅ 7 preconnect links present: unpkg, cartocdn, osm tiles, nominatim, osrm (5 new V7.7) + fonts.googleapis, fonts.gstatic (2 existing)
+  6. ✅ Debug panel hidden by default (debugPanelVisible=false at boot)
+  7. ✅ Konami code (↑↑↓↓←→←→BA) opens panel — 8 rows render with live data: FPS=54, Memoria=11/4137 MB, Cache=77 KB/10240 MB, SW=active, Latencia=69 ms, LCP=240 ms, Trend=0 activos, Ahorro=off
+  8. ✅ Close button (×) hides panel (id removed from DOM)
+  9. ✅ 7-tap on footer text opens panel (mobile gesture; .footer-more button excluded)
+  10. ✅ Telemetry beacons flow end-to-end (3 POST /api/telemetry → 202):
+      - LCP: {"event":"lcp","value":344,"route":"/"}
+      - js_error: {"event":"js_error","value":1,"route":":1 Uncaught Error: V7.7 test: uncaught error"} (triggered via setTimeout throw)
+      - promise_rejection: {"event":"promise_rejection","value":1,"route":"V7.7 test: unhandled rejection"} (triggered via Promise.reject)
+  11. ✅ QA test 1 (non-blocking): sendBeacon async — FPS counter stayed 43-60 during beacon sends; page fully responsive
+  12. ✅ Debug panel reads V7.5 service: VoyAhorroService.recompute(1900,6000) → Ahorro row shows "68%" (available=true, savingsPercent=68)
+  13. ✅ Debug panel reads V7.6 service: Trend row shows "0 activos" (correct — no estimate run; would show count of uber/didi/maxim with non-null getTrend)
+  14. ✅ Layout intact: footer bottom=844=viewportH (sticky), footerAtBottom=true; debug panel bottom=273, footer top=805 → NO overlap
+- Screenshots: /tmp/v77-debug-panel-open.png, /tmp/v77-panel-layout.png, /tmp/v77-clean-default.png
+
+Stage Summary:
+- ✅ Step 1 (high) — Global error telemetry: VoyHealthMonitor IIFE captures window 'error' + 'unhandledrejection' (capture phase) + LCP via PerformanceObserver(buffered:true). Sends via navigator.sendBeacon to /api/telemetry with schema {event,value,route,ts}. Throttled 5s/event-type. Worker /api/telemetry (_handleTelemetry) reuses exclusion filters + console.log + optional WAE. Dev mirror route at src/app/api/telemetry/route.ts. Vanilla-JS ErrorBoundary equivalent.
+- ✅ Step 2 (medium) — Resource Hinting: 5 <link rel=preconnect> added in <head> for actual third-party origins (unpkg, cartocdn, osm tiles, nominatim, osrm) — DNS+TCP+TLS completes before first tile/geocode/route request. Adapted blueprint's googleapis.com (not used by VOY's MapLibre/OSM stack) to real domains.
+- ✅ Step 3 (low) — Hidden debug panel: VoyDebugPanel IIFE, 8 diagnostic rows (FPS/Memory/Cache/SW/Latency/LCP/Trend/Ahorro). Hidden by default. Triggers: konami code (keyboard, desktop) + 7-tap on footer text (mobile, excludes footerMore button) + window.VoyDebugPanel.toggle() (console). All timers (rAF + setInterval) cleared on hide.
+- ✅ QA: Beacon non-blocking (sendBeacon async, FPS stable), panel hidden by default (verified), layout intact (footer sticky, no overlap).
+- ✅ No regression: V7.4 category tabs (Ahorro/Privados/Activos/Público) + V7.5 VoyAhorroService (debug panel reads getState) + V7.6 VoyTrendEngine (debug panel reads getTrend) all intact.
+- ✅ Browser-verified 14/14 points. Zero console errors. Lint clean.
+- ⏳ Pending: commit + push V7.7 + verify production deployment (/api/health.build_hash + HTML markers).
+- 🔁 RE-AUDIT TRIGGERS: konami code (↑↑↓↓←→←→BA) or 7 taps on footer opens a dark debug panel top-right showing live FPS/Memory/Cache/SW/Latency/LCP/Trend/Ahorro; JS errors + LCP silently beacon to /api/telemetry (visible in wrangler tail / dev.log as {"telemetry":true,...}); preconnect headers speed up map tile + geocode + route fetches.
