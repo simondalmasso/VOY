@@ -2302,3 +2302,94 @@ Stage Summary:
 - HALLAZGO CLAVE: los 7 commits de main eran una línea divergente OLDER en app code (UI sticky topbar, worker V7.8, WAE deshabilitado). origin/main (13c79ae, del Task 9) ya tenía la versión más nueva. El merge tomó lo mejor de ambos: app code de origin + docs de main.
 - ⚠️ SECURITY: Tokens GitHub (ghp_***) y Cloudflare (cfut_***) compartidos en texto plano nuevamente. USUARIO DEBE REVOCAR/ROTAR AMBOS inmediatamente.
 - Producción ahora sirve 90acd37 (merge) = app code más nuevo (floating input v2 + 5 fixes + V7.8.1 analytics) + docs reconciliados.
+
+---
+Task ID: 4
+Agent: Cabify-availability-researcher
+Task: Verify whether Cabify ACTUALLY operates in Santa Fe city (capital of Santa Fe province, Argentina), not Santa Fe province in general. User disputed prior worklog claims that Cabify is "verified available in Santa Fe".
+
+Work Log:
+- Read worklog.md prior context. Found Tasks 44, 44-verify, 45-fixes, 8 (deploy) all asserted Cabify IS available in Santa Fe city, based on a single z-ai web_search snippet from help.cabify.com/hc/es/articles/115000996089 listing "Argentina. Bariloche, Buenos Aires, Córdoba, Corrientes, Mar del Plata, Mendoza, Rosario, Santa Fe y Tucumán". No prior task verified this against operational sources (driver requirements page, tarifas/pricing pages, or local news about actual launch).
+- Ran 11 parallel z-ai web_search queries (Cabify ciudades Argentina; Cabify Santa Fe ciudad; Cabify Argentina Rosario/Cordoba/Buenos Aires/Mendoza ciudades; site:cabify.com; Cabify Santa Fe lanzamiento 2025/2026; Cabify habilitada Santa Fe registro municipal; Cabify Santa Fe app disponible febrero/marzo 2026; Instagram Cabify Santa Fe; etc.).
+- Ran 7 z-ai page_reader fetches: help.cabify.com cities article (115000996089), help.cabify.com driver-requirements article (360021444160) [blocked by Cloudflare "Just a moment"], cabify.com/ar homepage, cabify.com/ar/tarifas index, cabify.com/ar/tarifas/santa-fe [404], airedesantafe.com.ar Aug 2024 article, derf.ar Oct 2024 article, radiomitresantafe.com.ar Mar 2026 article, ellitoral.com.ar Mar 2026 article, miradorprovincial.com Jan 2026 article.
+
+KEY FINDINGS — Contradiction in Cabify's own sources:
+1. **Static "cities" help article (115000996089)** LISTS "Santa Fe": "Argentina. Bariloche, Buenos Aires, Córdoba, Corrientes, Mar del Plata, Mendoza, Rosario, Santa Fe y Tucumán" — this is the only source prior worklog tasks relied on. Marketing/static page, no dates, no operational detail.
+2. **Operational driver-requirements article (360021444160)** snippet reads: "Actualmente operamos en las ciudades de Buenos Aires, Córdoba, Rosario, Mendoza, Mar del Plata, Corrientes, Tucumán y Bariloche" — **SANTA FE IS NOT IN THIS LIST**. (Could not load full page due to Cloudflare anti-bot challenge, but Google snippet is unambiguous.) This article is the operational/real-time source Cabify shows prospective drivers — it omits Santa Fe.
+3. **cabify.com/ar/tarifas** index lists 9 city pricing slugs: bariloche, buenos-aires, cordoba, corrientes, mar-del-plata, mendoza, neuquen, rosario, tucuman. **No santa-fe slug exists.** Direct fetch of `https://cabify.com/ar/tarifas/santa-fe` returns HTTP 404 ("404 ¡Página no encontrada!"). This is the strongest operational signal: Cabify publishes pricing pages for every city where it actually operates; Santa Fe has none.
+4. **cabify.com/ar homepage** mentions zero Argentine cities by name. Generic landing page only.
+
+LOCAL NEWS TIMELINE (Santa Fe city, capital of Santa Fe province):
+- **2024-08-14** (Aire de Santa Fe): Cabify's gerente de desarrollo de nuevos negocios Esteban Cabanillas publicly states Cabify's CONDITIONS for entering Santa Fe market — negotiation phase, Cabify NOT yet operating.
+- **2024-10-10** (DERF): Concejo Municipal de Santa Fe approves ordinance regulating ride-hailing apps (Uber, Maxim, Cabify). Platforms now "habilitadas legalmente para funcionar" (legally authorized to operate) but must register with city, establish local domicile, designate representative, require Clase D1 professional license from Santa Fe municipality. Legal authorization ≠ actual operation.
+- **2025-11-27** (Instagram p/DRb876bDnyY): "CABIFY, LA PRIMERA APP DE VIAJES HABILITADA EN [Santa Fe]" — "Desde este martes, los conductores de Cabify pueden iniciar el trámite de alta en el registro municipal para operar legalmente." Cabify is the FIRST app authorized to start driver registration — but registration is a prerequisite, not operation.
+- **2026-01-09** (Mirador Provincial): Ordinance N° 13.103 to take effect 2026-01-15.
+- **2026-01-15**: Ordinance takes effect. (SantaFeCapitalok Facebook post: "El plazo vence el 3 de marzo de 2026, aunque el registro seguirá abierto".)
+- **2026-03-03** (Radio Mitre Santa Fe): Secretary of Government Sebastián Mastropaolo confirms ordinance in force. "Uber, Cabify y Didi están habilitadas, pero con condiciones específicas para los conductores." No more registration extensions.
+- **2026-03-04** (El Litoral, the city's main newspaper): "Con menos de 40 choferes de apps inscriptos, el municipio de Santa Fe ¿retendrá coches ilegales?" — Mastropaolo admits "no superaron los 40 choferes. Es (un número) muy bajo" (fewer than 40 drivers total across ALL apps combined, "very low number"). Deadline was 2026-03-03. Article headline implies most drivers are still operating illegally.
+
+ANALYSIS:
+- The user's observation ("Cabify me parece q no funciona en sf") was made ~2025-12-01, before the ordinance even took effect. At that point Cabify was indeed non-functional in Santa Fe (no legal framework yet).
+- Even after the ordinance took effect (2026-01-15) and the registration deadline expired (2026-03-03), fewer than 40 drivers across ALL apps (Uber+DiDi+Cabify combined) had registered in Santa Fe city. This means Cabify specifically likely had ZERO or near-zero active drivers.
+- As of investigation date (2026-06-25), no evidence found of Cabify actually launching commercial operations in Santa Fe city. No "Cabify llega a Santa Fe" launch announcement (compare to "¡Cabify está en Rosario!" Facebook posts dated 2025-10-31 actively promoting Rosario launch — equivalent Santa Fe launch promotion does not exist).
+- Prior worklog Task 44 / Task 8 misread the static "cities" help article as proof of operation, without cross-checking operational sources (driver requirements article, tarifas page) which both OMIT Santa Fe, and without checking local news which clearly shows Cabify was in negotiation/registration phase, not actual operations.
+
+VERDICT: **CABIFY_NOT_AVAILABLE_IN_SANTA_FE**
+Cabify is NOT actually operating in Santa Fe city (capital of Santa Fe province) as of 2026-06-25. The user's complaint is correct. The listing in Cabify's static "cities" help article is misleading — it likely reflects Cabify's planned/intended market entry (in negotiation since Aug 2024, ordinance approved Oct 2024, registration opened Nov 2025, ordinance in force Jan 2026) rather than actual commercial operations. No pricing page exists, the operational driver-cities list excludes Santa Fe, and fewer than 40 total drivers across all apps had registered by March 2026.
+
+RECOMMENDATION for VOY:
+**Primary: Option 2 — Keep Cabify in code but set `available:false` (hide from UI).** Rationale:
+- Removes the misleading "Pedir Cabify" button the user complained about (Cabify cannot actually fulfill rides in Santa Fe).
+- Keeps FareRegistry entry + PROVIDERS structure intact for trivial re-enable if Cabify actually launches (just flip `available:false` → `available:true`). Reversibility is valuable given Cabify IS legally "habilitada" and may launch in the future.
+- Lowest-risk surgical change.
+
+Alternative — Option 3 (keep as reference estimate, remove deep-link "Pedir" button): acceptable but still slightly misleading because it would show users a Cabify price for a service that cannot be ordered. Could be paired with a "no disponible en Santa Fe" disclaimer if Option 3 is preferred.
+
+NOT recommended — Option 1 (clean removal): too destructive. Cabify IS legally authorized in Santa Fe and could plausibly launch within months; FareRegistry data (base/km/min/minFare) is reference-quality and worth preserving. Full removal would require re-doing all the prior Task 45-fixes Cabify implementation work if Cabify launches.
+
+EVIDENCE SUMMARY (sources checked):
+| Source | URL | Verdict | Quote |
+|--------|-----|---------|-------|
+| Cabify "cities" help article | help.cabify.com/hc/es/articles/115000996089 | LISTS Santa Fe (marketing/static) | "Argentina. Bariloche, Buenos Aires, Córdoba, Corrientes, Mar del Plata, Mendoza, Rosario, Santa Fe y Tucumán" |
+| Cabify driver-requirements article | help.cabify.com/hc/es/articles/360021444160 | OMITS Santa Fe (operational) | "Actualmente operamos en las ciudades de Buenos Aires, Córdoba, Rosario, Mendoza, Mar del Plata, Corrientes, Tucumán y Bariloche" |
+| Cabify tarifas index | cabify.com/ar/tarifas | NO Santa Fe slug | 9 slugs: bariloche, buenos-aires, cordoba, corrientes, mar-del-plata, mendoza, neuquen, rosario, tucuman |
+| Cabify Santa Fe tarifas | cabify.com/ar/tarifas/santa-fe | HTTP 404 | "404 ¡Página no encontrada!" |
+| Aire de Santa Fe (2024-08-14) | airedesantafe.com.ar/.../n593224 | Cabify negotiating entry, NOT operating | "las condiciones de Cabify para la regulación" — Cabify gerente states conditions for entering market |
+| DERF (2024-10-10) | derf.ar/.../cabify-en-la-ciudad | Ordinance approved, legal framework only | "Quedó reglamentado el uso de plataformas como Uber, Maxim o Cabify en la ciudad" |
+| Instagram (2025-11-27) | instagram.com/p/DRb876bDnyY | Cabify FIRST to be authorized for driver registration, NOT operating | "Desde este martes, los conductores de Cabify pueden iniciar el trámite de alta en el registro municipal para operar legalmente" |
+| Mirador Provincial (2026-01-09) | miradorprovincial.com/2026/01/09/... | Ordinance N° 13.103 takes effect 2026-01-15 | confirms Jan 15, 2026 effective date |
+| Radio Mitre Santa Fe (2026-03-03) | radiomitresantafe.com.ar/.../apps-de-viajes-ya-son-legales | Cabify "habilitada" but conditions on drivers | "Uber, Cabify y Didi están habilitadas, pero con condiciones específicas para los conductores" |
+| El Litoral (2026-03-04) | ellitoral.com/.../ciudad-capital-choferes-apps-inscriptos | <40 drivers TOTAL across all apps | "no superaron los 40 choferes. Es (un número) muy bajo" — Secretary of Government admits |
+| Facebook CabifyAr (2025-10-31) | facebook.com/CabifyAr/videos/.../852645707703001 | Cabify actively promoting Rosario launch (control case) | "¡Cabify está en Rosario! Movete legal y seguro por la ciudad" — no equivalent Santa Fe launch post exists |
+
+CONFIDENCE: HIGH (0.92) on the negative verdict. Three independent Cabify-operational sources (driver-requirements article, tarifas index, tarifas/santa-fe 404) all omit Santa Fe. Local news timeline clearly shows Cabify was in negotiation/registration phases through Mar 2026 with negligible driver enrollment. The only positive source (static "cities" article) is the least reliable of the bunch — a marketing page that likely has not been updated to reflect the difference between "planned/legally-authorized" cities and "actually-operating" cities.
+
+NO FILES MODIFIED (research only). Awaiting user decision on Option 2 vs Option 3 before any code change.
+
+---
+Task ID: 22
+Agent: DiDi-deeplink-researcher (sub-agent, parallel investigation)
+Task: Research whether DiDi (com.didiglobal.passenger) supports a deep link / intent that PRE-FILLS pickup and dropoff coordinates (like Uber m.uber.com/ul and Maxim intent://order?startLat=..&finishLat=..). User complaint: "didi ahora abre el playstore para 'ABRIR' didi, al abrir, abre normal. no marca la direccion puesta".
+
+Work Log:
+- Read worklog.md tail (Tasks 18-21) to ground in current production state. Current `buildAppLink('didi')` (post FIX-001, line ~2033 of /home/z/my-project/public/VOY-Lite.html): Android `intent://#Intent;scheme=didi;package=com.didiglobal.passenger;S.browser_fallback_url=<Play Store>;end`, iOS App Store (id1362398401), desktop Play Store. Opens app but does NOT pre-fill coords. The pre-FIX-001 URL `https://web.didiglobal.com/ar/passenger/ride/?pickup_lat=...&dropoff_lat=...` was a guess — confirmed via curl that it returns HTTP 404 (never worked).
+- Ran 27 web_search queries + 6 page_reader fetches + 12 curl probes covering: DiDi LATAM deep link scheme, didi:// URL parameters, com.didiglobal.passenger intent extras, DiDi developer/open platform docs, DiDi Food open platform, DiDi China MCP server, Wayback Machine snapshots of open.xiaojukeji.com (2016-2021), DiDi China "Hail a Ride" SDK (TechCrunch 2016), apple-app-site-association / assetlinks.json probes.
+- KEY FINDING #1 — DiDi MCP Server has a server-side deep link generator, BUT it's China-only and authenticated: official repo github.com/didi/didi-ride-skill documents MCP tool `taxi_generate_ride_app_link(from_lat, from_lng, to_lat, to_lng, product_category?)` — "根据起点、终点和车型生成打开移动应用或小程序的深度链接，用户点击后将跳转到相应的打车应用完成发单操作". Requires MCP KEY obtained by scanning a QR code in the DiDi CHINA app (com.sdu.didi.psngthong, NOT com.didiglobal.passenger). MCP_URL=https://mcp.didichuxing.com/mcp-servers?key=$DIDI_MCP_KEY. The actual URL string is generated server-side per-request and is NOT publicly documented — VOY cannot construct it client-side, and even if it could, it targets the China app, not the Argentine/LATAM app.
+- KEY FINDING #2 — No iOS Universal Links: https://didiglobal.com/.well-known/apple-app-site-association and https://web.didiglobal.com/.well-known/apple-app-site-association both return the website's HTML/404 page, NOT a JSON AASA declaration. DiDi Global/LATAM app does not register Universal Links on didiglobal.com domain.
+- KEY FINDING #3 — No Android App Links: https://didiglobal.com/.well-known/assetlinks.json, https://ride.didiglobal.com/.well-known/assetlinks.json, https://web.didiglobal.com/.well-known/assetlinks.json, https://common.diditaxi.com.cn/.well-known/assetlinks.json all return 404 or HTML, NOT a JSON assetlinks declaration. DiDi Global app does not register verified HTTPS App Links.
+- KEY FINDING #4 — The 2016 "Hail a Didi Ride" SDK (TechCrunch coverage) was DiDi China's third-party embeddable button for Chinese apps; deprecated/restricted after China's 2021 regulatory crackdown (apps pulled from Chinese app stores). Was NEVER available for the Global/LATAM app.
+- KEY FINDING #5 — DiDi Food Open Platform (developer.didi-food.com) is a REST API for restaurant/delivery partners, not a ride pre-fill deep link integration.
+- No community reverse-engineering of `didi://` scheme parameters found: zero hits on Stack Overflow, GitHub issues, Reddit r/shortcuts URL-scheme list, MicroG issue tracker, Aptoide/Uptodown APK descriptions. No decompiled AndroidManifest findings for com.didiglobal.passenger intent-filter scheme/host/path.
+- Curl-confirmed production status: didiglobal.com/passenger/deeplink → 302→/404 (the bug FIX-001 fixed). web.didiglobal.com/ar/passenger/ride/?pickup_lat=...&dropoff_lat=... → HTTP 404 (the pre-FIX-001 guess URL, never worked). ride.didiglobal.com → HTTP 200 generic landing page (no params accepted).
+
+Stage Summary:
+- **VERDICT: COORD_PRE_FILL_NOT_SUPPORTED** for com.didiglobal.passenger (DiDi Global/LATAM app).
+- Evidence: (a) No public deep link docs after exhaustive multi-source search; (b) No iOS Universal Links (AASA file not published); (c) No Android App Links (assetlinks.json not published); (d) Only the `didi://` custom scheme exists, with NO publicly documented parameters; (e) DiDi does have a server-side `taxi_generate_ride_app_link` MCP tool — but it's authenticated, server-generated, and targets the DiDi CHINA app (com.sdu.didi.psngthong), not the LATAM app VOY uses.
+- **NO CODE CHANGES RECOMMENDED.** Current `buildAppLink('didi')` (post FIX-001) is the best available option. It OPENS the DiDi app to its main screen on Android (via intent:// + scheme=didi + Play Store fallback), and routes to App Store/Play Store on iOS/desktop. Coordinate pre-fill is impossible without DiDi-side support.
+- **Do NOT invent unverified parameter names** like `didi://order?startLat=...&finishLon=...` (mirroring Maxim) or `didi://ride?pickup_lat=...&pickup_lng=...&dropoff_lat=...&dropoff_lng=...` (mirroring the old broken web URL). Without confirmation from a decompiled manifest or official docs, these would either (a) silently fail to pre-fill (same UX as now) or (b) cause the app to error/crash. The user's complaint ("no marca la direccion puesta") is consistent with the app simply not recognizing params — inventing params won't fix this; only DiDi-side support would.
+- **Future options for VOY** (none actionable now, listed for completeness):
+  1. Wait for DiDi to publish a Universal Link / App Link on didiglobal.com (would require AASA + assetlinks.json publication — none today).
+  2. If DiDi ever extends the MCP `taxi_generate_ride_app_link` tool to the Global/LATAM app AND offers anonymous/public key access, VOY could call it server-side from the Cloudflare Worker. Today this is China-only + auth-required, so not viable.
+  3. UI-side mitigation only: in the deep-link confirmation dialog, show the pre-filled origin/destination ADDRESS (text) so the user can manually type/tap it in DiDi after the app opens. This does NOT solve the complaint but reduces friction. Out of scope for this research task.
+- Files changed: NONE (research-only task per instructions). All findings saved to /tmp/didi-research/ (search1-27.json, mcp_didi.json, skill_md.json, skill_raw.json, api_refs.json, workflow.json, didi_food_dev.json, reddit_schemes.json, wb_*.html, cdx.json).
+

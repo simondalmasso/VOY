@@ -74,7 +74,10 @@ Constraints honored:
   --fw-display:800;--fw-title:700;--fw-body:500;--fw-bold:600;
   --header-bg:rgba(255,255,255,0.92);
   --footer-bg:rgba(255,255,255,0.96);
-  --top-scrim:linear-gradient(180deg,rgba(255,255,255,0.92) 0%,rgba(255,255,255,0.55) 60%,rgba(255,255,255,0) 100%);
+  /* ISSUE-1 FIX: softened scrim (0.92→0.60, 0.55→0.30) so the top area is no longer a
+     solid white/black square behind the floating search bar. Still enough contrast for
+     legibility of the dark focal pill (#0F0F0F) over the map. */
+  --top-scrim:linear-gradient(180deg,rgba(255,255,255,0.60) 0%,rgba(255,255,255,0.30) 60%,rgba(255,255,255,0) 100%);
   /* UX_CORE_REDESIGN — floating_input_v2: dark focal pill (FOCUS_SINGLE_ACTION_DESTINATION).
      Spec bg #0F0F0F honored in light theme; lifted to #1A1A1A in dark theme for legibility
      (on pure-black --bg, #0F0F0F would be near-invisible). Intent (dark focal pill) preserved. */
@@ -89,7 +92,11 @@ Constraints honored:
   --accent:#FFFFFF;--primary:#0A84FF;--success:#30D158;--red:#FF453A;--orange:#FF9F0A;
   --border:rgba(255,255,255,0.10);--border-subtle:rgba(255,255,255,0.06);--border-strong:rgba(255,255,255,0.15);
   --header-bg:rgba(0,0,0,0.92);--footer-bg:rgba(0,0,0,0.96);
-  --top-scrim:linear-gradient(180deg,rgba(0,0,0,0.92) 0%,rgba(0,0,0,0.55) 60%,rgba(0,0,0,0) 100%);
+  /* ISSUE-1 FIX: dark-theme scrim softened (0.92→0.45, 0.55→0.20). The old 0.92 opacity
+     created a visible black rectangle (#000 at near-full opacity) behind the search bar —
+     the user-reported "cuadrado negro". 0.45 keeps the dark focal pill legible over the
+     map without forming a solid black block. */
+  --top-scrim:linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.20) 60%,rgba(0,0,0,0) 100%);
   --fi-bg:#1A1A1A;--fi-text:#FFFFFF;--fi-sub:rgba(255,255,255,0.50);--fi-border:rgba(255,255,255,0.10);--fi-hover:rgba(255,255,255,0.08);
 }
 *{margin:0;padding:0;box-sizing:border-box}
@@ -536,6 +543,12 @@ button{cursor:pointer}
 .dialog .dg-title{font-size:var(--font-title);font-weight:var(--fw-title);color:var(--text);text-align:center;letter-spacing:-0.02em;margin-bottom:var(--sp-2)}
 .dialog .dg-provider{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);text-align:center;margin-bottom:var(--sp-2)}
 .dialog .dg-msg-short{font-size:var(--font-body);font-weight:var(--fw-bold);color:var(--text);text-align:center;line-height:1.4;margin-bottom:var(--sp-2)}
+/* ISSUE-2: route hint shown only for DiDi (no coord pre-fill deep link). */
+.dialog .dg-route-hint{margin:0 0 var(--sp-3);padding:var(--sp-3);background:var(--surface2);border:1px solid var(--border-subtle);border-radius:var(--radius-sm)}
+.dialog .dg-route-hint .dgrh-label{font-size:var(--font-micro);font-weight:var(--fw-bold);color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--sp-2);line-height:1.4}
+.dialog .dg-route-hint .dgrh-route{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--font-body);color:var(--text);font-weight:var(--fw-bold)}
+.dialog .dg-route-hint .dgrh-from,.dialog .dg-route-hint .dgrh-to{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dialog .dg-route-hint .dgrh-arrow{color:var(--text3);flex-shrink:0}
 .dialog .dg-msg{font-size:var(--font-caption);color:var(--text2);text-align:center;line-height:1.5;margin-bottom:var(--sp-5)}
 .dialog .dg-actions{display:flex;gap:var(--sp-2)}
 .dg-cancel{
@@ -696,6 +709,7 @@ button{cursor:pointer}
     <div class="dg-icon" id="dgIcon"></div>
     <div class="dg-title" id="dgTitle">Abrir aplicación externa</div>
     <div class="dg-provider" id="dgProvider"></div>
+    <div class="dg-route-hint" id="dgRouteHint" hidden></div>
     <div class="dg-msg-short" id="dgMsgShort">Vas a salir de VOY y abrir una app externa.</div>
     <div class="dg-msg">El servicio y el precio final dependen del proveedor externo, no de VOY.</div>
     <div class="dg-actions">
@@ -802,7 +816,12 @@ var PROVIDERS={
   uber:{name:'Uber',available:true,color:'#111111',category:'app'},
   didi:{name:'DiDi',available:true,color:'#FF6B00',category:'app'},
   maxim:{name:'Maxim',available:true,color:'#7C3AED',category:'app'},
-  cabify:{name:'Cabify',available:true,color:'#00A99D',category:'app'},
+  // ISSUE-4 FIX: Cabify set to available:false — verified NOT operating in Santa Fe city
+  // (only legally "habilitada" with <40 drivers across ALL apps combined as of Mar 2026).
+  // Cabify's own operational driver page lists BA/Córdoba/Rosario/Mendoza/MdP/Corrientes/
+  // Tucumán/Bariloche — Santa Fe omitted. cabify.com/ar/tarifas/santa-fe returns 404.
+  // Hidden from UI via available:false; re-enable (flip to true) when Cabify actually launches.
+  cabify:{name:'Cabify',available:false,color:'#00A99D',category:'app'},
   radiotaxi:{name:'Radiotaxi Santa Fe',available:true,color:'#F59E0B',category:'taxi'},
   taxiapp:{name:'TaxiApp',available:true,color:'#22C55E',category:'taxi'},
   remisreal:{name:'Remises Real',available:true,color:'#6B7280',category:'remis'}
@@ -1879,6 +1898,25 @@ function openDeepLinkDialog(action,url,name){
   if(name&&/whatsapp/i.test(name))iconName='whatsapp';
   var iconEl=document.getElementById('dgIcon');
   if(iconEl)iconEl.innerHTML=svg(iconName,36);
+  // ISSUE-2 FIX: DiDi has NO public deep link to pre-fill pickup/dropoff coordinates
+  // (verified — no Universal Link, no documented didi:// params, no MCP public access).
+  // Uber and Maxim DO pre-fill. To avoid the user opening DiDi and finding an empty
+  // route, we surface the origin→destination as text in the dialog so they can re-enter
+  // it manually in the DiDi app. Only shown for didi (not uber/maxim which pre-fill).
+  var hintEl=document.getElementById('dgRouteHint');
+  if(hintEl){
+    if(action==='didi'){
+      var o=MC.getOrigin(),d=MC.getDest();
+      var oName=(o&&(o.name||'')).split(',')[0]||'origen';
+      var dName=(d&&(d.name||'')).split(',')[0]||'destino';
+      hintEl.innerHTML='<div class="dgrh-label">DiDi no admite pre-cargar la dirección. Ingresala manualmente:</div><div class="dgrh-route"><span class="dgrh-from">'+escapeHtml(oName)+'</span><span class="dgrh-arrow">→</span><span class="dgrh-to">'+escapeHtml(dName)+'</span></div>';
+      hintEl.hidden=false;
+      var ms=document.getElementById('dgMsgShort');if(ms)ms.textContent='DiDi se abre sin la ruta cargada. Anotá el destino arriba.';
+    }else{
+      hintEl.innerHTML='';hintEl.hidden=true;
+      var ms2=document.getElementById('dgMsgShort');if(ms2)ms2.textContent='Vas a salir de VOY y abrir una app externa.';
+    }
+  }
   document.getElementById('dialogOverlay').classList.add('show');
 }
 function closeDeepLinkDialog(){
