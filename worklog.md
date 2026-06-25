@@ -3109,3 +3109,48 @@ Stage Summary:
 - ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash c195c68 matches git SHA. V7.11.0 deployed.
 - ✅ QA: VLM 5/5 (dev + route + prod). Geo: Puente Colgante → SF first. Contrast: WCAG AA. Zero console errors. Lint clean.
 - 🔁 RE-AUDIT TRIGGERS: scrim is transparent (no more 'caja negra'); chips/mode-pills have white text on dark glass; 'Puente Colgante' returns SF; routes select min_distance; geo hint appears when results outside SF bbox.
+
+---
+Task ID: V7_12_GHOST_MODE_ABSOLUTE_TRANSPARENCY_RESET
+Agent: Main (GLM5.2 — Ghost Mode Absolute Transparency)
+Task: Implement V7.12 "Ghost_Mode" — absolute map transparency reset. (1) Eliminate opaque backgrounds from .app/.stage/#map, (2) Convert DiDi modal full-screen → Action Sheet max 25%, (3) z-index reset map=1/UI=5. User warned: "si no soluciona el bloque visual, la arquitectura CSS está viciada desde la raíz".
+
+Work Log:
+- Read prior worklog (V7_11_ANTI_CLUTTER_AND_GEO_CORRECTION). Confirmed V7.11 LIVE in production (build_hash c195c68). Dev server running.
+- INVESTIGATION (critical — user believed .app/.stage had opaque bg blocking map): Explored actual CSS state of all containers.
+  * .app (line 143): NO background set — already transparent. User was wrong about .app.
+  * .stage (line 285): NO background set — already transparent. User was wrong about .stage.
+  * #map (line 131): background:var(--bg3) — in dark theme --bg3:#1A1A1A (near-black). THIS was showing through if tiles slow to load, but tiles cover it once loaded.
+  * .dialog-overlay (line 568): background:rgba(0,0,0,0.5) full-screen overlay — the DiDi modal scrim. Darkened entire map.
+  * .dialog (line 573): NO max-height — grew to fill ~90% of screen with long content. THIS was the "modal que tapa toda la pantalla" the user reported.
+  * .sheet (line 289): background:rgba(18,18,18,0.85) — dark glass, but 0.85 opacity made it look like a solid dark box. THIS was the actual "bloque oscuro" VLM flagged in V7.11.
+- ROOT CAUSE: The "dark layer blocking map" was NOT .app or .stage (both already transparent). It was (a) .sheet at 0.85 opacity looking solid, (b) .dialog-overlay at 0.5 opacity darkening full screen, (c) .dialog with no max-height growing to fill screen.
+- Fase 1 Step 1 (structural transparency): #map background var(--bg3)→transparent!important (never shows dark). .app background:transparent!important explicit. .stage background:transparent!important explicit. #scrim already transparent (V7.11), kept.
+- Fase 1 Step 2 (sheet ghost mode): .sheet opacity 0.85→0.55 (glass ligero), blur 20→25px (more blur compensates for less opacity), max-height 38vh→32vh (less screen covered). Scoped vars: --text #F5F5F5→#FFFFFF (pure white for max contrast), --surface #1A1A1A→rgba(255,255,255,0.06) (translucent surface). Map now visible through the sheet.
+- Fase 1 Step 3 (z-index reset): #map z-index 10→1, #scrim 10→1, .app 20→5. Blueprint spec: map_layer=1, ui_layer=5. All with !important. pointer-events:none on .app/.stage maintained.
+- Fase 2 (DiDi modal → Action Sheet): .dialog-overlay background rgba(0,0,0,0.5)→rgba(0,0,0,0.15) (scrim sutil, not full darken). .dialog: max-height:none→25vh!important (211px on 844px viewport = exactly 25%), border-radius→20px 20px 0 0, overflow-y:auto, padding sp-5→sp-4 (compact). Now it's a bottom Action Sheet leaving 75% of map visible.
+- Updated VOY_VERSION V7.11.0 → V7.12.0.
+- bun run lint → clean (0 errors, 0 warnings).
+- Agent Browser QA (dev, viewport 390x844):
+  * Page load: zero errors. version=V7.12.0, mapZ=1, mapBg=rgba(0,0,0,0), appZ=5, appBg=rgba(0,0,0,0), stageBg=rgba(0,0,0,0), scrimBg=rgba(0,0,0,0), sheetBg=rgba(18,18,18,0.55), sheetMaxH=270px (32vh), dialogMaxH=211px (25vh).
+  * VLM iteration 1 (v712-ghost.png): 3/5 PASS, 2 FAIL — "solid dark box visible" + "map not clearly visible behind all UI". VLM identified the culprit: the bottom sheet (.sheet at 0.85 opacity) looked like a solid dark box.
+  * Applied fix: .sheet 0.85→0.55 opacity, blur 20→25px, max-height 38vh→32vh.
+  * VLM iteration 2 (v712-ghost-3.png): 5/5 PASS — map streets visible, search bar translucent, tabs translucent white, bottom sheet TRANSLUCENT (map visible through), map dominant.
+  * DiDi modal QA: Set origin+dest+car mode → clicked "Pedir DiDi". dialogVisible=true, dialogH.height=211px (exactly 25% of 844px), dialogH.top=633 (starts at 75% down), overlayBg=rgba(0,0,0,0.15), pctOfScreen=25%. VLM 5/5: dialog at bottom, 25% height, map visible top 75%, DiDi branding shown, lightly dimmed overlay.
+- Commit 8a69e53 → push to simonkey888/VOY (2ef6895..8a69e53). CI auto-triggered + workflow_dispatch re-run.
+- Production deploy: wrangler deploy --minify → Uploaded voy-app, Version dad9276f-9fcf-407a-b5f3-372bf8a337a4.
+- Production verification:
+  * /api/health: build_hash="8a69e53" (matches git SHA — V7 guardrail PASSED).
+  * VOY-Lite.html markers: V7.12.0 (1x), background:transparent!important (5x), z-index:1!important (1x), z-index:5!important (1x), rgba(18,18,18,0.55) (1x), max-height:25vh (1x). All V7.12 code LIVE.
+  * Agent Browser production: version=V7.12.0, mapZ=1, mapBg=transparent, appZ=5, appBg=transparent, sheetBg=rgba(18,18,18,0.55), sheetMaxH=270px, dialogMaxH=211px. Zero errors.
+  * VLM production 5/5: map dominant, search translucent, tabs translucent white, sheet translucent (map through), no opaque boxes.
+- GitHub Actions CI: run for 8a69e53 completed:success.
+
+Stage Summary:
+- ✅ INVESTIGATION: User's hypothesis (.app/.stage opaque) was WRONG — both were already transparent. Real culprits: .sheet at 0.85 opacity (looked solid), .dialog-overlay at 0.5 (darkened screen), .dialog no max-height (grew to 90%).
+- ✅ Fase 1 Structural Transparency: #map background→transparent!important, .app/.stage background:transparent!important explicit. z-index 10/20→1/5 (!important).
+- ✅ Fase 1 Sheet Ghost: rgba(18,18,18,0.85)→0.55, blur 20→25px, max-height 38vh→32vh. Map visible through sheet. Text #FFFFFF on rgba(255,255,255,0.06) surfaces.
+- ✅ Fase 2 Action Sheet: .dialog max-height 25vh (211px=25% of 844px), overlay 0.5→0.15. DiDi modal now leaves 75% of map visible.
+- ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash 8a69e53 matches git SHA. V7.12.0 deployed.
+- ✅ QA: VLM dev 5/5 (after sheet fix), VLM DiDi modal 5/5 (25% action sheet), VLM production 5/5 (ghost mode confirmed). Zero console errors. Lint clean.
+- 🔁 RE-AUDIT TRIGGERS: map is z-1 with transparent background (never dark); .app/.stage transparent; sheet is glass ligero (0.55 opacity, map visible through); DiDi modal is 25% action sheet (not full screen); z-index 1/5 layering.
