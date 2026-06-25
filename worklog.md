@@ -3678,3 +3678,44 @@ Stage Summary:
 - ✅ GOLDEN PATH: destination search "terminal" → autocomplete dropdown (9 suggestions) renders with 0 errors.
 - 🔁 DEPLOY NOTE: `window.VOY_BUILD_HASH` still "__BUILD_HASH__" placeholder in dev (`scripts/inject-build-hash.mjs` runs in CI only). Production deploy via wrangler will inject real hash; `scripts/verify-production.sh` will assert `VOY_VERSION`===`/api/health` version.
 - 🔁 RE-AUDIT TRIGGERS: `#map` computed `contain`==="none"; canvas backingH ≤ viewport height on mobile; 0 TypeErrors in console during boot; `#splash` absent from DOM within ~1s of load.
+
+---
+Task ID: V7.18.1_DEPLOY_2026-06-25
+Agent: Main (Deploy Operator)
+Task: Push V7.18.1 hotfix to GitHub (simonkey888/VOY) + deploy to Cloudflare Workers (voy-app.simondalmasso44.workers.dev)
+
+Work Log:
+- Read /home/z/my-project/worklog.md to review prior agent work (latest: V7.18.1_HOTFIX_2026-06-25 which applied the code changes).
+- Checked git status: working tree clean, V7.18.1 hotfix already committed locally as `3d08faf` (auto-commit hook uses UUID messages). 8 local commits ahead of origin/main (ce549f6..3d08faf).
+- Verified .git/config had NO credentials persisted and remote was correctly set to https://github.com/simonkey888/VOY.git.
+- PUSHED to GitHub: `git -c credential.helper='!f() { echo "username=x-access-token"; echo "password=$GITHUB_TOKEN"; }; f' push origin main` with GITHUB_TOKEN passed via env var only (NOT persisted to .git/config, NOT in shell history). Result: `ce549f6..3d08faf  main -> main` ✅
+- Verified post-push: .git/config still clean (rg for ghp_/cfut_/token/password returned no matches).
+- Inspected wrangler.jsonc: name="voy-app" ✅, account_id b21fa81d12acb663798f9f7c51801955 (in comments) ✅, main="./worker.js" ✅, assets.directory="./public" ✅, workers_dev=true ✅, analytics_engine VOY_METRICS bound ✅, cron "0 6 * * 1" ✅. wrangler 4.104.0 available.
+- DRY-RUN: `npx wrangler deploy --dry-run` — read 35 files from public/, total upload 13.02 KiB (gzip 3.95 KiB), all 10 bindings resolved (VOY_METRICS + ASSETS + 8 env vars), no errors.
+- DEPLOY #1: `npx wrangler deploy` with CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID via env vars. Uploaded 1 new asset (VOY-Lite.html with V7.18.1), 30 assets already current. Worker voy-app deployed in 5.06s. Version ID: 743e1e54-d768-40c8-8c5b-036385e4e56c.
+- Detected issue: production /api/health returned build_hash="__BUILD_HASH__" (literal placeholder) — the manual deploy skipped the CI step `scripts/inject-build-hash.mjs` that runs before wrangler deploy in .github/workflows/deploy.yml.
+- Ran `node scripts/inject-build-hash.mjs`: auto-detected git SHA `3d08faf`, ts=2026-06-25T13:00:43.041Z, dirty=false. Patched worker.js (BUILD_HASH="3d08faf") + public/VOY-Lite.html (VOY_BUILD_HASH='3d08faf', VOY_DEPLOY_TS='2026-06-25T13:00:43.041Z').
+- DEPLOY #2: `npx wrangler deploy` (redeploy with injected hash). Worker voy-app deployed in 7.68s. Version ID: a0134d6a-45cb-441d-b3dd-01d9ee4c68e0.
+- Propagation: first curl post-deploy #2 showed stale `__BUILD_HASH__` (edge cache + worker propagation lag). After 8s wait, /api/health returned build_hash="3d08faf" ✅.
+- Verified production HTML (cache-busted): VOY_VERSION='V7.18.1' ✅, VOY_BUILD_HASH='3d08faf' ✅, VOY_DEPLOY_TS='2026-06-25T13:00:43.041Z' ✅ — all match local patched version.
+- Ran `bash scripts/verify-production.sh https://voy-app.simondalmasso44.workers.dev` — 9/9 PASS:
+  * HTTPS 200 ✅
+  * Worker version V7.8.0 ✅ (worker.js WORKER_VERSION, separate from HTML VOY_VERSION — pre-existing project convention)
+  * Build hash injected: 3d08faf ✅
+  * Build hash matches local git SHA ✅
+  * UI HTML contains version pin ✅
+  * Cache-Control: no-store on HTML ✅
+  * /VOY-Lite.html → 200 ✅
+  * modeSelector element present ✅
+  * Mode selector force-shown ✅
+- Restored placeholders locally: `git checkout worker.js public/VOY-Lite.html` — working tree clean, `__BUILD_HASH__` placeholder back in both files (correct for committed source; CI replaces at deploy time).
+
+Stage Summary:
+- ✅ GITHUB PUSH: 8 commits (ce549f6..3d08faf) pushed to https://github.com/simonkey888/VOY main branch. V7.18.1 hotfix is now in the remote repository.
+- ✅ CLOUDFLARE DEPLOY: voy-app worker deployed to https://voy-app.simondalmasso44.workers.dev. Version ID a0134d6a-45cb-441d-b3dd-01d9ee4c68e0. Cron trigger intact (0 6 * * 1).
+- ✅ BUILD HASH GUARDRAIL: inject-build-hash.mjs ran before final deploy. Production /api/health reports build_hash="3d08faf" (matches git HEAD). verify-production.sh confirms deploy is current.
+- ✅ PRODUCTION VERIFIED: 9/9 checks PASS. V7.18.1 hotfix (contain:strict removal + canvas null-guard) is LIVE for users.
+- ✅ NO TOKEN LEAKAGE: GitHub token used via env var + inline credential helper (not persisted to .git/config). Cloudflare token used via CLOUDFLARE_API_TOKEN env var. User confirmed both tokens will be revoked post-deploy ("DESPUÉS REVOCO. DESPREOCUPATE.").
+- ✅ CLEAN WORKING TREE: placeholders restored locally via git checkout. Ready for next dev cycle.
+- 🔁 NOTE: Two version constants exist in this project — worker.js WORKER_VERSION="V7.8.0" (API/worker version, bumped independently) and public/VOY-Lite.html window.VOY_VERSION="V7.18.1" (UI version). The V7.18.1 hotfix was UI-only; worker version unchanged. This is a pre-existing convention, not a regression.
+- 🔁 RE-AUDIT TRIGGERS: production /api/health.build_hash === git rev-parse --short HEAD; production HTML VOY_VERSION === "V7.18.1"; verify-production.sh exit code 0.
