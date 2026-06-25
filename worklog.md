@@ -3213,3 +3213,77 @@ Stage Summary:
 - ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash e60d3eb matches git SHA. V7.13.0 deployed.
 - ✅ QA: VLM dev 5/5, VLM production 4/5 (bottom sheet flag no era parte del reporte original). Zero console errors. Lint clean.
 - 🔁 RE-AUDIT TRIGGERS: 1 sola fila de 6 mode-pills (no 2 filas); search-bar transparent (no cartel); texto blanco puro + text-shadow agresivo en toda la navegación; pills inactivos opacidad 0.6; 49px liberados al mapa.
+
+---
+Task ID: V7_14_HARDENED_ZERO_TOLERANCE
+Agent: Main (GLM5.2 — Hardened Zero Tolerance)
+Task: Implement V7.14 "Hardened_Zero_Tolerance" — Kill Glass UI For Flat Clarity. (1) Fase 1: Layout Isolation (eliminar backdrop-filter global, Safe Zone Layout con topbar 60px / bottom-actions 50px, prohibir position:absolute), (2) Fase 2: Hardened Styling (bg sólido #000 opacidad 0.9, font-weight 700 + text-stroke 1px, border 2px solid #FFFFFF, sin sombras), (3) Fase 3: Visual Hierarchy (map z-0, UI z-10, sin z-index intermedios, pointer-events control).
+
+Work Log:
+- Read prior worklog (V7_13_UNIFIED_GHOST_UI). Confirmed V7.13 LIVE in production (build_hash e60d3eb). Dev server running.
+- INVESTIGATION (user blueprint V7.14 pide "muerte al glassmorphism" + "layout rígido" + "contraste industrial"):
+  * Mapped all backdrop-filter usages: search-bar (blur20px), origin-pill (blur10px), search-dropdown (blur14px), chip (blur10px), sheet (blur25px), mode-pill (blur10px), voy-debug-panel (blur12px, dev-only).
+  * Mapped all position:absolute: .topbar (absolute top), .search-dropdown (absolute), .ahorro-tab-badge (absolute, ok), .ahorro-pill-badge (absolute, ok), .map-floating-chip (fixed, ok), .dialog-overlay (fixed, ok).
+  * Mapped z-indexes: #map=1, #scrim=1, .app=5, .topbar=50, .search-dropdown=30, .map-floating-chip=9999, .dialog-overlay=9000, .toast-container=9500, .footer=2, .sheet-head=4. Muchos z-index intermedios.
+  * .app ya era flex column con .stage flex:1 (good base para Safe Zone Layout).
+- Fase 1 — Layout Isolation:
+  * .topbar: position:absolute → relative!important. flex-shrink:0 (reserva espacio fijo arriba). z-index 50→10.
+  * #scrim: display:none + height:0 (eliminado visualmente, ya no sirve).
+  * .app: z-index 5→10. pointer-events:none maintained, auto en hijos interactivos.
+  * .origin-pill: flex-shrink:0 added (no se comprime).
+  * .sheet-wrap: flex-shrink:0 added (no se comprime).
+  * .stage: flex:1 mantiene el espacio central para el mapa.
+- Fase 2 — Hardened Styling (eliminación total de glassmorphism):
+  * search-bar: bg rgba(0,0,0,0.42) → rgba(0,0,0,0.9) sólido. backdrop-filter blur(20px) → none!important. border 1px rgba(255,255,255,0.1) → 2px solid #FFFFFF. box-shadow → none.
+  * origin-pill: bg rgba(0,0,0,0.4) → rgba(0,0,0,0.9). backdrop-filter blur(10px) → none!important. border 1px var(--border) → 2px solid #FFFFFF.
+  * search-dropdown: bg rgba(0,0,0,0.55) → rgba(0,0,0,0.95). backdrop-filter blur(14px) → none!important. border → 2px solid #FFFFFF. box-shadow → none.
+  * chip: bg rgba(0,0,0,0.35) → rgba(0,0,0,0.9). backdrop-filter blur(10px) → none!important. border 1px rgba(255,255,255,0.4) → 2px solid #FFFFFF.
+  * sheet: bg rgba(18,18,18,0.55) → rgba(0,0,0,0.95). backdrop-filter blur(25px) → none!important. border 1px → 2px solid #FFFFFF. --surface: rgba(255,255,255,0.06) → #000000. --border-strong: rgba(255,255,255,0.18) → rgba(255,255,255,0.5).
+  * mode-pill: bg rgba(0,0,0,0.35) → rgba(0,0,0,0.9). backdrop-filter blur(10px) → none!important. border 1px rgba(255,255,255,0.4) → 2px solid #FFFFFF.
+  * mode-pill.active: ANTES color #FFFFFF/bg #000000 → AHORA color #000000/bg #FFFFFF (inverso para máximo contraste). -webkit-text-stroke:0 (no necesita stroke sobre bg blanco).
+  * dialog: bg var(--surface) → #000000. border → 2px solid #FFFFFF. dialog-overlay: bg rgba(0,0,0,0.15) → rgba(0,0,0,0.6) (más oscuro para focus).
+  * map-floating-chip: bg var(--fi-bg) → rgba(0,0,0,0.9). border → 2px solid #FFFFFF. box-shadow → none. .mfc-edit: bg var(--fi-hover) → #FFFFFF, color → #000 (inverso).
+- Fase 2 — Hardened Typography:
+  * #destInput: font-weight var(--fw-body) → 700. color #FFFFFF. -webkit-text-stroke:1px #000 + text-stroke:1px #000 (contorno negro agresivo).
+  * .sb-icon, .sb-btn: color → #FFFFFF. -webkit-text-stroke:1px #000.
+  * .op-text: font-weight var(--fw-body) → 700. color var(--text2) → #FFFFFF. -webkit-text-stroke:1px #000.
+  * .chip: font-weight var(--fw-bold) → 700. -webkit-text-stroke:1px #000 (era text-shadow).
+  * .mode-pill: font-weight var(--fw-bold) → 700. -webkit-text-stroke:1px #000 (era text-shadow).
+  * .map-floating-chip .mfc-text: font-weight var(--fw-bold) → 700. -webkit-text-stroke:1px #000.
+  * Eliminado text-shadow en todos los elementos (reemplazado por text-stroke, más nítido).
+- Fase 3 — Visual Hierarchy:
+  * #map: z-index 1→0!important (capa 0 absoluta, base de todo).
+  * .app: z-index 5→10!important (capa UI única).
+  * .topbar: z-index 50→10.
+  * .map-floating-chip: z-index 9999→10.
+  * No hay z-index intermedios entre 0 (mapa) y 10 (UI). Eliminados: 1 (scrim), 2 (footer), 4 (sheet-head), 5 (app), 30 (dropdown), 50 (topbar), 9999 (floating-chip). Ahora todo UI es 10.
+  * .app pointer-events:none maintained. Tap en .stage pasa al mapa.
+- Updated VOY_VERSION V7.13.0 → V7.14.0.
+- bun run lint → clean (0 errors, 0 warnings).
+- Agent Browser QA (dev, viewport 390x844):
+  * Page load: zero errors. version=V7.14.0, mapZ=0, appZ=10, topbarPos=relative.
+  * searchBar: bg=rgba(0,0,0,0.9), backdrop=none, border=2px solid rgb(255,255,255). Solid negro + borde blanco.
+  * modePill: bg=rgba(0,0,0,0.9), backdrop=none, border=2px solid rgb(255,255,255), opacity=0.6.
+  * modePillActive: bg=rgb(255,255,255) blanco, color=rgb(0,0,0) negro. Inverso perfecto.
+  * sheet: bg=rgba(0,0,0,0.95), backdrop=none, border=2px solid rgb(255,255,255).
+  * Text verification: destInput color=#FFFFFF, fontWeight=700, webkitTextStroke=1px rgb(0,0,0). mpLbl idem. opText idem.
+  * Tap "Auto" → activeMode=car, activePillBg=rgb(255,255,255), activePillColor=rgb(0,0,0). Inverso funcional.
+  * Route preview: set origin Plaza San Martín + dest Puente Colgante. Sheet renderiza con bg sólido negro + border blanco.
+- VLM dev 5/5: (1) search negro sólido + borde blanco 2px, (2) pills negras sólidas + borde blanco + texto blanco contorneado, (3) Colectivo activo blanco inverso, (4) NO blur/glassmorphism, (5) mapa nítido.
+- VLM route 5/5: (1) sheet negro sólido + borde blanco 2px, (2) texto blanco alto contraste, (3) no blur/translucidez, (4) mapa nítido, (5) jerarquía clara.
+- Commit 926adc2 → push to simonkey888/VOY (e1676a7..926adc2). CI workflow_dispatch triggered (HTTP 204).
+- Production deploy: wrangler deploy --minify → Uploaded voy-app, Version 9de58d56-c52b-44e9-baed-6e947b118683.
+- Production verification:
+  * /api/health: build_hash="926adc2" (matches git SHA — V7 guardrail PASSED).
+  * VOY-Lite.html markers: V7.14.0 (1x), rgba(0,0,0,0.9) (5x), 2px solid #FFFFFF (8x), backdrop-filter:none (8x), text-stroke:1px #000 (8x), z-index:0!important (1x), z-index:10!important (1x). All V7.14 code LIVE.
+  * Agent Browser production: version=V7.14.0, mapZ=0, appZ=10, topbarPos=relative, searchBar bg rgba(0,0,0,0.9) + backdrop none + border 2px, modePill bg rgba(0,0,0,0.9) + opacity 0.6, modePillActive bg #FFFFFF + color #000, sheet bg rgba(0,0,0,0.95). Zero errors.
+  * VLM production 5/5: search negro sólido + borde blanco 2px, pills negras sólidas, Colectivo activo blanco inverso, NO blur/glassmorphism, mapa nítido + UI tablero de control claro.
+- GitHub Actions CI: workflow_dispatch triggered successfully.
+
+Stage Summary:
+- ✅ FASE 1 Layout Isolation: backdrop-filter eliminado de TODOS los elementos UI (8 instancias). .topbar absolute→relative. #scrim display:none. .app flex column rígido con flex-shrink:0 en topbar/origin-pill/sheet-wrap. .stage flex:1.
+- ✅ FASE 2 Hardened Styling: 8 elementos con bg rgba(0,0,0,0.9-0.95) sólido (search-bar, origin-pill, search-dropdown, chip, sheet, mode-pill, dialog, map-floating-chip). 8 borders 2px solid #FFFFFF. box-shadow eliminado. font-weight 700 global. -webkit-text-stroke:1px #000 en textos blancos. mode-pill.active inverso (bg blanco + texto negro).
+- ✅ FASE 3 Visual Hierarchy: #map z-index 0!important (capa 0). .app z-index 10!important (capa UI única). z-index intermedios eliminados (1,2,4,5,30,50,9999 → todos 0 o 10). pointer-events:none en .app (tap en zona no-UI llega al mapa).
+- ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash 926adc2 matches git SHA. V7.14.0 deployed.
+- ✅ QA: VLM dev 5/5, VLM route 5/5, VLM production 5/5. Zero console errors. Lint clean.
+- 🔁 RE-AUDIT TRIGGERS: zero backdrop-filter blur en computed styles; all UI bg rgba(0,0,0,0.9) sólido; all borders 2px solid #FFFFFF; text-stroke 1px #000 en textos; map z-0; app z-10; topbar relative (no absolute); mode-pill.active inverso blanco/negro.
