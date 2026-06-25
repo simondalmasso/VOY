@@ -8,6 +8,7 @@ V7 deploy fixes:
   - HARD VERSION PIN: <meta name="voy-version" content="V7.8.0"> + window.VOY_BUILD_HASH
   - V7.2 UI patches: ButtonRouterFix (DiDi universal link + Maxim scheme=maxim), SheetCompression (38vh cap + internal scroll), MapAlwaysVisible (portrait fitBounds), DestinationInstantFeedback (1-char trigger)
   - V7.3 VOY_PROVIDER_ROUTER_V1: confirmation dialog split into message_short + message_extended per spec; provider-appropriate icon (car/taxi/whatsapp) now shown in dialog; all 5 providers verified (Uber universal link, DiDi deeplink exact coords, Maxim intent first via window.location.href not window.open, Taxi/Remis company accordions with WhatsApp CTA, confirmation gate before leaving VOY)
+  - V7.4 CATEGORY_MANAGER + MAP_STATE_MANAGER: 3 semantic groups (Privados/Activos/Público) with horizontal swipe + slide-fade animation; 3-state map machine (SEARCH_FOCUS/ROUTE_PREVIEW/FULL_MAP) with floating chip; VoyMapContext observer (decoupled from rendering); hardware-accelerated transforms (translateY, never height); rollback via window.VOY_CATEGORY_MANAGER_ENABLED=false
   - worker.js: Cache-Control: no-store on HTML (edge never serves stale UI)
   - SINGLE ENTRYPOINT: ONLY / serves UI (/VOY-Lite.html → 301 → /)
   - Mode selector force-rendered on initial mount
@@ -620,6 +621,106 @@ button{cursor:pointer}
 .mode-pill .mp-ic{display:flex;align-items:center}
 .mode-pill .mp-lbl{font-size:11px;letter-spacing:0.02em}
 
+/* === V7.4 CATEGORY MANAGER (semantic_density grouping + horizontal swipe) ===========================
+   Blueprint: CategoryManager config. Wraps the existing mode-selector with 3 semantic
+   groups — Privados (Auto/Taxi/Remis), Activos (A pie/Bicicleta), Público (Colectivo).
+   Horizontal swipe between groups (collapse_threshold_ms=300); slide-fade animation
+   via CSS transform on .cat-panels-track (hardware-accelerated, no height animation).
+   Rollback: window.VOY_CATEGORY_MANAGER_ENABLED=false restores old flat mode-selector. */
+.category-wrapper{display:none;flex-direction:column;gap:0}
+.category-wrapper.show{display:flex}
+.category-tabs{
+  display:flex;gap:4px;padding:6px var(--sp-4) 2px;
+  border-bottom:0.5px solid var(--border-subtle);
+}
+.cat-tab{
+  flex:1;border:none;background:transparent;cursor:pointer;
+  padding:8px 4px;font-size:var(--font-caption);font-weight:var(--fw-bold);
+  color:var(--text3);min-height:36px;border-radius:var(--radius-xs);
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  transition:color var(--ease-out),background var(--ease-out);
+  -webkit-tap-highlight-color:transparent;
+  border-bottom:2px solid transparent;
+}
+.cat-tab:active{transform:scale(0.97)}
+.cat-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.cat-tab .ct-ic{display:flex;align-items:center}
+.category-panels{
+  overflow:hidden;position:relative;
+  touch-action:pan-y; /* allow vertical scroll, capture horizontal swipe */
+}
+.cat-panels-track{
+  display:flex;
+  transition:transform 250ms ease-in-out; /* blueprint: duration=250, transition=ease-in-out, effect=slide-fade */
+  will-change:transform;
+}
+.cat-panel{
+  min-width:100%;flex-shrink:0;
+  display:flex;gap:6px;padding:8px var(--sp-4) 4px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.cat-panel::-webkit-scrollbar{display:none}
+.cat-panel .mode-pill{opacity:0.72;transition:opacity 250ms ease-in-out,transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out)}
+.cat-panel .mode-pill.active{opacity:1}
+
+/* === V7.4 MAP STATE MANAGER (3-state machine + floating chip) ===========================
+   Blueprint: MapStateManager — SEARCH_FOCUS / ROUTE_PREVIEW / FULL_MAP.
+   body[data-map-state] is the single source of truth. CSS rules below handle
+   visibility/transform of .topbar, .sheet-wrap, .category-wrapper, .map-floating-chip.
+   Performance: all animations use transform: translateY() (hardware-accelerated, no layout).
+   z-index per blueprint: base=map_canvas(0), overlay=search_panel(50), floating_chip=9999. */
+.map-floating-chip{
+  position:fixed;top:calc(env(safe-area-inset-top,0px) + var(--sp-3));left:50%;
+  transform:translateX(-50%) translateY(-160%); /* hidden above viewport by default */
+  z-index:9999; /* floating_chip z-index per blueprint */
+  display:flex;align-items:center;gap:var(--sp-2);
+  padding:10px 16px;min-height:44px;
+  background:var(--fi-bg);color:var(--fi-text);
+  border:1px solid var(--fi-border);border-radius:999px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  cursor:pointer;
+  opacity:0;pointer-events:none;
+  transition:transform 280ms cubic-bezier(0.22,1.1,0.36,1),opacity 280ms ease-out;
+  will-change:transform,opacity;
+  max-width:calc(100% - 32px);
+}
+.map-floating-chip .mfc-ic{display:flex;align-items:center;color:var(--fi-sub);flex-shrink:0}
+.map-floating-chip .mfc-text{
+  font-size:var(--font-body);font-weight:var(--fw-bold);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:200px;letter-spacing:-0.01em;
+}
+.map-floating-chip .mfc-edit{
+  font-size:var(--font-micro);font-weight:700;color:var(--fi-sub);
+  text-transform:uppercase;letter-spacing:0.04em;
+  padding:3px 8px;border-radius:999px;background:var(--fi-hover);
+}
+/* Shared transition for all state-driven panels */
+.topbar,.sheet-wrap,.category-wrapper{
+  transition:transform 280ms cubic-bezier(0.22,1.1,0.36,1),opacity 280ms ease-out;
+  will-change:transform,opacity;
+}
+/* SEARCH_FOCUS (default): all panels visible */
+body[data-map-state="SEARCH_FOCUS"] .topbar{transform:translateY(0);opacity:1;pointer-events:auto}
+body[data-map-state="SEARCH_FOCUS"] .sheet-wrap{transform:translateY(0);opacity:1;pointer-events:auto}
+body[data-map-state="SEARCH_FOCUS"] .category-wrapper{transform:translateY(0);opacity:1}
+body[data-map-state="SEARCH_FOCUS"] .map-floating-chip{transform:translateX(-50%) translateY(-160%);opacity:0;pointer-events:none}
+/* ROUTE_PREVIEW: all panels visible (sheet shows results, category-wrapper shown) */
+body[data-map-state="ROUTE_PREVIEW"] .topbar{transform:translateY(0);opacity:1;pointer-events:auto}
+body[data-map-state="ROUTE_PREVIEW"] .sheet-wrap{transform:translateY(0);opacity:1;pointer-events:auto}
+body[data-map-state="ROUTE_PREVIEW"] .category-wrapper{transform:translateY(0);opacity:1}
+body[data-map-state="ROUTE_PREVIEW"] .map-floating-chip{transform:translateX(-50%) translateY(-160%);opacity:0;pointer-events:none}
+/* FULL_MAP: panels translated off-screen, floating chip slides in */
+body[data-map-state="FULL_MAP"] .topbar{transform:translateY(-160%);opacity:0;pointer-events:none}
+body[data-map-state="FULL_MAP"] .sheet-wrap{transform:translateY(160%);opacity:0;pointer-events:none}
+body[data-map-state="FULL_MAP"] .category-wrapper{transform:translateY(160%);opacity:0;pointer-events:none}
+body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+@media(prefers-reduced-motion:reduce){
+  .topbar,.sheet-wrap,.category-wrapper,.map-floating-chip{transition:opacity 200ms ease-out;transform:none!important}
+  .cat-panels-track{transition:none}
+  .cat-tab:active{transform:none}
+}
+
 /* === SPLASH SCREEN (logo_system + splash spec) === */
 #splash{
   position:fixed;inset:0;z-index:99998;background:#000000;
@@ -689,6 +790,13 @@ button{cursor:pointer}
     <div class="sheet" id="decisionSheet" role="region" aria-label="Opciones de viaje"></div>
   </div>
 
+</div>
+
+<!-- V7.4 MAP STATE MANAGER — floating chip (shown only in FULL_MAP state) -->
+<div class="map-floating-chip" id="mapFloatingChip" role="button" tabindex="0" aria-label="Editar búsqueda" aria-hidden="true">
+  <span class="mfc-ic" id="mfcIcon"></span>
+  <span class="mfc-text" id="mfcText">Destino</span>
+  <span class="mfc-edit">Editar</span>
 </div>
 
 <!-- FOOTER (sticky bottom) -->
@@ -1042,8 +1150,10 @@ document.addEventListener('DOMContentLoaded',function(){
   bindOriginPill();
   bindFooterMenu();
   startIdleDrift();
-  initModeSelector();
+  initCategoryManager(); // V7.4: replaces initModeSelector (3-group semantic tabs + swipe). Rollback: window.VOY_CATEGORY_MANAGER_ENABLED=false
   showModeSelector(true); // V7: force transport selector visible on initial mount (not gated on search)
+  document.body.setAttribute('data-map-state','SEARCH_FOCUS'); // V7.4: initial map state
+  initFloatingChip(); // V7.4: wire floating chip click → SEARCH_FOCUS
   // app_ready → dismiss splash (exit_condition: app_ready_event)
   _signalAppReady();
 
@@ -1109,6 +1219,7 @@ function initMap(){
   try{
     _map=new maplibregl.Map({container:'map',style:CARTO_STYLE,center:[-60.7087,-31.6256],zoom:13,attributionControl:false,interactive:true});
     _map.on('click',onMapClick);
+    _map.on('dragstart',function(){ if(MC.getDest()) VoyMapContext.setState('FULL_MAP'); }); // V7.4: on_map_drag → FULL_MAP
     _map.on('error',function(e){if(_mapStyleLoaded)return;clearTimeout(_mapLoadTimeout);console.warn('[MAP] CARTO error, fallback OSM',e);_map.setStyle(FALLBACK_STYLE)});
     _map.on('load',function(){clearTimeout(_mapLoadTimeout);_mapStyleLoaded=true;_map.resize()});
     _mapLoadTimeout=setTimeout(function(){console.error('[MAP] timeout 10s')},10000);
@@ -1384,6 +1495,7 @@ async function onSearchInput(val){
   val=(val||'').trim();
   var dd=document.getElementById('destDropdown');
   if(!val||val.length===0){
+    VoyMapContext.setState('SEARCH_FOCUS'); // V7.4: input cleared → return to search focus
     if(MC.getDest()){MC.clearDest();renderSheet();updateMapMarkers();clearBusRoute()}
     renderEmptyDropdown();
     dd.classList.add('hidden');
@@ -1435,6 +1547,7 @@ async function fallbackGeocode(q){
   }catch(e){showToast('Error de red al buscar','error')}
 }
 function onSearchFocus(){
+  VoyMapContext.setState('SEARCH_FOCUS'); // V7.4: on_search_input → SEARCH_FOCUS
   var inp=document.getElementById('destInput');
   if(!inp||inp.value.trim().length>=2)return;
   renderEmptyDropdown();
@@ -1516,6 +1629,8 @@ function selectDest(lat,lon,name){
   updateMapMarkers();
   v5event('destination_selected',{source:'search'});
   checkFavActive();
+  updateFloatingChip(); // V7.4: update floating chip text with new dest
+  VoyMapContext.setState('ROUTE_PREVIEW'); // V7.4: on_route_select → ROUTE_PREVIEW
   if(MC.getOrigin())runEstimations();
   else showToast('Te falta el origen — activá la ubicación','warn');
 }
@@ -1579,6 +1694,22 @@ function computeTaxiFare(distKm,timeMin){
   return Math.round(price);
 }
 
+// V7.4 — renderSheetHeadHTML: extracted helper so bike/bus modes can reuse the same
+// sheet head (route summary + favorite button) without duplicating HTML.
+function renderSheetHeadHTML(origin,dest){
+  var h='';
+  h+='<div class="sheet-head">';
+  h+='<div class="sh-route">';
+  h+='<div class="sh-origin"><span class="sh-dot from"></span><span>'+escapeHtml((origin.name||'Mi ubicación').split(',')[0])+'</span></div>';
+  h+='<div class="sh-dest"><span class="sh-dot to"></span><span>'+escapeHtml((dest.name||'Destino').split(',')[0])+'</span></div>';
+  h+='</div>';
+  h+='<div class="sh-actions">';
+  h+='<button class="icon-btn'+(_favActive?' active':'')+'" id="favBtn" aria-label="Guardar destino">'+svg('star',18)+'</button>';
+  h+='</div>';
+  h+='</div>';
+  return h;
+}
+
 // ===================== RENDER DECISION SHEET =====================
 function renderSheet(){
   var container=document.getElementById('decisionSheet');
@@ -1600,6 +1731,57 @@ function renderSheet(){
   }
   showModeSelector(true);
   if(window.VoyEventBus){try{var _o=MC.getOrigin(),_d=MC.getDest();var _winner=(autoEst.rankedProviders&&autoEst.rankedProviders[0])?autoEst.rankedProviders[0]:null;var _fare=_winner?_winner.price:0;VoyEventBus.emit('ride_estimated',{distance_km:autoEst.distance,estimated_fare:_fare,price:_fare,time_min:autoEst.timeMin||0,provider:_winner?_winner.id:'',mode:'auto',fare_captured:_fare>0,lost_conversion:_fare<=0,from_lat:_o&&_o.lat,to_lat:_d&&_d.lat})}catch(e){}}
+
+  // V7.4 CategoryManager: bike/bus modes show ONLY their respective block (no hero/taxi/remis).
+  // Reduces cognitive load — user sees just the relevant transport info for the selected group.
+  if(_activeMode==='bike'){
+    clearBusRoute();
+    var bikeH=renderSheetHeadHTML(origin,dest);
+    if(bikeEst){
+      bikeH+='<div class="bike-block">';
+      bikeH+='<div class="block-title"><span class="bt-ic">'+svg('bike',15)+'</span> Bicicleta</div>';
+      bikeH+='<button class="bike-line" id="bikeLineBtn"><span class="bk-ic">'+svg('bike',20)+'</span><span class="bk-text">'+bikeEst.distance.toFixed(1)+' km · gratis</span><span class="ah-chev">'+svg('chevron',16)+'</span></button>';
+      bikeH+='<div class="bike-detail'+(_bikeDetailExpanded?' expanded':'')+'" id="bikeDetail">';
+      if(bikeEst.nearStation)bikeH+='<div class="bd-row"><span class="bd-ic">'+svg('pin',14)+'</span><span>Retirar: '+escapeHtml(bikeEst.nearStation.nombre)+' ('+escapeHtml(bikeEst.nearStation.calles)+')</span></div>';
+      if(bikeEst.nearDestStation)bikeH+='<div class="bd-row"><span class="bd-ic">'+svg('flag',14)+'</span><span>Dejar: '+escapeHtml(bikeEst.nearDestStation.nombre)+' ('+escapeHtml(bikeEst.nearDestStation.calles)+')</span></div>';
+      bikeH+='<div class="bd-row"><span class="bd-ic">'+svg('external',14)+'</span><a href="'+buildBikeLink()+'" target="_blank" rel="noopener">Abrir Las Bicis</a></div>';
+      bikeH+='</div></div>';
+    }else{
+      bikeH+='<div class="sheet-empty"><div class="se-icon">'+svg('bike',40)+'</div>La bicicleta no es ideal para este trayecto</div>';
+    }
+    container.innerHTML=bikeH;
+    attachSheetEvents();
+    return;
+  }
+  if(_activeMode==='bus'){
+    var rankedBus=[];
+    if(typeof MC.rankBusLines==='function'){try{rankedBus=MC.rankBusLines()||[]}catch(e){rankedBus=[]}}
+    if(!rankedBus.length&&busEst)rankedBus=[busEst];
+    _rankedBus=rankedBus;
+    var busH=renderSheetHeadHTML(origin,dest);
+    if(rankedBus.length){
+      var destKey=(MC.getDest()?MC.getDest().lat.toFixed(4)+'_'+MC.getDest().lon.toFixed(4):'');
+      if(destKey!==_busBlockDestKey){
+        _busBlockDestKey=destKey;
+        _activeBusLine=null;
+        _busDetailExpanded=false;
+        _busAltsExpanded=false;
+      }
+      if(!_activeBusLine||!rankedBus.some(function(b){return String(b.linea)===String(_activeBusLine)})){
+        _activeBusLine=rankedBus[0].linea;
+      }
+      busH+='<div id="busBlockContainer">'+renderBusBlockHTML()+'</div>';
+      container.innerHTML=busH;
+      attachSheetEvents();
+      drawBusRoute(_activeBusLine);
+    }else{
+      busH+='<div class="sheet-empty"><div class="se-icon">'+svg('bus',40)+'</div>Sin rutas de colectivo cercanas</div>';
+      container.innerHTML=busH;
+      attachSheetEvents();
+      clearBusRoute();
+    }
+    return;
+  }
 
   // V7: Build hero/alts respecting _activeMode (transport selector is functional, not decorative).
   // all|car|custom → ride-hailing apps (uber/didi/maxim); taxi → taxi providers;
@@ -1651,16 +1833,7 @@ function renderSheet(){
   var confClass=confidence>=0.8?'high':confidence>=0.65?'mid':'';
 
   var h='';
-  // Sheet head: route summary + save favorite
-  h+='<div class="sheet-head">';
-  h+='<div class="sh-route">';
-  h+='<div class="sh-origin"><span class="sh-dot from"></span><span>'+escapeHtml((origin.name||'Mi ubicación').split(',')[0])+'</span></div>';
-  h+='<div class="sh-dest"><span class="sh-dot to"></span><span>'+escapeHtml((dest.name||'Destino').split(',')[0])+'</span></div>';
-  h+='</div>';
-  h+='<div class="sh-actions">';
-  h+='<button class="icon-btn'+(_favActive?' active':'')+'" id="favBtn" aria-label="Guardar destino">'+svg('star',18)+'</button>';
-  h+='</div>';
-  h+='</div>';
+  h+=renderSheetHeadHTML(origin,dest);
 
   // Hero
   // V7.1 (Gemini AC-1): Walk hero — rendered standalone with arrival clock (ETD magic),
@@ -2297,6 +2470,147 @@ function showToast(msg,type){
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('/sw.js').then(function(){}).catch(function(){});
+  });
+}
+
+// ===================== V7.4 CATEGORY MANAGER (semantic_density grouping + horizontal swipe) =====================
+// Blueprint: CategoryManager config — 3 semantic groups (Privados/Activos/Público).
+// Wraps the existing #modeSelector (swaps class mode-selector → category-wrapper).
+// Does NOT delete old initModeSelector() code — rollback via window.VOY_CATEGORY_MANAGER_ENABLED=false.
+// Groups: Privados(Auto/Taxi/Remis), Activos(A pie/Bicicleta), Público(Colectivo).
+// Interaction: horizontal swipe between groups (collapse_threshold_ms=300), slide-fade animation.
+window.VOY_CATEGORY_MANAGER_ENABLED=true;
+var CATEGORY_GROUPS=[
+  {id:'group_private',label:'Privados',icon:'car',modes:['car','taxi','remis']},
+  {id:'group_eco',label:'Activos',icon:'route',modes:['walk','bike']},
+  {id:'group_public',label:'Público',icon:'bus',modes:['bus']}
+];
+var MODE_META={
+  car:{label:'Auto',icon:'car'},
+  taxi:{label:'Taxi',icon:'taxi'},
+  remis:{label:'Remis',icon:'navigate'},
+  walk:{label:'A pie',icon:'route'},
+  bike:{label:'Bicicleta',icon:'bike'},
+  bus:{label:'Colectivo',icon:'bus'}
+};
+var _activeGroup=0;
+var _catTouchStartX=0,_catTouchStartT=0;
+function initCategoryManager(){
+  if(!window.VOY_CATEGORY_MANAGER_ENABLED){initModeSelector();return}
+  var el=document.getElementById('modeSelector');if(!el)return;
+  el.classList.add('category-wrapper');
+  el.classList.remove('mode-selector');
+  el.removeAttribute('role'); // inner .category-tabs will carry role=tablist
+  var tabsHTML=CATEGORY_GROUPS.map(function(g,i){
+    return '<button class="cat-tab'+(i===_activeGroup?' active':'')+'" data-group-idx="'+i+'" role="tab" aria-selected="'+(i===_activeGroup)+'"><span class="ct-ic">'+svg(g.icon,14)+'</span><span>'+g.label+'</span></button>';
+  }).join('');
+  var panelsHTML=CATEGORY_GROUPS.map(function(g,i){
+    var pillsHTML=g.modes.map(function(modeId){
+      var meta=MODE_META[modeId]||{label:modeId,icon:'car'};
+      return '<button class="mode-pill'+(modeId===_activeMode?' active':'')+'" data-mode="'+modeId+'" role="tab" aria-selected="'+(modeId===_activeMode)+'"><span class="mp-ic">'+svg(meta.icon,16)+'</span><span class="mp-lbl">'+meta.label+'</span></button>';
+    }).join('');
+    return '<div class="cat-panel" data-group-idx="'+i+'">'+pillsHTML+'</div>';
+  }).join('');
+  el.innerHTML='<div class="category-tabs" role="tablist" aria-label="Categoría de transporte">'+tabsHTML+'</div>'
+    +'<div class="category-panels"><div class="cat-panels-track" id="catPanelsTrack">'+panelsHTML+'</div></div>';
+  setCategoryGroup(_activeGroup,false);
+  el.querySelector('.category-tabs').addEventListener('click',function(e){
+    var btn=e.target.closest('.cat-tab');if(!btn)return;
+    setCategoryGroup(parseInt(btn.getAttribute('data-group-idx'),10),true);
+  });
+  el.querySelector('.category-panels').addEventListener('click',function(e){
+    var pill=e.target.closest('.mode-pill');if(!pill)return;
+    setMode(pill.getAttribute('data-mode'));
+  });
+  var panels=el.querySelector('.category-panels');
+  panels.addEventListener('touchstart',function(e){
+    _catTouchStartX=e.touches[0].clientX;
+    _catTouchStartT=Date.now();
+  },{passive:true});
+  panels.addEventListener('touchend',function(e){
+    var dx=e.changedTouches[0].clientX-_catTouchStartX;
+    var dt=Date.now()-_catTouchStartT;
+    if(dt>300)return; // collapse_threshold_ms=300 (ignore slow drags — user is scrolling vertically)
+    if(Math.abs(dx)<50)return; // min 50px horizontal swipe
+    if(dx>0&&_activeGroup>0)setCategoryGroup(_activeGroup-1,true);
+    else if(dx<0&&_activeGroup<CATEGORY_GROUPS.length-1)setCategoryGroup(_activeGroup+1,true);
+  },{passive:true});
+}
+function setCategoryGroup(idx,animate){
+  if(idx<0||idx>=CATEGORY_GROUPS.length)return;
+  _activeGroup=idx;
+  var track=document.getElementById('catPanelsTrack');
+  if(track){track.style.transform='translateX(-'+(idx*100)+'%)'}
+  var tabs=document.querySelectorAll('.cat-tab');
+  for(var i=0;i<tabs.length;i++){
+    var on=i===idx;
+    tabs[i].classList.toggle('active',on);
+    tabs[i].setAttribute('aria-selected',on);
+  }
+}
+function setMode(modeId){
+  _activeMode=modeId;
+  var pills=document.querySelectorAll('.cat-panel .mode-pill');
+  for(var i=0;i<pills.length;i++){
+    var on=pills[i].getAttribute('data-mode')===modeId;
+    pills[i].classList.toggle('active',on);
+    pills[i].setAttribute('aria-selected',on);
+  }
+  // Auto-switch group if the mode belongs to a different group
+  for(var i=0;i<CATEGORY_GROUPS.length;i++){
+    if(CATEGORY_GROUPS[i].modes.indexOf(modeId)>=0){
+      if(i!==_activeGroup)setCategoryGroup(i,true);
+      break;
+    }
+  }
+  if(window.VoyEventBus)VoyEventBus.emit('vehicle_viewed',{mode:_activeMode});
+  renderSheet();
+}
+
+// ===================== V7.4 MAP STATE MANAGER (3-state machine + floating chip) =====================
+// Blueprint: MapStateManager — SEARCH_FOCUS / ROUTE_PREVIEW / FULL_MAP.
+// Decoupled from rendering via VoyMapContext (observer pattern). Any component can
+// request a state change via VoyMapContext.setState(). CSS rules on body[data-map-state]
+// handle panel visibility/transform.
+// Triggers: on_search_input → SEARCH_FOCUS, on_route_select → ROUTE_PREVIEW,
+//           on_map_drag → FULL_MAP, on_chip_tap → SEARCH_FOCUS.
+// Performance: all animations use transform: translateY() (hardware-accelerated, no layout).
+window.VoyMapContext=(function(){
+  var _state='SEARCH_FOCUS';
+  var _listeners=[];
+  function setState(s){
+    if(s===_state)return;
+    var prev=_state;_state=s;
+    document.body.setAttribute('data-map-state',s);
+    for(var i=0;i<_listeners.length;i++){
+      try{_listeners[i](s,prev)}catch(e){console.error('[VoyMapContext] listener error',e)}
+    }
+  }
+  return {
+    getState:function(){return _state},
+    setState:setState,
+    subscribe:function(fn){_listeners.push(fn);return function(){_listeners=_listeners.filter(function(f){return f!==fn})}}
+  };
+})();
+function updateFloatingChip(){
+  var textEl=document.getElementById('mfcText');if(!textEl)return;
+  var dest=MC.getDest();
+  textEl.textContent=dest?(dest.name||'Destino').split(',')[0]:'Destino';
+}
+function initFloatingChip(){
+  var chip=document.getElementById('mapFloatingChip');if(!chip)return;
+  var iconEl=document.getElementById('mfcIcon');
+  if(iconEl)iconEl.innerHTML=svg('mapPin',16);
+  chip.addEventListener('click',function(){
+    VoyMapContext.setState('SEARCH_FOCUS'); // on_chip_tap → SEARCH_FOCUS
+    var inp=document.getElementById('destInput');
+    if(inp){inp.focus();inp.select()}
+  });
+  chip.addEventListener('keydown',function(e){
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();chip.click()}
+  });
+  VoyMapContext.subscribe(function(state){
+    chip.setAttribute('aria-hidden',state!=='FULL_MAP');
   });
 }
 </script>

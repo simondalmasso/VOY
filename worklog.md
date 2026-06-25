@@ -2548,3 +2548,69 @@ Stage Summary:
 - ✅ All 3 fixes browser-verified on dev server.
 - ⏳ Pending: commit + push (triggers deploy.yml auto-deploy with V7 guardrails).
 - 🔁 RE-AUDIT TRIGGERS: user reports no more black box; deep link opens app (not Play Store) on Samsung Internet/Firefox; "Precio estimado" visible in hero card.
+
+---
+Task ID: V7_4_CATEGORY_MAP_STATE
+Agent: Main (CategoryManager + MapStateManager blueprint implementation)
+Task: Implement two UI/UX blueprints from user — (1) CategoryManager: 3 semantic groups (Privados/Activos/Público) with horizontal swipe + slide-fade animation; (2) MapStateManager: 3-state machine (SEARCH_FOCUS/ROUTE_PREVIEW/FULL_MAP) with floating chip. Directives: CategorizerWrapper (don't delete old code, allow rollback), MapContext decoupled via observer pattern, hardware-accelerated transforms (translateY, never height).
+
+Work Log:
+- Read prior worklog (Tasks 1-11, SW_JSON_PARSE_FIX_001, V7_3_UI_UX_FIXES). Confirmed V7.3 (scrim + deep link + Precio estimado) committed locally as 7d1f256 but NOT pushed (origin/main at d27f3b7). Decided to batch V7.3 + V7.4 into single push.
+- Read VOY-Lite.html (2304 lines → 2618 lines after edits) strategically:
+  * DOM structure: #map (fixed full-screen z-0) + #scrim (z-1) + .app (z-2: topbar/origin-pill/memory-row/stage/mode-selector/sheet-wrap) + footer + dialog + toast + floating chip (new)
+  * Categories array (line 1074): car/taxi/remis/walk/custom — blueprint's "Bicicleta"/"Colectivo" exist as rendered BLOCKS (lines 1784/1993) not as mode tabs. Mapped: group_private=[car,taxi,remis], group_eco=[walk,bike], group_public=[bus]
+  * Map init (line 1107): _map.on('click') + 'error' + 'load' — no dragstart listener (added one)
+  * selectDest (line 1511): destination selection → runEstimations → renderSheet
+  * onSearchFocus (line 1437) / onSearchInput (line 1380): search input handlers
+  * renderSheet (line 1583): builds sheet-head + hero + taxi/remis accordions + bus block + bike block + share button
+- Implemented Blueprint 1 (CategoryManager):
+  * New CATEGORY_GROUPS config (3 groups, 6 modes including new 'bike' and 'bus' virtual modes)
+  * initCategoryManager() wraps #modeSelector (swaps class mode-selector→category-wrapper, removes role=tablist from container since inner .category-tabs carries it)
+  * setCategoryGroup(idx): translates .cat-panels-track via transform:translateX(-N*100%) (hardware-accelerated, 250ms ease-in-out per blueprint)
+  * setMode(modeId): updates _activeMode, auto-switches group if mode belongs to different group
+  * Horizontal swipe: touchstart/touchend on .category-panels, collapse_threshold_ms=300, min 50px dx
+  * Rollback: window.VOY_CATEGORY_MANAGER_ENABLED=false → falls back to old initModeSelector()
+  * Old initModeSelector() + MODE_OPTIONS array preserved intact (rollback path)
+- Implemented Blueprint 2 (MapStateManager):
+  * VoyMapContext: vanilla JS observer pattern (getState/setState/subscribe), decoupled from rendering
+  * body[data-map-state] attribute is single source of truth
+  * 3 states: SEARCH_FOCUS (default, all panels visible) / ROUTE_PREVIEW (all visible, dest selected) / FULL_MAP (panels translated off-screen, floating chip slides in)
+  * CSS rules use transform:translateY() for all panel animations (hardware-accelerated, will-change:transform, NO height animation per directive)
+  * Floating chip: position:fixed top center, z-index:9999 per blueprint, shows dest name + "Editar" badge
+  * Triggers wired: on_search_input→SEARCH_FOCUS (in onSearchFocus + onSearchInput cleared block), on_route_select→ROUTE_PREVIEW (in selectDest), on_map_drag→FULL_MAP (_map.on('dragstart')), on_chip_tap→SEARCH_FOCUS (chip click handler)
+  * prefers-reduced-motion: disables transforms, keeps opacity transitions
+  * updateFloatingChip(): called in selectDest to sync chip text with destination name
+- renderSheet modifications:
+  * Extracted renderSheetHeadHTML(origin,dest) helper (reduces duplication, used by main path + bike + bus branches)
+  * Added bike/bus early-return branches after showModeSelector(true): bike mode shows ONLY bike-block, bus mode shows ONLY bus-block (no hero/taxi/remis). Reduces cognitive load per blueprint UX directive.
+  * Main path (car/taxi/remis/walk/custom) unchanged — still renders hero + taxi + remis + bus + bike blocks
+- HTML additions:
+  * Floating chip element inserted after .app close, before footer (sibling to .app, direct child of body for z-index independence)
+- CSS additions (~100 lines): .category-wrapper, .category-tabs, .cat-tab, .cat-panels-track, .cat-panel, .map-floating-chip, body[data-map-state] rules for 3 states, prefers-reduced-motion overrides
+- Lint: bun run lint → clean (no errors)
+- Agent Browser self-verification (viewport 390x844, 14 verification points):
+  1. ✅ Page loads, no console errors, no runtime errors
+  2. ✅ 3 category tabs render (Privados/Activos/Público)
+  3. ✅ 3 panels + 6 mode pills render (Auto/Taxi/Remis/A pie/Bicicleta/Colectivo)
+  4. ✅ Initial state: data-map-state="SEARCH_FOCUS", track at translateX(0%)
+  5. ✅ Tab click "Activos" → track slides to translateX(-100%)
+  6. ✅ Pill click "Bicicleta" → _activeMode="bike"
+  7. ✅ Auto-switch: setMode('bus') while on group 0 → _activeGroup=2, track at translateX(-200%)
+  8. ✅ Set origin+dest → data-map-state="ROUTE_PREVIEW", floating chip text="Estación Belgrano"
+  9. ✅ Bike mode sheet: hasBikeBlock=true, hasHero=false, hasTaxiAcc=false, hasRemisAcc=false, hasBusBlock=false
+  10. ✅ Bus mode sheet: hasBusBlock=true, hasHero=false, hasTaxiAcc=false, hasBikeBlock=false
+  11. ✅ Car mode full sheet: hasHero=true, hasTaxiAcc=true, hasRemisAcc=true, hasBusBlock=true, hasBikeBlock=true, hasShareBtn=true
+  12. ✅ VoyMapContext.setState('FULL_MAP') → chip opacity=1, aria-hidden=false; topbar translated up; sheet+categories opacity=0
+  13. ✅ _map.fire('dragstart') → data-map-state="FULL_MAP" (dragstart listener wired correctly)
+  14. ✅ Floating chip click → data-map-state="SEARCH_FOCUS"
+- Screenshots: /tmp/v74-initial.png, /tmp/v74-fullmap.png, /tmp/v74-route-preview.png, /tmp/v74-categories.png
+
+Stage Summary:
+- ✅ Blueprint 1 (CategoryManager): 3 semantic groups with horizontal swipe + slide-fade animation (250ms ease-in-out, transform-based). Rollback path preserved (window.VOY_CATEGORY_MANAGER_ENABLED=false).
+- ✅ Blueprint 2 (MapStateManager): 3-state machine (SEARCH_FOCUS/ROUTE_PREVIEW/FULL_MAP) via VoyMapContext observer. All 4 triggers wired (on_search_input/on_route_select/on_map_drag/on_chip_tap). Floating chip z-index 9999.
+- ✅ Performance directive honored: ALL animations use transform:translateY/translateX (hardware-accelerated, will-change set, NO height animation). prefers-reduced-motion overrides included.
+- ✅ Refactor directive honored: old initModeSelector() + MODE_OPTIONS preserved (rollback path). renderSheetHeadHTML() extracted as helper (reduces duplication across main/bike/bus paths).
+- ✅ Decoupling directive honored: VoyMapContext is standalone observer, any component can subscribe. No direct coupling between map events and renderSheet.
+- ✅ Browser-verified 14/14 points. Zero console errors. Lint clean.
+- ⏳ Pending: commit + push (will include V7.3 scrim/deep-link/precio-estimado fixes + V7.4 CategoryManager/MapStateManager in single deploy).
+- 🔁 RE-AUDIT TRIGGERS: user sees 3 category tabs with swipe; map drag hides UI + shows floating chip; chip tap returns to search; bike/bus modes show only their block.
