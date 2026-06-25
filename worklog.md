@@ -3154,3 +3154,62 @@ Stage Summary:
 - ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash 8a69e53 matches git SHA. V7.12.0 deployed.
 - ✅ QA: VLM dev 5/5 (after sheet fix), VLM DiDi modal 5/5 (25% action sheet), VLM production 5/5 (ghost mode confirmed). Zero console errors. Lint clean.
 - 🔁 RE-AUDIT TRIGGERS: map is z-1 with transparent background (never dark); .app/.stage transparent; sheet is glass ligero (0.55 opacity, map visible through); DiDi modal is 25% action sheet (not full screen); z-index 1/5 layering.
+
+---
+Task ID: V7_13_UNIFIED_GHOST_UI
+Agent: Main (GLM5.2 — Unified Ghost UI)
+Task: Implement V7.13 "Unified_Ghost_UI" — (1) Fase 1: Eliminar doble fila de botones fusionando cat-tabs + mode-pills en 1 sola fila scrollable de 36px, (2) Fase 2: Ghost contrast real en search-bar (bg transparent + blur(20px) + text-shadow agresivo), (3) Fase 3: Clean map (opacidad 0.6 inactivos + height 36px pills).
+
+Work Log:
+- Read prior worklog (V7_12_GHOST_MODE_ABSOLUTE_TRANSPARENCY_RESET). Confirmed V7.12 LIVE in production (build_hash 8a69e53). Dev server running.
+- INVESTIGATION (user reported 3 issues: "cartel atrás de búsqueda", "botones en diferentes líneas", "no se lee nada"):
+  * search-bar: bg rgba(0,0,0,0.42) + blur(15px) + box-shadow — se veía como "cartel oscuro" real (bg opaco al 42%).
+  * cat-tabs (Ahorro/Privados/Activos/Público): color rgb(155,155,155) sobre bg transparente — ilegibles sobre mapa claro (contraste ~1.6:1, WCAG AA requiere 4.5:1).
+  * cat-panels-track: 4 cat-panels con slide horizontal transform, cada uno con sus mode-pills — 2 filas apiladas (cat-tabs y=533 h=45 + cat-panel y=578 h=52 = 97px total).
+  * mode-pills: ya estaban bien (glass oscuro rgba(0,0,0,0.35) + texto blanco + text-shadow 0.4).
+- Fase 1 — Unificación estructural (initCategoryManager rewrite):
+  * Eliminado render de cat-tabs + cat-panels-track + cat-panel. category-wrapper ahora es flex-row directo de mode-pills.
+  * 6 mode-pills únicos: car, taxi, remis, bus, walk, bike (antes: 7 pills con Colectivo duplicado en group_ahorro + group_public).
+  * setMode simplificado: querySelectorAll('.mode-pill') directo (antes: '.cat-panel .mode-pill'). _mapModeToGroup() mantiene _activeGroup sync para compat.
+  * setCategoryGroup: no-op visual (sin cat-tabs ni slide). Mantiene lógica de auto-select mode si se llama.
+  * Ahorro feature preservado: renderAhorroBadges() en core/ahorro.js busca .mode-pill[data-mode="bus"] — ahora 1 solo pill, badge se monta ahí.
+  * CSS: .category-tabs,.category-panels,.cat-panels-track,.cat-panel { display:none!important }. .category-wrapper: flex-direction:row, min-height:36px, overflow-x:auto.
+  * Altura category zone: 97px → 48px. **49px liberados al mapa** (blueprint objetivo cumplido).
+- Fase 2 — Ghost contrast search-bar:
+  * background: rgba(0,0,0,0.42) → transparent!important (ghost real, NO cartel).
+  * backdrop-filter: blur(15px) → blur(20px) (sútil frosted glass).
+  * border: rgba(255,255,255,0.2) → rgba(255,255,255,0.1) (sutil).
+  * box-shadow: eliminado (era 0 4px 16px rgba(0,0,0,0.12)).
+  * #destInput color: var(--fi-text) → #FFFFFF puro + text-shadow: 0 1px 2px rgba(0,0,0,0.8) agresivo.
+  * .sb-icon, .sb-btn color: var(--fi-sub) → #FFFFFF + text-shadow agresivo.
+  * #destInput::placeholder: rgba(255,255,255,0.85) + text-shadow.
+- Fase 3 — Clean map + opacity:
+  * .mode-pill min-height: 40px → 36px (directiva CSS blueprint).
+  * .mode-pill opacity inactivos: 0.72 → 0.6 (blueprint: "no distrae pero mantiene contraste").
+  * .mode-pill text-shadow: rgba(0,0,0,0.4) → rgba(0,0,0,0.8) agresivo (blueprint: "se lee sí o sí").
+- Updated VOY_VERSION V7.12.0 → V7.13.0.
+- bun run lint → clean (0 errors, 0 warnings).
+- Agent Browser QA (dev, viewport 390x844):
+  * Page load: zero errors. version=V7.13.0, modePillCount=6 (antes 7 con duplicado), catTabCount=0, catPanelCount=0 (doble fila eliminada).
+  * catWrapperHeight=36px (antes 97px combinados). searchBarBg=rgba(0,0,0,0) (transparent!). searchBarBackdrop=blur(20px). searchBarBorder=rgba(255,255,255,0.1).
+  * destInputColor=rgb(255,255,255), destInputShadow=rgba(0,0,0,0.8) 0px 1px 2px. modePillOpacity=0.6. modePillShadow=rgba(0,0,0,0.8). modePillHeight=36px.
+  * activeMode=bus (default), activeGroup=3 (mapeo correcto via _mapModeToGroup).
+  * Tap "Auto" → activeMode=car, activeGroup=1, activePill="Auto". Click funcional.
+  * Layout: catWrapper y=582 h=48 bottom=630, sheetWrap y=630 h=175. gap=0px (sin espacio muerto). 49px liberados al mapa vs V7.12.
+- VLM dev 5/5: (1) 1 sola fila de botones, (2) pills legibles glass oscuro + texto blanco, (3) Colectivo activo sólido negro + inactivos tenues, (4) placeholder legible, (5) mapa dominante.
+- Commit e60d3eb → push to simonkey888/VOY (6ce32e7..e60d3eb). CI auto-triggered + workflow_dispatch re-run.
+- Production deploy: wrangler deploy --minify → Uploaded voy-app, Version 3b63c71b-ddfb-48d1-afe6-37ad5c2d75c1.
+- Production verification:
+  * /api/health: build_hash="e60d3eb" (matches git SHA — V7 guardrail PASSED).
+  * VOY-Lite.html markers: V7.13.0 (1x), uniqueModes (2x), _mapModeToGroup (3x), background:transparent!important (6x), opacity:0.6 (3x). All V7.13 code LIVE.
+  * Agent Browser production: version=V7.13.0, modePillCount=6, catTabCount=0, catPanelCount=0, searchBarBg=transparent, modePillOpacity=0.6, catWrapperHeight=36px. Zero errors.
+  * VLM production 4/5: (1) 1 sola fila PASS, (2) pills legibles PASS, (3) Colectivo activo sólido PASS, (4) placeholder legible PASS, (5) bottom sheet percibido como opaco (rgba(18,18,18,0.55) — ya verificado 5/5 en V7.12, no era parte de los problemas reportados).
+- GitHub Actions CI: run for e60d3eb completed:success (2 runs).
+
+Stage Summary:
+- ✅ FASE 1 Unificación: Doble fila eliminada. 6 mode-pills en 1 sola fila scrollable de 36px. cat-tabs/cat-panels/cat-panel display:none!important. initCategoryManager reescrito. setMode simplificado. _mapModeToGroup() mantiene compat. Ahorro badge preservado sobre Colectivo. 49px liberados al mapa.
+- ✅ FASE 2 Ghost contrast: search-bar bg rgba(0,0,0,0.42) → transparent!important. blur 15→20px. border 0.2→0.1. box-shadow eliminado. #destInput + .sb-icon + .sb-btn → #FFFFFF + text-shadow 0 1px 2px rgba(0,0,0,0.8) agresivo.
+- ✅ FASE 3 Clean map: mode-pill min-height 40→36px. opacity inactivos 0.72→0.6. text-shadow 0.4→0.8 agresivo.
+- ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash e60d3eb matches git SHA. V7.13.0 deployed.
+- ✅ QA: VLM dev 5/5, VLM production 4/5 (bottom sheet flag no era parte del reporte original). Zero console errors. Lint clean.
+- 🔁 RE-AUDIT TRIGGERS: 1 sola fila de 6 mode-pills (no 2 filas); search-bar transparent (no cartel); texto blanco puro + text-shadow agresivo en toda la navegación; pills inactivos opacidad 0.6; 49px liberados al mapa.
