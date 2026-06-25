@@ -3596,3 +3596,52 @@ Stage Summary:
 - ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash ce549f6 matches git HEAD.
 - ✅ QA: Agent Browser mobile 390x844 — 0 errors, canvas dims correct (390x844), handler verified via synthetic event, VLM 4/4.
 - 🔁 RE-AUDIT TRIGGERS: canvas backingH <= 844 on mobile; webglcontextlost listener defaultPrevented=true on synthetic dispatch; no [MAP] WebGL context lost warnings in normal usage.
+
+---
+Task ID: FORENSIC_LOG_AUDIT_2026-06-25
+Agent: Main (Forensic Log Auditor)
+Task: Dump all today's console errors, crashing code, and root-cause the "black squares behind buttons" visual issue
+
+Work Log:
+- Read /home/z/my-project/dev.log (34034 bytes, 549 lines, binary bytes stripped via tr -cd). Filtered by date 2026-06-25 (America/Buenos_Aires).
+- Launched Agent Browser on production (390x844 mobile) with cache-bust ?_bust=forensic_audit_v718. Captured full console + page errors + network requests.
+- Triggered full user flow: load → type destination "terminal santa fe" → select suggestion → wait for estimation.
+
+DEV.LOG FINDINGS (today):
+1. EADDRINUSE :3000 at startup (stale dev server from prior session). Non-blocking — second instance bound fine.
+2. Next.js deprecation warning: "middleware" file convention deprecated → use "proxy" instead. Non-blocking.
+3. POST /api/events 404 — DOZENS of occurrences in dev.log. Root cause: public/core/eventBus.js:23 calls '/api/events' (exists in worker.js production, NOT in Next.js dev routes). DEV-ONLY issue, production returns 202.
+4. POST /api/predict 405 — one-off, wrong HTTP method. No client source found calling /api/predict (likely manual test).
+5. Telemetry js_error + promise_rejection events captured: payload "V7.7 test: uncaught error" and "V7.7 test: unhandled rejection" — these are INTENTIONAL test telemetry (V7.7 era), not real crashes.
+6. LCP values: range 240ms to 10216ms (one outlier at 10216ms, most 1500-3500ms). Slow loads correlate with cold compile.
+
+PRODUCTION RUNTIME (Agent Browser):
+- ONLY console error: [error] [MAP] timeout 10s (fires once on load).
+- 0 page errors (no uncaught exceptions, no promise rejections).
+- 0 network 4xx/5xx errors.
+- All scripts loaded 200 OK (maplibre-gl, mobilityEngine, pricingEngine, eventBus, mobilityController, ahorro, trend, telemetry, favorites, feedback).
+- CARTO style + tiles + sprite + fonts all loaded 200 OK.
+- Full estimation flow (type destination → select suggestion → cards render) completed with 0 new errors.
+
+ROOT CAUSE of [MAP] timeout 10s:
+- File: public/VOY-Lite.html line 1649
+- Code: _mapLoadTimeout=setTimeout(function(){console.error('[MAP] timeout 10s')},10000);
+- Bug: timeout fires console.error after 10s regardless of whether map actually loaded. clearTimeout only runs on _map.on('load') event (line 1648). On slow networks the style load can legitimately take >10s, but the map DOES eventually load (confirmed: tiles + sprite + fonts all 200 OK, VLM confirms map_visible=true).
+- Severity: FALSE POSITIVE — scary log but no functional impact. Map renders correctly.
+- Recommended fix: either (a) bump timeout to 20s, or (b) log as console.warn instead of console.error, or (c) check _mapStyleLoaded flag before logging.
+
+BLACK SQUARES BEHIND BUTTONS — ROOT CAUSE IDENTIFIED:
+- VLM analysis (glm-4.6v): black_squares_visible=true on search-bar + mode-pills (Auto, Taxi, Remis).
+- Agent Browser computed styles confirmed:
+  * .mode-pill (Auto/Taxi/Remis): bg=rgb(0,0,0) pure black, border=1px solid rgba(255,255,255,0.6), border-radius=999px, width=89-108px, height=46px
+  * .search-bar: bg=rgb(0,0,0) pure black, border-radius=14px, width=358, height=56
+  * .origin-pill: bg=rgb(0,0,0) pure black, border-radius=999px
+- Root cause: V7.16 LEGIBILITY_CORE block at line 991 forces `background:#000000!important` on 11 selectors (.search-bar, .mode-pill, .sheet-wrap, .sheet, .cat-panel, .dialog-overlay, .dialog, .chip, .origin-pill, .map-floating-chip, .search-dropdown). This was intended to maximize text legibility (white text on pure black) but visually produces opaque black rectangles over the map.
+- The elements DO have border-radius (999px for pills, 14px for search-bar) so technically they are rounded — but the pure black opacity against the light map background creates the "black square" perception.
+- This is a DESIGN TRADEOFF, not a bug. V7.16 deliberately chose pure black bg for legibility. To reverse: change `background:#000000!important` to a semi-transparent value like `rgba(0,0,0,0.75)!important` or use theme-aware colors.
+
+Stage Summary:
+- Today's dev.log: 1 EADDRINUSE (stale server, harmless), 1 deprecation warning (middleware→proxy), dozens of /api/events 404 (dev-only, production OK), 1 /api/predict 405 (one-off test), 2 intentional V7.7 test telemetry events. NO real crashes.
+- Production runtime: ONLY [MAP] timeout 10s console.error (false positive — map loads fine). 0 page errors, 0 network errors, full estimation flow works.
+- Black squares: root cause is V7.16 LEGIBILITY_CORE `background:#000000!important` on 11 selectors. Intentional design decision for legibility, but creates visual "black square" perception against the map. Reversible by switching to semi-transparent bg.
+- No code changes applied in this audit (user requested analysis only).
