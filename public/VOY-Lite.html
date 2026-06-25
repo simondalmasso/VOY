@@ -123,52 +123,50 @@ body{
 button{font-family:inherit;letter-spacing:inherit}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
 
-/* === AMBIENT MAP (V7.12 GHOST_MODE: z-1) — full-bleed, opacity 1, native gestures ===
-   V7.12: z-index 10→1 (blueprint spec: map_layer=1). background var(--bg3)→transparent
-   para que NUNCA muestre un fondo oscuro si los tiles tardan en cargar. El mapa es
-   la capa 0 absoluta — todo flota encima con glassmorphism. ============================ */
+/* === AMBIENT MAP (V7.14 HARDENED: z-0) — full-bleed, capa 0 absoluta ============
+   V7.14: z-index 1→0 (blueprint spec: map_layer=0). El mapa es la capa base.
+   Todo UI arriba tiene z-index:10. No hay z-index intermedios. ====================== */
 #map{
-  position:fixed;inset:0;z-index:1!important;width:100%;height:100%;
+  position:fixed;inset:0;z-index:0!important;width:100%;height:100%;
   opacity:1;filter:none;background:transparent!important;
 }
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
 .maplibregl-ctrl-attrib{display:none!important}
 
-/* === TOP SCRIM (z-1) — V7.12 GHOST_MODE: background transparent (sin gradient opaco) === */
-#scrim{position:fixed;top:0;left:0;right:0;height:200px;z-index:1;background:transparent!important;pointer-events:none}
+/* === TOP SCRIM (V7.14: eliminado — sin scrim, sin blur) ============================ */
+#scrim{position:fixed;top:0;left:0;right:0;height:0;z-index:0;background:transparent!important;pointer-events:none;display:none}
 
-/* === APP (V7.12 GHOST_MODE: z-5) — UI overlay layer; pointer-events:none lets map through ===
-   V7.12: z-index 20→5 (blueprint spec: ui_layer=5). background:transparent!important
-   explícito (ya lo era, pero forzado para cumplir directiva step_1). ====================== */
-.app{position:relative;z-index:5!important;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0;pointer-events:none;background:transparent!important}
+/* === APP (V7.14 HARDENED: z-10, flex column rígido, sin absolute) ================
+   V7.14: z-index 5→10 (blueprint spec: ui_layer=10). Layout flex column estricto:
+   .topbar (top-header 60px) → .origin-pill (auto) → .memory-row (auto) → .stage (flex:1)
+   → .category-wrapper (bottom-actions 50px) → .sheet-wrap (auto).
+   El mapa (z-0) se ve a través de .stage. Los elementos UI NO usan position:absolute.
+   pointer-events:none en contenedores, auto solo en botones/inputs. ================== */
+.app{position:relative;z-index:10!important;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0;pointer-events:none;background:transparent!important}
 .app>.topbar,.app>.origin-pill,.app>.memory-row,.app>.mode-selector,.app>.category-wrapper,.app>.sheet-wrap{pointer-events:auto}
 
-/* === FLOATING INPUT v2 (UX_CORE_REDESIGN_LIGHT_TOUCH) ===========================
-   Principles: NO_COLOR_EXPLOSION · FOCUS_SINGLE_ACTION_DESTINATION · MOBILE_FIRST_9_16 ·
-   FLOATING_INPUT_PRIORITY. The destination input is THE single action: a dark focal pill
-   floating at lower_top_third over the ambient map, topmost ambient z, first visual
-   attention element on load. Mic is inside_input_right (continuous push-to-talk).
-   Map/Locate retained as muted secondary actions per LIGHT_TOUCH (removing would break
-   pick-on-map + locate-me flows). =========================================================== */
+/* === V7.14 HARDENED TOPBAR (Safe Zone Layout) ===================================
+   Blueprint fase_1: 'Barra de búsqueda en Top-Header (60px)'. position:relative (no absolute).
+   Flex shrink:0 para reservar espacio fijo arriba. El mapa se ve debajo, sin superposición. */
 .topbar{
-  /* UI_RESET_V1 step_4: sticky to top with notch safe-area padding (was 20vh down).
-     Frees the upper map area for full-bleed visibility. */
-  position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);left:0;right:0;
-  z-index:50;
-  padding:0 var(--sp-4);
-  background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+  position:relative!important; /* V7.14: absolute→relative (no más flotante) */
+  flex-shrink:0;
+  z-index:10;
+  padding:calc(env(safe-area-inset-top,0px) + 8px) var(--sp-4) 4px;
+  background:transparent;
 }
-/* V7.13 UNIFIED_GHOST_UI: search-bar = ghost real. background:transparent (era rgba(0,0,0,0.42)
-   que se veía como 'cartel oscuro'). Solo blur(20px) + border rgba(255,255,255,0.1) sútil.
-   Text-shadow agresivo 0 1px 2px rgba(0,0,0,0.8) garantiza legibilidad sobre cualquier mapa. */
+/* V7.14 HARDENED search-bar: bg SOLID #000000 (no transparent, no blur, no glassmorphism).
+   Border 2px #FFFFFF sólido (define dónde termina UI y empieza mapa).
+   Texto #FFFFFF weight 700 + text-stroke 1px para legibilidad absoluta. */
 .search-bar{
   position:relative;display:flex;align-items:center;gap:var(--sp-1);
-  background:transparent!important; /* V7.13: rgba(0,0,0,0.42) → transparent (ghost real) */
-  border:1px solid rgba(255,255,255,0.1); /* V7.13: 0.2 → 0.1 (sútil) */
-  backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2); /* V7.13: 15 → 20 */
+  background:#000000!important; /* V7.14: rgba(0,0,0,0.42)→solid #000 (0.9 opacidad via rgba abajo) */
+  background:rgba(0,0,0,0.9)!important; /* spec: opacidad 0.9 */
+  border:2px solid #FFFFFF!important; /* V7.14: 1px rgba(255,255,255,0.1)→2px solid #FFFFFF */
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important; /* V7.14: ELIMINADO blur */
   border-radius:14px;
   padding:0 var(--sp-2);height:48px;min-height:48px;
-  box-shadow:none; /* V7.13: eliminado (era 0 4px 16px rgba(0,0,0,0.12)) */
+  box-shadow:none;
   animation:fadeUpSoftWake 420ms ease-out both;
 }
 @keyframes fadeUpSoftWake{
@@ -176,24 +174,24 @@ button{font-family:inherit;letter-spacing:inherit}
   100%{opacity:1;transform:translateY(0)}
 }
 @media(prefers-reduced-motion:reduce){.search-bar{animation:none;opacity:1;transform:none}}
-/* V7.13: text-shadow agresivo en todos los textos de navegación del search-bar.
-   Truco técnico: texto blanco + sombra negra fuerte se lee sobre mapa claro u oscuro sin caja. */
-.search-bar .sb-icon{color:#FFFFFF;flex-shrink:0;display:flex;align-items:center;padding-left:var(--sp-1);text-shadow:0 1px 2px rgba(0,0,0,0.8)}
+/* V7.14 HARDENED typography: weight 700 + text-stroke 1px negro para legibilidad absoluta.
+   Texto blanco sobre fondo negro sólido = contraste máximo. Sin text-shadow (reemplazado por stroke). */
+.search-bar .sb-icon{color:#FFFFFF;flex-shrink:0;display:flex;align-items:center;padding-left:var(--sp-1);-webkit-text-stroke:1px #000;text-stroke:1px #000}
 #destInput{
   flex:1;border:none;background:transparent;outline:none;
   font-size:calc(var(--font-body) * 1.05);
-  font-weight:var(--fw-body);color:#FFFFFF; /* V7.13: var(--fi-text) → #FFFFFF puro */
+  font-weight:700;color:#FFFFFF; /* V7.14: var(--fw-body)→700, #FFFFFF */
   min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;min-height:32px;
-  text-shadow:0 1px 2px rgba(0,0,0,0.8); /* V7.13: agresivo */
+  -webkit-text-stroke:1px #000;text-stroke:1px #000; /* V7.14: stroke agresivo */
 }
-#destInput::placeholder{color:rgba(255,255,255,0.85);text-shadow:0 1px 2px rgba(0,0,0,0.8)} /* V7.13: var(--fi-sub) → blanco con sombra */
+#destInput::placeholder{color:rgba(255,255,255,0.85);-webkit-text-stroke:1px #000;text-stroke:1px #000}
 .sb-btn{
   border:none;background:transparent;cursor:pointer;flex-shrink:0;
   width:40px;height:40px;border-radius:var(--radius-sm);
-  display:flex;align-items:center;justify-content:center;color:#FFFFFF; /* V7.13: var(--fi-sub) → #FFFFFF */
+  display:flex;align-items:center;justify-content:center;color:#FFFFFF;
   transition:transform var(--ease-out),background var(--ease-out),opacity var(--ease-out);
   -webkit-tap-highlight-color:transparent;
-  text-shadow:0 1px 2px rgba(0,0,0,0.8); /* V7.13: agresivo */
+  -webkit-text-stroke:1px #000;text-stroke:1px #000; /* V7.14: stroke agresivo */
 }
 .sb-btn:active{transform:scale(0.9);background:var(--fi-hover)}
 .sb-btn[disabled]{opacity:0.3;cursor:not-allowed}
@@ -209,29 +207,29 @@ button{font-family:inherit;letter-spacing:inherit}
 @keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,59,48,0.35)}50%{box-shadow:0 0 0 6px rgba(255,59,48,0)}}
 @media(prefers-reduced-motion:reduce){.sb-btn.sb-mic.listening{animation:none}}
 
-/* Origin pill — V7.9: glassmorphism (dark glass, matches search-bar aesthetic). */
+/* === V7.14 HARDENED ORIGIN PILL: bg sólido negro + border 2px blanco, sin blur === */
 .origin-pill{
   display:none;align-items:center;gap:var(--sp-2);margin:calc(env(safe-area-inset-top,0px) + var(--sp-2)) var(--sp-4) 0;
-  padding:8px 12px;background:rgba(0,0,0,0.4);border:1px solid var(--border);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  padding:8px 12px;background:rgba(0,0,0,0.9)!important;border:2px solid #FFFFFF!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
   border-radius:999px;width:fit-content;max-width:calc(100% - 32px);
   cursor:pointer;transition:transform var(--ease-out);min-height:36px;
+  flex-shrink:0;
 }
 .origin-pill.show{display:flex}
 .origin-pill:active{transform:scale(0.98)}
 .origin-pill .op-dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0}
 .origin-pill .op-dot.err{background:var(--red)}
-.origin-pill .op-text{font-size:var(--font-caption);color:var(--text2);font-weight:var(--fw-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.origin-pill .op-text{font-size:var(--font-caption);color:#FFFFFF;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-text-stroke:1px #000;text-stroke:1px #000}
 
-/* === SEARCH DROPDOWN === */
-/* Dropdown — dark glass matching the focal pill (V7.9: glassmorphism replaces opaque). */
+/* === SEARCH DROPDOWN (V7.14 HARDENED: bg sólido negro, sin blur, border 2px blanco) === */
 .search-dropdown{
   position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:30;
-  background:rgba(0,0,0,0.55);border:1px solid var(--fi-border);
-  backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+  background:rgba(0,0,0,0.95)!important;border:2px solid #FFFFFF!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
   border-radius:14px;overflow:hidden;
-  max-height:40vh;overflow-y:auto;-webkit-overflow-scrolling:touch; /* UI_RESET_V1 step_3: 40% screen cap */
-  box-shadow:0 8px 24px rgba(0,0,0,0.18);
+  max-height:40vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  box-shadow:none;
 }
 .search-dropdown.hidden{display:none}
 .sd-section{padding:var(--sp-1) 0}
@@ -265,49 +263,45 @@ button{font-family:inherit;letter-spacing:inherit}
 .memory-row{display:none;padding:var(--sp-2) var(--sp-4) 0;gap:var(--sp-2);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .memory-row.show{display:flex}
 .memory-row::-webkit-scrollbar{display:none}
-/* V7.11 ANTI_CLUTTER: chips = glass puro, NO background opaco. Blanco semi-transparente
-   + border blanco semi-transp (rgba(255,255,255,0.4)) + texto #FFFFFF para WCAG AA sobre
-   cualquier mapa (claro/oscuro). El glassmorphism (blur) da la legibilidad, no el bg opaco. */
+/* === V7.14 HARDENED MEMORY CHIPS: bg sólido negro, border 2px blanco, sin blur === */
 .chip{
   display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
   padding:8px 14px;border-radius:999px;
-  background:rgba(0,0,0,0.35);
-  border:1px solid rgba(255,255,255,0.4);
-  backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);
-  font-size:var(--font-caption);font-weight:var(--fw-bold);color:#FFFFFF;
+  background:rgba(0,0,0,0.9)!important;
+  border:2px solid #FFFFFF!important;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  font-size:var(--font-caption);font-weight:700;color:#FFFFFF;
   cursor:pointer;min-height:36px;transition:transform var(--ease-out);
   -webkit-tap-highlight-color:transparent;white-space:nowrap;
-  text-shadow:0 1px 2px rgba(0,0,0,0.4); /* extra contrast on light map tiles */
+  -webkit-text-stroke:1px #000;text-stroke:1px #000;
 }
 .chip:active{transform:scale(0.95)}
 .chip .chip-ic{display:flex;align-items:center;color:#FFFFFF}
 .chip.chip-fav .chip-ic{color:var(--orange)}
-.chip.chip-clear{color:#FFFFFF;background:rgba(255,59,48,0.55);border-color:rgba(255,255,255,0.4);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-[data-theme="dark"] .chip{background:rgba(0,0,0,0.45)}
-[data-theme="dark"] .chip.chip-clear{background:rgba(255,59,48,0.5)}
+.chip.chip-clear{color:#FFFFFF;background:rgba(255,59,48,0.9)!important;border-color:#FFFFFF!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+[data-theme="dark"] .chip{background:rgba(0,0,0,0.95)!important}
+[data-theme="dark"] .chip.chip-clear{background:rgba(255,59,48,0.85)!important}
 .chip .chip-text{max-width:140px;overflow:hidden;text-overflow:ellipsis}
 
-/* === STAGE (V7.12 GHOST_MODE: transparent spacer — never blocks map gestures) === */
+/* === STAGE (V7.14: flex:1 — empuja category-wrapper y sheet hacia abajo) =========
+   El espacio entre la fila de pills y el bottom sheet esStage. Mapa se ve a través. */
 .stage{flex:1;min-height:120px;pointer-events:none;background:transparent!important}
 
 /* === DECISION SHEET === */
-.sheet-wrap{padding:0 var(--sp-4);padding-bottom:var(--sp-3)}
+/* === DECISION SHEET (V7.14 HARDENED: bg sólido negro, sin blur, border 2px blanco) === */
+.sheet-wrap{padding:0 var(--sp-4);padding-bottom:var(--sp-3);flex-shrink:0}
 .sheet{
-  /* V7.12 GHOST_MODE: sheet más transparente (0.85→0.55) + blur mayor (20→25px).
-     Antes era un bloque oscuro opaco que tapaba el mapa. Ahora es glass ligero:
-     se ve el mapa a través, pero el blur mantiene legibilidad del texto claro.
-     Scoped CSS var overrides mantienen children con texto claro para contraste. */
-  background:rgba(18,18,18,0.55)!important;backdrop-filter:blur(25px) saturate(1.3);-webkit-backdrop-filter:blur(25px) saturate(1.3);border-radius:var(--radius-card) var(--radius-card) 0 0;
-  border:1px solid var(--border-strong);border-top:1px solid rgba(255,255,255,0.1);border-bottom:none;
+  background:rgba(0,0,0,0.95)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-radius:var(--radius-card) var(--radius-card) 0 0;
+  border:2px solid #FFFFFF!important;border-top:2px solid #FFFFFF!important;border-bottom:none;
   padding:var(--sp-4);
   padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
   animation:sheetIn var(--ease-sheet) both;
-  max-height:32vh; /* V7.12: 38vh→32vh — menos pantalla tapada, más mapa visible */
+  max-height:32vh;
   overflow-y:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.15) transparent;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.3) transparent;
   --text:#FFFFFF;--text2:#CCCCCC;--text3:#999999;
-  --border:rgba(255,255,255,0.12);--border-subtle:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.18);
-  --surface:rgba(255,255,255,0.06);--surface2:rgba(255,255,255,0.04);--bg3:rgba(255,255,255,0.04);
+  --border:rgba(255,255,255,0.3);--border-subtle:rgba(255,255,255,0.2);--border-strong:rgba(255,255,255,0.5);
+  --surface:#000000;--surface2:#0a0a0a;--bg3:#0a0a0a;
   color:var(--text);
 }
 .sheet::-webkit-scrollbar{width:5px}
@@ -571,26 +565,23 @@ button{cursor:pointer}
 .fm-ic{display:inline-flex;color:var(--text2);flex-shrink:0}
 .fm-sep{height:1px;background:var(--border-subtle);margin:2px 4px}
 
-/* === DEEP-LINK CONFIRMATION DIALOG (V7.12 GHOST_MODE: Action Sheet max 25%) ============
-   V7.12: el .dialog-overlay era full-screen con bg rgba(0,0,0,0.5) que oscurecía todo
-   el mapa. Ahora el overlay es transparente (solo scrim sutil) y el .dialog es un
-   Action Sheet de max-height 25vh — deja el 75% del mapa SIEMPRE visible.
-   El overlay mantiene pointer-events:auto para capturar clicks fuera (cerrar). ========== */
+/* === DEEP-LINK CONFIRMATION DIALOG (V7.14 HARDENED: bg sólido, sin blur, border 2px) === */
 .dialog-overlay{
-  position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.15)!important;
+  position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.6)!important;
   display:flex;align-items:flex-end;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity var(--ease-out);
 }
 .dialog-overlay.show{opacity:1;pointer-events:auto}
 .dialog{
-  background:var(--surface);border-radius:20px 20px 0 0!important;
-  border:1px solid var(--border-strong);border-bottom:none;
+  background:#000000!important;border-radius:20px 20px 0 0!important;
+  border:2px solid #FFFFFF!important;border-bottom:none;
   width:100%;max-width:560px;max-height:25vh!important;overflow-y:auto;-webkit-overflow-scrolling:touch;
   padding:var(--sp-4);
   padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
   transform:translateY(100%);
   transition:transform var(--ease-spring);
-  scrollbar-width:thin;scrollbar-color:var(--text3) transparent;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.3) transparent;
+  color:#FFFFFF;
 }
 .dialog::-webkit-scrollbar{width:4px}
 .dialog::-webkit-scrollbar-thumb{background:var(--text3);border-radius:999px}
@@ -659,26 +650,24 @@ button{cursor:pointer}
 }
 .mode-selector::-webkit-scrollbar{display:none}
 .mode-selector.show{display:flex}
-/* V7.13 UNIFIED_GHOST_UI: mode-pill = glass oscuro (rgba(0,0,0,0.35)) + border blanco semi-transp
-   (rgba(255,255,255,0.4)) + texto #FFFFFF + text-shadow agresivo (0.4→0.8). Opacidad inactivos
-   0.72→0.6 (blueprint fase_3: no distrae pero mantiene contraste). .active sigue sólido negro. */
+/* === V7.14 HARDENED MODE-PILL: bg sólido negro, border 2px blanco, sin blur, opacity inactivos 0.6 === */
 .mode-pill{
   display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
   padding:9px 14px;border-radius:999px;
-  background:rgba(0,0,0,0.35);
-  border:1px solid rgba(255,255,255,0.4);
-  font-size:var(--font-caption);font-weight:var(--fw-bold);
-  backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);
-  color:#FFFFFF;cursor:pointer;min-height:36px; /* V7.13: 40→36 (directiva CSS blueprint) */
+  background:rgba(0,0,0,0.9)!important;
+  border:2px solid #FFFFFF!important;
+  font-size:var(--font-caption);font-weight:700;
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  color:#FFFFFF;cursor:pointer;min-height:36px;
   transition:transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out),opacity var(--ease-out);
   -webkit-tap-highlight-color:transparent;white-space:nowrap;
-  text-shadow:0 1px 2px rgba(0,0,0,0.8); /* V7.13: 0.4 → 0.8 agresivo */
-  opacity:0.6; /* V7.13: inactivos 0.72→0.6 (blueprint fase_3) */
+  -webkit-text-stroke:1px #000;text-stroke:1px #000;
+  opacity:0.6;
 }
 .mode-pill:active{transform:scale(0.95)}
-.mode-pill.active{color:#FFFFFF;background:#000000;border-color:#FFFFFF;backdrop-filter:none;-webkit-backdrop-filter:none;text-shadow:none;opacity:1}
-[data-theme="dark"] .mode-pill{background:rgba(0,0,0,0.45)}
-[data-theme="dark"] .mode-pill.active{color:#000000;background:#FFFFFF;border-color:#FFFFFF;backdrop-filter:none;-webkit-backdrop-filter:none;text-shadow:none}
+.mode-pill.active{color:#000000;background:#FFFFFF!important;border-color:#FFFFFF!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;-webkit-text-stroke:0;text-stroke:0;opacity:1}
+[data-theme="dark"] .mode-pill{background:rgba(0,0,0,0.95)!important}
+[data-theme="dark"] .mode-pill.active{color:#000000;background:#FFFFFF!important;border-color:#FFFFFF!important}
 .mode-pill .mp-ic{display:flex;align-items:center}
 .mode-pill .mp-lbl{font-size:11px;letter-spacing:0.02em}
 
@@ -852,31 +841,33 @@ body[data-offline="true"] #destInput{opacity:0.5;pointer-events:none}
    visibility/transform of .topbar, .sheet-wrap, .category-wrapper, .map-floating-chip.
    Performance: all animations use transform: translateY() (hardware-accelerated, no layout).
    z-index per blueprint: base=map_canvas(0), overlay=search_panel(50), floating_chip=9999. */
+/* === V7.14 HARDENED MAP-FLOATING-CHIP: bg sólido negro, border 2px blanco === */
 .map-floating-chip{
   position:fixed;top:calc(env(safe-area-inset-top,0px) + var(--sp-3));left:50%;
-  transform:translateX(-50%) translateY(-160%); /* hidden above viewport by default */
-  z-index:9999; /* floating_chip z-index per blueprint */
+  transform:translateX(-50%) translateY(-160%);
+  z-index:10;
   display:flex;align-items:center;gap:var(--sp-2);
   padding:10px 16px;min-height:44px;
-  background:var(--fi-bg);color:var(--fi-text);
-  border:1px solid var(--fi-border);border-radius:999px;
-  box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  background:rgba(0,0,0,0.9)!important;color:#FFFFFF;
+  border:2px solid #FFFFFF!important;border-radius:999px;
+  box-shadow:none;
   cursor:pointer;
   opacity:0;pointer-events:none;
   transition:transform 280ms cubic-bezier(0.22,1.1,0.36,1),opacity 280ms ease-out;
   will-change:transform,opacity;
   max-width:calc(100% - 32px);
+  -webkit-text-stroke:1px #000;text-stroke:1px #000;
 }
-.map-floating-chip .mfc-ic{display:flex;align-items:center;color:var(--fi-sub);flex-shrink:0}
+.map-floating-chip .mfc-ic{display:flex;align-items:center;color:#FFFFFF;flex-shrink:0}
 .map-floating-chip .mfc-text{
-  font-size:var(--font-body);font-weight:var(--fw-bold);
+  font-size:var(--font-body);font-weight:700;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   max-width:200px;letter-spacing:-0.01em;
 }
 .map-floating-chip .mfc-edit{
-  font-size:var(--font-micro);font-weight:700;color:var(--fi-sub);
+  font-size:var(--font-micro);font-weight:700;color:#000;
   text-transform:uppercase;letter-spacing:0.04em;
-  padding:3px 8px;border-radius:999px;background:var(--fi-hover);
+  padding:3px 8px;border-radius:999px;background:#FFFFFF;
 }
 /* Shared transition for all state-driven panels */
 .topbar,.sheet-wrap,.category-wrapper{
@@ -1050,7 +1041,7 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.13.0';
+window.VOY_VERSION='V7.14.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
