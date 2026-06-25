@@ -74,10 +74,12 @@ Constraints honored:
   --fw-display:800;--fw-title:700;--fw-body:500;--fw-bold:600;
   --header-bg:rgba(255,255,255,0.92);
   --footer-bg:rgba(255,255,255,0.96);
-  /* ISSUE-1 FIX: softened scrim (0.92→0.60, 0.55→0.30) so the top area is no longer a
-     solid white/black square behind the floating search bar. Still enough contrast for
-     legibility of the dark focal pill (#0F0F0F) over the map. */
-  --top-scrim:linear-gradient(180deg,rgba(255,255,255,0.60) 0%,rgba(255,255,255,0.30) 60%,rgba(255,255,255,0) 100%);
+  /* V7.3 BLACK_BOX_FIX: scrim softened further (0.60→0.25, 0.30→0.08). Task 11
+     softened from 0.92→0.60, but users still reported a visible white rectangle
+     behind the search bar. 0.25 is subtle enough to blend with the map while
+     still helping label legibility at the very top. The search bar has its own
+     solid #0F0F0F background + box-shadow, so it doesn't depend on the scrim. */
+  --top-scrim:linear-gradient(180deg,rgba(255,255,255,0.25) 0%,rgba(255,255,255,0.08) 60%,rgba(255,255,255,0) 100%);
   /* UX_CORE_REDESIGN — floating_input_v2: dark focal pill (FOCUS_SINGLE_ACTION_DESTINATION).
      Spec bg #0F0F0F honored in light theme; lifted to #1A1A1A in dark theme for legibility
      (on pure-black --bg, #0F0F0F would be near-invisible). Intent (dark focal pill) preserved. */
@@ -92,11 +94,13 @@ Constraints honored:
   --accent:#FFFFFF;--primary:#0A84FF;--success:#30D158;--red:#FF453A;--orange:#FF9F0A;
   --border:rgba(255,255,255,0.10);--border-subtle:rgba(255,255,255,0.06);--border-strong:rgba(255,255,255,0.15);
   --header-bg:rgba(0,0,0,0.92);--footer-bg:rgba(0,0,0,0.96);
-  /* ISSUE-1 FIX: dark-theme scrim softened (0.92→0.45, 0.55→0.20). The old 0.92 opacity
-     created a visible black rectangle (#000 at near-full opacity) behind the search bar —
-     the user-reported "cuadrado negro". 0.45 keeps the dark focal pill legible over the
-     map without forming a solid black block. */
-  --top-scrim:linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.20) 60%,rgba(0,0,0,0) 100%);
+  /* V7.3 BLACK_BOX_FIX: dark-theme scrim softened further (0.45→0.18, 0.20→0.06).
+     Task 11 softened from 0.92→0.45, but users still reported a visible "black
+     box" behind the search bar. 0.18 is subtle enough to blend with the map
+     while still improving label legibility at the very top. The search bar
+     has its own solid #1A1A1A background + box-shadow, so it's fully legible
+     without relying on the scrim. */
+  --top-scrim:linear-gradient(180deg,rgba(0,0,0,0.18) 0%,rgba(0,0,0,0.06) 60%,rgba(0,0,0,0) 100%);
   --fi-bg:#1A1A1A;--fi-text:#FFFFFF;--fi-sub:rgba(255,255,255,0.50);--fi-border:rgba(255,255,255,0.10);--fi-hover:rgba(255,255,255,0.08);
 }
 *{margin:0;padding:0;box-sizing:border-box}
@@ -1679,7 +1683,13 @@ function renderSheet(){
     h+='<div class="hero-color" style="background:'+(PROVIDERS[hero.id]?PROVIDERS[hero.id].color:'#666')+'"></div>';
     h+='<div class="hero-info">';
     h+='<div class="hero-name">'+escapeHtml(hero.name)+'</div>';
-    h+='<div class="hero-meta">'+formatMin(hero.timeMin)+' · '+distKm.toFixed(1)+' km · <span class="conf-badge '+confClass+'">Confianza '+Math.round(confidence*100)+'%</span>'+(surgeLabel?' <span class="conf-badge mid">'+escapeHtml(surgeLabel)+'</span>':'')+'</div>';
+    // V7.3 DATA_CLARITY_FIX: replaced "Confianza X%" with "Precio estimado" badge.
+    // The percentage had no semantic meaning for users (what does 82% confidence mean?).
+    // Now shows "Precio estimado" only when confidence is ≥0.65 (mid/high); omitted
+    // entirely for low confidence (reduces visual noise). Color coding preserved:
+    // high=green, mid=orange. Surge label still shown when applicable.
+    var _confBadge=(confidence>=0.65)?' · <span class="conf-badge '+confClass+'">Precio estimado</span>':'';
+    h+='<div class="hero-meta">'+formatMin(hero.timeMin)+' · '+distKm.toFixed(1)+' km'+_confBadge+(surgeLabel?' <span class="conf-badge mid">'+escapeHtml(surgeLabel)+'</span>':'')+'</div>';
     h+='</div>';
     h+='<div class="hero-price-block">';
     h+='<div class="hero-price">'+formatPrice(hero.price)+'</div>';
@@ -1858,6 +1868,52 @@ function attachSheetEvents(){
   if(sheetShareBtn)sheetShareBtn.addEventListener('click',shareRoute);
 }
 
+// ===================== DEEP-LINK LAUNCH (V7.3 intent + visibility-based fallback) =====================
+// V7.3 DEEP_LINK_FIX: replaces the old `window.location.href = intentUrl` (which
+// silently failed on non-Chrome browsers like Samsung Internet/Firefox when the
+// app wasn't installed — the intent:// scheme is Chrome-specific).
+//
+// New strategy:
+//  1. For HTTPS URLs (Uber universal link, Maxim taximaxim.com, App Store links):
+//     open in new tab via window.open(). These work on all browsers.
+//  2. For intent:// URLs (DiDi, Cabify, Maxim Android, Las Bicis):
+//     a. Extract the S.browser_fallback_url parameter (Play Store URL).
+//     b. Listen for visibilitychange — if the page becomes hidden, the app
+//        opened successfully (no fallback needed).
+//     c. Set a 1.5s timeout — if the page is STILL visible after 1.5s, the
+//        intent failed (app not installed, or browser doesn't support intent://).
+//        Redirect to the Play Store fallback URL.
+//
+// This is more robust than the old approach and the user's Date.now() heuristic
+// (which doesn't work because Date.now() doesn't pause when the app opens).
+// visibilitychange is the W3C-standard way to detect app switches.
+function launchDeepLink(url){
+  if(!url||url==='#')return;
+  // HTTPS URLs — universal links and web fallbacks work on all browsers
+  if(url.indexOf('intent://')!==0){
+    window.open(url,'_blank','noopener');
+    return;
+  }
+  // intent:// URL — extract S.browser_fallback_url (Play Store) for JS-level fallback
+  var fbMatch=url.match(/S\.browser_fallback_url=([^;]+)/);
+  var fallback=fbMatch?decodeURIComponent(fbMatch[1]):null;
+  // Track if the app opened (page becomes hidden = app took over)
+  var appOpened=false;
+  function onVisChange(){if(document.hidden)appOpened=true;}
+  document.addEventListener('visibilitychange',onVisChange);
+  // Trigger the intent
+  window.location.href=url;
+  // After 1.5s, if the page never hid, the intent likely failed.
+  // Fall back to the Play Store URL (for non-Chrome browsers that don't honor
+  // S.browser_fallback_url natively, like Samsung Internet/Firefox).
+  setTimeout(function(){
+    document.removeEventListener('visibilitychange',onVisChange);
+    if(!appOpened&&!document.hidden&&fallback){
+      window.location.href=fallback;
+    }
+  },1500);
+}
+
 // ===================== DEEP-LINK CONFIRMATION DIALOG =====================
 var _pendingDeepLink=null;
 function bindDialogButtons(){
@@ -1869,8 +1925,7 @@ function bindDialogButtons(){
     MC.v5LogTrip(MC.getOrigin(),MC.getDest(),modeForAction(p.action),p.action);
     closeDeepLinkDialog();
     if(p.url&&p.url!=='#'){
-      if(p.url.indexOf('intent://')===0)window.location.href=p.url;
-      else window.open(p.url,'_blank','noopener');
+      launchDeepLink(p.url);
     }else{
       showToast('Abriendo '+p.name+'…','info');
     }

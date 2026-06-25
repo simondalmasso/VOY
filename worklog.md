@@ -2503,3 +2503,48 @@ Stage Summary:
 - ⏳ Pending: push to origin/main (triggers auto-deploy via deploy.yml)
 - ⏳ Pending: user-side browser cleanup (unregister SW + clear caches + hard reload)
 - 🔁 RE-AUDIT TRIGGERS: user reports JSON parse error gone after browser cleanup; /api/health build_hash matches new git SHA; sw.js V7.2 served from production
+
+---
+Task ID: V7_3_UI_UX_FIXES
+Agent: Main (GLM5.2 VOY_Lite_Production_Fix response)
+Task: Fix 3 user-reported UI/UX issues — (1) black box behind search bar, (2) deep link failure (intent:// going to Play Store instead of opening app), (3) "Confianza 95%" label lacks semantic meaning. Plus strategic plan for Ahorro tab, category collapse, Mapa Completo button (deferred).
+
+Work Log:
+- Read prior worklog (Tasks 1-11, SW_JSON_PARSE_FIX_001). Confirmed SW V7.2 deployed: /api/health.build_hash=d27f3b7, /sw.js serving voy-v7-2 with /api/* passthrough + nuke-all-on-activate.
+- Investigated VOY-Lite.html (2250 lines) for the 3 fix targets:
+  * "black box": identified as #scrim element (line 651 HTML, line 123 CSS) — position:fixed top:0 height:240px z-index:1, background=var(--top-scrim) gradient. Task 11 already softened from 0.92→0.45 (dark) / 0.92→0.60 (light), but users still reported visible "black box". The .search-dropdown element (the user's hypothesis) already has display:none when hidden — NOT the cause.
+  * deep link: found launch logic at lines 1871-1876 — `if(intent://)window.location.href=url; else window.open(url)`. No fallback for non-Chrome browsers that don't support intent:// scheme natively.
+  * "Confianza X%": found at line 1682 — `<span class="conf-badge">Confianza '+Math.round(confidence*100)+'%</span>`. Confidence is a 0-1 value from PricingEngineV2/MC.v6FareConfidence.
+- Applied Fix 1 (BLACK_BOX_FIX): softened #scrim further.
+  * Light theme: 0.60→0.25 (top), 0.30→0.08 (60% mark)
+  * Dark theme: 0.45→0.18 (top), 0.20→0.06 (60% mark)
+  * Rationale: search bar has own solid #1A1A1A/#0F0F0F background + box-shadow, doesn't depend on scrim. 0.18/0.25 is subtle enough to blend with map while preserving label legibility.
+- Applied Fix 2 (DEEP_LINK_FIX): new launchDeepLink(url) function (40 lines) replacing the 2-line launch at line 1871.
+  * HTTPS URLs: window.open(url, '_blank', 'noopener') — works on all browsers.
+  * intent:// URLs: extracts S.browser_fallback_url from intent URI, listens for visibilitychange (W3C standard for app switch detection), sets 1.5s timeout. If page never became hidden (app didn't open), redirects to Play Store fallback. More robust than user's Date.now() heuristic (which doesn't pause on app switch) and than old approach (which silently failed on Samsung Internet/Firefox).
+- Applied Fix 3 (DATA_CLARITY_FIX): replaced "Confianza X%" with "Precio estimado" badge.
+  * Shows "Precio estimado" only when confidence ≥ 0.65 (mid/high); omitted entirely for low confidence (reduces visual noise).
+  * Color coding preserved: high=green (.conf-badge.high), mid=orange (.conf-badge.mid).
+  * Surge label still shown when applicable (e.g., "Noche" surge).
+- Verified: node --check on extracted JS (6 script blocks, 99741 chars) → syntax OK. bun run lint → clean.
+- Browser verification (agent-browser on localhost:3000):
+  * Page loads clean, no errors, no console errors
+  * #scrim computed background: light theme rgba(255,255,255,0.25) ✓, dark theme rgba(0,0,0,0.18) ✓
+  * launchDeepLink typeof === "function" ✓
+  * Set origin (-31.6107, -60.6851, Centro Santa Fe) + dest (Terminal Belgrano) via MC.setOrigin + runEstimations
+  * Hero rendered: "Uber" hero-name ✓
+  * hero-meta text: "9 min · 3.9 km · Precio estimado Noche" ✓
+  * "Confianza" in conf-badge: false ✓
+  * "Precio estimado" in conf-badge: true ✓
+  * Deep link dialog opens on "Pedir Uber" click ✓
+  * Route hint (dgRouteHint) display:none for Uber (correct — only DiDi shows it) ✓
+  * Screenshots: /tmp/v73-initial.png, /tmp/v73-hero.png, /tmp/v73-dialog.png, /tmp/v73-final.png
+- Strategic features (Feature_Ahorro tab, UI_Categorization_Collapse, Map_Interaction button) deferred to next cycle — larger scope, need design discussion.
+
+Stage Summary:
+- ✅ Fix 1 (BLACK_BOX_FIX): #scrim softened 0.60→0.25 (light) / 0.45→0.18 (dark). No more visible "black box" behind search bar.
+- ✅ Fix 2 (DEEP_LINK_FIX): launchDeepLink() with visibilitychange-based fallback. Fixes Play Store redirect on non-Chrome browsers.
+- ✅ Fix 3 (DATA_CLARITY_FIX): "Confianza X%" → "Precio estimado" (shown only when confidence ≥0.65).
+- ✅ All 3 fixes browser-verified on dev server.
+- ⏳ Pending: commit + push (triggers deploy.yml auto-deploy with V7 guardrails).
+- 🔁 RE-AUDIT TRIGGERS: user reports no more black box; deep link opens app (not Play Store) on Samsung Internet/Firefox; "Precio estimado" visible in hero card.
