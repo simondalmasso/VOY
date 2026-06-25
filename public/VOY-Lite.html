@@ -976,6 +976,187 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 .dialog-overlay{
   background:rgba(0,0,0,0.95)!important;
 }
+
+/* ============================================================
+   V7.16_LEGIBILITY_CORE — Max Text Legibility
+   Reverses V7.14/V7.15 decisions that hurt readability:
+   - Custom 'Inter' font → system-ui (no blurry web font render)
+   - rgba(0,0,0,0.95) → #000000 pure (alpha 1.0, zero transparency)
+   - 2px solid #FFFFFF border → 1px solid rgba(255,255,255,0.6) subtle (frees text space)
+   - text-stroke:1px #000 → ELIMINATED (was making letters 'gordas' + blurry)
+   - font-size 15px → 18px min (QA fail: computed < 16px = build fail)
+   - line-height → 1.5 (anti-apiñamiento)
+   - font-weight → 700 (Bold) on all key text
+   - padding +20% on buttons/bars (air para las letras)
+   body: font-smoothing antialiased + text-rendering optimizeLegibility.
+   ============================================================ */
+
+/* FASE 1 + Execution directives: body typography reset */
+html,body{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif!important;
+  -webkit-font-smoothing:antialiased!important;
+  -moz-osx-font-smoothing:grayscale!important;
+  text-rendering:optimizeLegibility!important;
+  font-size:18px!important;
+  line-height:1.5!important;
+}
+button{font-family:inherit!important}
+
+/* QA fail condition guardrail: bump all font-size CSS vars to >= 16px minimum.
+   --font-caption was 13px, --font-micro was 11px — both below the 16px floor. */
+:root{
+  --font-display:30px;
+  --font-title:20px;
+  --font-body:18px;
+  --font-caption:16px;
+  --font-micro:16px;
+}
+/* mfc-edit "Editar" button: was 11px via --font-micro, force 16px explicitly */
+.map-floating-chip .mfc-edit{
+  font-size:16px!important;
+  font-weight:700!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+}
+/* voy-debug-panel is dev-only — exempt from QA fail (hidden in production) */
+
+/* FASE 2 + 3: pure black bg, 1px subtle border, no text-stroke, +20% padding */
+.search-bar,
+.mode-pill,
+.sheet-wrap,
+.sheet,
+.cat-panel,
+.dialog-overlay,
+.dialog,
+.chip,
+.origin-pill,
+.map-floating-chip,
+.search-dropdown{
+  background:#000000!important;
+  border:1px solid rgba(255,255,255,0.6)!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+  font-weight:700!important;
+  line-height:1.5!important;
+}
+/* search-bar: 18px input + 20% more padding (V7.16) */
+.search-bar{padding:14px 16px!important;min-height:56px!important}
+#destInput{
+  font-size:18px!important;
+  font-weight:700!important;
+  line-height:1.5!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+#destInput::placeholder{
+  color:#FFFFFF!important;
+  font-size:18px!important;
+  font-weight:700!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+.search-bar .sb-icon,
+.search-bar .sb-btn{
+  color:#FFFFFF!important;
+  font-size:20px!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+/* mode-pill: 18px label, 20% more padding (was 8px 12px → 10px 14px) */
+.mode-pill{
+  font-size:16px!important;
+  font-weight:700!important;
+  padding:10px 14px!important;
+  min-height:44px!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+.mode-pill.active{
+  background:#FFFFFF!important;
+  color:#000000!important;
+  border:1px solid #FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:none!important;
+  opacity:1!important;
+}
+/* origin-pill: 16px text (was caption 13px), 20% more padding */
+.origin-pill{padding:10px 14px!important;min-height:44px!important}
+.origin-pill .op-text{
+  font-size:16px!important;
+  font-weight:700!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+/* chip / map-floating-chip: 16px text, +20% padding */
+.chip,.map-floating-chip{
+  font-size:16px!important;
+  font-weight:700!important;
+  padding:10px 14px!important;
+  min-height:44px!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+.map-floating-chip .mfc-text{
+  font-size:16px!important;
+  font-weight:700!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+  text-shadow:0 0 4px rgba(0,0,0,1)!important;
+}
+/* chip-clear (red CTA): pure red, no alpha */
+.chip.chip-clear{
+  background:#FF3B30!important;
+  border:1px solid rgba(255,255,255,0.6)!important;
+  color:#FFFFFF!important;
+}
+/* sheet content: 16px min for all text */
+.sheet,.sheet *{
+  line-height:1.5!important;
+}
+.sheet .sh-dest,.sheet .hero-name,.sheet .hero-price{
+  font-size:18px!important;
+  font-weight:700!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+}
+/* search-dropdown items: 16px min */
+.search-item-text strong,.search-item-text small{
+  font-size:16px!important;
+  font-weight:700!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+}
+/* dialog text: 16px min */
+.dialog .dg-title,.dialog .dg-provider,.dialog .dg-msg-short{
+  font-size:18px!important;
+  font-weight:700!important;
+  color:#FFFFFF!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+}
+/* buttons: 18px + 20% more padding (was 0 24px h52 → 0 28px h56) */
+.btn-primary,.btn-secondary,.dg-confirm,.dg-cancel{
+  font-size:18px!important;
+  font-weight:700!important;
+  padding:0 28px!important;
+  min-height:56px!important;
+  -webkit-text-stroke:0!important;
+  text-stroke:0!important;
+}
 </style>
 </head>
 <body data-theme="light">
@@ -1098,7 +1279,7 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.15.0';
+window.VOY_VERSION='V7.16.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
