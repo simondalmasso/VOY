@@ -3412,3 +3412,54 @@ Stage Summary:
 - ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash fe5f22f matches git SHA. V7.16.0 deployed.
 - ✅ QA: VLM dev 5/5, VLM production mobile 5/5, VLM production route detailed "large, bold, crisp, no blurriness". Zero console errors. Lint clean.
 - 🔁 RE-AUDIT TRIGGERS: system-ui font (no Inter); body 18px + antialiased + optimizeLegibility; all UI bg #000000 pure (zero transparency); all borders 1px subtle (not 2px); zero text-stroke (32 instances of text-stroke:0); text-shadow 0 0 4px rgba(0,0,0,1) for legibility; font-weight 700 global; min computed font-size 16px (QA fail condition met); padding +20% on buttons/bars.
+
+---
+Task ID: V7_17_SURGICAL_FIX
+Agent: Main (GLM5.2 — CSS Override Enforcement)
+Task: Implement V7.17 "Surgical_Fix" — CSS Override Enforcement. Fixes conflicts C1, C2, C3 identified in FORENSIC_CODE_AUDIT. (1) Directive 1 OVERRIDE_CSS: .mode-pill .mp-lbl 16px + .est-badge/.ahorro-pill-badge/.search-item--empty/.bd-row 16px. (2) Directive 2 REMOVE_ELEMENTS: Google Fonts Inter <link>. (3) Directive 3 CLEANUP_DEAD_CODE: V7.15 block. QA assertion: .mp-lbl fontSize >= 16 must pass.
+
+Work Log:
+- Read prior worklog (V7_16_LEGIBILITY_CORE). Confirmed V7.16 LIVE in production (build_hash f7e2d8c). Dev server running.
+- FORENSIC_CODE_AUDIT (previous task, read-only) identified 3 root-cause conflicts:
+  * C1 CRITICAL: .mode-pill .mp-lbl{font-size:11px} (line 672) — direct declaration overrides inherited 16px!important from .mode-pill. Mode labels rendered at 11px across V7.14/V7.15/V7.16. Root cause of "no se lee nada".
+  * C2 HIGH: Literal px font-sizes (est-badge 10px, ahorro-pill-badge 9px, search-item--empty 14px, bd-row 11px inline) bypassed :root var bump.
+  * C3 HIGH: Google Fonts Inter <link> still loaded (lines 48-50) despite V7.16 forcing system-ui — triple render path (fallback → Inter swap → system-ui override) caused FOIT/FOUT blur.
+  * C6 LOW: V7.15 dead code block (lines 931-978) redundant with V7.16, maintenance hazard.
+- Directive 1 — OVERRIDE_CSS (appended after V7.16 block, before </style>):
+  * .mode-pill .mp-lbl: font-size:16px!important, line-height:1.5!important, font-weight:700!important, -webkit-text-stroke:0!important, text-stroke:0!important. Overrides line 672 direct declaration.
+  * .est-badge, .ahorro-pill-badge, .search-item--empty, .bd-row: font-size:16px!important. Overrides literal px values.
+- Directive 2 — REMOVE_ELEMENTS:
+  * Deleted line 48: <link rel="preconnect" href="https://fonts.googleapis.com">
+  * Deleted line 49: <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  * Deleted line 50: <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  * Replaced with HTML comment: <!-- V7.17 SURGICAL_FIX: Google Fonts Inter <link> REMOVED ... -->
+- Directive 3 — CLEANUP_DEAD_CODE:
+  * Removed V7.15_CRITICAL_HARDENING_OVERRIDE block (was lines 923-978): 11-selector override + .mode-pill.active + .chip.chip-clear + dark theme variants + .dialog-overlay. 48 lines removed.
+  * V7.16 block (which superseded V7.15) preserved and updated with note about V7.15 removal.
+- Updated VOY_VERSION V7.16.0 → V7.17.0.
+- Net code change: +30 insertions, -61 deletions (V7.15 dead code removal > V7.17 surgical fixes).
+- bun run lint → clean (0 errors, 0 warnings).
+- Agent Browser QA (dev, 390x844):
+  * Page load: zero errors. version=V7.17.0.
+  * RUN_QA_ASSERTION (exact from directive): document.querySelectorAll('.mp-lbl').forEach(fontSize >= 16) → 0 violations. PASS.
+  * .mp-lbl computed: fs=16px (was 11px in V7.16), fw=700, stroke=0px, lh=24px (1.5×16).
+  * All 6 mode labels verified: Auto=16px, Taxi=16px, Remis=16px, Colectivo=16px, "A pie"=16px, Bicicleta=16px.
+  * C2 targets (synthetic element test): est-badge=16px, ahorro-pill-badge=16px, search-item--empty=16px, bd-row=16px. allPass=true.
+  * Google Fonts link: null (ABSENT). V7.15 block: 0 matches (REMOVED).
+- VLM dev 5/5: mode-pill labels clearly large legible 16px, search large, active pill inverse, no blurry text, overall legibility improved vs 11px.
+- Commit 912dd7e → push to simonkey888/VOY (f7e2d8c..912dd7e). CI run 28166978781 auto-triggered → completed:success (~30s).
+- Production verification:
+  * /api/health: build_hash="912dd7e" (matches git SHA — V7 guardrail PASSED). version="V7.8.0" (worker const, HTML es V7.17.0).
+  * VOY-Lite.html markers: V7.17.0 (1x), SURGICAL_FIX (3x), C1 FIX (1x), C2 FIX (1x). fonts.googleapis=0 matches (REMOVED). V7.15_CRITICAL=0 matches (REMOVED). All V7.17 directives LIVE.
+  * Agent Browser production (cache-bust ?_bust=<ts>v717qa): version=V7.17.0, build_hash=912dd7e. Zero errors.
+  * RUN_QA_ASSERTION production: qaAssertionPassed=true, violations=[], all 6 .mp-lbl at 16px (Auto/Taxi/Remis/Colectivo/"A pie"/Bicicleta). googleFontsLink=ABSENT (PASS).
+- VLM production 5/5: mode-pill labels large legible, search large, Colectivo inverse, no blurry text, legibility at 30cm PASS.
+
+Stage Summary:
+- ✅ DIRECTIVE 1 OVERRIDE_CSS: .mode-pill .mp-lbl forced to 16px (was 11px — root cause of "no se lee nada" fixed). C2 literal px targets (est-badge, ahorro-pill-badge, search-item--empty, bd-row) forced to 16px.
+- ✅ DIRECTIVE 2 REMOVE_ELEMENTS: Google Fonts Inter <link> (3 lines) deleted. Eliminates triple render path. V7.16 system-ui!important is now the single font source.
+- ✅ DIRECTIVE 3 CLEANUP_DEAD_CODE: V7.15_CRITICAL_HARDENING_OVERRIDE block (48 lines) removed. V7.16 is the single hardening source. No more specificity confusion.
+- ✅ QA ASSERTION (from directive): document.querySelectorAll('.mp-lbl').forEach(fontSize >= 16) → 0 violations in dev + production. PASS.
+- ✅ PRODUCTION LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html — build_hash 912dd7e matches git SHA. V7.17.0 deployed.
+- ✅ QA: VLM dev 5/5, VLM production 5/5. Agent Browser QA assertion passed (0 violations). Zero console errors. Lint clean.
+- 🔁 RE-AUDIT TRIGGERS: .mp-lbl renders at 16px (not 11px); all 6 mode labels legible; Google Fonts link absent (no Inter fetch); V7.15 block absent (no dead code); C2 targets all 16px; QA assertion .mp-lbl >= 16px passes.
