@@ -3490,3 +3490,41 @@ Stage Summary:
 - Step 4 (.mode-pill .mp-lbl computed font-weight:700 + -webkit-text-stroke:0px): PASS.
 - 1 ADVISORY (non-blocking): inline font-size:11px on .bd-row at L2701 is masked only by !important. Recommend future cleanup to remove the inline 11px.
 - No changes applied (read-only audit per directive).
+
+---
+Task ID: VOY_V7_LEGIBILITY_GUARD_v1.0
+Agent: Main (Legibility Guard Verification)
+Task: VOY_V7_LEGIBILITY_GUARD v1.0 — verify forbidden V7.15 CSS block absent, required .mp-lbl block present verbatim, forbidden strings absent, computed styles match.
+
+Work Log:
+- GUARD 1 (forbidden V7.15 3-selector block absent): Searched for the exact signature `.search-bar, .mode-pill, .sheet-wrap { background:rgba(0,0,0,0.95)!important; border:2px solid #FFFFFF!important; }`.
+  * Multi-line grep for the 3-selector combo: NOT present as a standalone rule.
+  * Lines 966-984 contain `.search-bar, .mode-pill, .sheet-wrap` but as part of an 11-selector V7.16 LEGIBILITY_CORE group, with DIFFERENT values: `background:#000000!important` (pure black, not rgba 0.95) + `border:1px solid rgba(255,255,255,0.6)!important` (1px 60% alpha, not 2px solid white). This is the correct V7.16 hardening, NOT V7.15 dead code.
+  * Line 226 `.search-dropdown` (single selector, V7.14) reuses `rgba(0,0,0,0.95)!important;border:2px solid #FFFFFF!important` — pre-V7.15 hardening on a different element, not the forbidden 3-selector combo.
+  * VERDICT: Forbidden V7.15 block ABSENT. ✅ PASS.
+- GUARD 2 (required .mode-pill .mp-lbl block present verbatim): Lines 1114-1120 match the required block exactly:
+    .mode-pill .mp-lbl{
+      font-size:16px!important;
+      line-height:1.5!important;
+      font-weight:700!important;
+      -webkit-text-stroke:0!important;
+      text-stroke:0!important;
+    }
+  * ✅ PASS — all 5 declarations present, verbatim, with !important.
+- GUARD 3 (forbidden strings absent):
+  * `V7.15_CRITICAL_HARDENING_OVERRIDE`: 0 matches in source. ✅ PASS.
+  * `fonts.googleapis.com`: 0 matches in source. ✅ PASS.
+- GUARD 4 (computed styles match expected):
+  * `.mode-pill .mp-lbl`: L670 base (11px, no !important) is overridden by V7.17 L1114-1120 (16px/700/stroke:0, all !important). V7.16 L966-984 11-selector block also sets font-weight:700 + stroke:0 on .mode-pill (inherited). Compound selector .mode-pill .mp-lbl (V7.17) is more specific than single .mode-pill (V7.16), so V7.17 wins. Computed: font-size=16px ✅, font-weight=700 ✅, -webkit-text-stroke=0px ✅.
+  * `.est-badge`: L489 base (10px, no !important) overridden by V7.17 L1127 (16px!important). Computed: font-size=16px ✅.
+  * `.ahorro-pill-badge`: L707-709 base (9px, no !important) overridden by V7.17 L1127 (16px!important). Computed: font-size=16px ✅.
+- ADVISORY (non-blocking, out of current guard scope): V7.16 block L966-984 sets `text-shadow:0 0 4px rgba(0,0,0,1)!important` on .mode-pill, inherited by .mp-lbl. V7.17 .mp-lbl block does NOT override text-shadow. On pure-black bg (#000000) this is invisible (black-on-black). On active pill (white bg) it creates a subtle dark halo behind black text. Previously flagged in FORENSIC_CODE_AUDIT as a potential sub-pixel rasterization trigger. Not in current guard's expected computed styles, but noted for future V7.18 cleanup.
+
+Stage Summary:
+- ✅ ALL 4 GUARDS PASSED. VOY_V7_LEGIBILITY_GUARD v1.0 = CLEAN.
+- GUARD 1: Forbidden V7.15 3-selector block (rgba 0.95 + 2px white border) ABSENT. V7.16 block present with correct reversed values (#000000 + 1px rgba 0.6).
+- GUARD 2: Required .mode-pill .mp-lbl block PRESENT verbatim at L1114-1120.
+- GUARD 3: Both forbidden strings (V7.15_CRITICAL_HARDENING_OVERRIDE, fonts.googleapis.com) ABSENT from source.
+- GUARD 4: All computed styles match expected values (16px / 700 / 0px stroke on .mp-lbl; 16px on .est-badge + .ahorro-pill-badge).
+- 1 ADVISORY: text-shadow:0 0 4px rgba(0,0,0,1) inherited from V7.16 .mode-pill block — non-blocking, flagged for future cleanup.
+- No changes applied (read-only verification per protocol).
