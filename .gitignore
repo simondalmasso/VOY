@@ -61,3 +61,11 @@ server.log
 
 # Skills directory
 /skills/
+# is-a.dev PR watch state (runtime, do not commit)
+.watch-isadev-state.json
+
+# Production evidence screenshots (internal artifacts, not source)
+prod-*.png
+
+# Tool result dumps (internal agent artifacts, not source)
+tool-results/
