@@ -126,7 +126,10 @@ button{font-family:inherit;letter-spacing:inherit}
    Todo UI arriba tiene z-index:10. No hay z-index intermedios. ====================== */
 #map{
   position:fixed;inset:0;z-index:0!important;width:100%;height:100%;
+  max-height:100vh;max-height:100dvh; /* V7.18: hard cap — prevents GPU-killing 2399px canvas */
   opacity:1;filter:none;background:transparent!important;
+  will-change:transform; /* V7.18: force GPU layer — browser won't discard canvas on memory pressure */
+  contain:strict; /* V7.18: isolate layout/paint — prevents canvas from inheriting inflated parent dims */
 }
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
 .maplibregl-ctrl-attrib{display:none!important}
@@ -628,7 +631,18 @@ button{cursor:pointer}
 @media (min-width:560px){
   .topbar,.sheet-wrap,.memory-row,.footer{max-width:560px;margin-left:auto;margin-right:auto}
 }
-.maplibregl-canvas{outline:none!important}
+.maplibregl-canvas{
+  outline:none!important;
+  /* V7.18: stabilize mobile rendering — prevents the GPU from allocating a 2399px
+     backing store when the WebGL context is under pressure. */
+  image-rendering:-webkit-optimize-contrast;
+  image-rendering:crisp-edges;
+  /* Hard cap on the canvas backing size — defends against MapLibre computing
+     an inflated drawing buffer when devicePixelRatio spikes or the container
+     briefly reports a huge height during layout transitions. */
+  max-height:100vh!important;
+  max-height:100dvh!important;
+}
 
 /* === MAP GRID OVERLAY (ui_system: grid_overlay) — subtle, premium GPS feel === */
 #mapGrid{
@@ -1248,7 +1262,7 @@ button{font-family:inherit!important}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.17.0';
+window.VOY_VERSION='V7.18.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -1634,6 +1648,28 @@ function initMap(){
     _map.on('load',function(){clearTimeout(_mapLoadTimeout);_mapStyleLoaded=true;_map.resize()});
     _mapLoadTimeout=setTimeout(function(){console.error('[MAP] timeout 10s')},10000);
     requestAnimationFrame(function(){requestAnimationFrame(function(){if(_map)_map.resize()})});
+    // V7.18: WebGL context loss recovery — the GPU can kill the canvas context
+    // when the backing store grows too large (e.g. 2399px canvas on mobile).
+    // preventDefault() signals the browser we'll handle restoration ourselves;
+    // on 'webglcontextrestored' we force a full repaint + resize so the map
+    // comes back instead of leaving a black rectangle.
+    (function attachContextLossHandlers(){
+      var canvas=_map.getCanvas&&_map.getCanvas();
+      if(!canvas){console.warn('[MAP] no canvas — webglcontextlost handlers not attached');return}
+      canvas.addEventListener('webglcontextlost',function(e){
+        e.preventDefault(); // CRITICAL: without this the context is permanently lost
+        console.warn('[MAP] WebGL context lost — waiting for restore event');
+      },false);
+      canvas.addEventListener('webglcontextrestored',function(){
+        console.info('[MAP] WebGL context restored — repainting');
+        try{
+          _map.repaint=true;
+          _map.resize();
+          // Force a style reload so tiles re-fetch after context loss
+          if(_mapStyleLoaded){_map.setStyle(_map.getStyle()||CARTO_STYLE)}
+        }catch(err){console.error('[MAP] restore failed',err)}
+      },false);
+    })();
   }catch(e){console.error('[MAP] init failed',e)}
 }
 
