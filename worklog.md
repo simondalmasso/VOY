@@ -2614,3 +2614,59 @@ Stage Summary:
 - ✅ Browser-verified 14/14 points. Zero console errors. Lint clean.
 - ⏳ Pending: commit + push (will include V7.3 scrim/deep-link/precio-estimado fixes + V7.4 CategoryManager/MapStateManager in single deploy).
 - 🔁 RE-AUDIT TRIGGERS: user sees 3 category tabs with swipe; map drag hides UI + shows floating chip; chip tap returns to search; bike/bus modes show only their block.
+
+---
+Task ID: V7_5_AHORRO_INTELIGENTE
+Agent: Main (GLM5.2 — AhorroFeature blueprint implementation)
+Task: Implement V7.5 "Ahorro_Inteligente" blueprint — comparative cost algorithm (Colectivo vs Ride-Hailing) with AhorroService logic engine, "Ahorro" tab injected at position 0 of CategoryManager, and BadgeRenderer mounting "¡Ahorrá un X%!" on Colectivo mode-pill when threshold met. Must not break V7.4 horizontal swipe.
+
+Work Log:
+- Read prior worklog (Tasks 1-11, SW_JSON_PARSE_FIX_001, V7_3_UI_UX_FIXES, V7_4_CATEGORY_MAP_STATE). Confirmed V7.4 (CategoryManager + MapStateManager) committed locally as b1bb3e5, browser-verified 14/14. V7.3 (7d1f256) + V7.4 (b1bb3e5) NOT pushed to origin/main (origin at d27f3b7). Decided to batch V7.3+V7.4+V7.5 into single push.
+- Verified environment: dev server running on port 3000 (pid 1097), /api/health 200, /api/estimate 200, /api/geocode 200. `gh` CLI not available — will use git push with PAT.
+- Verified VOY stack: vanilla JS PWA (NO React, NO TrackerView.tsx — that's stracker). VOY-Lite.html = 2618 lines (pre-V7.5). Categories confirmed: 6 modes (car/taxi/remis/walk/bike/bus) in 3 groups (Privados/Activos/Público). Blueprint's "Colectivo" = mode 'bus' ✓.
+- Read fares.json: colectivo.sube=1900 ARS, efectivo=2111 ARS. Uber minFare=3000, base+500/km+65/min. Formula threshold: colectivo(1900) < rideHailing*0.5 → rideHailing > 3800 ARS.
+- Read pricingEngine.js + mobilityController.js: MC.getEstimations() returns [{mode:'auto',rankedProviders:[{id,price}...]}, {mode:'bus',price:1900}, ...]. renderSheet resolves autoEst/busEst at line 1727.
+- Designed V7.5 architecture (vanilla JS, mirroring VoyMapContext observer pattern):
+  * VoyAhorroService: IIFE module with THRESHOLD=0.5, REFRESH_MS=300000, recompute(colP,rhP), getState(), subscribe(), isStale(). _set() emits to listeners + triggers renderAhorroBadges() on change.
+  * BadgeRenderer (renderAhorroBadges): idempotent — queries all .mode-pill[data-mode="bus"] + .cat-tab[data-group-idx="0"], mounts/removes .ahorro-pill-badge + .ahorro-tab-badge based on state.available.
+  * Tab injection: group_ahorro at CATEGORY_GROUPS[0] with {ahorro:true} flag, modes:['bus']. setMode auto-switch SKIPS ahorro-flagged groups (bus pill tap on Público stays on Público, doesn't jump to Ahorro).
+  * Default _activeGroup=1 (Privados) — Ahorro tab visible at position 0 but not auto-focus (condition false at init).
+  * recompute hook in renderSheet after autoEst/busEst resolved (line 1765) — reads busEst.price + min(uber/didi/maxim prices).
+- Applied 9 atomic edits to public/VOY-Lite.html via MultiEdit:
+  1. Added 'savings' SVG icon (coin with $) to svg() registry
+  2. V7.5 CSS block (~35 lines): .mode-pill/.cat-tab position:relative, .cat-tab--ahorro, .ahorro-tab-badge (pulse animation), .ahorro-pill-badge (#00E676 green, scale-in animation), prefers-reduced-motion overrides
+  3. CATEGORY_GROUPS: added group_ahorro at index 0, shifted Privados/Activos/Público to 1/2/3
+  4. _activeGroup default 0→1
+  5. initCategoryManager tabsHTML: added cat-tab--ahorro class for ahorro-flagged groups
+  6. initCategoryManager: renderAhorroBadges() call after setCategoryGroup (no-op at boot since condition false)
+  7. setMode auto-switch: prefer current group if it has mode; skip ahorro-flagged groups when switching
+  8. renderSheet: recompute hook (busEst.price + cheapest app provider → VoyAhorroService.recompute)
+  9. VoyAhorroService IIFE + renderAhorroBadges function appended before </script>
+- File grew 2618 → 2752 lines (+134). bun run lint → clean (0 errors).
+- Agent Browser self-verification (viewport 390x844, 12 verification points):
+  1. ✅ Page loads, title="VOY — Movilidad Santa Fe", ZERO console errors
+  2. ✅ 4 category tabs render: "0:Ahorro [ahorro] | 1:Privados [ACTIVE] | 2:Activos | 3:Público"
+  3. ✅ Default _activeGroup=1 (Privados), track at translateX(-100%) — Ahorro visible at position 0 but not auto-focus
+  4. ✅ VoyAhorroService defined, initial state {available:false, colectivoPrice:null, rideHailingPrice:null, savingsPercent:0, threshold:0.5}
+  5. ✅ 2 bus pills (one in Ahorro panel, one in Público panel), 0 badges, 0 tab dots at init
+  6. ✅ Real estimate (Centro Santa Fe → Terminal Belgrano): busPrice=1900, cheapestRH=Maxim 2564 → savingsPercent=26, thresholdMet=false, available=false (correct — short route, ride-hailing too cheap)
+  7. ✅ Manual trigger recompute(1900, 6000): available=true, savingsPercent=68, threshold met
+  8. ✅ BadgeRenderer: tab dot mounted on Ahorro tab (aria-label="Ahorro disponible"), 2 pill badges mounted with text "¡Ahorrá un 68%!" (cross-group: both Ahorro + Público bus pills)
+  9. ✅ Tap Ahorro tab → activeGroup=0, track translateX(0%), ahorroTabActive=true
+  10. ✅ Tap bus pill on Ahorro panel → _activeMode='bus', STAYS on group 0 (setMode current-group preference works — no jump)
+  11. ✅ Tap bus pill on Público panel → _activeMode='bus', STAYS on group 3 (setMode skip-ahorro works — no jump to Ahorro)
+  12. ✅ Swipe bounds (4 groups): g0 blocks swipe-right, g3 blocks swipe-left, g1/g2 bidirectional. setCategoryGroup(-1) and setCategoryGroup(99) ignored. V7.4 swipe NOT broken.
+  13. ✅ Reset recompute(null,null): available=false, 0 badges, 0 dots (idempotent cleanup)
+  14. ✅ body[data-map-state]="SEARCH_FOCUS" preserved (V7.4 MapStateManager not affected)
+- Screenshots: /tmp/v75-ahorro-with-badge.png, /tmp/v75-publico-badge.png
+
+Stage Summary:
+- ✅ AhorroService (VoyAhorroService): vanilla JS observer module, threshold=0.5, formula isRecommendationAvailable=(colectivoPrice < rideHailingPrice*0.5), refresh=300000ms, data_source=MC.getEstimations via renderSheet.
+- ✅ Tab "Ahorro" injected at position 0 of CATEGORY_GROUPS with ahorro:true flag. Default group=1 (Privados) so Ahorro is visible but not auto-focus. cat-tab--ahorro class + green border-bottom when active.
+- ✅ BadgeRenderer (renderAhorroBadges): idempotent, mounts "¡Ahorrá un X%!" (dynamic percentage) on ALL Colectivo mode-pills (both Ahorro + Público groups) + highlight dot on Ahorro cat-tab when condition true. Badge color #00E676 per blueprint.
+- ✅ V7.4 swipe intact: 4 groups, bounds respected, setCategoryGroup transforms 0%/-100%/-200%/-300%. setMode auto-switch prefers current group + skips ahorro group (bus pill tap doesn't jump between Ahorro/Público).
+- ✅ Performance: all animations CSS-based (transform/opacity), prefers-reduced-motion overrides included. No layout thrash.
+- ✅ Decoupling: VoyAhorroService is standalone observer (mirrors VoyMapContext). Any component can subscribe. No direct coupling between estimate flow and badge rendering.
+- ✅ Browser-verified 14/14 points. Zero console errors. Lint clean.
+- ⏳ Pending: commit + push (V7.3 + V7.4 + V7.5 batched into single deploy).
+- 🔁 RE-AUDIT TRIGGERS: user sees "Ahorro" tab at left with green dot when colectivo saves >50%; tapping tab shows Colectivo pill with "¡Ahorrá un X%!" badge; tapping pill shows bus routes; swipe still works across 4 tabs.

@@ -663,6 +663,42 @@ button{cursor:pointer}
 .cat-panel .mode-pill{opacity:0.72;transition:opacity 250ms ease-in-out,transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out)}
 .cat-panel .mode-pill.active{opacity:1}
 
+/* === V7.5 AHORRO INTELIGENTE =================================================================
+   Blueprint: AhorroFeature — comparative cost algorithm (Colectivo vs Ride-Hailing).
+   Formula: isRecommendationAvailable = (PublicTransportPrice < RideHailingPrice * 0.5)
+   UI: (1) "Ahorro" cat-tab at position 0 with highlight dot when condition true;
+       (2) BadgeRenderer mounts "¡Ahorrá un X%!" on Colectivo mode-pill when condition true.
+   position:relative on .mode-pill + .cat-tab so badges anchor correctly (no layout impact). */
+.mode-pill{position:relative}
+.cat-tab{position:relative}
+.cat-tab--ahorro{color:var(--text2)}
+.cat-tab--ahorro.active{border-bottom-color:#00E676;color:var(--text)}
+.ahorro-tab-badge{
+  position:absolute;top:2px;right:6px;
+  width:7px;height:7px;border-radius:50%;background:#00E676;
+  border:1.5px solid var(--bg);
+  animation:ahorro-pulse 2s ease-in-out infinite;
+  pointer-events:none;
+}
+@keyframes ahorro-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(0,230,118,0.6)}
+  50%{box-shadow:0 0 0 5px rgba(0,230,118,0)}
+}
+.ahorro-pill-badge{
+  position:absolute;top:-7px;right:-7px;
+  font-size:9px;font-weight:800;letter-spacing:0.02em;
+  padding:3px 6px;border-radius:999px;white-space:nowrap;
+  background:#00E676;color:#003314;
+  box-shadow:0 1px 4px rgba(0,0,0,0.25);
+  pointer-events:none;
+  animation:ahorro-badge-in 250ms ease-out;
+}
+@keyframes ahorro-badge-in{from{opacity:0;transform:scale(0.6)}to{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){
+  .ahorro-tab-badge{animation:none}
+  .ahorro-pill-badge{animation:none}
+}
+
 /* === V7.4 MAP STATE MANAGER (3-state machine + floating chip) ===========================
    Blueprint: MapStateManager — SEARCH_FOCUS / ROUTE_PREVIEW / FULL_MAP.
    body[data-map-state] is the single source of truth. CSS rules below handle
@@ -997,6 +1033,7 @@ function svg(name,size){
     gauge:'<path d="M12 13l4-4"/><path d="M3 12a9 9 0 1 1 18 0"/><circle cx="12" cy="13" r="1.2"/>',
     route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 6h6a4 4 0 0 1 0 8H10a4 4 0 0 0 0 8h6"/>',
     mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
+    savings:'<circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15 9.5c0-1.4-1.3-2.3-3-2.3s-3 .9-3 2.3 1.3 2 3 2 3 .6 3 2-1.3 2.3-3 2.3-3-.9-3-2.3"/>',
     coffee:'<path d="M5 9h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9Z"/><path d="M16 10h2.5a2 2 0 0 1 0 4H16"/><path d="M8 2v3M12 2v3"/>'
   };
   return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[name]||'')+'</svg>';
@@ -1725,6 +1762,22 @@ function renderSheet(){
   }
   var autoEst=null,busEst=null,bikeEst=null;
   estimations.forEach(function(e){if(e.mode==='auto'&&!autoEst)autoEst=e;else if(e.mode==='bus'&&!busEst)busEst=e;else if(e.mode==='bike'&&!bikeEst)bikeEst=e});
+  // V7.5 Ahorro_Inteligente: recompute comparative recommendation on every estimate.
+  // colectivoPrice = busEst.price (SUBE fare); rideHailingPrice = cheapest app provider (uber/didi/maxim).
+  // Formula: isRecommendationAvailable = (colectivoPrice < rideHailingPrice * 0.5)
+  if(window.VoyAhorroService){
+    var _colP = busEst ? busEst.price : null;
+    var _rhP = null;
+    if(autoEst && autoEst.rankedProviders && autoEst.rankedProviders.length){
+      var _appPrices=[];
+      for(var k=0;k<autoEst.rankedProviders.length;k++){
+        var _rp=autoEst.rankedProviders[k];
+        if(_rp && (_rp.id==='uber'||_rp.id==='didi'||_rp.id==='maxim') && _rp.price>0)_appPrices.push(_rp.price);
+      }
+      if(_appPrices.length)_rhP=Math.min.apply(null,_appPrices);
+    }
+    VoyAhorroService.recompute(_colP,_rhP);
+  }
   if(!autoEst){
     container.innerHTML='<div class="sheet-empty"><div class="se-icon">'+svg('car',40)+'</div>Sin tarifas de auto disponibles</div>';
     clearBusRoute();showModeSelector(false);return;
@@ -2481,6 +2534,10 @@ if('serviceWorker' in navigator){
 // Interaction: horizontal swipe between groups (collapse_threshold_ms=300), slide-fade animation.
 window.VOY_CATEGORY_MANAGER_ENABLED=true;
 var CATEGORY_GROUPS=[
+  // V7.5: group_ahorro at position 0 — recommendation tab (badge-driven, not a real mode group).
+  // Contains 'bus' mode so the Colectivo pill + BadgeRenderer render inside its panel.
+  // setMode() auto-switch SKIPS this group (only entered via explicit tab tap).
+  {id:'group_ahorro',label:'Ahorro',icon:'savings',modes:['bus'],ahorro:true},
   {id:'group_private',label:'Privados',icon:'car',modes:['car','taxi','remis']},
   {id:'group_eco',label:'Activos',icon:'route',modes:['walk','bike']},
   {id:'group_public',label:'Público',icon:'bus',modes:['bus']}
@@ -2493,7 +2550,7 @@ var MODE_META={
   bike:{label:'Bicicleta',icon:'bike'},
   bus:{label:'Colectivo',icon:'bus'}
 };
-var _activeGroup=0;
+var _activeGroup=1; // V7.5: default to Privados (group 0 is Ahorro — entered only via tab tap when condition met)
 var _catTouchStartX=0,_catTouchStartT=0;
 function initCategoryManager(){
   if(!window.VOY_CATEGORY_MANAGER_ENABLED){initModeSelector();return}
@@ -2502,7 +2559,8 @@ function initCategoryManager(){
   el.classList.remove('mode-selector');
   el.removeAttribute('role'); // inner .category-tabs will carry role=tablist
   var tabsHTML=CATEGORY_GROUPS.map(function(g,i){
-    return '<button class="cat-tab'+(i===_activeGroup?' active':'')+'" data-group-idx="'+i+'" role="tab" aria-selected="'+(i===_activeGroup)+'"><span class="ct-ic">'+svg(g.icon,14)+'</span><span>'+g.label+'</span></button>';
+    var extraCls=g.ahorro?' cat-tab--ahorro':'';
+    return '<button class="cat-tab'+extraCls+(i===_activeGroup?' active':'')+'" data-group-idx="'+i+'" role="tab" aria-selected="'+(i===_activeGroup)+'"><span class="ct-ic">'+svg(g.icon,14)+'</span><span>'+g.label+'</span></button>';
   }).join('');
   var panelsHTML=CATEGORY_GROUPS.map(function(g,i){
     var pillsHTML=g.modes.map(function(modeId){
@@ -2514,6 +2572,7 @@ function initCategoryManager(){
   el.innerHTML='<div class="category-tabs" role="tablist" aria-label="Categoría de transporte">'+tabsHTML+'</div>'
     +'<div class="category-panels"><div class="cat-panels-track" id="catPanelsTrack">'+panelsHTML+'</div></div>';
   setCategoryGroup(_activeGroup,false);
+  renderAhorroBadges(); // V7.5: mount initial badge state on Colectivo pills + Ahorro tab (no-op if condition false)
   el.querySelector('.category-tabs').addEventListener('click',function(e){
     var btn=e.target.closest('.cat-tab');if(!btn)return;
     setCategoryGroup(parseInt(btn.getAttribute('data-group-idx'),10),true);
@@ -2556,11 +2615,16 @@ function setMode(modeId){
     pills[i].classList.toggle('active',on);
     pills[i].setAttribute('aria-selected',on);
   }
-  // Auto-switch group if the mode belongs to a different group
-  for(var i=0;i<CATEGORY_GROUPS.length;i++){
-    if(CATEGORY_GROUPS[i].modes.indexOf(modeId)>=0){
-      if(i!==_activeGroup)setCategoryGroup(i,true);
-      break;
+  // V7.5: Auto-switch group only if the mode is NOT in the current group.
+  // Skip groups flagged `ahorro:true` — those are recommendation views, never auto-switch targets.
+  // (bus exists in both group_ahorro and group_public; tapping bus on Público stays on Público.)
+  var _curHasMode = CATEGORY_GROUPS[_activeGroup] && CATEGORY_GROUPS[_activeGroup].modes.indexOf(modeId)>=0;
+  if(!_curHasMode){
+    for(var i=0;i<CATEGORY_GROUPS.length;i++){
+      if(!CATEGORY_GROUPS[i].ahorro && CATEGORY_GROUPS[i].modes.indexOf(modeId)>=0){
+        if(i!==_activeGroup)setCategoryGroup(i,true);
+        break;
+      }
     }
   }
   if(window.VoyEventBus)VoyEventBus.emit('vehicle_viewed',{mode:_activeMode});
@@ -2612,6 +2676,75 @@ function initFloatingChip(){
   VoyMapContext.subscribe(function(state){
     chip.setAttribute('aria-hidden',state!=='FULL_MAP');
   });
+}
+
+// ===================== V7.5 AHORRO INTELIGENTE =================================================
+// Blueprint: AhorroFeature — comparative cost algorithm (Colectivo vs Ride-Hailing).
+//   formula: isRecommendationAvailable = (PublicTransportPrice < RideHailingPrice * threshold)
+//   threshold: 0.5  |  data_source: V7_DataStore (MC.getEstimations via renderSheet)  |  refresh: 300000ms (5 min)
+// Decoupled from rendering via observer pattern (mirrors VoyMapContext). renderSheet() calls
+// recompute() after each estimate; _set() emits to listeners + triggers BadgeRenderer.
+window.VoyAhorroService=(function(){
+  var THRESHOLD=0.5;
+  var REFRESH_MS=300000;
+  var _state={available:false,colectivoPrice:null,rideHailingPrice:null,savingsPercent:0,threshold:THRESHOLD};
+  var _listeners=[];
+  var _lastComputeTs=0;
+  function _emit(){for(var i=0;i<_listeners.length;i++){try{_listeners[i](_state)}catch(e){console.error('[VoyAhorroService] listener',e)}}}
+  function _set(avail,colP,rhP,sav){
+    var changed=_state.available!==avail||_state.colectivoPrice!==colP||_state.rideHailingPrice!==rhP||_state.savingsPercent!==sav;
+    _state.available=avail;
+    if(colP!=null)_state.colectivoPrice=colP;
+    if(rhP!=null)_state.rideHailingPrice=rhP;
+    if(sav!=null)_state.savingsPercent=sav;
+    if(changed){
+      _emit();
+      if(typeof renderAhorroBadges==='function')renderAhorroBadges();
+    }
+  }
+  function recompute(colectivoPrice,rideHailingPrice){
+    if(colectivoPrice==null||colectivoPrice<0||rideHailingPrice==null||rideHailingPrice<=0){_set(false,null,null,0);return}
+    _lastComputeTs=Date.now();
+    var avail=colectivoPrice<(rideHailingPrice*THRESHOLD);
+    var sav=rideHailingPrice>0?Math.round((1-colectivoPrice/rideHailingPrice)*100):0;
+    _set(avail,colectivoPrice,rideHailingPrice,sav);
+  }
+  function isStale(){return _lastComputeTs===0||(Date.now()-_lastComputeTs)>REFRESH_MS}
+  return {
+    THRESHOLD:THRESHOLD,REFRESH_MS:REFRESH_MS,
+    getState:function(){return _state},
+    recompute:recompute,
+    isStale:isStale,
+    subscribe:function(fn){_listeners.push(fn);return function(){_listeners=_listeners.filter(function(f){return f!==fn})}}
+  };
+})();
+
+// V7.5 BadgeRenderer — mounts "¡Ahorrá un X%!" on every Colectivo mode-pill and a
+// highlight dot on the Ahorro cat-tab when VoyAhorroService.getState().available is true.
+// Idempotent: safe to call on every state change (clears stale badges first, then mounts fresh).
+function renderAhorroBadges(){
+  if(!window.VoyAhorroService)return; // not yet initialized (boot-time call from initCategoryManager)
+  var st=VoyAhorroService.getState();
+  // (1) Ahorro cat-tab highlight dot (group index 0 = group_ahorro)
+  var ahorroTabs=document.querySelectorAll('.cat-tab[data-group-idx="0"]');
+  for(var i=0;i<ahorroTabs.length;i++){
+    var tab=ahorroTabs[i];
+    var dot=tab.querySelector('.ahorro-tab-badge');
+    if(st.available){
+      if(!dot){dot=document.createElement('span');dot.className='ahorro-tab-badge';dot.setAttribute('aria-label','Ahorro disponible');tab.appendChild(dot)}
+    }else if(dot){dot.parentNode.removeChild(dot)}
+  }
+  // (2) Colectivo mode-pill badges — every bus pill across ALL groups (Ahorro + Público)
+  var busPills=document.querySelectorAll('.mode-pill[data-mode="bus"]');
+  for(var j=0;j<busPills.length;j++){
+    var pill=busPills[j];
+    var badge=pill.querySelector('.ahorro-pill-badge');
+    if(st.available){
+      var txt='¡Ahorrá un '+st.savingsPercent+'%!';
+      if(!badge){badge=document.createElement('span');badge.className='ahorro-pill-badge';pill.appendChild(badge)}
+      badge.textContent=txt;
+    }else if(badge){badge.parentNode.removeChild(badge)}
+  }
 }
 </script>
 </body>
