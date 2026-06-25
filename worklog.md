@@ -3528,3 +3528,34 @@ Stage Summary:
 - GUARD 4: All computed styles match expected values (16px / 700 / 0px stroke on .mp-lbl; 16px on .est-badge + .ahorro-pill-badge).
 - 1 ADVISORY: text-shadow:0 0 4px rgba(0,0,0,1) inherited from V7.16 .mode-pill block — non-blocking, flagged for future cleanup.
 - No changes applied (read-only verification per protocol).
+
+---
+Task ID: DEPLOY_674a942
+Agent: Main (DevOps / Deployment)
+Task: Push latest commits to GitHub simonkey888/VOY + deploy to Cloudflare Workers (voy-app.simondalmasso44.workers.dev)
+
+Work Log:
+- Pre-push state: local main was 3 commits ahead of origin/main (3885985..674a942). Working tree clean (no uncommitted source changes — only audit worklog entries already committed in 674a942).
+- Pushed 3 commits to https://github.com/simonkey888/VOY.git main using provided GitHub PAT (one-time, not stored in remote config; token revoked by user post-deploy).
+  * Result: 3885985..674a942 main -> main. PUSH OK.
+- GitHub Actions deploy.yml auto-triggered on push to main (concurrency group: deploy-voy-prod, cancel-in-progress: false).
+- CI pipeline (checkout → setup-bun → bun install → lint → inject-build-hash → wrangler deploy) completed in ~45s.
+- Production /api/health verification:
+  * T+0 (pre-CI): build_hash="3885985" (stale)
+  * T+45 (post-CI): build_hash="674a942" ✅ MATCHES git HEAD
+  * V7 guardrail PASSED: local HEAD == edge build_hash.
+- Production VOY-Lite.html markers (?_bust=674a942 cache-bust):
+  * V7.17.0: 1 match (version string) ✅
+  * SURGICAL_FIX: 3 matches (comments + block) ✅
+  * C1 FIX: 1 match ✅
+  * C2 FIX: 1 match ✅
+  * V7.15_CRITICAL_HARDENING_OVERRIDE: 0 matches ✅ (forbidden dead code absent)
+  * fonts.googleapis.com: 0 matches ✅ (forbidden dependency absent)
+- No manual wrangler deploy required — CI handled the full deploy. Wrangler --dry-run fallback not needed.
+
+Stage Summary:
+- ✅ PUSH: 3 commits pushed to simonkey888/VOY main (3885985..674a942).
+- ✅ DEPLOY: CI auto-deployed to voy-app.simondalmasso44.workers.dev via wrangler. No manual intervention.
+- ✅ GUARDRAIL: /api/health.build_hash=674a942 == git HEAD 674a942. V7 "local == edge" invariant holds.
+- ✅ MARKERS: All V7.17 directives (SURGICAL_FIX, C1 FIX, C2 FIX) present in production HTML. Forbidden strings (V7.15_CRITICAL_HARDENING_OVERRIDE, fonts.googleapis.com) absent.
+- Production URL: https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html
