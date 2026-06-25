@@ -123,24 +123,24 @@ body{
 button{font-family:inherit;letter-spacing:inherit}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
 
-/* === AMBIENT MAP (z-10) — full-bleed, opacity 1, native gestures ================
-   UI_RESET_V1: z-index 10!important — map is the base layer, always visible.
-   .app(z-20) floats above with pointer-events:none; interactive children get auto.
-   This guarantees map gestures (pan/zoom/pinch) work in every transparent gap. ===== */
+/* === AMBIENT MAP (V7.12 GHOST_MODE: z-1) — full-bleed, opacity 1, native gestures ===
+   V7.12: z-index 10→1 (blueprint spec: map_layer=1). background var(--bg3)→transparent
+   para que NUNCA muestre un fondo oscuro si los tiles tardan en cargar. El mapa es
+   la capa 0 absoluta — todo flota encima con glassmorphism. ============================ */
 #map{
-  position:fixed;inset:0;z-index:10!important;width:100%;height:100%;
-  opacity:1;filter:none;background:var(--bg3);
+  position:fixed;inset:0;z-index:1!important;width:100%;height:100%;
+  opacity:1;filter:none;background:transparent!important;
 }
 #map.crosshair .maplibregl-canvas{cursor:crosshair!important}
 .maplibregl-ctrl-attrib{display:none!important}
 
-/* === TOP SCRIM (z-10) — V7.11 ANTI_CLUTTER: background ELIMINADO. Era un gradient
-   opaco (var(--top-scrim)) que creaba la 'caja negra' sobre el mapa. Ahora transparent:
-   el search-bar se sostiene por su propio glassmorphism (rgba(0,0,0,0.42)+blur15px). === */
-#scrim{position:fixed;top:0;left:0;right:0;height:200px;z-index:10;background:transparent;pointer-events:none}
+/* === TOP SCRIM (z-1) — V7.12 GHOST_MODE: background transparent (sin gradient opaco) === */
+#scrim{position:fixed;top:0;left:0;right:0;height:200px;z-index:1;background:transparent!important;pointer-events:none}
 
-/* === APP (z-20) — UI overlay layer; pointer-events:none lets map gestures through === */
-.app{position:relative;z-index:20!important;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0;pointer-events:none}
+/* === APP (V7.12 GHOST_MODE: z-5) — UI overlay layer; pointer-events:none lets map through ===
+   V7.12: z-index 20→5 (blueprint spec: ui_layer=5). background:transparent!important
+   explícito (ya lo era, pero forzado para cumplir directiva step_1). ====================== */
+.app{position:relative;z-index:5!important;max-width:560px;margin:0 auto;width:100%;flex:1 0 auto;display:flex;flex-direction:column;min-height:0;pointer-events:none;background:transparent!important}
 .app>.topbar,.app>.origin-pill,.app>.memory-row,.app>.mode-selector,.app>.category-wrapper,.app>.sheet-wrap{pointer-events:auto}
 
 /* === FLOATING INPUT v2 (UX_CORE_REDESIGN_LIGHT_TOUCH) ===========================
@@ -281,25 +281,27 @@ button{font-family:inherit;letter-spacing:inherit}
 [data-theme="dark"] .chip.chip-clear{background:rgba(255,59,48,0.5)}
 .chip .chip-text{max-width:140px;overflow:hidden;text-overflow:ellipsis}
 
-/* === STAGE (transparent spacer — never blocks map gestures) === */
-.stage{flex:1;min-height:120px;pointer-events:none}
+/* === STAGE (V7.12 GHOST_MODE: transparent spacer — never blocks map gestures) === */
+.stage{flex:1;min-height:120px;pointer-events:none;background:transparent!important}
 
 /* === DECISION SHEET === */
 .sheet-wrap{padding:0 var(--sp-4);padding-bottom:var(--sp-3)}
 .sheet{
-  /* UI_RESET_V1: dark glass sheet (rgba(18,18,18,0.85) + blur 20px).
-     Scoped CSS var overrides flip all children to light text for contrast. */
-  background:rgba(18,18,18,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:var(--radius-card) var(--radius-card) 0 0;
+  /* V7.12 GHOST_MODE: sheet más transparente (0.85→0.55) + blur mayor (20→25px).
+     Antes era un bloque oscuro opaco que tapaba el mapa. Ahora es glass ligero:
+     se ve el mapa a través, pero el blur mantiene legibilidad del texto claro.
+     Scoped CSS var overrides mantienen children con texto claro para contraste. */
+  background:rgba(18,18,18,0.55)!important;backdrop-filter:blur(25px) saturate(1.3);-webkit-backdrop-filter:blur(25px) saturate(1.3);border-radius:var(--radius-card) var(--radius-card) 0 0;
   border:1px solid var(--border-strong);border-top:1px solid rgba(255,255,255,0.1);border-bottom:none;
   padding:var(--sp-4);
   padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
   animation:sheetIn var(--ease-sheet) both;
-  max-height:38vh; /* <50% screen per QA hierarchy_validation */
+  max-height:32vh; /* V7.12: 38vh→32vh — menos pantalla tapada, más mapa visible */
   overflow-y:auto;-webkit-overflow-scrolling:touch;
   scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.15) transparent;
-  --text:#F5F5F5;--text2:#999999;--text3:#666666;
-  --border:rgba(255,255,255,0.10);--border-subtle:rgba(255,255,255,0.06);--border-strong:rgba(255,255,255,0.15);
-  --surface:#1A1A1A;--surface2:#242424;--bg3:#242424;
+  --text:#FFFFFF;--text2:#CCCCCC;--text3:#999999;
+  --border:rgba(255,255,255,0.12);--border-subtle:rgba(255,255,255,0.08);--border-strong:rgba(255,255,255,0.18);
+  --surface:rgba(255,255,255,0.06);--surface2:rgba(255,255,255,0.04);--bg3:rgba(255,255,255,0.04);
   color:var(--text);
 }
 .sheet::-webkit-scrollbar{width:5px}
@@ -563,21 +565,29 @@ button{cursor:pointer}
 .fm-ic{display:inline-flex;color:var(--text2);flex-shrink:0}
 .fm-sep{height:1px;background:var(--border-subtle);margin:2px 4px}
 
-/* === DEEP-LINK CONFIRMATION DIALOG === */
+/* === DEEP-LINK CONFIRMATION DIALOG (V7.12 GHOST_MODE: Action Sheet max 25%) ============
+   V7.12: el .dialog-overlay era full-screen con bg rgba(0,0,0,0.5) que oscurecía todo
+   el mapa. Ahora el overlay es transparente (solo scrim sutil) y el .dialog es un
+   Action Sheet de max-height 25vh — deja el 75% del mapa SIEMPRE visible.
+   El overlay mantiene pointer-events:auto para capturar clicks fuera (cerrar). ========== */
 .dialog-overlay{
-  position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.5);
+  position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.15)!important;
   display:flex;align-items:flex-end;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity var(--ease-out);
 }
 .dialog-overlay.show{opacity:1;pointer-events:auto}
 .dialog{
-  background:var(--surface);border-radius:var(--radius-card) var(--radius-card) 0 0;
+  background:var(--surface);border-radius:20px 20px 0 0!important;
   border:1px solid var(--border-strong);border-bottom:none;
-  width:100%;max-width:560px;padding:var(--sp-5);
-  padding-bottom:calc(var(--sp-5) + env(safe-area-inset-bottom,0px));
+  width:100%;max-width:560px;max-height:25vh!important;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:var(--sp-4);
+  padding-bottom:calc(var(--sp-4) + env(safe-area-inset-bottom,0px));
   transform:translateY(100%);
   transition:transform var(--ease-spring);
+  scrollbar-width:thin;scrollbar-color:var(--text3) transparent;
 }
+.dialog::-webkit-scrollbar{width:4px}
+.dialog::-webkit-scrollbar-thumb{background:var(--text3);border-radius:999px}
 .dialog-overlay.show .dialog{transform:translateY(0)}
 .dialog .dg-icon{display:flex;justify-content:center;margin-bottom:var(--sp-3);color:var(--primary)}
 .dialog .dg-title{font-size:var(--font-title);font-weight:var(--fw-title);color:var(--text);text-align:center;letter-spacing:-0.02em;margin-bottom:var(--sp-2)}
@@ -1061,7 +1071,7 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.11.0';
+window.VOY_VERSION='V7.12.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
