@@ -3023,3 +3023,44 @@ Stage Summary:
 - ✅ QA 3: star toggle has clear on/off visual state (filled orange vs outline, aria-label changes). ✓
 - ✅ Browser-verified 10/10 points. Zero console errors. Lint clean.
 - 🔁 RE-AUDIT TRIGGERS: search dropdown shows "Favoritos" first (sorted by last_used); star icon on every dropdown item toggles favorite without selecting; flag icon on provider price cards sends accuracy report (toast confirms); favorites persist across reloads (LocalStorage).
+
+---
+Task ID: V7_9_PROD_DEPLOY_FIELD_OPS
+Agent: Main (GLM5.2 — Production Deploy + QA)
+Task: Push V7.9 + V7.9.1 + V7.9 Field Ops commits to GitHub (simonkey888/VOY) + deploy to Cloudflare Workers (voy-app) + production QA verification.
+
+Work Log:
+- Read prior worklog (V7_9_FIELD_OPS_AND_PERSISTENT_CONTEXT). Confirmed all 3 feature cycles complete + committed locally (working tree clean). 3 unpushed commits: 2a9bbf8 (V7.9 CRITICAL_UI_FIX), 50416bc (V7.9.1 UI_RESET_V1), 288e339 (V7.9 Field Ops with favorites.js + feedback.js).
+- Pushed 3 commits to https://github.com/simonkey888/VOY.git main via PAT (ghp_***). Result: f8f2387..288e339 main -> main. Push successful.
+- Verified wrangler.jsonc: name="voy-app", workers_dev=true, assets=./public, analytics_engine VOY_METRICS. Matches user-provided credentials (account b21fa81d..., subdomain simondalmasso44.workers.dev).
+- Deployed to Cloudflare Workers via `npx wrangler deploy --minify` with CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID env vars. Result: Uploaded voy-app, 1 new asset (VOY-Lite.html), Version ID 70887728-e4bb-4d0c-aad7-f0354f1b1199, URL https://voy-app.simondalmasso44.workers.dev. Deploy successful.
+- Triggered CI re-run via workflow_dispatch (HTTP 204) to fix build_hash placeholder (my manual deploy overwrote CI's hash-injected deploy). CI run 28157857898 completed: success. Build hash now correct.
+- Production verification (curl):
+  * /api/health: ok:true, service:"voy-app", build_hash:"288e339" (matches git SHA — V7 guardrail PASSED), analytics:true.
+  * /core/favorites.js: HTTP 200, 6134 bytes, text/javascript.
+  * /core/feedback.js: HTTP 200, 3516 bytes, text/javascript.
+  * VOY-Lite.html markers: VoyFavoritesService (20x), fb-flag (10x), data-fav-toggle (4x), Favoritos (2x), V7.9.0 (1x), VoyFeedbackService (3x). All Field Ops code is LIVE.
+- Agent Browser QA (production, viewport 390x844, mobile):
+  * Page load: zero console errors, zero page errors. VOY_VERSION=V7.9.0, VoyFavoritesService=object, VoyFeedbackService=object, VoyEventBus=object, MC=object. _activeGroup=0 (Ahorro default), _activeMode=bus (V7.9 change).
+  * QA 1 (save favorite → reload → persist): VoyFavoritesService.add({lat:-31.6256,lon:-60.7053,name:'Centro Santa Fe'}) → getAll() count=1, LS 'voy_favorites' has data, isFavorite=true. After reload: count=1, firstFav='Centro Santa Fe', isFav=true, lsHasData=true. FAVORITE PERSISTED ACROSS RELOAD.
+  * QA 1 (dropdown): Click destInput → dropdown opens with "Favoritos" section FIRST (sd-section-title), item "Centro Santa Fe" with fav-star.active (aria-label="Quitar de favoritos", aria-pressed="true"). Star toggle present.
+  * QA 3 (star toggle on→off): Click active star → VoyFavoritesService.toggle() removes favorite. After 800ms: activeStarsNow=0, favCount=0, isFav=false. Visual state changed (active class removed).
+  * QA 3 (star toggle off→on): Click inactive star → toggle adds favorite back. After 800ms: activeStars=1, favCount=1, isFav=true, starLabel="Quitar de favoritos", starPressed="true". Bidirectional toggle works.
+  * QA 2 (flag → beacon): Set origin (Plaza San Martín) + dest (Centro Santa Fe) + mode=car. After 3.5s estimations: 2 flag buttons found (DiDi $2500, Uber $3000) with data-fb-provider + data-fb-price. Wrapped navigator.sendBeacon, clicked DiDi flag → beaconCalls=1, url=/api/telemetry. Toast appeared: "Precio reportado · gracias por la corrección".
+  * QA 2 (beacon payload): Wrapped sendBeacon to capture Blob.text(). Clicked Uber flag → payload captured: {"event":"data_accuracy_issue","routeKey":"-31621_-60704__-31626_-60705","provider":"uber","price_shown":3000,"user_note":"","ts":1782377348560}. Schema matches blueprint exactly.
+  * QA 2 (production POST): Direct curl POST to https://voy-app.simondalmasso44.workers.dev/api/telemetry with data_accuracy_issue schema → HTTP 202 {"ok":true}. Worker accepts extended schema.
+- VLM cross-verification (glm-4.6v, 1 screenshot /tmp/prod-v79-fieldops-final.png): 5/5 checks PASS — (1) Map dominant background, (2) Search bar translucent dark glass at top, (3) Bottom sheet with price cards + flag icon, (4) 'Ahorro' tab visible, (5) Glassmorphism on UI panels.
+- GitHub Actions CI: run 28157611301 (auto from push) + run 28157857898 (workflow_dispatch re-run) both completed:success. Deploy pipeline healthy.
+
+Stage Summary:
+- ✅ PUSH: 3 commits (V7.9 + V7.9.1 + V7.9 Field Ops) pushed to simonkey888/VOY main. f8f2387..288e339.
+- ✅ DEPLOY: voy-app worker deployed to https://voy-app.simondalmasso44.workers.dev. Version 70887728-e4bb-4d0c-aad7-f0354f1b1199. 1 new asset (VOY-Lite.html) + 2 new modules (favorites.js, feedback.js) LIVE.
+- ✅ BUILD_HASH GUARDRAIL: /api/health.build_hash="288e339" === git short SHA. V7 guardrail PASSED — no local/edge desync.
+- ✅ PRODUCTION QA (Agent Browser, mobile 390x844):
+  - QA 1 (save→reload→persist): PASS. Favorite persists in LocalStorage, shows in "Favoritos" dropdown section.
+  - QA 2 (flag→beacon): PASS. Flag click sends beacon with {event, routeKey, provider, price_shown, user_note, ts} to /api/telemetry. Worker returns 202. Toast confirms.
+  - QA 3 (star toggle on/off): PASS. Bidirectional toggle syncs visual (active class), aria-label, aria-pressed, and storage.
+- ✅ VLM: 5/5 visual checks PASS (map dominant, glass search bar, flag on price cards, Ahorro tab, glassmorphism).
+- ✅ CI: 2 runs completed:success. Auto-deploy pipeline healthy.
+- 🔁 PRODUCTION IS LIVE at https://voy-app.simondalmasso44.workers.dev/VOY-Lite.html with V7.9 Field Ops (Favorites + Feedback) + UI_RESET_V1 (Map Priority Layout) + V7.9 CRITICAL_UI_FIX (Glassmorphism + Ahorro default + collapsible search).
+- 🔁 RE-AUDIT TRIGGERS: production build_hash matches git SHA (288e339); favorites persist across reloads; flag beacons reach production worker (HTTP 202); star toggles bidirectional; glassmorphism intact in production.
