@@ -158,36 +158,42 @@ button{font-family:inherit;letter-spacing:inherit}
   padding:0 var(--sp-4);
   background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
 }
-/* UI_RESET_V1: glass search bar — dark frosted glass (blur 15px) so map shows through.
-   White border rgba(255,255,255,0.2) defines the pill edge over light map. */
+/* V7.13 UNIFIED_GHOST_UI: search-bar = ghost real. background:transparent (era rgba(0,0,0,0.42)
+   que se veía como 'cartel oscuro'). Solo blur(20px) + border rgba(255,255,255,0.1) sútil.
+   Text-shadow agresivo 0 1px 2px rgba(0,0,0,0.8) garantiza legibilidad sobre cualquier mapa. */
 .search-bar{
   position:relative;display:flex;align-items:center;gap:var(--sp-1);
-  background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.2);
-  backdrop-filter:blur(15px) saturate(1.2);-webkit-backdrop-filter:blur(15px) saturate(1.2);
-  border-radius:14px; /* spec border_radius */
-  padding:0 var(--sp-2);height:48px;min-height:48px; /* spec height */
-  box-shadow:0 4px 16px rgba(0,0,0,0.12),0 1px 3px rgba(0,0,0,0.08); /* soft_low shadow */
-  animation:fadeUpSoftWake 420ms ease-out both; /* spec animation: fade_up_soft_wake, 420ms, ease-out */
+  background:transparent!important; /* V7.13: rgba(0,0,0,0.42) → transparent (ghost real) */
+  border:1px solid rgba(255,255,255,0.1); /* V7.13: 0.2 → 0.1 (sútil) */
+  backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2); /* V7.13: 15 → 20 */
+  border-radius:14px;
+  padding:0 var(--sp-2);height:48px;min-height:48px;
+  box-shadow:none; /* V7.13: eliminado (era 0 4px 16px rgba(0,0,0,0.12)) */
+  animation:fadeUpSoftWake 420ms ease-out both;
 }
 @keyframes fadeUpSoftWake{
   0%{opacity:0;transform:translateY(10px)}
   100%{opacity:1;transform:translateY(0)}
 }
 @media(prefers-reduced-motion:reduce){.search-bar{animation:none;opacity:1;transform:none}}
-.search-bar .sb-icon{color:var(--fi-sub);flex-shrink:0;display:flex;align-items:center;padding-left:var(--sp-1)}
+/* V7.13: text-shadow agresivo en todos los textos de navegación del search-bar.
+   Truco técnico: texto blanco + sombra negra fuerte se lee sobre mapa claro u oscuro sin caja. */
+.search-bar .sb-icon{color:#FFFFFF;flex-shrink:0;display:flex;align-items:center;padding-left:var(--sp-1);text-shadow:0 1px 2px rgba(0,0,0,0.8)}
 #destInput{
   flex:1;border:none;background:transparent;outline:none;
-  font-size:calc(var(--font-body) * 1.05); /* spec font_scale 1.05em */
-  font-weight:var(--fw-body);color:var(--fi-text);
+  font-size:calc(var(--font-body) * 1.05);
+  font-weight:var(--fw-body);color:#FFFFFF; /* V7.13: var(--fi-text) → #FFFFFF puro */
   min-width:0;letter-spacing:-0.01em;padding:var(--sp-1) 0;min-height:32px;
+  text-shadow:0 1px 2px rgba(0,0,0,0.8); /* V7.13: agresivo */
 }
-#destInput::placeholder{color:var(--fi-sub)}
+#destInput::placeholder{color:rgba(255,255,255,0.85);text-shadow:0 1px 2px rgba(0,0,0,0.8)} /* V7.13: var(--fi-sub) → blanco con sombra */
 .sb-btn{
   border:none;background:transparent;cursor:pointer;flex-shrink:0;
   width:40px;height:40px;border-radius:var(--radius-sm);
-  display:flex;align-items:center;justify-content:center;color:var(--fi-sub);
+  display:flex;align-items:center;justify-content:center;color:#FFFFFF; /* V7.13: var(--fi-sub) → #FFFFFF */
   transition:transform var(--ease-out),background var(--ease-out),opacity var(--ease-out);
   -webkit-tap-highlight-color:transparent;
+  text-shadow:0 1px 2px rgba(0,0,0,0.8); /* V7.13: agresivo */
 }
 .sb-btn:active{transform:scale(0.9);background:var(--fi-hover)}
 .sb-btn[disabled]{opacity:0.3;cursor:not-allowed}
@@ -653,9 +659,9 @@ button{cursor:pointer}
 }
 .mode-selector::-webkit-scrollbar{display:none}
 .mode-selector.show{display:flex}
-/* V7.11 ANTI_CLUTTER: mode-pill = glass oscuro (rgba(0,0,0,0.35)) + border blanco semi-transp
-   (rgba(255,255,255,0.4)) + texto #FFFFFF. Garantiza contraste WCAG AA sobre mapa claro
-   (positron) y oscuro. El .active sigue siendo sólido negro/según tema para feedback claro. */
+/* V7.13 UNIFIED_GHOST_UI: mode-pill = glass oscuro (rgba(0,0,0,0.35)) + border blanco semi-transp
+   (rgba(255,255,255,0.4)) + texto #FFFFFF + text-shadow agresivo (0.4→0.8). Opacidad inactivos
+   0.72→0.6 (blueprint fase_3: no distrae pero mantiene contraste). .active sigue sólido negro. */
 .mode-pill{
   display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
   padding:9px 14px;border-radius:999px;
@@ -663,59 +669,32 @@ button{cursor:pointer}
   border:1px solid rgba(255,255,255,0.4);
   font-size:var(--font-caption);font-weight:var(--fw-bold);
   backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);
-  color:#FFFFFF;cursor:pointer;min-height:40px;
-  transition:transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out);
+  color:#FFFFFF;cursor:pointer;min-height:36px; /* V7.13: 40→36 (directiva CSS blueprint) */
+  transition:transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out),opacity var(--ease-out);
   -webkit-tap-highlight-color:transparent;white-space:nowrap;
-  text-shadow:0 1px 2px rgba(0,0,0,0.4);
+  text-shadow:0 1px 2px rgba(0,0,0,0.8); /* V7.13: 0.4 → 0.8 agresivo */
+  opacity:0.6; /* V7.13: inactivos 0.72→0.6 (blueprint fase_3) */
 }
 .mode-pill:active{transform:scale(0.95)}
-.mode-pill.active{color:#FFFFFF;background:#000000;border-color:#FFFFFF;backdrop-filter:none;-webkit-backdrop-filter:none;text-shadow:none}
+.mode-pill.active{color:#FFFFFF;background:#000000;border-color:#FFFFFF;backdrop-filter:none;-webkit-backdrop-filter:none;text-shadow:none;opacity:1}
 [data-theme="dark"] .mode-pill{background:rgba(0,0,0,0.45)}
 [data-theme="dark"] .mode-pill.active{color:#000000;background:#FFFFFF;border-color:#FFFFFF;backdrop-filter:none;-webkit-backdrop-filter:none;text-shadow:none}
 .mode-pill .mp-ic{display:flex;align-items:center}
 .mode-pill .mp-lbl{font-size:11px;letter-spacing:0.02em}
 
-/* === V7.4 CATEGORY MANAGER (semantic_density grouping + horizontal swipe) ===========================
-   Blueprint: CategoryManager config. Wraps the existing mode-selector with 3 semantic
-   groups — Privados (Auto/Taxi/Remis), Activos (A pie/Bicicleta), Público (Colectivo).
-   Horizontal swipe between groups (collapse_threshold_ms=300); slide-fade animation
-   via CSS transform on .cat-panels-track (hardware-accelerated, no height animation).
-   Rollback: window.VOY_CATEGORY_MANAGER_ENABLED=false restores old flat mode-selector. */
-.category-wrapper{display:none;flex-direction:column;gap:0}
+/* === V7.13 UNIFIED_GHOST_UI: CategoryManager aplanado a 1 sola fila ===========================
+   Blueprint V7.13 fase_1: Eliminar la doble fila (cat-tabs + mode-pills) fusionando
+   todo en 1 fila scrollable de 36px. Los cat-tabs (Ahorro/Privados/Activos/Público) ya
+   no se renderizan visualmente — el feature Ahorro se mantiene como badge animado sobre
+   el mode-pill Colectivo (montado por renderAhorroBadges en core/ahorro.js).
+   _activeGroup se mantiene internamente para compat (mapeo modo→grupo en setMode). */
+.category-wrapper{display:none;flex-direction:row;gap:6px;padding:6px var(--sp-4);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;align-items:center;min-height:36px}
 .category-wrapper.show{display:flex}
-.category-tabs{
-  display:flex;gap:4px;padding:6px var(--sp-4) 2px;
-  border-bottom:0.5px solid var(--border-subtle);
-}
-.cat-tab{
-  flex:1;border:none;background:transparent;cursor:pointer;
-  padding:8px 4px;font-size:var(--font-caption);font-weight:var(--fw-bold);
-  color:var(--text3);min-height:36px;border-radius:var(--radius-xs);
-  display:flex;align-items:center;justify-content:center;gap:4px;
-  transition:color var(--ease-out),background var(--ease-out);
-  -webkit-tap-highlight-color:transparent;
-  border-bottom:2px solid transparent;
-}
-.cat-tab:active{transform:scale(0.97)}
-.cat-tab.active{color:var(--text);border-bottom-color:var(--accent)}
-.cat-tab .ct-ic{display:flex;align-items:center}
-.category-panels{
-  overflow:hidden;position:relative;
-  touch-action:pan-y; /* allow vertical scroll, capture horizontal swipe */
-}
-.cat-panels-track{
-  display:flex;
-  transition:transform 250ms ease-in-out; /* blueprint: duration=250, transition=ease-in-out, effect=slide-fade */
-  will-change:transform;
-}
-.cat-panel{
-  min-width:100%;flex-shrink:0;
-  display:flex;gap:6px;padding:8px var(--sp-4) 4px;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
-}
-.cat-panel::-webkit-scrollbar{display:none}
-.cat-panel .mode-pill{opacity:0.72;transition:opacity 250ms ease-in-out,transform var(--ease-out),background var(--ease-out),color var(--ease-out),border-color var(--ease-out)}
-.cat-panel .mode-pill.active{opacity:1}
+.category-wrapper::-webkit-scrollbar{display:none}
+/* V7.13: category-tabs + category-panels + cat-panels-track ya NO se renderizan.
+   initCategoryManager() ahora inyecta mode-pills directamente en .category-wrapper.
+   Las reglas .cat-tab/.cat-panel previas fueron eliminadas (dead CSS). */
+.category-tabs,.category-panels,.cat-panels-track,.cat-panel{display:none!important}
 
 /* === V7.5 AHORRO INTELIGENTE =================================================================
    Blueprint: AhorroFeature — comparative cost algorithm (Colectivo vs Ride-Hailing).
@@ -1071,7 +1050,7 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.12.0';
+window.VOY_VERSION='V7.13.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -2841,82 +2820,50 @@ function initCategoryManager(){
   var el=document.getElementById('modeSelector');if(!el)return;
   el.classList.add('category-wrapper');
   el.classList.remove('mode-selector');
-  el.removeAttribute('role'); // inner .category-tabs will carry role=tablist
-  var tabsHTML=CATEGORY_GROUPS.map(function(g,i){
-    var extraCls=g.ahorro?' cat-tab--ahorro':'';
-    return '<button class="cat-tab'+extraCls+(i===_activeGroup?' active':'')+'" data-group-idx="'+i+'" role="tab" aria-selected="'+(i===_activeGroup)+'"><span class="ct-ic">'+svg(g.icon,14)+'</span><span>'+g.label+'</span></button>';
+  el.setAttribute('role','tablist');
+  el.setAttribute('aria-label','Modo de transporte');
+  // V7.13 UNIFIED_GHOST_UI: aplanar todos los modos únicos en 1 sola fila scrollable.
+  // Antes: cat-tabs (Ahorro/Privados/Activos/Público) + cat-panels-track con slide = 2 filas, 97px altura.
+  // Ahora: 6 mode-pills en 1 fila, 36px altura. Ahorro = badge animado sobre Colectivo (renderAhorroBadges).
+  var uniqueModes=['car','taxi','remis','bus','walk','bike'];
+  var pillsHTML=uniqueModes.map(function(modeId){
+    var meta=MODE_META[modeId]||{label:modeId,icon:'car'};
+    return '<button class="mode-pill'+(modeId===_activeMode?' active':'')+'" data-mode="'+modeId+'" role="tab" aria-selected="'+(modeId===_activeMode)+'"><span class="mp-ic">'+svg(meta.icon,16)+'</span><span class="mp-lbl">'+meta.label+'</span></button>';
   }).join('');
-  var panelsHTML=CATEGORY_GROUPS.map(function(g,i){
-    var pillsHTML=g.modes.map(function(modeId){
-      var meta=MODE_META[modeId]||{label:modeId,icon:'car'};
-      return '<button class="mode-pill'+(modeId===_activeMode?' active':'')+'" data-mode="'+modeId+'" role="tab" aria-selected="'+(modeId===_activeMode)+'"><span class="mp-ic">'+svg(meta.icon,16)+'</span><span class="mp-lbl">'+meta.label+'</span></button>';
-    }).join('');
-    return '<div class="cat-panel" data-group-idx="'+i+'">'+pillsHTML+'</div>';
-  }).join('');
-  el.innerHTML='<div class="category-tabs" role="tablist" aria-label="Categoría de transporte">'+tabsHTML+'</div>'
-    +'<div class="category-panels"><div class="cat-panels-track" id="catPanelsTrack">'+panelsHTML+'</div></div>';
-  setCategoryGroup(_activeGroup,false);
-  renderAhorroBadges(); // V7.5: mount initial badge state on Colectivo pills + Ahorro tab (no-op if condition false)
-  el.querySelector('.category-tabs').addEventListener('click',function(e){
-    var btn=e.target.closest('.cat-tab');if(!btn)return;
-    setCategoryGroup(parseInt(btn.getAttribute('data-group-idx'),10),true);
-  });
-  el.querySelector('.category-panels').addEventListener('click',function(e){
+  el.innerHTML=pillsHTML;
+  _activeGroup=_mapModeToGroup(_activeMode); // V7.13: sync interno para compat
+  renderAhorroBadges(); // V7.5: mount badge sobre Colectivo si aplica (no-op si condition false)
+  el.addEventListener('click',function(e){
     var pill=e.target.closest('.mode-pill');if(!pill)return;
     setMode(pill.getAttribute('data-mode'));
   });
-  var panels=el.querySelector('.category-panels');
-  panels.addEventListener('touchstart',function(e){
-    _catTouchStartX=e.touches[0].clientX;
-    _catTouchStartT=Date.now();
-  },{passive:true});
-  panels.addEventListener('touchend',function(e){
-    var dx=e.changedTouches[0].clientX-_catTouchStartX;
-    var dt=Date.now()-_catTouchStartT;
-    if(dt>300)return; // collapse_threshold_ms=300 (ignore slow drags — user is scrolling vertically)
-    if(Math.abs(dx)<50)return; // min 50px horizontal swipe
-    if(dx>0&&_activeGroup>0)setCategoryGroup(_activeGroup-1,true);
-    else if(dx<0&&_activeGroup<CATEGORY_GROUPS.length-1)setCategoryGroup(_activeGroup+1,true);
-  },{passive:true});
+}
+// V7.13: mapeo modo→grupo para mantener compat con código que lee _activeGroup.
+// Ya no hay UI de grupos, pero _activeGroup se sincroniza para no romper referencias.
+function _mapModeToGroup(modeId){
+  if(modeId==='car'||modeId==='taxi'||modeId==='remis')return 1; // Privados
+  if(modeId==='walk'||modeId==='bike')return 2; // Activos
+  if(modeId==='bus')return 3; // Público
+  return 0;
 }
 function setCategoryGroup(idx,animate){
+  // V7.13: no-op visual (no hay cat-tabs ni slide). Mantiene _activeGroup para compat.
   if(idx<0||idx>=CATEGORY_GROUPS.length)return;
   _activeGroup=idx;
-  var track=document.getElementById('catPanelsTrack');
-  if(track){track.style.transform='translateX(-'+(idx*100)+'%)'}
-  var tabs=document.querySelectorAll('.cat-tab');
-  for(var i=0;i<tabs.length;i++){
-    var on=i===idx;
-    tabs[i].classList.toggle('active',on);
-    tabs[i].setAttribute('aria-selected',on);
-  }
-  // V7.9 UI_FIX: auto-select first mode if current mode isn't in this group.
-  // Smoother tab-switch UX — user sees relevant content immediately.
   var g=CATEGORY_GROUPS[idx];
   if(g&&g.modes&&g.modes.length){
     var _curHasMode=g.modes.indexOf(_activeMode)>=0;
-    if(!_curHasMode){setMode(g.modes[0])} // setMode calls renderSheet()
+    if(!_curHasMode){setMode(g.modes[0])}
   }
 }
 function setMode(modeId){
   _activeMode=modeId;
-  var pills=document.querySelectorAll('.cat-panel .mode-pill');
+  _activeGroup=_mapModeToGroup(modeId); // V7.13: sync compat
+  var pills=document.querySelectorAll('.mode-pill');
   for(var i=0;i<pills.length;i++){
     var on=pills[i].getAttribute('data-mode')===modeId;
     pills[i].classList.toggle('active',on);
     pills[i].setAttribute('aria-selected',on);
-  }
-  // V7.5: Auto-switch group only if the mode is NOT in the current group.
-  // Skip groups flagged `ahorro:true` — those are recommendation views, never auto-switch targets.
-  // (bus exists in both group_ahorro and group_public; tapping bus on Público stays on Público.)
-  var _curHasMode = CATEGORY_GROUPS[_activeGroup] && CATEGORY_GROUPS[_activeGroup].modes.indexOf(modeId)>=0;
-  if(!_curHasMode){
-    for(var i=0;i<CATEGORY_GROUPS.length;i++){
-      if(!CATEGORY_GROUPS[i].ahorro && CATEGORY_GROUPS[i].modes.indexOf(modeId)>=0){
-        if(i!==_activeGroup)setCategoryGroup(i,true);
-        break;
-      }
-    }
   }
   if(window.VoyEventBus)VoyEventBus.emit('vehicle_viewed',{mode:_activeMode});
   renderSheet();
