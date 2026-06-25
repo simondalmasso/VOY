@@ -754,6 +754,34 @@ button{cursor:pointer}
   .voy-debug-panel{animation:none}
 }
 
+/* === V7.8 OFFLINE PWA — Offline Chip (MapStateManager integration) ============================
+   Blueprint: ui_resiliencia — 'Offline Chip' injected into MapStateManager.
+   Color: #FF9800 (amber). Icon: wifi-off. Shown when navigator.onLine === false.
+   Disables search input + API calls; local trend history (VoyHistoryDB) still queryable. */
+.offline-chip{
+  position:fixed;top:calc(env(safe-area-inset-top,0px) + var(--sp-3));left:50%;
+  transform:translateX(-50%) translateY(-160%);
+  z-index:10000;
+  display:flex;align-items:center;gap:var(--sp-2);
+  padding:8px 14px;min-height:40px;
+  background:#FF9800;color:#1a1a1a;
+  border-radius:999px;
+  box-shadow:0 4px 16px rgba(255,152,0,0.4);
+  font-size:var(--font-body);font-weight:var(--fw-bold);
+  letter-spacing:-0.01em;white-space:nowrap;
+  opacity:0;pointer-events:none;
+  transition:transform 280ms cubic-bezier(0.22,1.1,0.36,1),opacity 280ms ease-out;
+  will-change:transform,opacity;
+  max-width:calc(100% - 32px);
+}
+.offline-chip .oc-ic{display:flex;align-items:center;flex-shrink:0}
+.offline-chip.visible{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+@media(prefers-reduced-motion:reduce){
+  .offline-chip{transition:opacity 200ms ease-out;transform:none!important}
+  .offline-chip.visible{transform:translateX(-50%)!important}
+}
+body[data-offline="true"] #destInput{opacity:0.5;pointer-events:none}
+
 /* === V7.4 MAP STATE MANAGER (3-state machine + floating chip) ===========================
    Blueprint: MapStateManager — SEARCH_FOCUS / ROUTE_PREVIEW / FULL_MAP.
    body[data-map-state] is the single source of truth. CSS rules below handle
@@ -890,6 +918,12 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
   <span class="mfc-edit">Editar</span>
 </div>
 
+<!-- V7.8 OFFLINE PWA — Offline Chip (shown when navigator.onLine === false) -->
+<div class="offline-chip" id="offlineChip" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true">
+  <span class="oc-ic" id="ocIcon"></span>
+  <span class="oc-text">Sin conexión · historial local disponible</span>
+</div>
+
 <!-- FOOTER (sticky bottom) -->
 <footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos<button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button></footer>
 
@@ -928,6 +962,12 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 <!-- ANALYTICS DASHBOARD (hidden, 5 taps on VOY wordmark) -->
 <div id="vaDash"></div>
 
+<!-- V7.8 MODULAR_REFACTOR — extracted inline IIFEs loaded as external modules.
+     Order: ahorro.js (no deps) → trend.js (IndexedDB) → telemetry.js (PerformanceObserver/sendBeacon).
+     Loaded before the main inline <script> so globals exist when DOMContentLoaded fires. -->
+<script src="core/ahorro.js?v=78"></script>
+<script src="core/trend.js?v=78"></script>
+<script src="core/telemetry.js?v=78"></script>
 <script>
 // ===================== V7 VERSION PIN (single source of truth) =====================
 // HARD VERSION PIN — worker.js serves HTML with Cache-Control: no-store so the
@@ -1092,6 +1132,7 @@ function svg(name,size){
     trendingUp:'<path d="M22 7L13.5 15.5L8.5 10.5L2 17"/><path d="M16 7h6v6"/>',
     trendingDown:'<path d="M22 17L13.5 8.5L8.5 13.5L2 7"/><path d="M16 17h6v-6"/>',
     minus:'<path d="M5 12h14"/>',
+    wifiOff:'<path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.55a11 11 0 0 1 5.18-2.88"/><path d="M19 12.55a11 11 0 0 0-5.18-2.88"/><path d="M8.53 19a5 5 0 0 1 6.94 0"/><path d="M2 8.82a15 15 0 0 1 3.94-2.94"/>',
     coffee:'<path d="M5 9h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9Z"/><path d="M16 10h2.5a2 2 0 0 1 0 4H16"/><path d="M8 2v3M12 2v3"/>'
   };
   return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[name]||'')+'</svg>';
@@ -1249,6 +1290,7 @@ document.addEventListener('DOMContentLoaded',function(){
   showModeSelector(true); // V7: force transport selector visible on initial mount (not gated on search)
   document.body.setAttribute('data-map-state','SEARCH_FOCUS'); // V7.4: initial map state
   initFloatingChip(); // V7.4: wire floating chip click → SEARCH_FOCUS
+  initOfflineChip(); // V7.8: wire offline chip + online/offline listeners
   // app_ready → dismiss splash (exit_condition: app_ready_event)
   _signalAppReady();
 
@@ -2741,511 +2783,33 @@ function initFloatingChip(){
   });
 }
 
-// ===================== V7.5 AHORRO INTELIGENTE =================================================
-// Blueprint: AhorroFeature — comparative cost algorithm (Colectivo vs Ride-Hailing).
-//   formula: isRecommendationAvailable = (PublicTransportPrice < RideHailingPrice * threshold)
-//   threshold: 0.5  |  data_source: V7_DataStore (MC.getEstimations via renderSheet)  |  refresh: 300000ms (5 min)
-// Decoupled from rendering via observer pattern (mirrors VoyMapContext). renderSheet() calls
-// recompute() after each estimate; _set() emits to listeners + triggers BadgeRenderer.
-window.VoyAhorroService=(function(){
-  var THRESHOLD=0.5;
-  var REFRESH_MS=300000;
-  var _state={available:false,colectivoPrice:null,rideHailingPrice:null,savingsPercent:0,threshold:THRESHOLD};
-  var _listeners=[];
-  var _lastComputeTs=0;
-  function _emit(){for(var i=0;i<_listeners.length;i++){try{_listeners[i](_state)}catch(e){console.error('[VoyAhorroService] listener',e)}}}
-  function _set(avail,colP,rhP,sav){
-    var changed=_state.available!==avail||_state.colectivoPrice!==colP||_state.rideHailingPrice!==rhP||_state.savingsPercent!==sav;
-    _state.available=avail;
-    if(colP!=null)_state.colectivoPrice=colP;
-    if(rhP!=null)_state.rideHailingPrice=rhP;
-    if(sav!=null)_state.savingsPercent=sav;
-    if(changed){
-      _emit();
-      if(typeof renderAhorroBadges==='function')renderAhorroBadges();
-    }
-  }
-  function recompute(colectivoPrice,rideHailingPrice){
-    if(colectivoPrice==null||colectivoPrice<0||rideHailingPrice==null||rideHailingPrice<=0){_set(false,null,null,0);return}
-    _lastComputeTs=Date.now();
-    var avail=colectivoPrice<(rideHailingPrice*THRESHOLD);
-    var sav=rideHailingPrice>0?Math.round((1-colectivoPrice/rideHailingPrice)*100):0;
-    _set(avail,colectivoPrice,rideHailingPrice,sav);
-  }
-  function isStale(){return _lastComputeTs===0||(Date.now()-_lastComputeTs)>REFRESH_MS}
-  return {
-    THRESHOLD:THRESHOLD,REFRESH_MS:REFRESH_MS,
-    getState:function(){return _state},
-    recompute:recompute,
-    isStale:isStale,
-    subscribe:function(fn){_listeners.push(fn);return function(){_listeners=_listeners.filter(function(f){return f!==fn})}}
-  };
-})();
+// V7.8 MODULAR_REFACTOR: VoyAhorroService + VoyHistoryDB + VoyTrendEngine + VoyHealthMonitor + VoyDebugPanel moved to /core/ahorro.js + /core/trend.js + /core/telemetry.js (loaded as external <script> tags before this inline block).
 
-// V7.5 BadgeRenderer — mounts "¡Ahorrá un X%!" on every Colectivo mode-pill and a
-// highlight dot on the Ahorro cat-tab when VoyAhorroService.getState().available is true.
-// Idempotent: safe to call on every state change (clears stale badges first, then mounts fresh).
-function renderAhorroBadges(){
-  if(!window.VoyAhorroService)return; // not yet initialized (boot-time call from initCategoryManager)
-  var st=VoyAhorroService.getState();
-  // (1) Ahorro cat-tab highlight dot (group index 0 = group_ahorro)
-  var ahorroTabs=document.querySelectorAll('.cat-tab[data-group-idx="0"]');
-  for(var i=0;i<ahorroTabs.length;i++){
-    var tab=ahorroTabs[i];
-    var dot=tab.querySelector('.ahorro-tab-badge');
-    if(st.available){
-      if(!dot){dot=document.createElement('span');dot.className='ahorro-tab-badge';dot.setAttribute('aria-label','Ahorro disponible');tab.appendChild(dot)}
-    }else if(dot){dot.parentNode.removeChild(dot)}
-  }
-  // (2) Colectivo mode-pill badges — every bus pill across ALL groups (Ahorro + Público)
-  var busPills=document.querySelectorAll('.mode-pill[data-mode="bus"]');
-  for(var j=0;j<busPills.length;j++){
-    var pill=busPills[j];
-    var badge=pill.querySelector('.ahorro-pill-badge');
-    if(st.available){
-      var txt='¡Ahorrá un '+st.savingsPercent+'%!';
-      if(!badge){badge=document.createElement('span');badge.className='ahorro-pill-badge';pill.appendChild(badge)}
-      badge.textContent=txt;
-    }else if(badge){badge.parentNode.removeChild(badge)}
-  }
-}
-
-// ===================== V7.6 PREDICTIVE TREND ENGINE ============================================
-// Blueprint: TrendEngine + HistoryDB — local historical estimates + Simple_Moving_Average_Deviation.
-//   storage: IndexedDB (voy-history / estimates store), schema {timestamp, routeKey, origin_zone,
-//            destination_zone, price, mode}, retention 30 days, async (no main-thread block).
-//   logic:   heuristic = Simple_Moving_Average_Deviation
-//            calculation = current_price / moving_average_3_hours
-//            output_states = STABLE (0.95≤ratio≤1.05) / RISING (ratio>1.05) / FALLING (ratio<0.95)
-//   gate:    badge only renders if ≥3 historical datapoints for that route+provider in 3h window.
-//   ui:      PriceTrendBadge mounts inline next to hero/alt prices (data-trend-provider attr).
-window.VoyHistoryDB=(function(){
-  var DB_NAME='voy-history';
-  var DB_VERSION=1;
-  var STORE='estimates';
-  var RETENTION_DAYS=30;
-  var _dbPromise=null;
-  function open(){
-    if(_dbPromise)return _dbPromise;
-    _dbPromise=new Promise(function(resolve,reject){
-      if(!window.indexedDB){reject(new Error('IndexedDB not supported'));return}
-      try{
-        var req=indexedDB.open(DB_NAME,DB_VERSION);
-        req.onupgradeneeded=function(e){
-          var db=e.target.result;
-          if(!db.objectStoreNames.contains(STORE)){
-            var store=db.createObjectStore(STORE,{keyPath:'id',autoIncrement:true});
-            store.createIndex('routeKey','routeKey',{unique:false});
-            store.createIndex('mode','mode',{unique:false});
-            store.createIndex('timestamp','timestamp',{unique:false});
-          }
-        };
-        req.onsuccess=function(e){resolve(e.target.result)};
-        req.onerror=function(e){reject(e.target.error)};
-      }catch(err){reject(err)}
-    });
-    return _dbPromise;
-  }
-  function add(entry){
-    return open().then(function(db){
-      return new Promise(function(resolve,reject){
-        try{
-          var tx=db.transaction(STORE,'readwrite');
-          var store=tx.objectStore(STORE);
-          var req=store.add(entry);
-          req.onsuccess=function(){resolve(req.result)};
-          req.onerror=function(){reject(req.error)};
-        }catch(err){reject(err)}
-      });
-    });
-  }
-  function queryByRouteSince(routeKeyVal,sinceMs){
-    return open().then(function(db){
-      return new Promise(function(resolve,reject){
-        try{
-          var tx=db.transaction(STORE,'readonly');
-          var store=tx.objectStore(STORE);
-          var idx=store.index('routeKey');
-          var results=[];
-          var req=idx.openCursor(IDBKeyRange.only(routeKeyVal));
-          req.onsuccess=function(e){
-            var cursor=e.target.result;
-            if(cursor){
-              if(cursor.value.timestamp>=sinceMs)results.push(cursor.value);
-              cursor.continue();
-            }else{resolve(results)}
-          };
-          req.onerror=function(){reject(req.error)};
-        }catch(err){reject(err)}
-      });
-    });
-  }
-  function pruneOlderThan(days){
-    var cutoff=Date.now()-(days*24*60*60*1000);
-    return open().then(function(db){
-      return new Promise(function(resolve,reject){
-        try{
-          var tx=db.transaction(STORE,'readwrite');
-          var store=tx.objectStore(STORE);
-          var idx=store.index('timestamp');
-          var count=0;
-          var req=idx.openCursor(IDBKeyRange.upperBound(cutoff));
-          req.onsuccess=function(e){
-            var cursor=e.target.result;
-            if(cursor){cursor.delete();count++;cursor.continue()}
-            else{resolve(count)}
-          };
-          req.onerror=function(){reject(req.error)};
-        }catch(err){reject(err)}
-      });
-    });
-  }
-  return {RETENTION_DAYS:RETENTION_DAYS,open:open,add:add,queryByRouteSince:queryByRouteSince,pruneOlderThan:pruneOlderThan};
-})();
-
-window.VoyTrendEngine=(function(){
-  var WINDOW_MS=3*60*60*1000; // 3 hours (blueprint: moving_average_3_hours)
-  var MIN_DATAPOINTS=3; // QA test 2: badge only if ≥3 historical datapoints
-  var THRESHOLD_UP=1.05; // >5% above SMA → RISING
-  var THRESHOLD_DOWN=0.95; // <5% below SMA → FALLING
-  var RECORD_DEDUPE_MS=60000; // skip record if same route+provider recorded <60s ago
-  var _cache={}; // providerId → {state, sma, ratio, datapoints, routeKey}
-  var _lastRecordTs={}; // routeKey|providerId → timestamp (dedupe)
-  var _gen=0; // generation counter — only latest processEstimate renders badges
-  function _zoneKey(lat,lon){
-    var GRID=0.0072; // ~800m, matches _VA_GRID (coarse geo cluster)
-    return (Math.round(lat/GRID))+'_'+(Math.round(lon/GRID));
-  }
-  function routeKey(origin,dest){
-    if(!origin||!dest||origin.lat==null||dest.lat==null)return null;
-    return _zoneKey(origin.lat,origin.lon)+'>'+_zoneKey(dest.lat,dest.lon);
-  }
-  function analyze(routeKeyVal,providerId,currentPrice){
-    if(!routeKeyVal||!providerId||!currentPrice||currentPrice<=0)return Promise.resolve(null);
-    var sinceMs=Date.now()-WINDOW_MS;
-    return VoyHistoryDB.queryByRouteSince(routeKeyVal,sinceMs).then(function(entries){
-      var filtered=[];
-      for(var i=0;i<entries.length;i++){
-        if(entries[i].mode===providerId)filtered.push(entries[i]);
-      }
-      if(filtered.length<MIN_DATAPOINTS)return null; // gate: insufficient historical data
-      var sum=0;
-      for(var j=0;j<filtered.length;j++)sum+=filtered[j].price;
-      var sma=sum/filtered.length;
-      var ratio=currentPrice/sma;
-      var state=ratio>THRESHOLD_UP?'RISING':ratio<THRESHOLD_DOWN?'FALLING':'STABLE';
-      return {state:state,sma:Math.round(sma),ratio:Math.round(ratio*100)/100,datapoints:filtered.length,routeKey:routeKeyVal};
-    }).catch(function(){return null});
-  }
-  function record(routeKeyVal,origin,dest,providerId,price){
-    if(!routeKeyVal||!providerId||!price||price<=0)return Promise.resolve();
-    var dedupeKey=routeKeyVal+'|'+providerId;
-    var now=Date.now();
-    if(_lastRecordTs[dedupeKey]&&(now-_lastRecordTs[dedupeKey])<RECORD_DEDUPE_MS)return Promise.resolve();
-    _lastRecordTs[dedupeKey]=now;
-    var entry={
-      timestamp:now,
-      routeKey:routeKeyVal,
-      origin_zone:_zoneKey(origin.lat,origin.lon),
-      destination_zone:_zoneKey(dest.lat,dest.lon),
-      price:price,
-      mode:providerId
-    };
-    return VoyHistoryDB.add(entry).catch(function(){});
-  }
-  function processEstimate(autoEst,origin,dest){
-    if(!autoEst||!origin||!dest||!autoEst.rankedProviders)return Promise.resolve();
-    var rk=routeKey(origin,dest);
-    if(!rk)return Promise.resolve();
-    var myGen=++_gen;
-    _cache={}; // clear stale trends from previous route (prevents wrong-route badge races)
-    var providers=[];
-    for(var i=0;i<autoEst.rankedProviders.length;i++){
-      var p=autoEst.rankedProviders[i];
-      if(p&&(p.id==='uber'||p.id==='didi'||p.id==='maxim')&&p.price>0){
-        providers.push({id:p.id,price:p.price});
-      }
-    }
-    if(!providers.length)return Promise.resolve();
-    // Sequential: analyze (read historical) → record (write current) per provider.
-    // Avoids write-before-read race on same route+provider.
-    var chain=Promise.resolve();
-    providers.forEach(function(pr){
-      chain=chain.then(function(){return analyze(rk,pr.id,pr.price)})
-        .then(function(trend){_cache[pr.id]=trend})
-        .then(function(){return record(rk,origin,dest,pr.id,pr.price)});
-    });
-    return chain.then(function(){
-      if(myGen===_gen){renderTrendBadges()} // only latest generation renders
-      // Opportunistic prune (fire-and-forget, 1/50 calls)
-      if(Math.random()<0.02){VoyHistoryDB.pruneOlderThan(VoyHistoryDB.RETENTION_DAYS).catch(function(){})}
-    });
-  }
-  function getTrend(providerId){return _cache[providerId]||null}
-  return {
-    WINDOW_MS:WINDOW_MS,MIN_DATAPOINTS:MIN_DATAPOINTS,THRESHOLD_UP:THRESHOLD_UP,THRESHOLD_DOWN:THRESHOLD_DOWN,
-    routeKey:routeKey,analyze:analyze,record:record,processEstimate:processEstimate,getTrend:getTrend
-  };
-})();
-
-// V7.6 PriceTrendBadge renderer — mounts trend icon next to every element with [data-trend-provider].
-// Idempotent: clears stale badges first, then mounts fresh based on VoyTrendEngine cache.
-// No-op if cache empty (badge never appears until ≥3 datapoints accumulated → analyze returns null).
-function renderTrendBadges(){
-  if(!window.VoyTrendEngine)return;
-  var els=document.querySelectorAll('[data-trend-provider]');
-  for(var i=0;i<els.length;i++){
-    var el=els[i];
-    var pid=el.getAttribute('data-trend-provider');
-    var trend=VoyTrendEngine.getTrend(pid);
-    var existing=el.querySelector('.price-trend-badge');
-    if(!trend){
-      if(existing)existing.parentNode.removeChild(existing);
-      continue;
-    }
-    var icon='minus',cls='minus';
-    if(trend.state==='RISING'){icon='trendingUp';cls='trending-up'}
-    else if(trend.state==='FALLING'){icon='trendingDown';cls='trending-down'}
-    if(existing){
-      existing.className='price-trend-badge '+cls;
-      existing.innerHTML=svg(icon,14);
+// ===================== V7.8 OFFLINE PWA — Offline Chip (MapStateManager integration) =====================
+// Blueprint: ui_resiliencia — global 'online'/'offline' listeners render an amber Offline Chip
+// (#FF9800, wifi-off icon) that blocks search input + API calls when navigator.onLine === false.
+// Local trend history (VoyHistoryDB) remains queryable. Never freezes the UI — all fetches
+// (OSRM, Nominatim) already have .catch() handlers, so offline just silently no-ops.
+function initOfflineChip(){
+  var chip=document.getElementById('offlineChip');if(!chip)return;
+  var iconEl=document.getElementById('ocIcon');
+  if(iconEl)iconEl.innerHTML=svg('wifiOff',16);
+  function update(){
+    var online=navigator.onLine;
+    if(online){
+      chip.classList.remove('visible');
+      chip.setAttribute('aria-hidden','true');
+      document.body.removeAttribute('data-offline');
     }else{
-      var b=document.createElement('span');
-      b.className='price-trend-badge '+cls;
-      b.innerHTML=svg(icon,14);
-      b.setAttribute('aria-label','Tendencia '+trend.state.toLowerCase()+' (vs promedio 3h, '+trend.datapoints+' muestras)');
-      b.setAttribute('title','Tendencia: '+trend.state.toLowerCase()+' · promedio 3h: $'+trend.sma+' · ratio '+trend.ratio);
-      el.appendChild(b);
+      chip.classList.add('visible');
+      chip.setAttribute('aria-hidden','false');
+      document.body.setAttribute('data-offline','true');
     }
   }
+  window.addEventListener('online',update);
+  window.addEventListener('offline',update);
+  update();
 }
-
-// ===================== V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — HealthMonitor =====================
-// Captures LCP (Largest Contentful Paint) + uncaught JS errors + unhandled promise rejections.
-// Sends via Beacon API (navigator.sendBeacon) to /api/telemetry — fire-and-forget, never blocks unload.
-// Schema: {event, value, route}. Throttled per event-type (5s) to avoid spam on cascading errors.
-// Vanilla-JS ErrorBoundary equivalent: window 'error' + 'unhandledrejection' listeners (capture phase).
-window.VoyHealthMonitor=(function(){
-  var ENDPOINT='/api/telemetry';
-  var THROTTLE_MS=5000;
-  var MAX_ROUTE_LEN=140;
-  var _lastSent={};
-  var _lastLCP=null; // last LCP value (ms) — exposed for the debug panel (getEntriesByType is drained by the observer)
-  var _supported=(typeof navigator!=='undefined')&&(typeof navigator.sendBeacon==='function');
-
-  function _send(event,value,route){
-    if(!_supported)return;
-    try{
-      var key=String(event);
-      var now=Date.now();
-      if(_lastSent[key]&&(now-_lastSent[key])<THROTTLE_MS)return; // throttle cascading errors
-      _lastSent[key]=now;
-      var payload=JSON.stringify({
-        event:key,
-        value:isFinite(value)?Number(value):0,
-        route:String(route||(typeof location!=='undefined'?location.pathname:'')).slice(0,MAX_ROUTE_LEN),
-        ts:now
-      });
-      var blob=new Blob([payload],{type:'application/json'});
-      navigator.sendBeacon(ENDPOINT,blob);
-    }catch(e){/* telemetry must never break the app */}
-  }
-
-  function _init(){
-    if(!_supported)return false;
-    // (1) Uncaught runtime errors (vanilla-JS ErrorBoundary equivalent)
-    window.addEventListener('error',function(e){
-      var loc='';
-      try{loc=(e.filename||'')+':'+(e.lineno||0)+' '+(e.message||'').slice(0,90)}catch(_){}
-      _send('js_error',1,loc);
-    },{capture:true});
-    // (2) Unhandled promise rejections
-    window.addEventListener('unhandledrejection',function(e){
-      var msg='';
-      try{
-        var r=e&&e.reason;
-        msg=(r&&r.message)?r.message:String(r||'');
-        msg=msg.slice(0,90);
-      }catch(_){}
-      _send('promise_rejection',1,msg);
-    },{capture:true});
-    // (3) LCP via PerformanceObserver (buffered:true retrieves entries that already fired)
-    try{
-      var po=new PerformanceObserver(function(list){
-        var entries=list.getEntries();
-        var last=entries[entries.length-1];
-        if(last&&last.startTime){_lastLCP=Math.round(last.startTime);_send('lcp',_lastLCP,'')}
-      });
-      po.observe({type:'largest-contentful-paint',buffered:true});
-    }catch(e){/* LCP observer unsupported — silently skip */}
-    return true;
-  }
-
-  return {init:_init,send:_send,supported:function(){return _supported},getLastLCP:function(){return _lastLCP}};
-})();
-
-// ===================== V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — DebugPanel =====================
-// Hidden diagnostic panel (FPS, Memory, Cache, SW, Latency, LCP, Trend, Ahorro).
-// Distinct from the user analytics dashboard (va_dashboard, 5-tap on search icon).
-// Trigger: konami code (↑↑↓↓←→←→BA) OR 7 taps on the footer text (mobile-friendly, excludes ·· button).
-// window.VoyDebugPanel.toggle() also works from the dev console.
-window.VoyDebugPanel=(function(){
-  var _visible=false,_panel=null,_rafId=null,_refreshTimer=null;
-  var _fps=0,_fpsLast=0,_fpsFrames=0;
-  var _latencyMs=null,_latencyTs=0;
-  var KONAMI=[38,38,40,40,37,39,37,39,66,65]; // ↑↑↓↓←→←→ B A
-  var _kIdx=0,_tapCount=0,_tapTimer=null;
-
-  function _toggle(){_visible?_hide():_show();}
-
-  function _show(){
-    _visible=true;_build();_startFPS();_refreshSlow();
-    _refreshTimer=setInterval(_refreshSlow,2000);
-  }
-  function _hide(){
-    _visible=false;
-    if(_rafId){cancelAnimationFrame(_rafId);_rafId=null}
-    if(_refreshTimer){clearInterval(_refreshTimer);_refreshTimer=null}
-    if(_panel){_panel.remove();_panel=null}
-  }
-
-  function _build(){
-    if(_panel)return;
-    var p=document.createElement('div');
-    p.id='voyDebugPanel';
-    p.className='voy-debug-panel';
-    p.setAttribute('role','dialog');
-    p.setAttribute('aria-label','VOY Debug Panel');
-    p.innerHTML=
-      '<div class="vdp-head"><span class="vdp-title">VOY · Debug</span>'+
-      '<button class="vdp-close" aria-label="Cerrar panel" type="button">×</button></div>'+
-      '<dl class="vdp-grid">'+
-        '<dt>FPS</dt><dd data-vdp="fps">—</dd>'+
-        '<dt>Memoria</dt><dd data-vdp="mem">N/A</dd>'+
-        '<dt>Cache</dt><dd data-vdp="cache">—</dd>'+
-        '<dt>SW</dt><dd data-vdp="sw">—</dd>'+
-        '<dt>Latencia</dt><dd data-vdp="lat">—</dd>'+
-        '<dt>LCP</dt><dd data-vdp="lcp">—</dd>'+
-        '<dt>Trend</dt><dd data-vdp="trend">—</dd>'+
-        '<dt>Ahorro</dt><dd data-vdp="ahorro">—</dd>'+
-      '</dl>'+
-      '<div class="vdp-foot">konami · V7.7</div>';
-    document.body.appendChild(p);
-    _panel=p;
-    p.querySelector('.vdp-close').addEventListener('click',_hide);
-  }
-
-  function _setText(key,val){if(_panel){var el=_panel.querySelector('[data-vdp="'+key+'"]');if(el)el.textContent=val;}}
-
-  function _startFPS(){
-    _fpsLast=performance.now();_fpsFrames=0;
-    function loop(t){
-      if(!_visible)return;
-      _fpsFrames++;
-      if(t-_fpsLast>=500){
-        _fps=Math.round(_fpsFrames*1000/(t-_fpsLast));
-        _fpsLast=t;_fpsFrames=0;
-        _setText('fps',_fps);
-      }
-      _rafId=requestAnimationFrame(loop);
-    }
-    _rafId=requestAnimationFrame(loop);
-  }
-
-  function _refreshSlow(){
-    if(!_panel||!_visible)return;
-    // Memory (Chrome-only — performance.memory)
-    var mem='N/A';
-    if(performance.memory){
-      var used=Math.round(performance.memory.usedJSHeapSize/1048576);
-      var limit=Math.round(performance.memory.jsHeapSizeLimit/1048576);
-      mem=used+' / '+limit+' MB';
-    }
-    _setText('mem',mem);
-    // Service worker state
-    var sw='—';
-    if(navigator.serviceWorker){sw=navigator.serviceWorker.controller?'active':'registered'}
-    else{sw='unsupported'}
-    _setText('sw',sw);
-    // Storage estimate (cache quota)
-    if(navigator.storage&&navigator.storage.estimate){
-      navigator.storage.estimate().then(function(e){
-        var usage=e.usage?Math.round(e.usage/1024):0;
-        var quota=e.quota?Math.round(e.quota/1048576):0;
-        _setText('cache',usage+' KB / '+quota+' MB');
-      }).catch(function(){_setText('cache','err')});
-    }else{_setText('cache','unsupported')}
-    // Latency — ping /api/health (throttled to every 5s)
-    var now=Date.now();
-    if(now-_latencyTs>5000){
-      _latencyTs=now;
-      var t0=performance.now();
-      fetch('/api/health',{cache:'no-store'}).then(function(r){return r.text()}).then(function(){
-        _latencyMs=Math.round(performance.now()-t0);
-        _setText('lat',_latencyMs+' ms');
-      }).catch(function(){_setText('lat','err')});
-    }else if(_latencyMs!=null){_setText('lat',_latencyMs+' ms')}
-    // LCP — prefer HealthMonitor's stored value (observer drains the global buffer), fallback to getEntriesByType
-    var lcpVal=null;
-    if(window.VoyHealthMonitor&&typeof VoyHealthMonitor.getLastLCP==='function'){lcpVal=VoyHealthMonitor.getLastLCP()}
-    if(lcpVal==null){
-      try{
-        var lcpEntries=performance.getEntriesByType('largest-contentful-paint');
-        if(lcpEntries&&lcpEntries.length){lcpVal=Math.round(lcpEntries[lcpEntries.length-1].startTime)}
-      }catch(_){}
-    }
-    _setText('lcp',lcpVal!=null?(lcpVal+' ms'):'—')
-    // TrendEngine cache (count active provider trends via public getTrend API)
-    if(window.VoyTrendEngine){
-      try{
-        var n=0;var ids=['uber','didi','maxim'];
-        for(var i=0;i<ids.length;i++){if(VoyTrendEngine.getTrend(ids[i]))n++}
-        _setText('trend',n+' activos');
-      }catch(_){_setText('trend','?')}
-    }else{_setText('trend','off')}
-    // AhorroService state
-    if(window.VoyAhorroService){
-      try{var st=VoyAhorroService.getState();_setText('ahorro',st.available?(st.savingsPercent+'%'):'off')}
-      catch(_){_setText('ahorro','?')}
-    }else{_setText('ahorro','off')}
-  }
-
-  function _onKey(e){
-    var k=e.keyCode||e.which;
-    if(k===KONAMI[_kIdx]){
-      _kIdx++;
-      if(_kIdx===KONAMI.length){_kIdx=0;_toggle();}
-    }else{
-      _kIdx=(k===KONAMI[0])?1:0;
-    }
-  }
-
-  function _onFooterTap(){
-    _tapCount++;
-    if(_tapTimer)clearTimeout(_tapTimer);
-    _tapTimer=setTimeout(function(){_tapCount=0},2200);
-    if(_tapCount>=7){_tapCount=0;_toggle();}
-  }
-
-  function _init(){
-    // Konami code (keyboard — desktop)
-    document.addEventListener('keydown',_onKey);
-    // 7-tap on footer text (mobile — excludes the ·· footerMore button which has its own handler)
-    var footer=document.querySelector('.footer');
-    if(footer){
-      footer.addEventListener('click',function(e){
-        if(e.target.closest('.footer-more'))return;
-        _onFooterTap();
-      });
-    }
-  }
-
-  return {init:_init,toggle:_toggle};
-})();
-
-// V7.7 boot — register health monitoring + debug panel ASAP (inline script runs after DOM parsed).
-try{if(window.VoyHealthMonitor)VoyHealthMonitor.init();}catch(e){}
-try{if(window.VoyDebugPanel)VoyDebugPanel.init();}catch(e){}
 </script>
 </body>
 </html>
