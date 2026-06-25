@@ -979,7 +979,14 @@ button{font-family:inherit!important}
 }
 /* voy-debug-panel is dev-only — exempt from QA fail (hidden in production) */
 
-/* FASE 2 + 3: pure black bg, 1px subtle border, no text-stroke, +20% padding */
+/* FASE 2 + 3: SAKANA-FIX-01 (V7.18.2) — frosted glass instead of opaque black.
+   Was: background:#000000!important (alpha=1.0) → "black squares" over the map.
+   Now: background:rgba(0,0,0,0.78)!important (alpha=0.78) + backdrop-filter:blur(16px)
+   saturate(1.2) → map visible through UI, white text pops via blur, no opaque rect.
+   Border softened 0.6→0.18 to kill the "drawn-around" look.
+   Fallback: browsers without backdrop-filter (Android <9) just get the 0.78 alpha bg,
+   which is STILL better than opaque #000 — black squares gone either way.
+   WCAG AA 4.5:1 maintained: white on rgba(0,0,0,0.78) over light map ≈ 7:1. */
 .search-bar,
 .mode-pill,
 .sheet-wrap,
@@ -991,8 +998,10 @@ button{font-family:inherit!important}
 .origin-pill,
 .map-floating-chip,
 .search-dropdown{
-  background:#000000!important;
-  border:1px solid rgba(255,255,255,0.6)!important;
+  background:rgba(0,0,0,0.78)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.2)!important;
+  backdrop-filter:blur(16px) saturate(1.2)!important;
+  border:1px solid rgba(255,255,255,0.18)!important;
   -webkit-text-stroke:0!important;
   text-stroke:0!important;
   text-shadow:0 0 4px rgba(0,0,0,1)!important;
@@ -1265,7 +1274,7 @@ button{font-family:inherit!important}
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.18.1';
+window.VOY_VERSION='V7.18.2';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -2363,7 +2372,10 @@ function renderSheet(){
     hero={id:'walk',name:'A pie',price:0,timeMin:walkMin,url:''};
   }
   // V6.2: prefer bayesian PricingEngineV2 (multi_variable_bayes_estimation) with v6 fallback.
-  var heroProvider=hero?hero.id:'didi';
+  // SAKANA-FIX-02b (V7.18.2): default hero 'didi'→'uber'. DiDi has the worst deep-link
+  // UX (no coord pre-fill), so it should NOT be the fallback hero when no clear winner.
+  // Uber has the best deep-link (m.uber.com/ul/?action=setPickup with full coords).
+  var heroProvider=hero?hero.id:'uber';
   var surgeCtx={now:Date.now()};
   var confidence,surgeLabel,surgeMult,fareRange;
   if(_isWalkHero){
@@ -2657,7 +2669,32 @@ function bindDialogButtons(){
     MC.v5LogTrip(MC.getOrigin(),MC.getDest(),modeForAction(p.action),p.action);
     closeDeepLinkDialog();
     if(p.url&&p.url!=='#'){
-      launchDeepLink(p.url);
+      // SAKANA-FIX-02a (V7.18.2): DiDi has no public deep-link params to pre-fill
+      // pickup/dropoff. Copy destination address to clipboard BEFORE launchDeepLink
+      // (launchDeepLink uses window.location.href which is synchronous and would abort
+      // pending promises). User pastes in DiDi's search field → friction reduced from
+      // "type from scratch" to "long-press → paste". Placed in confirm handler (NOT in
+      // buildAppLink) because buildAppLink runs at card-render time (L2349), which would
+      // overwrite the clipboard on every estimate without a user gesture.
+      if(p.action==='didi'){
+        var _dest=MC.getDest();
+        var _addr=(_dest&&_dest.name)?_dest.name:'';
+        if(_addr&&navigator.clipboard&&navigator.clipboard.writeText){
+          navigator.clipboard.writeText(_addr).then(function(){
+            showToast('Dirección copiada — pegala en DiDi','success');
+            launchDeepLink(p.url);
+          }).catch(function(e){
+            console.warn('[DiDi] clipboard write failed',e);
+            showToast('DiDi se abre sin destino. Anotalo: '+_addr,'info');
+            launchDeepLink(p.url);
+          });
+        }else{
+          showToast('DiDi se abre sin destino. Anotalo: '+_addr,'info');
+          launchDeepLink(p.url);
+        }
+      }else{
+        launchDeepLink(p.url);
+      }
     }else{
       showToast('Abriendo '+p.name+'…','info');
     }
