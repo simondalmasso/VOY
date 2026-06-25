@@ -742,6 +742,44 @@ button{cursor:pointer}
   .price-trend-badge{animation:none}
 }
 
+/* === V7.9 FIELD_OPS — Feedback flag + Favorites star toggle ================================
+   Blueprint: Field_Ops_and_Persistent_Context.
+   - .fb-flag: small flag button on provider price cards (hero + alts + taxi/remis).
+              Non-disruptive: click → beacon + toast. Pulse animation on send.
+   - .fav-star: star toggle button on search-dropdown items (add/remove without selecting).
+              Filled (active) vs outline (inactive) — clear on/off visual state. */
+.fb-flag{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border:none;background:transparent;
+  color:rgba(255,255,255,0.45);cursor:pointer;flex-shrink:0;
+  border-radius:6px;-webkit-tap-highlight-color:transparent;
+  transition:background 150ms ease-out,color 150ms ease-out,transform 150ms ease-out;
+  margin-left:4px;
+}
+.fb-flag:hover,.fb-flag:focus-visible{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85)}
+.fb-flag:active{transform:scale(0.88)}
+.fb-flag.fb-pulse{animation:fbPulse 600ms ease-out}
+@keyframes fbPulse{
+  0%{transform:scale(1);color:rgba(255,255,255,0.45)}
+  40%{transform:scale(1.25);color:var(--orange,#FF9F0A)}
+  100%{transform:scale(1);color:rgba(255,255,255,0.45)}
+}
+@media (prefers-reduced-motion:reduce){.fb-flag.fb-pulse{animation:none}}
+
+.fav-star{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border:none;background:transparent;
+  color:rgba(255,255,255,0.35);cursor:pointer;flex-shrink:0;
+  border-radius:6px;-webkit-tap-highlight-color:transparent;
+  transition:transform 150ms ease-out,color 150ms ease-out;
+  margin-left:auto;padding:0 4px;
+}
+.fav-star:active{transform:scale(0.88)}
+.fav-star.active{color:var(--orange,#FF9F0A)}
+.fav-star:hover{background:rgba(255,255,255,0.06)}
+[data-theme="light"] .fav-star{color:rgba(0,0,0,0.35)}
+[data-theme="light"] .fav-star.active{color:var(--orange,#FF9F0A)}
+
 /* === V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY =====================================================
    Blueprint: HealthMonitor + DebugPanel.
    - .voy-debug-panel: floating diagnostic panel (FPS, Memory, Cache, SW, Latency, LCP, Trend, Ahorro).
@@ -987,11 +1025,14 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 <div id="vaDash"></div>
 
 <!-- V7.8 MODULAR_REFACTOR — extracted inline IIFEs loaded as external modules.
-     Order: ahorro.js (no deps) → trend.js (IndexedDB) → telemetry.js (PerformanceObserver/sendBeacon).
+     Order: ahorro.js (no deps) → trend.js (IndexedDB) → telemetry.js (sendBeacon).
+     V7.9: + favorites.js (VoyFavoritesService, LocalStorage+IDB) + feedback.js (VoyFeedbackService, beacon).
      Loaded before the main inline <script> so globals exist when DOMContentLoaded fires. -->
 <script src="core/ahorro.js?v=78"></script>
 <script src="core/trend.js?v=78"></script>
 <script src="core/telemetry.js?v=78"></script>
+<script src="core/favorites.js?v=79"></script>
+<script src="core/feedback.js?v=79"></script>
 <script>
 // ===================== V7 VERSION PIN (single source of truth) =====================
 // HARD VERSION PIN — worker.js serves HTML with Cache-Control: no-store so the
@@ -999,7 +1040,7 @@ body[data-map-state="FULL_MAP"] .map-floating-chip{transform:translateX(-50%) tr
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.8.0';
+window.VOY_VERSION='V7.9.0';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -1716,14 +1757,16 @@ function onSearchFocus(){
 async function renderEmptyDropdown(){
   var dd=document.getElementById('destDropdown');if(!dd)return;
   var html='';
-  // Favorites
-  var favs=await MC.v5GetFavorites();
+  // V7.9: Favoritos primero (via VoyFavoritesService — sorted by last_used, LocalStorage cache).
+  var favs=window.VoyFavoritesService?VoyFavoritesService.getAll():(await MC.v5GetFavorites());
   if(favs.length){
-    html+='<div class="sd-section"><div class="sd-section-title">Guardados</div>';
-    favs.slice(0,4).forEach(function(f){
+    html+='<div class="sd-section"><div class="sd-section-title">Favoritos</div>';
+    favs.slice(0,6).forEach(function(f){
       var tag=f.label==='home'?'Casa':f.label==='work'?'Trabajo':'Guardado';
       var ic=svg(f.label==='home'?'home':f.label==='work'?'work':'star',18);
-      html+='<button class="search-item" data-lat="'+f.lat+'" data-lon="'+f.lon+'" data-name="'+escapeAttr(f.name)+'"><span class="search-item-icon ic-fav">'+ic+'</span><div class="search-item-text"><strong>'+escapeHtml(f.name)+'</strong></div><span class="search-item-tag">'+tag+'</span></button>';
+      var isFav=window.VoyFavoritesService?VoyFavoritesService.isFavorite(f.lat,f.lon):true;
+      var starCls=window.VoyFavoritesService?'fav-star active':'';
+      html+='<button class="search-item" data-lat="'+f.lat+'" data-lon="'+f.lon+'" data-name="'+escapeAttr(f.name)+'"><span class="search-item-icon ic-fav">'+ic+'</span><div class="search-item-text"><strong>'+escapeHtml(f.name)+'</strong></div>'+(starCls?'<span class="'+starCls+'" data-fav-toggle data-lat="'+f.lat+'" data-lon="'+f.lon+'" data-name="'+escapeAttr(f.name)+'" role="button" aria-label="Quitar de favoritos" aria-pressed="true">'+svg('star',18)+'</span>':'<span class="search-item-tag">'+tag+'</span>')+'</button>';
     });
     html+='</div>';
   }
@@ -1732,7 +1775,9 @@ async function renderEmptyDropdown(){
   if(recents.length){
     html+='<div class="sd-section"><div class="sd-section-title">Recientes</div>';
     recents.forEach(function(r){
-      html+='<button class="search-item" data-lat="'+r.lat+'" data-lon="'+r.lon+'" data-name="'+escapeAttr(r.name)+'"><span class="search-item-icon ic-recent">'+svg('clock',18)+'</span><div class="search-item-text"><strong>'+escapeHtml(r.name)+'</strong></div></button>';
+      var isFav=window.VoyFavoritesService?VoyFavoritesService.isFavorite(r.lat,r.lon):false;
+      var starHTML=window.VoyFavoritesService?'<span class="fav-star'+(isFav?' active':'')+'" data-fav-toggle data-lat="'+r.lat+'" data-lon="'+r.lon+'" data-name="'+escapeAttr(r.name||"")+'" role="button" aria-label="'+(isFav?'Quitar de favoritos':'Guardar como favorito')+'" aria-pressed="'+isFav+'">'+svg('star',18)+'</span>':'';
+      html+='<button class="search-item" data-lat="'+r.lat+'" data-lon="'+r.lon+'" data-name="'+escapeAttr(r.name)+'"><span class="search-item-icon ic-recent">'+svg('clock',18)+'</span><div class="search-item-text"><strong>'+escapeHtml(r.name)+'</strong></div>'+starHTML+'</button>';
     });
     html+='</div>';
   }
@@ -1759,12 +1804,14 @@ function renderSearchDropdown(results,isRecent,isSearching){
     else if(r.type==='recent'){ic='clock';icClass='ic-recent'}
     else if(r.type==='bus'){ic='bus'}
     else if(r.type==='bike'){ic='bike'}
+    // V7.9: star toggle on every search result (add/remove without selecting dest)
+    var isFav=window.VoyFavoritesService?VoyFavoritesService.isFavorite(lat,lon):(r.type==='favorite');
+    var starHTML=window.VoyFavoritesService?'<span class="fav-star'+(isFav?' active':'')+'" data-fav-toggle data-lat="'+lat+'" data-lon="'+lon+'" data-name="'+escapeAttr(displayName)+'" role="button" aria-label="'+(isFav?'Quitar de favoritos':'Guardar como favorito')+'" aria-pressed="'+isFav+'">'+svg('star',18)+'</span>':'';
+    // Keep tag for home/work (semantic), but use star toggle for everything else
     var tag='';
-    if(r.type==='favorite')tag='<span class="search-item-tag">Guardado</span>';
-    else if(r.type==='home')tag='<span class="search-item-tag">Casa</span>';
+    if(r.type==='home')tag='<span class="search-item-tag">Casa</span>';
     else if(r.type==='work')tag='<span class="search-item-tag">Trabajo</span>';
-    else if(r.type==='recent')tag='<span class="search-item-tag">Reciente</span>';
-    html+='<button class="search-item" data-lat="'+lat+'" data-lon="'+lon+'" data-name="'+escapeAttr(displayName)+'"><span class="search-item-icon '+icClass+'">'+svg(ic,18)+'</span><div class="search-item-text"><strong>'+escapeHtml(name)+'</strong>'+(sub?'<small>'+escapeHtml(sub)+'</small>':'')+'</div>'+tag+'</button>';
+    html+='<button class="search-item" data-lat="'+lat+'" data-lon="'+lon+'" data-name="'+escapeAttr(displayName)+'"><span class="search-item-icon '+icClass+'">'+svg(ic,18)+'</span><div class="search-item-text"><strong>'+escapeHtml(name)+'</strong>'+(sub?'<small>'+escapeHtml(sub)+'</small>':'')+'</div>'+tag+starHTML+'</button>';
   });
   dd.innerHTML=html;
   dd.classList.remove('hidden');
@@ -1774,10 +1821,31 @@ function bindSearchItems(){
   var dd=document.getElementById('destDropdown');
   dd.querySelectorAll('.search-item').forEach(function(item){
     if(item.classList.contains('search-item--empty'))return;
+    // V7.9: star toggle — handle separately (stopPropagation so it doesn't trigger selectDest)
+    var starBtn=item.querySelector('[data-fav-toggle]');
+    if(starBtn){
+      starBtn.addEventListener('click',function(e){
+        e.stopPropagation();e.preventDefault();
+        var lat=parseFloat(starBtn.getAttribute('data-lat'));
+        var lon=parseFloat(starBtn.getAttribute('data-lon'));
+        var nm=starBtn.getAttribute('data-name')||'Destino';
+        if(!window.VoyFavoritesService)return;
+        VoyFavoritesService.toggle({lat:lat,lon:lon,name:nm},'').then(function(nowFav){
+          starBtn.classList.toggle('active',nowFav);
+          starBtn.setAttribute('aria-pressed',nowFav);
+          starBtn.setAttribute('aria-label',nowFav?'Quitar de favoritos':'Guardar como favorito');
+          if(typeof showToast==='function')showToast(nowFav?'Destino guardado':'Destino quitado',nowFav?'success':'info');
+          if(typeof v5event==='function')v5event(nowFav?'favorite_added':'favorite_removed',{});
+          renderMemoryRow(); // refresh chips
+        });
+      });
+    }
     item.addEventListener('click',function(){
       var lat=parseFloat(item.getAttribute('data-lat')),lon=parseFloat(item.getAttribute('data-lon')),name=item.getAttribute('data-name');
       selectDest(lat,lon,name);
       MC.v5AddRecent({lat:lat,lon:lon,name:name.split(',')[0]});
+      // V7.9: touch last_used if this dest is a favorite (bumps sort order)
+      if(window.VoyFavoritesService)VoyFavoritesService.touch(lat,lon);
       renderMemoryRow();
     });
   });
@@ -2051,6 +2119,8 @@ function renderSheet(){
     h+='<div class="hero-price-block">';
     h+='<div class="hero-price" data-trend-provider="'+escapeAttr(hero.id)+'">'+formatPrice(hero.price)+'</div>';
     h+='<div class="hero-range">'+formatPrice(fareRange.low)+' – '+formatPrice(fareRange.high)+'</div>';
+    // V7.9: feedback flag — reports price inaccuracy without leaving the flow
+    h+='<button class="fb-flag" data-fb-provider="'+escapeAttr(hero.id)+'" data-fb-price="'+hero.price+'" type="button" aria-label="Reportar precio inexacto" title="¿El precio no coincide?">'+svg('flag',16)+'</button>';
     h+='</div>';
     h+='</div>';
     h+='<div class="hero-cta-row">';
@@ -2066,6 +2136,8 @@ function renderSheet(){
         h+='<span class="ah-meta"><span data-trend-provider="'+escapeAttr(p.id)+'">'+formatPrice(p.price)+'</span> · '+formatMin(p.timeMin)+'</span>';
         h+='<span class="ah-chev">'+svg('arrow',16)+'</span>';
         h+='</button>';
+        // V7.9: feedback flag for alt providers (separate row so it doesn't trigger the accordion)
+        h+='<div class="fb-flag-row" style="display:flex;justify-content:flex-end;margin:-4px 8px 2px"><button class="fb-flag" data-fb-provider="'+escapeAttr(p.id)+'" data-fb-price="'+p.price+'" type="button" aria-label="Reportar precio inexacto de '+escapeAttr(p.name)+'" title="¿El precio no coincide?">'+svg('flag',14)+'</button></div>';
       });
       h+='</div>';
     }
@@ -2171,23 +2243,33 @@ function shortenStop(calles){
 
 // ===================== SHEET EVENT BINDING =====================
 function attachSheetEvents(){
-  // Favorite toggle
+  // V7.9: Feedback service — delegates flag clicks via event delegation (bound once per sheet)
+  if(window.VoyFeedbackService)VoyFeedbackService.attachToSheet();
+  // Favorite toggle (V7.9: now via VoyFavoritesService for cache consistency)
   var favBtn=document.getElementById('favBtn');
   if(favBtn){
     favBtn.addEventListener('click',function(){
       var dest=MC.getDest();if(!dest)return;
-      if(_favActive){
-        // find and remove matching favorite
-        MC.v5GetFavorites().then(function(favs){
-          var f=favs.find(function(x){return Math.abs(x.lat-dest.lat)<0.001&&Math.abs(x.lon-dest.lon)<0.001});
-          if(f){MC.v5RemoveFavorite(f.id).then(function(){_favActive=false;renderSheetHeadOnly();renderMemoryRow();showToast('Destino quitado de guardados','info')})}
+      if(window.VoyFavoritesService){
+        VoyFavoritesService.toggle({lat:dest.lat,lon:dest.lon,name:dest.name||'Destino'},'').then(function(nowFav){
+          _favActive=nowFav;renderSheetHeadOnly();renderMemoryRow();
+          if(typeof v5event==='function')v5event(nowFav?'favorite_added':'favorite_removed',{});
+          if(typeof showToast==='function')showToast(nowFav?'Destino guardado':'Destino quitado',nowFav?'success':'info');
         });
       }else{
-        MC.v5AddFavorite({lat:dest.lat,lon:dest.lon,name:dest.name||'Destino'},'').then(function(){
-          _favActive=true;renderSheetHeadOnly();renderMemoryRow();
-          v5event('favorite_added',{});
-          showToast('Destino guardado','success');
-        });
+        // Legacy fallback (pre-V7.9 path)
+        if(_favActive){
+          MC.v5GetFavorites().then(function(favs){
+            var f=favs.find(function(x){return Math.abs(x.lat-dest.lat)<0.001&&Math.abs(x.lon-dest.lon)<0.001});
+            if(f){MC.v5RemoveFavorite(f.id).then(function(){_favActive=false;renderSheetHeadOnly();renderMemoryRow();showToast('Destino quitado de guardados','info')})}
+          });
+        }else{
+          MC.v5AddFavorite({lat:dest.lat,lon:dest.lon,name:dest.name||'Destino'},'').then(function(){
+            _favActive=true;renderSheetHeadOnly();renderMemoryRow();
+            v5event('favorite_added',{});
+            showToast('Destino guardado','success');
+          });
+        }
       }
     });
   }
