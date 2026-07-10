@@ -397,10 +397,15 @@
     _lastSearchTime = Date.now();
 
     try {
+      // V7.11 GEO_BIAS: viewbox ajustado a Santa Fe ciudad (tighter bbox).
+      //   Antes: -60.85,-31.5,-60.55,-31.75 (incluía Santo Tomé, Recreo, etc → ambigüedad).
+      //   Ahora: -60.75,-31.67,-60.65,-31.57 (centro SF ciudad ~10km).
+      //   bounded=1 fuerza a Nominatim a priorizar resultados dentro del bbox.
+      //   "Puente Colgante" ahora retorna el de SF (no el de Argentina/otros).
       var url = 'https://nominatim.openstreetmap.org/search?' +
         'q=' + encodeURIComponent(q + ', Santa Fe, Argentina') +
         '&format=json&limit=10&accept-language=es' +
-        '&viewbox=-60.85,-31.5,-60.55,-31.75&bounded=1&addressdetails=1';
+        '&viewbox=-60.75,-31.67,-60.65,-31.57&bounded=1&addressdetails=1';
       var r = await fetch(url, { headers: { 'User-Agent': 'MovilidadAsistente/1.0' } });
       if (!r.ok) return [];
       var data = await r.json();

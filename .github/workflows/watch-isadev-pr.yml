@@ -1,0 +1,179 @@
+# ============================================================
+#  VOY — Autonomous monitor for is-a.dev PR #41619
+#
+#  Runs every 12 hours. Creates/updates a tracking issue in the
+#  VOY repo ONLY when PR state changes (no-op cycles are silent).
+#
+#  Triggers:
+#    - schedule: every 12h (00:00 and 12:00 UTC)
+#    - workflow_dispatch: manual run (supports --force / --post-merge)
+#
+#  Permissions:
+#    - contents: read (to read scripts/)
+#    - issues: write (to create/update tracking issue)
+#
+#  Exit codes from scripts/watch-isadev-pr.py:
+#    0 = no change (no-op) — no issue update
+#    1 = state changed — create/update tracking issue with report
+#    2 = merged detected — high-priority issue + deployment audit
+#    3 = error — create issue with error report
+# ============================================================
+name: Watch is-a.dev PR #41619
+
+on:
+  schedule:
+    # Every 12 hours at :00 and :12 UTC
+    - cron: "0 0,12 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force report even if no state change"
+        type: boolean
+        default: false
+      post_merge:
+        description: "Run post-merge validation (after merge detected)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: watch-isadev-pr
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dig (dnsutils)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils
+
+      - name: Run watch script
+        id: watch
+        run: |
+          ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          if [ "${{ inputs.post_merge }}" = "true" ]; then ARGS="$ARGS --post-merge"; fi
+
+          # Run script, capture output + exit code
+          set +e
+          python3 scripts/watch-isadev-pr.py $ARGS > report.md 2>&1
+          EXIT=$?
+          set -e
+
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          echo "## Exit code: $EXIT" >> report.md
+
+          # Display report in workflow log
+          cat report.md
+
+          # Persist report for next step (only if meaningful)
+          if [ "$EXIT" != "0" ] || [ "${{ inputs.force }}" = "true" ] || [ "${{ inputs.post_merge }}" = "true" ]; then
+            {
+              echo "REPORT<<EOF"
+              cat report.md
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+            echo "should_notify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_notify=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Find tracking issue
+        id: find
+        if: steps.watch.outputs.should_notify == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "_WATCH_IS_A_DEV: PR #41619";
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "all",
+              per_page: 100,
+            });
+            const found = issues.data.find(i => i.title === title);
+            core.setOutput("number", found ? found.number : "");
+            core.setOutput("state", found ? found.state : "");
+
+      - name: Create or update tracking issue
+        if: steps.watch.outputs.should_notify == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "_WATCH_IS_A_DEV: PR #41619";
+            const number = "${{ steps.find.outputs.number }}";
+            const exitCode = "${{ steps.watch.outputs.exit_code }}";
+            const report = process.env.REPORT;
+
+            // Labels based on exit code
+            const labels = exitCode === "2"
+              ? ["deployment-audit-needed", "high-priority"]
+              : exitCode === "3"
+                ? ["watch-error"]
+                : ["is-a-dev-watch"];
+
+            if (number) {
+              // Update existing issue: add comment with the report
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt(number),
+                body: report,
+              });
+              // Ensure labels
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt(number),
+                labels,
+              });
+              // Reopen if closed and we got new activity
+              if ("${{ steps.find.outputs.state }}" === "closed" && exitCode !== "0") {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: parseInt(number),
+                  state: "open",
+                });
+              }
+              core.notice(`Updated tracking issue #${number}`);
+            } else {
+              // Create new tracking issue
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: report,
+                labels,
+              });
+              core.notice(`Created tracking issue #${created.data.number}`);
+            }
+
+      - name: Close tracking issue on successful post-merge
+        if: inputs.post_merge == true && steps.watch.outputs.exit_code == 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const number = "${{ steps.find.outputs.number }}";
+            if (!number) return;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(number),
+              body: "✅ **Post-merge validation PASSED.** voy.is-a.dev is now canonical. Closing tracking issue.",
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(number),
+              state: "closed",
+              labels: ["resolved", "canonical-live"],
+            });
+            core.notice(`Closed tracking issue #${number} — voy.is-a.dev is LIVE`);

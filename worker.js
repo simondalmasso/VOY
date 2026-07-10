@@ -16,7 +16,16 @@
 //   - Nombres legacy se normalizan a estos 3 (ver EVENT_NORMALIZE).
 //   - WAE writeDataPoint via ctx.waitUntil() — no bloquea la respuesta.
 //   - sessionID via cookie (voy_sid) — sin auth, distingue sesiones únicas.
-//   - 3 filtros de exclusión: localhost, headless, bot (configurables via vars).
+//   - DATA_POLICY: no_personal_identifiable_storage · route_only_event_aggregation · geo_approximation_only.
+//     (anon_id only; WAE stores provider/mode/price/time/distance + ~500m geo cluster; no raw lat/lon, no email/name.)
+//   - Filtros de exclusión (ANALYTICS_SYSTEM_SETUP V7.8.1):
+//       · localhost, headless, bot      (env: VOY_EXCLUDE_LOCALHOST/HEADLESS/BOT)
+//       · glm_agent (GLM_* UA filter)   (env: VOY_EXCLUDE_GLM)
+//       · owner_ip / owner_ip_hash      (env: VOY_OWNER_IPS / VOY_OWNER_IP_HASHES — SIMON_DEVICE rule)
+//       · dev_ip                         (env: VOY_DEV_IPS)
+//       · custom UA patterns             (env: VOY_EXCLUDE_UA_PATTERNS — comma-separated regex)
+//   - /api/whoami: owner self-detects IP + SHA-256 to populate exclusion vars (USER_IP_DETECTED).
+//   - /api/health: exposes filter counts (not values) for verification.
 //   - Si VOY_METRICS está ausente (dry-run), devuelve 202 gracefully.
 // ============================================================
 
@@ -47,27 +56,76 @@ const EVENT_NORMALIZE = {
   voice_search: 'search',
 };
 
-// V7.8 — 3 filtros de exclusión (localhost, headless, bot). owner/dev IP opcionales.
+// V7.8.1 — ANALYTICS_SYSTEM_SETUP: filtros de exclusión ampliados.
+//   - localhost / headless / bot (heredados)
+//   - GLM_* user-agent (GLM_AGENT rule — excludes z-ai/GLM automated agents)
+//   - owner_ip + owner_ip_hash (SIMON_DEVICE rule — hash-based OR direct IP)
+//   - dev_ip
+//   - custom UA patterns (VOY_EXCLUDE_UA_PATTERNS, comma-separated regex)
+// All rules are opt-in/opt-out via env vars (dashboard or wrangler.jsonc vars).
 function _loadFilterConfig(env) {
   const list = (v) => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
   return {
     owner_ips: list(env.VOY_OWNER_IPS),
+    // SHA-256 hex hashes of owner IPs (hash-based mode — never stores raw IP in config).
+    owner_ip_hashes: list(env.VOY_OWNER_IP_HASHES).map(h => h.toLowerCase()),
     dev_ips: list(env.VOY_DEV_IPS),
     exclude_localhost: env.VOY_EXCLUDE_LOCALHOST !== 'false',
     exclude_headless: env.VOY_EXCLUDE_HEADLESS !== 'false',
-    exclude_bot: env.VOY_EXCLUDE_BOT !== 'false'
+    exclude_bot: env.VOY_EXCLUDE_BOT !== 'false',
+    exclude_glm: env.VOY_EXCLUDE_GLM !== 'false',
+    // Additional UA regex patterns (comma-separated, case-insensitive).
+    exclude_ua_patterns: list(env.VOY_EXCLUDE_UA_PATTERNS)
   };
 }
 
 const BOT_UA = /googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|facebookexternalhit|ia_archiver|applebot|twitterbot|linkedinbot|semrushbot|ahrefsbot|mj12bot|dotbot|petalbot/i;
 const HEADLESS_UA = /headlesschrome|phantomjs|slimerjs|puppeteer|playwright|webdriver|selenium|chrome-lighthouse|w3c_validator|nightmare|crawly|crawler/i;
+// GLM_AGENT rule — excludes UAs starting with "GLM" (z-ai/GLM automated agents, e.g. "GLM/4.6", "GLM-agent", "GLM_bot"). Spec: GLM_*
+const GLM_UA = /^GLM[\s\/\-_:]/i;
 
+// Cache compiled custom UA regexes per config signature (avoid recompiling on every request).
+let _customUaCache = { sig: null, regexes: [] };
+function _compiledUaPatterns(cfg) {
+  const sig = cfg.exclude_ua_patterns.join('|');
+  if (_customUaCache.sig === sig) return _customUaCache.regexes;
+  _customUaCache.regexes = cfg.exclude_ua_patterns
+    .map(p => { try { return new RegExp(p, 'i'); } catch (_) { return null; } })
+    .filter(Boolean);
+  _customUaCache.sig = sig;
+  return _customUaCache.regexes;
+}
+
+// SHA-256 hex of a string (Web Crypto, available in Workers). Used for hash-based IP exclusion.
+async function _sha256Hex(text) {
+  try {
+    const data = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+    return hex;
+  } catch (_) { return ''; }
+}
+
+// ctx may include { ip, ua, ipHash } — ipHash is pre-computed by caller only when
+// owner_ip_hashes is non-empty (avoids hashing every request unnecessarily).
 function _shouldExclude(ctx, cfg) {
   if (cfg.exclude_localhost && (ctx.ip === '127.0.0.1' || ctx.ip === '::1' || ctx.ip === '')) return 'localhost';
+  // SIMON_DEVICE — direct IP match (mode: ip_exclusion)
   if (cfg.owner_ips.length && cfg.owner_ips.indexOf(ctx.ip) > -1) return 'owner_ip';
+  // SIMON_DEVICE — hash-based match (mode: hash_based). More privacy-friendly: config stores only the hash.
+  if (cfg.owner_ip_hashes.length && ctx.ipHash && cfg.owner_ip_hashes.indexOf(ctx.ipHash) > -1) return 'owner_ip_hash';
   if (cfg.dev_ips.length && cfg.dev_ips.indexOf(ctx.ip) > -1) return 'developer_ip';
   if (cfg.exclude_headless && HEADLESS_UA.test(ctx.ua)) return 'headless';
   if (cfg.exclude_bot && BOT_UA.test(ctx.ua)) return 'bot';
+  // GLM_AGENT — user_agent_filter, value: GLM_*
+  if (cfg.exclude_glm && GLM_UA.test(ctx.ua)) return 'glm_agent';
+  // Custom UA patterns (extensible)
+  const res = _compiledUaPatterns(cfg);
+  for (let i = 0; i < res.length; i++) {
+    if (res[i].test(ctx.ua)) return 'ua_pattern:' + cfg.exclude_ua_patterns[i];
+  }
   return null;
 }
 
@@ -103,10 +161,51 @@ const worker = {
     if (pathLower === "/api/events" && request.method === "OPTIONS") {
       return _cors(new Response(null, { status: 204 }));
     }
+    // V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — /api/telemetry: Beacon API ingestion (fire-and-forget).
+    //   Accepts {event, value, route, ts}. Receives LCP + JS errors + unhandled promise rejections
+    //   from VoyHealthMonitor (client). Same exclusion filters as /api/events (no bot/localhost/owner noise).
+    //   Logs to wrangler tail; writes a 'telemetry' WAE datapoint if VOY_METRICS is bound (queryable separately).
+    if (pathLower === "/api/telemetry" && request.method === "POST") {
+      return _handleTelemetry(request, env, ctx);
+    }
+    if (pathLower === "/api/telemetry" && request.method === "OPTIONS") {
+      return _cors(new Response(null, { status: 204 }));
+    }
+    // ANALYTICS_SYSTEM_SETUP — /api/whoami: lets the OWNER detect their own IP + SHA-256
+    // so they can populate VOY_OWNER_IPS (direct) or VOY_OWNER_IP_HASHES (hash-based).
+    // Returns ONLY the caller's own info (no cross-user data, no PII stored server-side).
+    // Also reports whether the caller would currently be excluded → instant config feedback.
+    if (pathLower === "/api/whoami") {
+      const callerIp = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+      const callerUa = request.headers.get("user-agent") || "";
+      const wcfg = _loadFilterConfig(env);
+      const ipHash = (callerIp && wcfg.owner_ip_hashes.length) ? await _sha256Hex(callerIp) : '';
+      const excluded = _shouldExclude({ ip: callerIp, ua: callerUa, ipHash }, wcfg);
+      return _cors(new Response(JSON.stringify({
+        ip: callerIp,
+        ip_sha256: ipHash || (callerIp ? await _sha256Hex(callerIp) : ''),
+        ua: callerUa.slice(0, 120),
+        excluded: excluded,
+        note: "Visit this endpoint to detect your IP, then set VOY_OWNER_IPS (raw) or VOY_OWNER_IP_HASHES (SHA-256) in wrangler.jsonc vars / CF dashboard."
+      }), { headers: { "Content-Type": "application/json" } }));
+    }
     if (pathLower === "/api/health") {
+      const hcfg = _loadFilterConfig(env);
       return _cors(new Response(JSON.stringify({
         ok: true, service: "voy-app", version: WORKER_VERSION, build_hash: BUILD_HASH,
-        analytics: !!(env.VOY_METRICS), time: new Date().toISOString()
+        analytics: !!(env.VOY_METRICS),
+        // Expose active filter COUNTS (not values) for verification — no PII leak.
+        filters: {
+          owner_ips: hcfg.owner_ips.length,
+          owner_ip_hashes: hcfg.owner_ip_hashes.length,
+          dev_ips: hcfg.dev_ips.length,
+          exclude_localhost: hcfg.exclude_localhost,
+          exclude_headless: hcfg.exclude_headless,
+          exclude_bot: hcfg.exclude_bot,
+          exclude_glm: hcfg.exclude_glm,
+          exclude_ua_patterns: hcfg.exclude_ua_patterns.length
+        },
+        time: new Date().toISOString()
       }), { headers: { "Content-Type": "application/json" } }));
     }
 
@@ -151,11 +250,14 @@ async function _handleEvents(request, env, ctx) {
     }));
   }
 
-  // --- 3 filtros de exclusión ---
+  // --- filtros de exclusión (localhost / headless / bot / glm_agent / owner_ip / owner_ip_hash / dev_ip / ua_pattern) ---
   const cfg = _loadFilterConfig(env);
   const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
   const ua = request.headers.get("user-agent") || "";
-  const excludeReason = _shouldExclude({ ip, ua }, cfg);
+  // Hash-based owner-IP check — only compute SHA-256 when owner_ip_hashes is configured
+  // (avoids the digest cost on every request otherwise).
+  const ipHash = (cfg.owner_ip_hashes.length && ip) ? await _sha256Hex(ip) : '';
+  const excludeReason = _shouldExclude({ ip, ua, ipHash }, cfg);
   if (excludeReason) {
     return _cors(new Response(JSON.stringify({
       ok: true, received: events.length, written: 0, excluded: events.length, reason: excludeReason
@@ -213,6 +315,50 @@ async function _handleEvents(request, env, ctx) {
     ok: true, received: events.length, normalized: normalized.length,
     written: aeWritten, session_id: sid
   }), { status: 202, headers: { "Content-Type": "application/json" } }));
+}
+
+// ---------------- V7.7 Telemetry handler (Beacon API: LCP + JS errors + promise rejections) ----------------
+// Fire-and-forget ingestion endpoint. Never blocks unload (sendBeacon). Schema: {event, value, route, ts}.
+// Reuses the same exclusion model as /api/events so owner/bot/localhost noise never reaches the log.
+async function _handleTelemetry(request, env, ctx) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return _cors(new Response(JSON.stringify({ ok: false, error: "bad_json" }), {
+      status: 400, headers: { "Content-Type": "application/json" }
+    }));
+  }
+  // Exclusion filters (same model as /api/events — never log bot/localhost/owner noise).
+  const cfg = _loadFilterConfig(env);
+  const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ua = request.headers.get("user-agent") || "";
+  const ipHash = (cfg.owner_ip_hashes.length && ip) ? await _sha256Hex(ip) : '';
+  const excludeReason = _shouldExclude({ ip, ua, ipHash }, cfg);
+  if (excludeReason) {
+    return _cors(new Response(JSON.stringify({ ok: true, excluded: true, reason: excludeReason }), {
+      status: 202, headers: { "Content-Type": "application/json" }
+    }));
+  }
+  const event = String(body && body.event || "").slice(0, 40);
+  const value = Number(body && body.value) || 0;
+  const route = String(body && body.route || "").slice(0, 140);
+  const ts = Number(body && body.ts) || Date.now();
+  // Fire-and-forget log (visible via `wrangler tail`).
+  try { console.log(JSON.stringify({ telemetry: true, event, value, route, ts })); } catch (_) {}
+  // Optional WAE persistence (index 'telemetry' keeps it queryable separately from product events).
+  if (env.VOY_METRICS && typeof env.VOY_METRICS.writeDataPoint === "function") {
+    ctx.waitUntil((async () => {
+      try {
+        env.VOY_METRICS.writeDataPoint({
+          indexes: ["telemetry"],
+          blobs: [event, route],
+          doubles: [value, ts]
+        });
+      } catch (_) { /* WAE failure never breaks telemetry */ }
+    })());
+  }
+  return _cors(new Response(JSON.stringify({ ok: true }), { status: 202, headers: { "Content-Type": "application/json" } }));
 }
 
 function _cors(resp) {

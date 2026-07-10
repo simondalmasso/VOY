@@ -38,25 +38,39 @@
   // El worker escribe data points via ctx.waitUntil(env.VOY_METRICS.writeDataPoint()).
   // Si el binding está ausente (dry-run), /api/events devuelve 202 gracefully.
   //
-  // ⚠️ PENDIENTE: habilitar Analytics Engine en el dashboard de Cloudflare:
-  //   https://dash.cloudflare.com/b21fa81d12acb663798f9f7c51801955/workers/analytics-engine
-  // Error 10089 si se deploya sin habilitar. Una vez habilitado, descomentar el
-  // bloque de abajo y redeploy (./scripts/deploy.sh).
-  // "analytics_engine_datasets": [
-  //   { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
-  // ],
+  // ✅ Dataset creado en el dashboard CF (account b21fa81d12acb663798f9f7c51801955):
+  //   binding = VOY_METRICS, dataset = voy_metrics.
+  // Habilitado el 2026-06-23. /api/health ahora reporta analytics:true.
+  "analytics_engine_datasets": [
+    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
+  ],
 
   // V7.8: Durable Object + /api/reports eliminados (analytics V2 dual-store removido).
   // WAE es el único store. Simplificación: 3 eventos, 0 código muerto.
 
-  // V7.8 — Filtros de exclusión de analytics (configurables via dashboard/vars).
-  // 3 filtros activos: localhost, headless, bot. owner_ip/dev_ip opcionales.
+  // V7.8.1 — ANALYTICS_SYSTEM_SETUP: filtros de exclusión de analytics.
+  // Reglas activas (todas configurables via dashboard o wrangler.jsonc vars):
+  //   - localhost / headless / bot      (VOY_EXCLUDE_LOCALHOST/HEADLESS/BOT)
+  //   - glm_agent (GLM_* UA filter)     (VOY_EXCLUDE_GLM) — excludes z-ai/GLM automated agents
+  //   - owner_ip / owner_ip_hash        (VOY_OWNER_IPS / VOY_OWNER_IP_HASHES) — SIMON_DEVICE rule
+  //   - dev_ip                          (VOY_DEV_IPS)
+  //   - custom UA patterns              (VOY_EXCLUDE_UA_PATTERNS — comma-separated regex, case-insensitive)
+  //
+  // HOW TO EXCLUDE YOUR DEVICE (SIMON_DEVICE):
+  //   1. Visit https://voy-app.simondalmasso44.workers.dev/api/whoami from your device.
+  //   2. Copy the `ip` (→ VOY_OWNER_IPS) OR the `ip_sha256` (→ VOY_OWNER_IP_HASHES, more private).
+  //   3. Paste below (comma-separated if multiple devices). Redeploy.
+  //   4. Verify on /api/whoami → "excluded": "owner_ip" (or "owner_ip_hash").
+  //   5. Verify on /api/health → filters.owner_ips / owner_ip_hashes counts updated.
   "vars": {
     "VOY_OWNER_IPS": "",
+    "VOY_OWNER_IP_HASHES": "",
     "VOY_DEV_IPS": "",
     "VOY_EXCLUDE_LOCALHOST": "true",
     "VOY_EXCLUDE_HEADLESS": "true",
-    "VOY_EXCLUDE_BOT": "true"
+    "VOY_EXCLUDE_BOT": "true",
+    "VOY_EXCLUDE_GLM": "true",
+    "VOY_EXCLUDE_UA_PATTERNS": ""
   },
 
   "observability": {

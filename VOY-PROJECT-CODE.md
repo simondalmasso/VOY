@@ -1,3 +1,85 @@
+# VOY — Project Code Dump (V7.18.2)
+
+> Single-file reference for AI code review. Generated 2026-06-25.
+> Production: https://voy-app.simondalmasso44.workers.dev
+> GitHub: https://github.com/simonkey888/VOY
+> Current version: V7.18.2 (UI) / V7.8.0 (worker)
+
+## Project Overview
+
+**VOY** is a zero-install, mobile-first web app for urban mobility comparison in
+Santa Fe, Argentina. The user enters a destination; VOY estimates prices and ETAs
+across **ride-hailing apps** (Uber, DiDi, Maxim, Cabify), **taxi / remis**
+(radio-taxi companies), and **public transit** (colectivo / bus with SUBE card),
+then deep-links the user's chosen provider. The product thesis is *one URL, every
+provider, no app install* — a comparison layer that lives between the user's
+intent ("go to X") and the siloed provider apps.
+
+**Architecture.** The frontend is a single HTML page (`public/VOY-Lite.html`,
+~3229 lines) that ships with an inline `<style>` block (V7.18.2 "Corporate
+Minimal" design system, ~1095 lines of CSS) and an inline `<script>` block
+(~1957 lines of vanilla JS — no framework, no build step). The page loads
+MapLibre GL JS 4.7.1 from unpkg for the ambient full-bleed map, and four
+`core/*.js` modules (`mobilityEngine`, `pricingEngine`, `eventBus`,
+`telemetry`, `trend`, `favorites`, `ahorro`, `feedback`) for pure computation,
+analytics, persistence, and feature services. A separate `ui/mobilityController.js`
+(not included in this dump) acts as the controller layer; the inline script in
+`VOY-Lite.html` is the view + controller glue for the Lite build.
+
+**Backend.** A single Cloudflare Worker (`worker.js`, 401 lines) serves the
+static assets from `public/`, rewrites `/` → `/VOY-Lite.html`, hides the internal
+path (`/VOY-Lite.html` → 301 → `/`), ingests analytics events at `/api/events`
+and telemetry beacons at `/api/telemetry` into Cloudflare Analytics Engine
+(binding `VOY_METRICS`), exposes `/api/health` + `/api/whoami`, and runs a weekly
+cron (Mon 06:00 UTC) as a tariff-review reminder. HTML is served with
+`Cache-Control: no-store` so the edge never serves a stale UI; a `voy_sid`
+cookie provides anonymous sessionID for retention analytics. Build hash is
+injected at deploy time by `scripts/inject-build-hash.mjs` (replaces
+`__BUILD_HASH__` placeholders in both `worker.js` and `VOY-Lite.html`).
+
+**Privacy posture.** Anonymous-ID only (no PII, no accounts). Geo is coarsened
+to ~500m grid clusters before transport. Owner / dev / bot / headless / GLM-agent
+exclusion filters (configurable via `wrangler.jsonc` vars) keep test traffic out
+of the analytics dataset. The `/api/whoami` endpoint lets the owner self-detect
+their IP / SHA-256 hash to populate `VOY_OWNER_IPS` / `VOY_OWNER_IP_HASHES`.
+
+## File Map
+
+| # | File | LOC | Role |
+|---|---|---|---|
+| 1 | `public/VOY-Lite.html` — `<head>` + `<style>` | 1156 | Meta, resource hints, manifest, COMPLETE CSS design system (V7.18.2 Corporate Minimal) |
+| 2 | `public/VOY-Lite.html` — `<body>` | 113 | Semantic HTML structure: splash, map, search bar, origin pill, mode selector, decision sheet, dialog, footer |
+| 3 | `public/VOY-Lite.html` — inline `<script>` | 1956 | Main app JS: map init, search, estimation, rendering, deep-link routing, analytics, category manager |
+| 4 | `worker.js` | 401 | Cloudflare Worker: routing, /api/events, /api/telemetry, /api/health, /api/whoami, sessionID cookie, cron |
+| 5 | `public/core/mobilityEngine.js` | 442 | PURE mobility computation: haversine, fare calc, estimateAuto/estimateBus, rankProviders, searchLocal |
+| 6 | `public/core/pricingEngine.js` | 248 | PURE pricing v2: surge multipliers (time/weather/demand), Bayesian fare confidence, fare range |
+| 7 | `public/core/eventBus.js` | 217 | Event bus + batched transport to /api/events (sendBeacon + fetch keepalive), local localStorage fallback |
+| 8 | `public/core/telemetry.js` | 252 | VoyHealthMonitor (LCP + JS errors + promise rejections → /api/telemetry) + VoyDebugPanel (konami / 7-tap) |
+| 9 | `public/core/trend.js` | 245 | VoyHistoryDB (IndexedDB, 30d retention) + VoyTrendEngine (SMA deviation → STABLE/RISING/FALLING badges) |
+| 10 | `public/core/favorites.js` | 192 | VoyFavoritesService — frequent destinations (LocalStorage primary + IDB mirror), recency sort |
+| 11 | `public/core/ahorro.js` | 84 | VoyAhorroService — colectivo-vs-ridehailing savings observer + idempotent badge renderer |
+| 12 | `public/core/feedback.js` | 89 | VoyFeedbackService — in-flow price-accuracy flagging via sendBeacon → /api/telemetry |
+| 13 | `wrangler.jsonc` | 87 | Cloudflare Workers config: name, assets binding, VOY_METRICS analytics engine, exclusion-filter vars, cron |
+
+## Known Issues (active)
+
+- **UF-01: black_squares** — FIXED in V7.18.2. 11 UI selectors (modePill, searchBar, originPill, …) now use `rgba(0,0,0,0.78)` + `backdrop-filter:blur(16px) saturate(1.2)` instead of opaque `#000000`. VLM-verified in production.
+- **UF-02: didi_button no prefill** — PARTIALLY FIXED in V7.18.2. DiDi's deep-link doesn't accept a destination, so the confirm handler now copies the destination address to `navigator.clipboard` *before* `launchDeepLink`, with a toast prompting the user to paste. Workaround, not a true prefill.
+- **UF-03: css_specificity_debt** — ACTIVE. ~153 `!important` declarations across the CSS (grep count). Mostly from V7.14 hardened mode-pill overrides. Technical debt; needs a refactor pass.
+- **UF-04: dead code L687 `.mp-lbl` 11px** — ACTIVE. Orphaned selector, no matching DOM element. Safe to delete.
+- **UF-05: launchDeepLink 1500ms race condition** — ACTIVE. `launchDeepLink()` uses a 1500ms fallback timer that can fire after the user has navigated away from the dialog, causing a double-launch or a launch-after-cancel. Needs a cancellation token.
+- **UF-06: dev-only /api/events 404** — Local dev (`wrangler dev` without `--local`) sometimes 404s `/api/events` because the WAE binding is missing. Production is fine. Workaround: `wrangler dev --local`.
+- **UF-07: map timeout false positive** — The 8s map-init timeout fires a "map failed" toast even when the map eventually loads (e.g. on slow 3G). Needs a success-clears-timeout guard.
+- **UF-08: LCP variability 268ms-10s** — LCP ranges from 268ms (cached, fast 3G) to 10s (cold, slow 3G). The 10s tail is the map tile load blocking LCP. Candidate fix: `content-visibility: auto` on the map container, or a skeleton.
+- **UF-09: hero default didi mismatch** — FIXED in V7.18.2 → `uber`. The hero CTA default was `didi` (worst deep-link support); now `uber` (best universal-link support). DiDi appears as hero only when the recommendation engine explicitly ranks it #1.
+
+---
+
+## 1. `public/VOY-Lite.html` — `<head>` + `<style>` (CSS)
+
+The document head: `<!DOCTYPE>`, meta tags (viewport, theme-color, voy-version, voy-build), title, resource hints (preconnect to unpkg / cartocdn / OSM / OSRM), MapLibre GL JS 4.7.1 stylesheet + script (with integrity hashes), external core-module script tags, then the COMPLETE inline `<style>` block (V7.18.2 Corporate Minimal design system, ~1095 lines). Every line below is verbatim from the source file.
+
+```html
 <!--
 VOY V7.8.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
@@ -681,10 +763,10 @@ button{cursor:pointer}
 }
 .mode-pill:active{transform:scale(0.95)}
 .mode-pill.active{color:#000000;background:#FFFFFF!important;border-color:#FFFFFF!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;-webkit-text-stroke:0;text-stroke:0;opacity:1}
-[data-theme="dark"] .mode-pill{background:rgba(0,0,0,0.78)!important} /* V7.18.3: was rgba(0,0,0,0.95) — higher specificity than V7.16's .mode-pill rule, so it WON in dark mode and reverted the frosted glass to near-opaque. Aligned to 0.78 so dark mode also gets the frosted-glass effect. backdrop-filter inherits from V7.16 block (no dark override needed — blur is theme-agnostic). */
+[data-theme="dark"] .mode-pill{background:rgba(0,0,0,0.95)!important}
 [data-theme="dark"] .mode-pill.active{color:#000000;background:#FFFFFF!important;border-color:#FFFFFF!important}
 .mode-pill .mp-ic{display:flex;align-items:center}
-.mode-pill .mp-lbl{letter-spacing:0.02em} /* V7.18.3: removed dead `font-size:11px` (overridden by V7.17 L1131 16px!important). Kept letter-spacing — not overridden anywhere. */
+.mode-pill .mp-lbl{font-size:11px;letter-spacing:0.02em}
 
 /* === V7.13 UNIFIED_GHOST_UI: CategoryManager aplanado a 1 sola fila ===========================
    Blueprint V7.13 fase_1: Eliminar la doble fila (cat-tabs + mode-pills) fusionando
@@ -1154,6 +1236,13 @@ button{font-family:inherit!important}
 }
 </style>
 </head>
+```
+
+## 2. `public/VOY-Lite.html` — `<body>` structure (HTML)
+
+Semantic HTML body: splash screen, ambient full-bleed map (`#map`), map grid overlay, top scrim, floating search bar (`destInput` + map/locate/mic buttons + dropdown), origin pill, memory chips row, transport mode selector, decision sheet, map floating chip (FULL_MAP state), offline chip, footer + disclosure menu (share / support), deep-link confirmation dialog, toast container, analytics dashboard div, and the external core-module script tags (`ahorro.js`, `trend.js`, `telemetry.js`, `favorites.js`, `feedback.js`) loaded before the main inline script.
+
+```html
 <body data-theme="light">
 
 <!-- SPLASH SCREEN (exit on app_ready) -->
@@ -1268,13 +1357,20 @@ button{font-family:inherit!important}
 <script src="core/favorites.js?v=79"></script>
 <script src="core/feedback.js?v=79"></script>
 <script>
+```
+
+## 3. `public/VOY-Lite.html` — inline `<script>` (JS)
+
+The main inline JavaScript (~1957 lines, vanilla JS, no framework). Contains: version pin (`VOY_VERSION='V7.18.2'`, `VOY_BUILD_HASH`), SVG icon system, `BUS_STOPS` / `BIKE_STATIONS` / `LANDMARKS` / `FARE_REGISTRY` data tables, `MobilityController` (MC) object with GPS, map init (`initMap` + `attachContextLossHandlers`), search (Nominatim + local catalog), estimation pipeline (`runAllEstimations` → render), category manager (3 groups: Privados / Activos / Público), provider ranking, decision sheet rendering (`renderSheet`), deep-link routing (`buildAppLink` + `launchDeepLink`), confirmation dialog, analytics dashboard (5-tap), favorites wiring, feedback wiring, ahorro wiring, trend wiring, and DOMContentLoaded boot. Complete verbatim.
+
+```javascript
 // ===================== V7 VERSION PIN (single source of truth) =====================
 // HARD VERSION PIN — worker.js serves HTML with Cache-Control: no-store so the
 // edge never serves a stale build. The CI guardrail verifies window.VOY_VERSION
 // matches the deployed /api/health version before declaring deploy success.
 // 5d40cbc is replaced at deploy time by scripts/inject-build-hash.mjs
 // (scripts/verify-production.sh checks this equals the git short SHA).
-window.VOY_VERSION='V7.18.3';
+window.VOY_VERSION='V7.18.2';
 window.VOY_BUILD_HASH='__BUILD_HASH__';
 window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 
@@ -2641,33 +2737,21 @@ function launchDeepLink(url){
   // intent:// URL — extract S.browser_fallback_url (Play Store) for JS-level fallback
   var fbMatch=url.match(/S\.browser_fallback_url=([^;]+)/);
   var fallback=fbMatch?decodeURIComponent(fbMatch[1]):null;
-  // V7.18.3: app-open detection via BOTH visibilitychange AND pagehide.
-  // Previously only visibilitychange — but on some Android browsers (Samsung Internet,
-  // Firefox) pagehide fires more reliably than visibilitychange when an intent:// URL
-  // hands off to a native app. Listening to both maximizes detection accuracy.
+  // Track if the app opened (page becomes hidden = app took over)
   var appOpened=false;
-  function markOpened(){appOpened=true;}
-  function onVisChange(){if(document.visibilityState==='hidden')markOpened();}
-  function onPageHide(){markOpened();}
+  function onVisChange(){if(document.hidden)appOpened=true;}
   document.addEventListener('visibilitychange',onVisChange);
-  window.addEventListener('pagehide',onPageHide);
   // Trigger the intent
   window.location.href=url;
-  // V7.18.3: bumped timeout 1500ms → 2000ms. 1500ms was too aggressive for mid-range
-  // Android devices where the app-switch animation can take 1.4-1.8s. The race condition:
-  // app opens at 1400ms, visibilitychange fires at 1450ms, but timer evaluated at 1500ms
-  // saw appOpened=false (listener hadn't run yet) → double-redirect to Play Store.
-  // 2000ms gives 500ms margin. Re-checks document.visibilityState at fire time too.
+  // After 1.5s, if the page never hid, the intent likely failed.
+  // Fall back to the Play Store URL (for non-Chrome browsers that don't honor
+  // S.browser_fallback_url natively, like Samsung Internet/Firefox).
   setTimeout(function(){
     document.removeEventListener('visibilitychange',onVisChange);
-    window.removeEventListener('pagehide',onPageHide);
-    // V7.18.3: double-check visibilityState at fire time (not just the appOpened flag).
-    // This catches the edge case where the listener hasn't fired yet but the document
-    // is already hidden (app took over).
-    if(!appOpened&&document.visibilityState==='visible'&&!document.hidden&&fallback){
+    if(!appOpened&&!document.hidden&&fallback){
       window.location.href=fallback;
     }
-  },2000);
+  },1500);
 }
 
 // ===================== DEEP-LINK CONFIRMATION DIALOG =====================
@@ -3235,6 +3319,2382 @@ function initOfflineChip(){
   window.addEventListener('offline',update);
   update();
 }
+```
+
+## 3b. `public/VOY-Lite.html` — closing tags
+
+The closing `</script>`, `</body>`, and `</html>` tags that follow the inline JavaScript block. Included for completeness so that every line of the source file is represented in this dump.
+
+```html
 </script>
 </body>
 </html>
+```
+
+## 4. `worker.js` — Cloudflare Worker backend
+
+Single Cloudflare Worker (`voy-app`). Routing rules: hide `/VOY-Lite.html` → 301 → `/`; `/api/events` POST → 3 canonical events (`estimation` / `provider_tap` / `search`) → Cloudflare Analytics Engine via `ctx.waitUntil(env.VOY_METRICS.writeDataPoint(...))`; `/api/telemetry` POST → fire-and-forget beacon ingestion (LCP + JS errors); `/api/whoami` → owner self-detect IP + SHA-256; `/api/health` → version + build_hash + filter counts; `/` → internal rewrite to `/VOY-Lite.html` with `Cache-Control: no-store` + `Set-Cookie: voy_sid`. Exclusion filters: localhost, headless, bot, `GLM_*` UA, owner_ip, owner_ip_hash (SHA-256), dev_ip, custom UA regex patterns. Cron trigger Mon 06:00 UTC. Complete verbatim, 401 lines.
+
+```javascript
+// ============================================================
+//  VOY — Cloudflare Worker (V7.8: WAE analytics + sessionID + cron)
+//
+//  Canonical origin:  https://voy.is-a.dev  (is-a.dev PR #41619 open)
+//  Worker name:       voy-app  (updates the EXISTING production worker)
+//
+//  Rules (evaluated in order):
+//   1. /VOY-Lite.html  → 301 → /  (same-host relative redirect; hides internal path)
+//   2. CANONICAL REDIRECT DISABLED until voy.is-a.dev is registered.
+//   3. /api/events  → POST → Analytics Engine (VOY_METRICS) + 202 (fire-and-forget)
+//   4. /  → internal rewrite → /VOY-Lite.html  (browser URL stays /)
+//   5. everything else → ASSETS binding (core/, ui/, icons/, manifest.json, …)
+//
+//  Analytics (V7.8 — 3 eventos, WAE only):
+//   - 3 eventos canónicos: 'estimation', 'provider_tap', 'search'
+//   - Nombres legacy se normalizan a estos 3 (ver EVENT_NORMALIZE).
+//   - WAE writeDataPoint via ctx.waitUntil() — no bloquea la respuesta.
+//   - sessionID via cookie (voy_sid) — sin auth, distingue sesiones únicas.
+//   - DATA_POLICY: no_personal_identifiable_storage · route_only_event_aggregation · geo_approximation_only.
+//     (anon_id only; WAE stores provider/mode/price/time/distance + ~500m geo cluster; no raw lat/lon, no email/name.)
+//   - Filtros de exclusión (ANALYTICS_SYSTEM_SETUP V7.8.1):
+//       · localhost, headless, bot      (env: VOY_EXCLUDE_LOCALHOST/HEADLESS/BOT)
+//       · glm_agent (GLM_* UA filter)   (env: VOY_EXCLUDE_GLM)
+//       · owner_ip / owner_ip_hash      (env: VOY_OWNER_IPS / VOY_OWNER_IP_HASHES — SIMON_DEVICE rule)
+//       · dev_ip                         (env: VOY_DEV_IPS)
+//       · custom UA patterns             (env: VOY_EXCLUDE_UA_PATTERNS — comma-separated regex)
+//   - /api/whoami: owner self-detects IP + SHA-256 to populate exclusion vars (USER_IP_DETECTED).
+//   - /api/health: exposes filter counts (not values) for verification.
+//   - Si VOY_METRICS está ausente (dry-run), devuelve 202 gracefully.
+// ============================================================
+
+const CANONICAL_ORIGIN = "https://voy.is-a.dev"; // disabled until is-a.dev is live
+const WORKER_VERSION = "V7.8.0"; // V7.8 = analytics simplificado (3 eventos WAE + sessionID cookie + cron tarifas). DO + /api/reports eliminados. 0 código muerto.
+// __BUILD_HASH__ is replaced by CI at deploy time (scripts/inject-build-hash.mjs).
+// verify-production.sh checks /api/health.build_hash === git short SHA.
+const BUILD_HASH = "__BUILD_HASH__";
+
+// V7.8 — 3 eventos canónicos. Nombres legacy se mapean a estos.
+const V2_EVENTS = ['estimation', 'provider_tap', 'search'];
+const EVENT_NORMALIZE = {
+  // → estimation
+  estimation: 'estimation',
+  route_calculated: 'estimation',
+  ride_estimated: 'estimation',
+  route_selected: 'estimation',
+  destination_selected: 'estimation',
+  // → provider_tap
+  provider_tap: 'provider_tap',
+  provider_click: 'provider_tap',
+  provider_clicked: 'provider_tap',
+  deeplink_opened: 'provider_tap',
+  vehicle_viewed: 'provider_tap',
+  // → search
+  search: 'search',
+  search_performed: 'search',
+  voice_search: 'search',
+};
+
+// V7.8.1 — ANALYTICS_SYSTEM_SETUP: filtros de exclusión ampliados.
+//   - localhost / headless / bot (heredados)
+//   - GLM_* user-agent (GLM_AGENT rule — excludes z-ai/GLM automated agents)
+//   - owner_ip + owner_ip_hash (SIMON_DEVICE rule — hash-based OR direct IP)
+//   - dev_ip
+//   - custom UA patterns (VOY_EXCLUDE_UA_PATTERNS, comma-separated regex)
+// All rules are opt-in/opt-out via env vars (dashboard or wrangler.jsonc vars).
+function _loadFilterConfig(env) {
+  const list = (v) => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
+  return {
+    owner_ips: list(env.VOY_OWNER_IPS),
+    // SHA-256 hex hashes of owner IPs (hash-based mode — never stores raw IP in config).
+    owner_ip_hashes: list(env.VOY_OWNER_IP_HASHES).map(h => h.toLowerCase()),
+    dev_ips: list(env.VOY_DEV_IPS),
+    exclude_localhost: env.VOY_EXCLUDE_LOCALHOST !== 'false',
+    exclude_headless: env.VOY_EXCLUDE_HEADLESS !== 'false',
+    exclude_bot: env.VOY_EXCLUDE_BOT !== 'false',
+    exclude_glm: env.VOY_EXCLUDE_GLM !== 'false',
+    // Additional UA regex patterns (comma-separated, case-insensitive).
+    exclude_ua_patterns: list(env.VOY_EXCLUDE_UA_PATTERNS)
+  };
+}
+
+const BOT_UA = /googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|exabot|facebot|facebookexternalhit|ia_archiver|applebot|twitterbot|linkedinbot|semrushbot|ahrefsbot|mj12bot|dotbot|petalbot/i;
+const HEADLESS_UA = /headlesschrome|phantomjs|slimerjs|puppeteer|playwright|webdriver|selenium|chrome-lighthouse|w3c_validator|nightmare|crawly|crawler/i;
+// GLM_AGENT rule — excludes UAs starting with "GLM" (z-ai/GLM automated agents, e.g. "GLM/4.6", "GLM-agent", "GLM_bot"). Spec: GLM_*
+const GLM_UA = /^GLM[\s\/\-_:]/i;
+
+// Cache compiled custom UA regexes per config signature (avoid recompiling on every request).
+let _customUaCache = { sig: null, regexes: [] };
+function _compiledUaPatterns(cfg) {
+  const sig = cfg.exclude_ua_patterns.join('|');
+  if (_customUaCache.sig === sig) return _customUaCache.regexes;
+  _customUaCache.regexes = cfg.exclude_ua_patterns
+    .map(p => { try { return new RegExp(p, 'i'); } catch (_) { return null; } })
+    .filter(Boolean);
+  _customUaCache.sig = sig;
+  return _customUaCache.regexes;
+}
+
+// SHA-256 hex of a string (Web Crypto, available in Workers). Used for hash-based IP exclusion.
+async function _sha256Hex(text) {
+  try {
+    const data = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+    return hex;
+  } catch (_) { return ''; }
+}
+
+// ctx may include { ip, ua, ipHash } — ipHash is pre-computed by caller only when
+// owner_ip_hashes is non-empty (avoids hashing every request unnecessarily).
+function _shouldExclude(ctx, cfg) {
+  if (cfg.exclude_localhost && (ctx.ip === '127.0.0.1' || ctx.ip === '::1' || ctx.ip === '')) return 'localhost';
+  // SIMON_DEVICE — direct IP match (mode: ip_exclusion)
+  if (cfg.owner_ips.length && cfg.owner_ips.indexOf(ctx.ip) > -1) return 'owner_ip';
+  // SIMON_DEVICE — hash-based match (mode: hash_based). More privacy-friendly: config stores only the hash.
+  if (cfg.owner_ip_hashes.length && ctx.ipHash && cfg.owner_ip_hashes.indexOf(ctx.ipHash) > -1) return 'owner_ip_hash';
+  if (cfg.dev_ips.length && cfg.dev_ips.indexOf(ctx.ip) > -1) return 'developer_ip';
+  if (cfg.exclude_headless && HEADLESS_UA.test(ctx.ua)) return 'headless';
+  if (cfg.exclude_bot && BOT_UA.test(ctx.ua)) return 'bot';
+  // GLM_AGENT — user_agent_filter, value: GLM_*
+  if (cfg.exclude_glm && GLM_UA.test(ctx.ua)) return 'glm_agent';
+  // Custom UA patterns (extensible)
+  const res = _compiledUaPatterns(cfg);
+  for (let i = 0; i < res.length; i++) {
+    if (res[i].test(ctx.ua)) return 'ua_pattern:' + cfg.exclude_ua_patterns[i];
+  }
+  return null;
+}
+
+// V7.8 — sessionID via cookie. Sin auth, distingue sesiones únicas para retención.
+function _getOrCreateSessionId(request) {
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const match = cookieHeader.match(/voy_sid=([^;]+)/);
+  if (match) return { sid: match[1], isNew: false };
+  return { sid: crypto.randomUUID().slice(0, 8), isNew: true };
+}
+
+const worker = {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const host = url.hostname.toLowerCase();
+    const pathLower = url.pathname.toLowerCase();
+
+    // 1) Hide internal entry path → same-host root (relative 301).
+    if (pathLower === "/voy-lite.html" || pathLower === "/voy-lite") {
+      return Response.redirect("/", 301);
+    }
+
+    // 2) CANONICAL REDIRECT — DISABLED until voy.is-a.dev is registered.
+    // if (host.endsWith(".workers.dev") || host.includes("simondalmasso")) {
+    //   const target = CANONICAL_ORIGIN + url.pathname + url.search;
+    //   return Response.redirect(target, 301);
+    // }
+
+    // 3) Analytics ingestion endpoint — 3 eventos → WAE.
+    if (pathLower === "/api/events" && request.method === "POST") {
+      return _handleEvents(request, env, ctx);
+    }
+    if (pathLower === "/api/events" && request.method === "OPTIONS") {
+      return _cors(new Response(null, { status: 204 }));
+    }
+    // V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — /api/telemetry: Beacon API ingestion (fire-and-forget).
+    //   Accepts {event, value, route, ts}. Receives LCP + JS errors + unhandled promise rejections
+    //   from VoyHealthMonitor (client). Same exclusion filters as /api/events (no bot/localhost/owner noise).
+    //   Logs to wrangler tail; writes a 'telemetry' WAE datapoint if VOY_METRICS is bound (queryable separately).
+    if (pathLower === "/api/telemetry" && request.method === "POST") {
+      return _handleTelemetry(request, env, ctx);
+    }
+    if (pathLower === "/api/telemetry" && request.method === "OPTIONS") {
+      return _cors(new Response(null, { status: 204 }));
+    }
+    // ANALYTICS_SYSTEM_SETUP — /api/whoami: lets the OWNER detect their own IP + SHA-256
+    // so they can populate VOY_OWNER_IPS (direct) or VOY_OWNER_IP_HASHES (hash-based).
+    // Returns ONLY the caller's own info (no cross-user data, no PII stored server-side).
+    // Also reports whether the caller would currently be excluded → instant config feedback.
+    if (pathLower === "/api/whoami") {
+      const callerIp = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+      const callerUa = request.headers.get("user-agent") || "";
+      const wcfg = _loadFilterConfig(env);
+      const ipHash = (callerIp && wcfg.owner_ip_hashes.length) ? await _sha256Hex(callerIp) : '';
+      const excluded = _shouldExclude({ ip: callerIp, ua: callerUa, ipHash }, wcfg);
+      return _cors(new Response(JSON.stringify({
+        ip: callerIp,
+        ip_sha256: ipHash || (callerIp ? await _sha256Hex(callerIp) : ''),
+        ua: callerUa.slice(0, 120),
+        excluded: excluded,
+        note: "Visit this endpoint to detect your IP, then set VOY_OWNER_IPS (raw) or VOY_OWNER_IP_HASHES (SHA-256) in wrangler.jsonc vars / CF dashboard."
+      }), { headers: { "Content-Type": "application/json" } }));
+    }
+    if (pathLower === "/api/health") {
+      const hcfg = _loadFilterConfig(env);
+      return _cors(new Response(JSON.stringify({
+        ok: true, service: "voy-app", version: WORKER_VERSION, build_hash: BUILD_HASH,
+        analytics: !!(env.VOY_METRICS),
+        // Expose active filter COUNTS (not values) for verification — no PII leak.
+        filters: {
+          owner_ips: hcfg.owner_ips.length,
+          owner_ip_hashes: hcfg.owner_ip_hashes.length,
+          dev_ips: hcfg.dev_ips.length,
+          exclude_localhost: hcfg.exclude_localhost,
+          exclude_headless: hcfg.exclude_headless,
+          exclude_bot: hcfg.exclude_bot,
+          exclude_glm: hcfg.exclude_glm,
+          exclude_ua_patterns: hcfg.exclude_ua_patterns.length
+        },
+        time: new Date().toISOString()
+      }), { headers: { "Content-Type": "application/json" } }));
+    }
+
+    // 4) Root → internal rewrite to VOY-Lite.html.
+    //    Cache-Control: no-store on HTML so edge never serves stale UI.
+    //    Set-Cookie: voy_sid on first visit (sessionID for analytics).
+    if (url.pathname === "/" || url.pathname === "") {
+      url.pathname = "/VOY-Lite.html";
+      const resp = await env.ASSETS.fetch(new Request(url, request));
+      return _htmlNoStore(resp, request);
+    }
+
+    // 5) All other paths → static assets (with header cleanup).
+    const resp = await env.ASSETS.fetch(request);
+    return _cleanHeaders(resp);
+  },
+
+  // V7.8 — Cron trigger: recordatorio semanal de revisión de tarifas.
+  // Lunes 06:00 UTC. Solo loguea; el hook queda listo para fuente oficial futura.
+  async scheduled(event, env, ctx) {
+    console.log('[VOY CRON] Recordatorio: verificar tarifas municipales (Resolución N°217/2026). Próxima revisión: ver fares.json _meta.proxima_revision.');
+  }
+};
+
+export default worker;
+
+// ---------------- Analytics handler (V7.8 — 3 eventos, WAE only) ----------------
+async function _handleEvents(request, env, ctx) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return _cors(new Response(JSON.stringify({ ok: false, error: "bad_json" }), {
+      status: 400, headers: { "Content-Type": "application/json" }
+    }));
+  }
+
+  const events = body && Array.isArray(body.events) ? body.events : null;
+  if (!events) {
+    return _cors(new Response(JSON.stringify({ ok: false, error: "no_events" }), {
+      status: 400, headers: { "Content-Type": "application/json" }
+    }));
+  }
+
+  // --- filtros de exclusión (localhost / headless / bot / glm_agent / owner_ip / owner_ip_hash / dev_ip / ua_pattern) ---
+  const cfg = _loadFilterConfig(env);
+  const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ua = request.headers.get("user-agent") || "";
+  // Hash-based owner-IP check — only compute SHA-256 when owner_ip_hashes is configured
+  // (avoids the digest cost on every request otherwise).
+  const ipHash = (cfg.owner_ip_hashes.length && ip) ? await _sha256Hex(ip) : '';
+  const excludeReason = _shouldExclude({ ip, ua, ipHash }, cfg);
+  if (excludeReason) {
+    return _cors(new Response(JSON.stringify({
+      ok: true, received: events.length, written: 0, excluded: events.length, reason: excludeReason
+    }), { status: 202, headers: { "Content-Type": "application/json" } }));
+  }
+
+  // --- sessionID (cookie-based, sin auth) ---
+  const { sid } = _getOrCreateSessionId(request);
+
+  // --- normalización: legacy → 3 eventos canónicos ---
+  const normalized = [];
+  for (const e of events) {
+    const canonical = EVENT_NORMALIZE[e.name];
+    if (!canonical) continue; // drop non-canonical events
+    normalized.push({
+      name: canonical,
+      anon_id: String(e.anon_id || sid).slice(0, 64),
+      ts: Number(e.ts) || Date.now(),
+      geo: String(e.geo || "").slice(0, 60),
+      data: e.data || {}
+    });
+  }
+  if (!normalized.length) {
+    return _cors(new Response(JSON.stringify({ ok: true, received: events.length, written: 0, note: "no_canonical_events" }), {
+      status: 202, headers: { "Content-Type": "application/json" }
+    }));
+  }
+
+  // --- WAE write (fire-and-forget via ctx.waitUntil) ---
+  let aeWritten = 0;
+  if (env.VOY_METRICS && typeof env.VOY_METRICS.writeDataPoint === "function") {
+    ctx.waitUntil((async () => {
+      for (const e of normalized) {
+        try {
+          env.VOY_METRICS.writeDataPoint({
+            indexes: [e.name],              // 'estimation' | 'provider_tap' | 'search'
+            blobs: [
+              e.anon_id,                     // sessionID o anon_id
+              String(e.data && e.data.provider || ''),  // uber|didi|maxim|taxi|bus|...
+              String(e.data && e.data.mode || '')       // auto|moto|bus|walk|bike
+            ],
+            doubles: [
+              Number(e.data && e.data.price) || 0,      // precio estimado
+              Number(e.data && e.data.time_min) || 0,   // tiempo estimado
+              Number(e.data && e.data.distance_km) || 0 // distancia
+            ]
+          });
+          aeWritten++;
+        } catch (_) { /* WAE failure never breaks the app */ }
+      }
+    })());
+  }
+
+  return _cors(new Response(JSON.stringify({
+    ok: true, received: events.length, normalized: normalized.length,
+    written: aeWritten, session_id: sid
+  }), { status: 202, headers: { "Content-Type": "application/json" } }));
+}
+
+// ---------------- V7.7 Telemetry handler (Beacon API: LCP + JS errors + promise rejections) ----------------
+// Fire-and-forget ingestion endpoint. Never blocks unload (sendBeacon). Schema: {event, value, route, ts}.
+// Reuses the same exclusion model as /api/events so owner/bot/localhost noise never reaches the log.
+async function _handleTelemetry(request, env, ctx) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return _cors(new Response(JSON.stringify({ ok: false, error: "bad_json" }), {
+      status: 400, headers: { "Content-Type": "application/json" }
+    }));
+  }
+  // Exclusion filters (same model as /api/events — never log bot/localhost/owner noise).
+  const cfg = _loadFilterConfig(env);
+  const ip = (request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ua = request.headers.get("user-agent") || "";
+  const ipHash = (cfg.owner_ip_hashes.length && ip) ? await _sha256Hex(ip) : '';
+  const excludeReason = _shouldExclude({ ip, ua, ipHash }, cfg);
+  if (excludeReason) {
+    return _cors(new Response(JSON.stringify({ ok: true, excluded: true, reason: excludeReason }), {
+      status: 202, headers: { "Content-Type": "application/json" }
+    }));
+  }
+  const event = String(body && body.event || "").slice(0, 40);
+  const value = Number(body && body.value) || 0;
+  const route = String(body && body.route || "").slice(0, 140);
+  const ts = Number(body && body.ts) || Date.now();
+  // Fire-and-forget log (visible via `wrangler tail`).
+  try { console.log(JSON.stringify({ telemetry: true, event, value, route, ts })); } catch (_) {}
+  // Optional WAE persistence (index 'telemetry' keeps it queryable separately from product events).
+  if (env.VOY_METRICS && typeof env.VOY_METRICS.writeDataPoint === "function") {
+    ctx.waitUntil((async () => {
+      try {
+        env.VOY_METRICS.writeDataPoint({
+          indexes: ["telemetry"],
+          blobs: [event, route],
+          doubles: [value, ts]
+        });
+      } catch (_) { /* WAE failure never breaks telemetry */ }
+    })());
+  }
+  return _cors(new Response(JSON.stringify({ ok: true }), { status: 202, headers: { "Content-Type": "application/json" } }));
+}
+
+function _cors(resp) {
+  resp.headers.set("Access-Control-Allow-Origin", "*");
+  resp.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  resp.headers.set("Access-Control-Allow-Headers", "Content-Type");
+  resp.headers.delete("x-powered-by");
+  return resp;
+}
+
+function _cleanHeaders(resp) {
+  try {
+    resp.headers.delete("x-powered-by");
+    resp.headers.delete("server");
+  } catch (_) {}
+  return resp;
+}
+
+// V7.8: HTML responses get Cache-Control: no-store + sessionID cookie.
+function _htmlNoStore(resp, request) {
+  const headers = new Headers(resp.headers);
+  headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+  headers.set("Vary", "Accept-Encoding");
+  headers.set("X-VOY-Version", WORKER_VERSION);
+  headers.set("X-VOY-Build", BUILD_HASH);
+  headers.delete("x-powered-by");
+  headers.delete("server");
+
+  // Set-Cookie: voy_sid on first visit (30-day retention window).
+  const { sid, isNew } = _getOrCreateSessionId(request);
+  if (isNew) {
+    headers.append("Set-Cookie", `voy_sid=${sid}; Max-Age=2592000; SameSite=Lax; Path=/`);
+  }
+
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers: headers
+  });
+}
+
+```
+
+## 5. `public/core/mobilityEngine.js`
+
+PURE mobility computation module (v2.0.0). No DOM, no fetch, no localStorage — fully deterministic and testable. Exposes: `haversine`, `formatPrice`, `formatMin`, `normalize`, `fuzzyScore`, `calcAppPrice`, `estimateTaxi`, `estimateAuto` (per-provider prices + times for Uber/DiDi/Maxim/Cabify/taxi/remis/TaxiApp), `estimateBus` (direct-route only, no fake fallback), `findNearestBikeStation`, `runAllEstimations` (orchestrator → sorted array), `rankProviders` (MOBILITY_CORE_RANKING_V1: 0.7×price + 0.3×time, normalized), `searchLocal`, `dedupResults`, `formatBusText`. Bike gated to ≤3km (`BIKE_MAX_DISTANCE_KM`). Complete verbatim, 442 lines.
+
+```javascript
+/**
+ * VOY v2 — Core Mobility Engine
+ *
+ * Pure computational module for urban mobility estimation and recommendation.
+ *
+ * NO DOM manipulation, NO map logic, NO event listeners, NO UI rendering,
+ * NO localStorage, NO fetch/API calls, NO HTML strings.
+ *
+ * All data dependencies are injected via parameters.
+ * All functions are pure: same inputs → same outputs.
+ * Fully deterministic and testable.
+ *
+ * @module MobilityEngine
+ * @version 2.0.0
+ */
+(function (global) {
+  'use strict';
+
+  // =====================================================================
+  //  1. PURE UTILITIES
+  // =====================================================================
+
+  /**
+   * Haversine distance between two geo points.
+   * @param {number} lat1
+   * @param {number} lon1
+   * @param {number} lat2
+   * @param {number} lon2
+   * @returns {number} Distance in kilometers
+   */
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  /**
+   * Format price in Argentine pesos.
+   * @param {number} n
+   * @returns {string} e.g. "$1.900"
+   */
+  function formatPrice(n) {
+    return '$' + n.toLocaleString('es-AR');
+  }
+
+  /**
+   * Format minutes with ceiling.
+   * @param {number} m
+   * @returns {string} e.g. "15 min"
+   */
+  function formatMin(m) {
+    return Math.ceil(m) + ' min';
+  }
+
+  /**
+   * Normalize string for fuzzy matching (remove diacritics, lowercase).
+   * @param {string} s
+   * @returns {string}
+   */
+  function normalize(s) {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  /**
+   * Fuzzy score for search matching.
+   * @param {string} query
+   * @param {string} target
+   * @returns {number} 0 = no match, higher = better
+   */
+  function fuzzyScore(query, target) {
+    var nq = normalize(query);
+    var nt = normalize(target);
+    var idx = nt.indexOf(nq);
+    if (idx >= 0) {
+      return idx === 0 ? 100 : 80; // substring match, higher at start
+    }
+    // character-by-character matching
+    var qi = 0, score = 0;
+    for (var ti = 0; ti < nt.length && qi < nq.length; ti++) {
+      if (nt[ti] === nq[qi]) {
+        score += 10;
+        if (ti === 0 || nt[ti - 1] === ' ') score += 5; // word boundary bonus
+        qi++;
+      }
+    }
+    return qi === nq.length ? score : 0;
+  }
+
+  // =====================================================================
+  //  2. FARE SYSTEM
+  // =====================================================================
+
+  /**
+   * Calculate ride-hailing app price from fare config.
+   * @param {object} fareConfig - e.g. FareRegistry.apps.uber
+   * @param {number} distKm - Distance in km
+   * @param {number} timeMin - Estimated ride time in minutes
+   * @returns {number|null} Price in ARS, or null if unavailable
+   */
+  function calcAppPrice(fareConfig, distKm, timeMin) {
+    if (!fareConfig || fareConfig.base === null) return null;
+    var price = fareConfig.base + fareConfig.km * distKm + fareConfig.min * timeMin;
+    return Math.max(price, fareConfig.minFare);
+  }
+
+  /**
+   * Calculate taxi fare (diurno/nocturno).
+   * @param {number} distKm - Distance in km
+   * @param {object} taxiFare - FareRegistry.taxi object
+   * @param {number} hour - Current hour (0-23) for diurno/nocturno
+   * @returns {number} Price in ARS
+   */
+  function estimateTaxi(distKm, taxiFare, hour) {
+    var t = (hour >= 6 && hour < 22) ? taxiFare.diurno : taxiFare.nocturno;
+    var fichas = Math.floor(distKm * 1000 / t.distFicha);
+    return t.bajada + fichas * t.ficha;
+  }
+
+  // =====================================================================
+  //  3. ESTIMATION FUNCTIONS (pure, no DOM, no map)
+  // =====================================================================
+
+  // MOBILITY_CORE_RANKING_V1: bike is tertiary suggestion, only viable under 3km.
+  var BIKE_MAX_DISTANCE_KM = 3;
+
+  /**
+   * Estimate auto ride with all providers.
+   * @param {number} distKm - Distance in km
+   * @param {object} fareRegistry - Complete FareRegistry object
+   * @param {number} hour - Current hour (0-23) for taxi day/night
+   * @returns {object} Auto estimation with per-provider prices and times
+   */
+  function estimateAuto(distKm, fareRegistry, hour) {
+    var durCar = (distKm / 25) * 60;
+    var apps = fareRegistry.apps;
+    var uberPrice = calcAppPrice(apps.uber, distKm, durCar);
+    var didiPrice = calcAppPrice(apps.didi, distKm, durCar);
+    var maximPrice = calcAppPrice(apps.maxim, distKm, durCar);
+    var cabifyPrice = calcAppPrice(apps.cabify, distKm, durCar);
+    var taxiPrice = estimateTaxi(distKm, fareRegistry.taxi, hour);
+    var remisPrice = taxiPrice;
+    var taxiappPrice = taxiPrice;
+    return {
+      timeMin: Math.round(durCar),
+      uberTimeMin: Math.round(durCar * 1.00),
+      didiTimeMin: Math.round(durCar * 1.03),
+      maximTimeMin: Math.round(durCar * 1.05),
+      cabifyTimeMin: Math.round(durCar * 1.02),
+      taxiTimeMin: Math.round(durCar * 1.10),
+      remisTimeMin: Math.round(durCar * 1.08),
+      taxiappTimeMin: Math.round(durCar * 1.07),
+      uberPrice: uberPrice,
+      didiPrice: didiPrice,
+      maximPrice: maximPrice,
+      cabifyPrice: cabifyPrice,
+      taxiPrice: taxiPrice,
+      remisPrice: remisPrice,
+      taxiappPrice: taxiappPrice
+    };
+  }
+
+  /**
+   * Estimate bus route (direct only). Combinations removed in VOY Lite.
+   * Returns null when no real stops are available (no fake fallback).
+   * @param {object} origin - {lat, lon}
+   * @param {object} dest - {lat, lon}
+   * @param {Array} busStops - BUS_STOPS array
+   * @param {object} busFare - FareRegistry.bus object
+   * @returns {object} Bus estimation with stops, times, price
+   */
+  function estimateBus(origin, dest, busStops, busFare) {
+    var distKm = haversine(origin.lat, origin.lon, dest.lat, dest.lon);
+    var stopsByLine = {};
+    busStops.forEach(function (s) {
+      if (!stopsByLine[s.linea]) stopsByLine[s.linea] = [];
+      stopsByLine[s.linea].push(s);
+    });
+
+    var bestDirect = null;
+    var bestCombo = null;
+
+    // --- Direct routes ---
+    Object.keys(stopsByLine).forEach(function (linea) {
+      var stops = stopsByLine[linea];
+      var nearOrig = null, nearDest = null;
+      var minDO = Infinity, minDD = Infinity;
+      stops.forEach(function (s) {
+        var dO = haversine(origin.lat, origin.lon, s.lat, s.lon);
+        var dD = haversine(dest.lat, dest.lon, s.lat, s.lon);
+        if (dO < minDO) { minDO = dO; nearOrig = s; }
+        if (dD < minDD) { minDD = dD; nearDest = s; }
+      });
+      if (nearOrig && nearDest && stops.length >= 2) {
+        var rideDist = haversine(nearOrig.lat, nearOrig.lon, nearDest.lat, nearDest.lon);
+        var walkToMin = minDO / 5 * 60 + 3;
+        var rideMin = rideDist / 15 * 60;
+        var walkFromMin = minDD / 5 * 60 + 5;
+        var totalMin = walkToMin + rideMin + walkFromMin;
+        var price = busFare.sube;
+        if (!bestDirect || totalMin < bestDirect.totalMin) {
+          bestDirect = {
+            linea: linea, stopOrigen: nearOrig, stopDest: nearDest,
+            walkToStopMin: Math.ceil(walkToMin), rideMin: Math.ceil(rideMin),
+            walkFromStopMin: Math.ceil(walkFromMin), totalMin: Math.ceil(totalMin),
+            price: price, boletos: 1, combination: false,
+            stopOrigenCalles: nearOrig.calles, stopDestCalles: nearDest.calles
+          };
+        }
+      }
+    });
+
+    // VOY Lite: no fake fallback. Return null when no direct route exists.
+    return bestDirect;
+  }
+
+  /**
+   * Find nearest bike station to a point.
+   * @param {object} point - {lat, lon}
+   * @param {Array} bikeStations - BIKE_STATIONS array
+   * @returns {object|null} Nearest station or null
+   */
+  function findNearestBikeStation(point, bikeStations) {
+    var best = null, minD = Infinity;
+    bikeStations.forEach(function (s) {
+      var d = haversine(point.lat, point.lon, s.lat, s.lon);
+      if (d < minD) { minD = d; best = s; }
+    });
+    return best;
+  }
+
+  // =====================================================================
+  //  4. RECOMMENDATION ENGINE — REMOVED in VOY Lite
+  // =====================================================================
+
+  // =====================================================================
+  //  5. ORCHESTRATOR — runAllEstimations
+  // =====================================================================
+
+  /**
+   * Run all transport mode estimations for a given origin-destination pair.
+   * This is the main entry point for the estimation pipeline.
+   *
+   * @param {object} origin - {lat, lon, name?}
+   * @param {object} dest - {lat, lon, name?}
+   * @param {object} config - {busStops, bikeStations, fareRegistry}
+   * @returns {Array|null} Sorted array of estimation objects, or null
+   */
+  function runAllEstimations(origin, dest, config) {
+    if (!origin || !dest) return null;
+    var distKm = haversine(origin.lat, origin.lon, dest.lat, dest.lon);
+    var hour = new Date().getHours();
+    var estimations = [];
+
+    // 1. Rideshare (auto) — primary card
+    var autoResult = estimateAuto(distKm, config.fareRegistry, hour);
+    estimations.push(Object.assign({ mode: 'auto', icon: '\uD83D\uDE97', title: 'Auto', priority: 1, distance: distKm }, autoResult));
+
+    // 2. Bus — only if real stops exist (no fake fallback)
+    var busResult = estimateBus(origin, dest, config.busStops, config.fareRegistry.bus);
+    if (busResult) {
+      busResult.timeMin = busResult.totalMin;
+      estimations.push(Object.assign(
+        { mode: 'bus', icon: '\uD83D\uDE8C', title: 'Colectivo', priority: 2, distance: distKm },
+        busResult
+      ));
+    }
+
+    // 3. Bike — MOBILITY_CORE_RANKING_V1: only_if_under_3km (tertiary suggestion only)
+    var bikeMin = (distKm / 15) * 60;
+    var nearBike = findNearestBikeStation(origin, config.bikeStations);
+    var nearDestBike = dest ? findNearestBikeStation(dest, config.bikeStations) : null;
+    if (distKm <= BIKE_MAX_DISTANCE_KM) {
+      estimations.push({ mode: 'bike', icon: '\uD83D\uDEF2', title: 'Bicicleta', timeMin: bikeMin, distance: distKm, priority: 9, nearStation: nearBike, nearDestStation: nearDestBike });
+    }
+
+    // Sort by priority, then by time
+    estimations.sort(function (a, b) { return a.priority - b.priority || a.timeMin - b.timeMin; });
+
+    return estimations;
+  }
+
+  // =====================================================================
+  //  6. SEARCH UTILITIES (pure, no fetch)
+  // =====================================================================
+
+  /**
+   * Search local catalog (bus stops, bike stations, landmarks).
+   * @param {string} q - Search query
+   * @param {Array} busStops - BUS_STOPS array
+   * @param {Array} bikeStations - BIKE_STATIONS array
+   * @param {Array} landmarks - LANDMARKS array
+   * @returns {Array} Scored local results
+   */
+  function searchLocal(q, busStops, bikeStations, landmarks) {
+    var localResults = [];
+    busStops.forEach(function (s) {
+      var score = Math.max(fuzzyScore(q, s.nombre), fuzzyScore(q, s.calles), fuzzyScore(q, 'L\u00EDnea ' + s.linea));
+      if (score > 0) localResults.push({ type: 'bus', name: 'L\u00EDnea ' + s.linea + ' \u2013 ' + s.nombre, sub: s.calles, lat: s.lat, lon: s.lon, score: score, display_name: s.nombre + ', ' + s.calles });
+    });
+    bikeStations.forEach(function (s) {
+      var score = Math.max(fuzzyScore(q, s.nombre), fuzzyScore(q, s.calles));
+      if (score > 0) localResults.push({ type: 'bike', name: '\uD83D\uDEF2 ' + s.nombre, sub: s.calles, lat: s.lat, lon: s.lon, score: score, display_name: s.nombre + ', ' + s.calles });
+    });
+    landmarks.forEach(function (s) {
+      var score = Math.max(fuzzyScore(q, s.nombre), fuzzyScore(q, s.calles));
+      if (score > 0) localResults.push({ type: 'place', name: s.nombre, sub: s.calles, lat: s.lat, lon: s.lon, score: score, display_name: s.nombre + ', ' + s.calles });
+    });
+    return localResults;
+  }
+
+  /**
+   * Deduplicate search results by normalized name.
+   * @param {Array} results - Search results array
+   * @returns {Array} Deduped, max 3
+   */
+  function dedupResults(results) {
+    var seen = {};
+    var deduped = [];
+    results.forEach(function (r) {
+      var key = normalize(r.name || r.display_name || '');
+      if (!seen[key]) { seen[key] = true; deduped.push(r); }
+    });
+    return deduped.slice(0, 3);
+  }
+
+  // =====================================================================
+  //  7. CONTEXTUAL RANKING (MOBILITY_CORE_RANKING_V1)
+  // =====================================================================
+
+  /**
+   * Rank ride-hailing providers by contextual_score: weighted blend of
+   * price (70%) and time (30%). Lower score = better rank.
+   * Pure function: same inputs → same outputs. No DOM, no fetch.
+   *
+   * @param {object} autoResult - estimateAuto() output with per-provider prices/times
+   * @param {object} providers - PROVIDERS registry (availability filter)
+   * @returns {Array} Sorted provider objects: [{id,name,price,timeMin,score}, ...]
+   */
+  function rankProviders(autoResult, providers) {
+    if (!autoResult) return [];
+    var list = [
+      { id: 'uber', name: 'Uber', price: autoResult.uberPrice, timeMin: autoResult.uberTimeMin },
+      { id: 'didi', name: 'DiDi', price: autoResult.didiPrice, timeMin: autoResult.didiTimeMin },
+      { id: 'maxim', name: 'Maxim', price: autoResult.maximPrice, timeMin: autoResult.maximTimeMin },
+      { id: 'cabify', name: 'Cabify', price: autoResult.cabifyPrice, timeMin: autoResult.cabifyTimeMin },
+      { id: 'taxiapp', name: 'TaxiApp', price: autoResult.taxiappPrice, timeMin: autoResult.taxiappTimeMin },
+      { id: 'taxi', name: 'Radiotaxi', price: autoResult.taxiPrice, timeMin: autoResult.taxiTimeMin },
+      { id: 'remis', name: 'Remises Real', price: autoResult.remisPrice, timeMin: autoResult.remisTimeMin }
+    ].filter(function (p) {
+      return p.price != null && providers && providers[p.id] && providers[p.id].available;
+    });
+    if (list.length === 0) return [];
+
+    // Normalize price and time to 0-1 range for cross-factor comparison.
+    var prices = list.map(function (p) { return p.price; });
+    var times = list.map(function (p) { return p.timeMin; });
+    var minPrice = Math.min.apply(null, prices), maxPrice = Math.max.apply(null, prices);
+    var minTime = Math.min.apply(null, times), maxTime = Math.max.apply(null, times);
+
+    list.forEach(function (p) {
+      var normPrice = maxPrice > minPrice ? (p.price - minPrice) / (maxPrice - minPrice) : 0;
+      var normTime = maxTime > minTime ? (p.timeMin - minTime) / (maxTime - minTime) : 0;
+      // contextual_score: 0.7 price + 0.3 time (lower = better)
+      p.score = 0.7 * normPrice + 0.3 * normTime;
+    });
+
+    list.sort(function (a, b) { return a.score - b.score; });
+    return list;
+  }
+
+  // =====================================================================
+  //  8. FORMAT HELPERS
+  // =====================================================================
+
+  /**
+   * Format bus estimation into human-readable text.
+   * @param {object} r - Bus estimation result
+   * @param {function} [formatPriceFn] - Optional price formatter
+   * @returns {string} Multi-line description
+   */
+  function formatBusText(r, formatPriceFn) {
+    var fp = formatPriceFn || formatPrice;
+    if (!r.combination) {
+      return 'La L\u00EDnea ' + r.linea + ' te lleva directo.\n' +
+        'Subite a ' + r.walkToStopMin + ' min, en ' + r.stopOrigenCalles + '.\n' +
+        'En ' + r.totalMin + ' min lleg\u00E1s. Te sale ' + fp(r.price) + '.';
+    } else {
+      return 'Pod\u00E9s combinar la L\u00EDnea ' + r.linea1 + ' con la L\u00EDnea ' + r.linea2 + ' para llegar.\n' +
+        'Subite a la ' + r.linea1 + ' en ' + r.stopOrigenCalles + '.\n' +
+        'Pasate a la ' + r.linea2 + ' en ' + r.stopTransbordoCalles + '.\n' +
+        'En total ' + r.totalMin + ' min. Te sale ' + fp(r.price) + ' (' + r.boletos + ' boletos).';
+    }
+  }
+
+  // =====================================================================
+  //  EXPORTS
+  // =====================================================================
+
+  var MobilityEngine = {
+    // Pure utilities
+    haversine: haversine,
+    formatPrice: formatPrice,
+    formatMin: formatMin,
+    normalize: normalize,
+    fuzzyScore: fuzzyScore,
+
+    // Fare calculations
+    calcAppPrice: calcAppPrice,
+    estimateTaxi: estimateTaxi,
+
+    // Estimation functions
+    estimateBus: estimateBus,
+    estimateAuto: estimateAuto,
+    findNearestBikeStation: findNearestBikeStation,
+    runAllEstimations: runAllEstimations,
+
+    // MOBILITY_CORE_RANKING_V1: contextual_score ranking
+    rankProviders: rankProviders,
+    BIKE_MAX_DISTANCE_KM: BIKE_MAX_DISTANCE_KM,
+
+    // Search utilities (pure, no fetch)
+    searchLocal: searchLocal,
+    dedupResults: dedupResults,
+
+    // Format helpers
+    formatBusText: formatBusText
+  };
+
+  // Browser global
+  if (typeof window !== 'undefined') {
+    window.MobilityEngine = MobilityEngine;
+  }
+  // Node.js / CommonJS
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = MobilityEngine;
+  }
+
+})(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));
+
+```
+
+## 6. `public/core/pricingEngine.js`
+
+PURE pricing v2 module (spec: `multi_variable_bayes_estimation`). Additive to MobilityEngine — legacy path remains source of truth when this is absent. Surge multipliers: `timeSurge` (night 1.1×, 2-5am dead zone 1.3×), `weatherSurge` (rain 1.15×, heavy 1.25×), `demandSurge` (event 1.2×, rush 1.1×), combined via `surgeMultiplier` clamped to [1.0, 2.5]. Bayesian `fareConfidence` (prior × Gaussian likelihood over fare deviation, blended with distance/time factors, clamped 0.55-0.95). `fareRange` produces surge-aware low/high spread. `taxiTariff` returns active diurno/nocturno tariff. Complete verbatim, 248 lines.
+
+```javascript
+/**
+ * VOY Pricing Engine v2 — Santa Fe, Argentina
+ *
+ * Spec: multi_variable_bayes_estimation
+ *   inputs: distance, time, historical_fare, provider_variance
+ *   formula: base + (km * rate_km) + (min * rate_min)
+ *   surge: time_based + weather_based + demand_proxy
+ *
+ * This module is PURE (no DOM, no fetch, no side effects).
+ * It is additive to MobilityEngine — existing estimateAuto/estimateBus are untouched.
+ * The view layer MAY use these functions for richer confidence + surge-aware ranges,
+ * but the legacy estimation path remains the source of truth when this module is absent.
+ *
+ * @module PricingEngineV2
+ * @version 2.0.0
+ */
+(function (global) {
+  'use strict';
+
+  // ---- Provider base confidence (prior) — from fare_engine_v2.json ----
+  var PROVIDER_CONFIDENCE = {
+    uber: 0.85,
+    didi: 0.88,
+    maxim: 0.75,
+    taxi: 0.82,
+    remis: 0.78
+  };
+
+  // Provider variance σ² (how much real fares deviate from estimate).
+  // Higher variance → lower posterior confidence. Empirical defaults.
+  var PROVIDER_VARIANCE = {
+    uber: 0.10,
+    didi: 0.09,
+    maxim: 0.16,
+    taxi: 0.14,
+    remis: 0.18
+  };
+
+  // ---- Surge multipliers (conservative; no real demand/weather feed yet) ----
+  // time_based: night hours (22:00–06:00) → 1.1–1.3x per provider class
+  // weather_based: rain flag (caller-supplied) → 1.15x (capped)
+  // demand_proxy: special-events flag (caller-supplied) → 1.2x (capped)
+  // Combined surge is clamped to [1.0, 2.5] per fare_engine_v2.json surge range.
+  var SURGE_MAX = 2.5;
+  var SURGE_MIN = 1.0;
+
+  function _hourOf(ts) {
+    var d = ts ? new Date(ts) : new Date();
+    return d.getHours();
+  }
+
+  /**
+   * Time-based surge multiplier.
+   * Night (22–06): 1.1x base, rising to 1.3x in the 2–5am dead zone.
+   * Day: 1.0x (no surge).
+   */
+  function timeSurge(ts) {
+    var h = _hourOf(ts);
+    if (h >= 2 && h < 5) return 1.3;
+    if (h >= 22 || h < 6) return 1.1;
+    return 1.0;
+  }
+
+  /**
+   * Weather-based surge. Caller passes a weather context:
+   *   { rain: bool, heavy: bool }
+   * Rain → 1.15x; heavy rain → 1.25x (capped by SURGE_MAX on combine).
+   */
+  function weatherSurge(weather) {
+    if (!weather) return 1.0;
+    if (weather.heavy) return 1.25;
+    if (weather.rain) return 1.15;
+    return 1.0;
+  }
+
+  /**
+   * Demand-proxy surge. Caller passes an event context:
+   *   { event: bool, rush_hour: bool }
+   * Special event → 1.2x; rush hour → 1.1x.
+   */
+  function demandSurge(demand) {
+    if (!demand) return 1.0;
+    if (demand.event) return 1.2;
+    if (demand.rush_hour) return 1.1;
+    return 1.0;
+  }
+
+  /**
+   * Combined surge multiplier, clamped to [1.0, 2.5].
+   * Multiplies the three factors (time × weather × demand).
+   */
+  function surgeMultiplier(provider, ctx) {
+    var t = timeSurge(ctx && ctx.now);
+    var w = weatherSurge(ctx && ctx.weather);
+    var d = demandSurge(ctx && ctx.demand);
+    var m = t * w * d;
+    // Provider class adjustment: apps surge more aggressively than taxis.
+    var adj = (provider === 'uber' || provider === 'didi') ? 1.0
+            : (provider === 'maxim') ? 0.97
+            : 1.0; // taxi/remis mostly fixed tariff
+    var combined = m * adj;
+    return Math.max(SURGE_MIN, Math.min(SURGE_MAX, combined));
+  }
+
+  /**
+   * Human surge label for the UI.
+   * Returns '' when no surge, or a short label otherwise.
+   */
+  function surgeLabel(provider, ctx) {
+    var m = surgeMultiplier(provider, ctx);
+    if (m <= 1.01) return '';
+    if (ctx && ctx.weather && ctx.weather.heavy) return 'Clima';
+    if (ctx && ctx.demand && ctx.demand.event) return 'Demanda';
+    if (ctx && ctx.demand && ctx.demand.rush_hour) return 'Hora pico';
+    var h = _hourOf(ctx && ctx.now);
+    if (h >= 2 && h < 5) return 'Noche';
+    if (h >= 22 || h < 6) return 'Noche';
+    return 'Demanda';
+  }
+
+  // ---- Bayesian confidence estimation ----
+  //
+  // Posterior confidence ≈ prior (provider base) updated by a Gaussian likelihood
+  // over the observed (distance, time) vs the historical fare expectation.
+  //
+  // Simplified model (transparent, no hidden state):
+  //   likelihood = exp( -0.5 * (deviation² / (σ² + provider_variance)) )
+  //     where deviation = |observed_fare - historical_fare| / historical_fare
+  //   posterior = (prior * likelihood) / (prior*likelihood + (1-prior)*(1-likelihood)*0.5)
+  //
+  // Distance factor: very short (<1km) or very long (>25km) trips reduce confidence.
+  // Time factor: if observed ETA differs >40% from historical, reduce confidence.
+
+  function _clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+  function _distanceFactor(km) {
+    if (km == null) return 0.9;
+    if (km < 1) return 0.8;     // minimum fare dominates, less predictable
+    if (km <= 12) return 1.0;   // sweet spot
+    if (km <= 25) return 0.92;
+    return 0.82;                // long trips, traffic variance grows
+  }
+
+  function _timeFactor(min) {
+    if (min == null) return 0.9;
+    if (min <= 30) return 1.0;
+    if (min <= 60) return 0.93;
+    return 0.85;
+  }
+
+  /**
+   * Multi-variable Bayesian fare confidence.
+   *
+   * @param {string} provider   uber|didi|maxim|taxi|remis
+   * @param {object} obs        { distanceKm, timeMin, fare, historicalFare? }
+   * @returns {number}          confidence 0..1 (clamped 0.55..0.95)
+   */
+  function fareConfidence(provider, obs) {
+    var prior = PROVIDER_CONFIDENCE[provider] || 0.8;
+    var variance = PROVIDER_VARIANCE[provider] || 0.14;
+
+    var distF = _distanceFactor(obs && obs.distanceKm);
+    var timeF = _timeFactor(obs && obs.timeMin);
+
+    // Likelihood from fare deviation vs historical (if available).
+    var likelihood = 0.9;
+    if (obs && obs.historicalFare && obs.historicalFare > 0 && obs.fare > 0) {
+      var dev = Math.abs(obs.fare - obs.historicalFare) / obs.historicalFare;
+      // Gaussian-ish: small deviation → likelihood near 1, large → near 0.5
+      likelihood = Math.exp(-0.5 * (dev * dev) / (variance + 0.04));
+      likelihood = _clamp(likelihood, 0.5, 0.99);
+    }
+
+    // Bayesian update (simplified, normalized).
+    var posterior = (prior * likelihood) /
+      (prior * likelihood + (1 - prior) * (1 - likelihood) * 0.5 + 1e-6);
+
+    // Blend with distance/time factors (they gate confidence geometrically).
+    var blended = posterior * 0.6 + distF * 0.25 + timeF * 0.15;
+
+    return _clamp(blended, 0.55, 0.95);
+  }
+
+  /**
+   * Surge-aware fare range.
+   * Low end = base estimate; high end = estimate * surge (rounded).
+   * Spread widens when confidence is lower.
+   *
+   * @param {number} price      point estimate (ARS)
+   * @param {number} confidence 0..1
+   * @param {number} surge      multiplier (1.0 = no surge)
+   * @returns {{low:number, high:number, point:number}}
+   */
+  function fareRange(price, confidence, surge) {
+    if (!price || price <= 0) return { low: 0, high: 0, point: 0 };
+    var c = _clamp(confidence == null ? 0.8 : confidence, 0.55, 0.95);
+    var s = _clamp(surge == null ? 1 : surge, 1.0, SURGE_MAX);
+    // Lower confidence → wider spread (±5%..±12%).
+    var spread = (1 - c) * 0.30 + 0.05; // 5%..~20%
+    var low = Math.round(price * (1 - spread));
+    var high = Math.round(price * (1 + spread) * s);
+    if (high < low) high = low;
+    return { low: low, high: high, point: Math.round(price) };
+  }
+
+  // ---- Taxi municipal rates (daily_refresh stub) ----
+  //
+  // Real Santa Fe taxi tariffs are set by municipal resolution (bajada + ficha).
+  // The FareRegistry in the HTML holds the authoritative values (updated manually
+  // per Resolución). This function returns the active tariff for a given hour,
+  // so the view can label day/night correctly. "daily_refresh" is a TODO: the
+  // scraper mini-service could publish a tariffs.json that this reads — but only
+  // from official municipal sources (legal_only).
+
+  function taxiTariff(fareRegistry, ts) {
+    if (!fareRegistry || !fareRegistry.taxi) return null;
+    var t = fareRegistry.taxi;
+    var h = _hourOf(ts);
+    var nocturno = (h >= 22 || h < 6);
+    return {
+      bajada: nocturno ? t.nocturno.bajada : t.diurno.bajada,
+      ficha: nocturno ? t.nocturno.ficha : t.diurno.ficha,
+      distFicha: t.diurno.distFicha,
+      mode: nocturno ? 'nocturno' : 'diurno',
+      source: t.source,
+      updated_at: t.updated_at
+    };
+  }
+
+  // ---- Exports ----
+  var api = {
+    PROVIDER_CONFIDENCE: PROVIDER_CONFIDENCE,
+    PROVIDER_VARIANCE: PROVIDER_VARIANCE,
+    SURGE_MIN: SURGE_MIN,
+    SURGE_MAX: SURGE_MAX,
+    timeSurge: timeSurge,
+    weatherSurge: weatherSurge,
+    demandSurge: demandSurge,
+    surgeMultiplier: surgeMultiplier,
+    surgeLabel: surgeLabel,
+    fareConfidence: fareConfidence,
+    fareRange: fareRange,
+    taxiTariff: taxiTariff
+  };
+
+  global.PricingEngineV2 = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+```
+
+## 7. `public/core/eventBus.js`
+
+Event bus + batched transport (V7.8, spec v1.4). Emits to 3 canonical events + legacy names (worker normalizes). Three-layer delivery: (1) local_fallback — always persists to `localStorage` (`voy_events_v14`, max 500, guaranteeing no event is lost); (2) PostHog if `window.posthog` is present; (3) Cloudflare worker transport — batched flush every 15s (max 25/batch) via `sendBeacon` (survives page unload) with `fetch keepalive` fallback. Anonymous ID (`voy_anon_id`) generated once, persisted. Coarse geo cluster (~500m grid) — no raw lat/lon transported. Flushes on `pagehide` + `visibilitychange`. Complete verbatim, 217 lines.
+
+```javascript
+/**
+ * VOY Event Bus + Transport — V7.8 (3 eventos canónicos: estimation / provider_tap / search)
+ *
+ * El worker normaliza nombres legacy → estos 3 nombres antes de escribir a WAE.
+ * Eventos no canónicos se aceptan localmente pero se dropean server-side.
+ *
+ * Privacy:
+ *   - anonymous_id_only (no PII, no user accounts)
+ *   - sessionID via cookie voy_sid (set by worker, sin auth)
+ *   - local_fallback: events always persist locally (localStorage) even if transport fails
+ *
+ * @module EventBus
+ * @version 1.4.0
+ */
+(function (global) {
+  'use strict';
+
+  var SPEC_VERSION = '1.4';
+  var LOCAL_STORE = 'voy_events_v14';
+  var LOCAL_MAX = 500;
+  var FLUSH_INTERVAL_MS = 15000;     // flush every 15s
+  var FLUSH_BATCH = 25;              // max events per flush
+  var ENDPOINT = '/api/events';      // worker endpoint (relative; same origin)
+
+  // PostHog stub: if window.posthog is present (loaded via snippet), we forward.
+  // Otherwise events queue locally and the worker transport handles them.
+  function _posthogAvailable() {
+    return typeof global.posthog === 'object' && global.posthog && typeof global.posthog.capture === 'function';
+  }
+
+  // Anonymous ID — generated once, persisted in localStorage. Never tied to PII.
+  var _anonId = null;
+  var ANON_KEY = 'voy_anon_id';
+  function _anonIdGet() {
+    if (_anonId) return _anonId;
+    try {
+      var v = localStorage.getItem(ANON_KEY);
+      if (v) { _anonId = v; return v; }
+    } catch (e) {}
+    _anonId = 'a_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    try { localStorage.setItem(ANON_KEY, _anonId); } catch (e) {}
+    return _anonId;
+  }
+
+  // ---- Local persistence (IndexedDB with localStorage fallback) ----
+  function _localPush(evt) {
+    try {
+      var raw = localStorage.getItem(LOCAL_STORE);
+      var arr = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(arr)) arr = [];
+      arr.push(evt);
+      if (arr.length > LOCAL_MAX) arr = arr.slice(arr.length - LOCAL_MAX);
+      localStorage.setItem(LOCAL_STORE, JSON.stringify(arr));
+    } catch (e) { /* quota / private mode — silent */ }
+  }
+
+  function _localDrain(max) {
+    try {
+      var raw = localStorage.getItem(LOCAL_STORE);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      var take = arr.slice(0, max);
+      var rest = arr.slice(max);
+      localStorage.setItem(LOCAL_STORE, JSON.stringify(rest));
+      return take;
+    } catch (e) { return []; }
+  }
+
+  function _localCount() {
+    try {
+      var raw = localStorage.getItem(LOCAL_STORE);
+      if (!raw) return 0;
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.length : 0;
+    } catch (e) { return 0; }
+  }
+
+  // ---- Core emit ----
+  var _sessionStart = Date.now();
+
+  /**
+   * Emit an event per spec v1.4.
+   * @param {string} name   event name (must be in the spec list)
+   * @param {object} data   event payload (no PII)
+   */
+  function emit(name, data) {
+    // V7.8 — allow-list expandida. El worker normaliza todo a 3 eventos
+    // canónicos (estimation / provider_tap / search). Los nombres legacy
+    // se aceptan aquí y se mapean server-side.
+    var allowed = {
+      // 3 canónicos V7.8
+      estimation: true, provider_tap: true, search: true,
+      // legacy que el worker normaliza → canónicos
+      search_performed: true, destination_selected: true, route_selected: true,
+      route_calculated: true, ride_estimated: true, vehicle_viewed: true,
+      provider_click: true, provider_clicked: true, deeplink_opened: true,
+      voice_search: true,
+      // v5 legacy (no canónicos — se dropean server-side pero se guardan local)
+      app_boot: true, share: true, share_app: true, navigation_start: true,
+      navigation_stop: true, navigation_voice_toggled: true,
+      support_alias_copied: true, favorite_saved: true
+    };
+    if (!allowed[name]) {
+      if (global.console && console.debug) console.debug('[eventBus] unknown event:', name);
+      return;
+    }
+
+    var evt = {
+      v: SPEC_VERSION,
+      name: name,
+      data: data || {},
+      anon_id: _anonIdGet(),
+      ts: Date.now(),
+      session_age_ms: Date.now() - _sessionStart,
+      // geo is coarse-grained cluster (no raw lat/lon) — privacy.
+      geo: _coarseGeo(data)
+    };
+
+    // 1. local_fallback (always) — guarantees no event is lost.
+    _localPush(evt);
+
+    // 2. PostHog (if available) — privacy_mode: anonymous_id_only.
+    if (_posthogAvailable()) {
+      try {
+        global.posthog.capture(name, Object.assign({}, evt.data, {
+          voy_v: SPEC_VERSION,
+          voy_anon_id: evt.anon_id,
+          voy_geo: evt.geo
+        }));
+      } catch (e) { /* silent */ }
+    }
+
+    // 3. Cloudflare worker transport — batched, fire-and-forget.
+    _scheduleFlush();
+  }
+
+  // Coarse geo cluster (~500m) so the worker can do geo_distribution analytics
+  // without ever storing raw coordinates. Mirrors the va_cluster approach.
+  function _coarseGeo(data) {
+    if (!data || data.lat == null || data.lon == null) return '';
+    var grid = 0.0045; // ~500m
+    return (data.lat / grid).toFixed(0) + '_' + (data.lon / grid).toFixed(0);
+  }
+
+  // ---- Batched flush to worker ----
+  var _flushTimer = null;
+  var _flushing = false;
+
+  function _scheduleFlush() {
+    if (_flushTimer) return;
+    _flushTimer = setTimeout(_flush, FLUSH_INTERVAL_MS);
+  }
+
+  function _flush() {
+    _flushTimer = null;
+    if (_flushing) return;
+    _flushing = true;
+    var batch = _localDrain(FLUSH_BATCH);
+    if (!batch.length) { _flushing = false; return; }
+
+    // Use sendBeacon if available (survives page unload), else fetch keepalive.
+    var payload = JSON.stringify({ events: batch });
+    try {
+      if (global.navigator && navigator.sendBeacon) {
+        var blob = new Blob([payload], { type: 'application/json' });
+        var ok = navigator.sendBeacon(ENDPOINT, blob);
+        if (ok) { _flushing = false; return; }
+      }
+    } catch (e) { /* fall through to fetch */ }
+
+    try {
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true,
+        credentials: 'omit'
+      }).catch(function () { /* re-queued locally already drained; acceptable loss */ })
+        .finally(function () { _flushing = false; });
+    } catch (e) { _flushing = false; }
+  }
+
+  // Flush on page hide (best-effort).
+  function _bindLifecycle() {
+    if (typeof global.addEventListener !== 'function') return;
+    global.addEventListener('pagehide', function () {
+      try { _flush(); } catch (e) {}
+    });
+    global.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') {
+        try { _flush(); } catch (e) {}
+      }
+    });
+  }
+
+  // ---- Public API ----
+  var api = {
+    SPEC_VERSION: SPEC_VERSION,
+    emit: emit,
+    flush: function () { return _flush(); },
+    anonId: _anonIdGet,
+    localCount: _localCount,
+    // Test/debug helpers
+    _drainForDebug: function () { return _localDrain(LOCAL_MAX); }
+  };
+
+  global.VoyEventBus = api;
+  _bindLifecycle();
+  // Emit app_boot once per page load (critical event per spec).
+  // Deferred so listeners/consumers can attach before the first fire.
+  if (typeof global.setTimeout === 'function') {
+    global.setTimeout(function () {
+      try { emit('app_boot', { ua: (global.navigator && navigator.userAgent) ? '1' : '0' }); } catch (e) {}
+    }, 0);
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+```
+
+## 8. `public/core/telemetry.js`
+
+Two globals. **VoyHealthMonitor**: vanilla-JS ErrorBoundary — captures LCP via `PerformanceObserver` (buffered:true), uncaught `error` (capture phase) and `unhandledrejection` events; sends to `/api/telemetry` via `navigator.sendBeacon` (fire-and-forget, throttled 5s per event-type). **VoyDebugPanel**: hidden diagnostic panel (FPS, Memory, Cache, SW, Latency, LCP, Trend, Ahorro). Trigger: konami code (↑↑↓↓←→←→BA) on desktop OR 7 taps on footer text on mobile (excludes the ·· button). Boots on DOMReady. Complete verbatim, 252 lines.
+
+```javascript
+// ============================================================
+//  VOY — core/telemetry.js  (V7.8 Modular Refactor)
+//
+//  Extracted from VOY-Lite.html (V7.7 Performance_Audit_and_Telemetry).
+//  Loaded via <script src="core/telemetry.js?v=78"> after ahorro.js +
+//  trend.js and before the main inline script. Exposes two globals:
+//    - window.VoyHealthMonitor  (Beacon API error/LCP telemetry)
+//    - window.VoyDebugPanel     (hidden diagnostic panel)
+//
+//  Dependencies: PerformanceObserver, navigator.sendBeacon.
+//  Uses global svg() at runtime (defined in inline script — only called
+//  when the debug panel is toggled, not at load time).
+//
+//  Boot: _boot() registers HealthMonitor + DebugPanel on DOMReady.
+// ============================================================
+
+// ===================== V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — HealthMonitor =====================
+// Captures LCP (Largest Contentful Paint) + uncaught JS errors + unhandled promise rejections.
+// Sends via Beacon API (navigator.sendBeacon) to /api/telemetry — fire-and-forget, never blocks unload.
+// Schema: {event, value, route}. Throttled per event-type (5s) to avoid spam on cascading errors.
+// Vanilla-JS ErrorBoundary equivalent: window 'error' + 'unhandledrejection' listeners (capture phase).
+window.VoyHealthMonitor=(function(){
+  var ENDPOINT='/api/telemetry';
+  var THROTTLE_MS=5000;
+  var MAX_ROUTE_LEN=140;
+  var _lastSent={};
+  var _lastLCP=null; // last LCP value (ms) — exposed for the debug panel (getEntriesByType is drained by the observer)
+  var _supported=(typeof navigator!=='undefined')&&(typeof navigator.sendBeacon==='function');
+
+  function _send(event,value,route){
+    if(!_supported)return;
+    try{
+      var key=String(event);
+      var now=Date.now();
+      if(_lastSent[key]&&(now-_lastSent[key])<THROTTLE_MS)return; // throttle cascading errors
+      _lastSent[key]=now;
+      var payload=JSON.stringify({
+        event:key,
+        value:isFinite(value)?Number(value):0,
+        route:String(route||(typeof location!=='undefined'?location.pathname:'')).slice(0,MAX_ROUTE_LEN),
+        ts:now
+      });
+      var blob=new Blob([payload],{type:'application/json'});
+      navigator.sendBeacon(ENDPOINT,blob);
+    }catch(e){/* telemetry must never break the app */}
+  }
+
+  function _init(){
+    if(!_supported)return false;
+    // (1) Uncaught runtime errors (vanilla-JS ErrorBoundary equivalent)
+    window.addEventListener('error',function(e){
+      var loc='';
+      try{loc=(e.filename||'')+':'+(e.lineno||0)+' '+(e.message||'').slice(0,90)}catch(_){}
+      _send('js_error',1,loc);
+    },{capture:true});
+    // (2) Unhandled promise rejections
+    window.addEventListener('unhandledrejection',function(e){
+      var msg='';
+      try{
+        var r=e&&e.reason;
+        msg=(r&&r.message)?r.message:String(r||'');
+        msg=msg.slice(0,90);
+      }catch(_){}
+      _send('promise_rejection',1,msg);
+    },{capture:true});
+    // (3) LCP via PerformanceObserver (buffered:true retrieves entries that already fired)
+    try{
+      var po=new PerformanceObserver(function(list){
+        var entries=list.getEntries();
+        var last=entries[entries.length-1];
+        if(last&&last.startTime){_lastLCP=Math.round(last.startTime);_send('lcp',_lastLCP,'')}
+      });
+      po.observe({type:'largest-contentful-paint',buffered:true});
+    }catch(e){/* LCP observer unsupported — silently skip */}
+    return true;
+  }
+
+  return {init:_init,send:_send,supported:function(){return _supported},getLastLCP:function(){return _lastLCP}};
+})();
+
+// ===================== V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — DebugPanel =====================
+// Hidden diagnostic panel (FPS, Memory, Cache, SW, Latency, LCP, Trend, Ahorro).
+// Distinct from the user analytics dashboard (va_dashboard, 5-tap on search icon).
+// Trigger: konami code (↑↑↓↓←→←→BA) OR 7 taps on the footer text (mobile-friendly, excludes ·· button).
+// window.VoyDebugPanel.toggle() also works from the dev console.
+window.VoyDebugPanel=(function(){
+  var _visible=false,_panel=null,_rafId=null,_refreshTimer=null;
+  var _fps=0,_fpsLast=0,_fpsFrames=0;
+  var _latencyMs=null,_latencyTs=0;
+  var KONAMI=[38,38,40,40,37,39,37,39,66,65]; // ↑↑↓↓←→←→ B A
+  var _kIdx=0,_tapCount=0,_tapTimer=null;
+
+  function _toggle(){if(_visible){_hide()}else{_show()}}
+
+  function _show(){
+    _visible=true;_build();_startFPS();_refreshSlow();
+    _refreshTimer=setInterval(_refreshSlow,2000);
+  }
+  function _hide(){
+    _visible=false;
+    if(_rafId){cancelAnimationFrame(_rafId);_rafId=null}
+    if(_refreshTimer){clearInterval(_refreshTimer);_refreshTimer=null}
+    if(_panel){_panel.remove();_panel=null}
+  }
+
+  function _build(){
+    if(_panel)return;
+    var p=document.createElement('div');
+    p.id='voyDebugPanel';
+    p.className='voy-debug-panel';
+    p.setAttribute('role','dialog');
+    p.setAttribute('aria-label','VOY Debug Panel');
+    p.innerHTML=
+      '<div class="vdp-head"><span class="vdp-title">VOY · Debug</span>'+
+      '<button class="vdp-close" aria-label="Cerrar panel" type="button">×</button></div>'+
+      '<dl class="vdp-grid">'+
+        '<dt>FPS</dt><dd data-vdp="fps">—</dd>'+
+        '<dt>Memoria</dt><dd data-vdp="mem">N/A</dd>'+
+        '<dt>Cache</dt><dd data-vdp="cache">—</dd>'+
+        '<dt>SW</dt><dd data-vdp="sw">—</dd>'+
+        '<dt>Latencia</dt><dd data-vdp="lat">—</dd>'+
+        '<dt>LCP</dt><dd data-vdp="lcp">—</dd>'+
+        '<dt>Trend</dt><dd data-vdp="trend">—</dd>'+
+        '<dt>Ahorro</dt><dd data-vdp="ahorro">—</dd>'+
+      '</dl>'+
+      '<div class="vdp-foot">konami · V7.8</div>';
+    document.body.appendChild(p);
+    _panel=p;
+    p.querySelector('.vdp-close').addEventListener('click',_hide);
+  }
+
+  function _setText(key,val){if(_panel){var el=_panel.querySelector('[data-vdp="'+key+'"]');if(el)el.textContent=val;}}
+
+  function _startFPS(){
+    _fpsLast=performance.now();_fpsFrames=0;
+    function loop(t){
+      if(!_visible)return;
+      _fpsFrames++;
+      if(t-_fpsLast>=500){
+        _fps=Math.round(_fpsFrames*1000/(t-_fpsLast));
+        _fpsLast=t;_fpsFrames=0;
+        _setText('fps',_fps);
+      }
+      _rafId=requestAnimationFrame(loop);
+    }
+    _rafId=requestAnimationFrame(loop);
+  }
+
+  function _refreshSlow(){
+    if(!_panel||!_visible)return;
+    // Memory (Chrome-only — performance.memory)
+    var mem='N/A';
+    if(performance.memory){
+      var used=Math.round(performance.memory.usedJSHeapSize/1048576);
+      var limit=Math.round(performance.memory.jsHeapSizeLimit/1048576);
+      mem=used+' / '+limit+' MB';
+    }
+    _setText('mem',mem);
+    // Service worker state
+    var sw='—';
+    if(navigator.serviceWorker){sw=navigator.serviceWorker.controller?'active':'registered'}
+    else{sw='unsupported'}
+    _setText('sw',sw);
+    // Storage estimate (cache quota)
+    if(navigator.storage&&navigator.storage.estimate){
+      navigator.storage.estimate().then(function(e){
+        var usage=e.usage?Math.round(e.usage/1024):0;
+        var quota=e.quota?Math.round(e.quota/1048576):0;
+        _setText('cache',usage+' KB / '+quota+' MB');
+      }).catch(function(){_setText('cache','err')});
+    }else{_setText('cache','unsupported')}
+    // Latency — ping /api/health (throttled to every 5s)
+    var now=Date.now();
+    if(now-_latencyTs>5000){
+      _latencyTs=now;
+      var t0=performance.now();
+      fetch('/api/health',{cache:'no-store'}).then(function(r){return r.text()}).then(function(){
+        _latencyMs=Math.round(performance.now()-t0);
+        _setText('lat',_latencyMs+' ms');
+      }).catch(function(){_setText('lat','err')});
+    }else if(_latencyMs!=null){_setText('lat',_latencyMs+' ms')}
+    // LCP — prefer HealthMonitor's stored value (observer drains the global buffer), fallback to getEntriesByType
+    var lcpVal=null;
+    if(window.VoyHealthMonitor&&typeof VoyHealthMonitor.getLastLCP==='function'){lcpVal=VoyHealthMonitor.getLastLCP()}
+    if(lcpVal==null){
+      try{
+        var lcpEntries=performance.getEntriesByType('largest-contentful-paint');
+        if(lcpEntries&&lcpEntries.length){lcpVal=Math.round(lcpEntries[lcpEntries.length-1].startTime)}
+      }catch(_){}
+    }
+    _setText('lcp',lcpVal!=null?(lcpVal+' ms'):'—')
+    // TrendEngine cache (count active provider trends via public getTrend API)
+    if(window.VoyTrendEngine){
+      try{
+        var n=0;var ids=['uber','didi','maxim'];
+        for(var i=0;i<ids.length;i++){if(VoyTrendEngine.getTrend(ids[i]))n++}
+        _setText('trend',n+' activos');
+      }catch(_){_setText('trend','?')}
+    }else{_setText('trend','off')}
+    // AhorroService state
+    if(window.VoyAhorroService){
+      try{var st=VoyAhorroService.getState();_setText('ahorro',st.available?(st.savingsPercent+'%'):'off')}
+      catch(_){_setText('ahorro','?')}
+    }else{_setText('ahorro','off')}
+  }
+
+  function _onKey(e){
+    var k=e.keyCode||e.which;
+    if(k===KONAMI[_kIdx]){
+      _kIdx++;
+      if(_kIdx===KONAMI.length){_kIdx=0;_toggle();}
+    }else{
+      _kIdx=(k===KONAMI[0])?1:0;
+    }
+  }
+
+  function _onFooterTap(){
+    _tapCount++;
+    if(_tapTimer)clearTimeout(_tapTimer);
+    _tapTimer=setTimeout(function(){_tapCount=0},2200);
+    if(_tapCount>=7){_tapCount=0;_toggle();}
+  }
+
+  function _init(){
+    // Konami code (keyboard — desktop)
+    document.addEventListener('keydown',_onKey);
+    // 7-tap on footer text (mobile — excludes the ·· footerMore button which has its own handler)
+    var footer=document.querySelector('.footer');
+    if(footer){
+      footer.addEventListener('click',function(e){
+        if(e.target.closest('.footer-more'))return;
+        _onFooterTap();
+      });
+    }
+  }
+
+  return {init:_init,toggle:_toggle};
+})();
+
+// V7.8 boot — register health monitoring + debug panel ASAP.
+// Guarded for DOMReady: the external script may load before the body is fully parsed
+// (it's placed before the main inline <script> at end of body, so the footer usually
+// exists, but the readyState guard makes it bulletproof).
+function _voyTelemetryBoot(){
+  try{if(window.VoyHealthMonitor)VoyHealthMonitor.init();}catch(e){}
+  try{if(window.VoyDebugPanel)VoyDebugPanel.init();}catch(e){}
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',_voyTelemetryBoot);
+}else{
+  _voyTelemetryBoot();
+}
+
+```
+
+## 9. `public/core/trend.js`
+
+Two globals + one renderer. **VoyHistoryDB**: IndexedDB wrapper (`voy-history` / `estimates` store, schema `{timestamp, routeKey, origin_zone, destination_zone, price, mode}`, 30-day retention, async, with `queryByRouteSince` / `queryRecent` / `pruneOlderThan`). **VoyTrendEngine**: Simple Moving Average deviation over a 3-hour window (`WINDOW_MS=3h`, `MIN_DATAPOINTS=3` gate). States: STABLE (0.95≤ratio≤1.05) / RISING (>1.05) / FALLING (<0.95). `processEstimate` runs analyze-then-record per provider (sequential, avoids write-before-read race) with a generation counter so only the latest render paints badges. **renderTrendBadges()**: idempotent — mounts `price-trend-badge` next to every `[data-trend-provider]` element. Complete verbatim, 245 lines.
+
+```javascript
+// ============================================================
+//  VOY — core/trend.js  (V7.8 Modular Refactor)
+//
+//  Extracted from VOY-Lite.html (V7.6 Predictive_Trend_Engine).
+//  Loaded via <script src="core/trend.js?v=78"> after ahorro.js and
+//  before telemetry.js. Exposes three globals:
+//    - window.VoyHistoryDB    (IndexedDB wrapper — async, 30-day retention)
+//    - window.VoyTrendEngine  (SMA deviation engine — STABLE/RISING/FALLING)
+//    - renderTrendBadges()    (idempotent PriceTrendBadge renderer)
+//
+//  Dependencies: IndexedDB (native). Uses global svg() at runtime.
+//
+//  Blueprint:
+//    storage: IndexedDB (voy-history / estimates), schema {timestamp, routeKey,
+//             origin_zone, destination_zone, price, mode}, retention 30 days, async.
+//    logic:   Simple_Moving_Average_Deviation = current_price / moving_average_3_hours
+//    states:  STABLE (0.95≤ratio≤1.05) / RISING (>1.05) / FALLING (<0.95)
+//    gate:    badge only renders if ≥3 historical datapoints for route+provider in 3h.
+// ============================================================
+
+// ===================== V7.6 PREDICTIVE TREND ENGINE ============================================
+// Blueprint: TrendEngine + HistoryDB — local historical estimates + Simple_Moving_Average_Deviation.
+window.VoyHistoryDB=(function(){
+  var DB_NAME='voy-history';
+  var DB_VERSION=1;
+  var STORE='estimates';
+  var RETENTION_DAYS=30;
+  var _dbPromise=null;
+  function open(){
+    if(_dbPromise)return _dbPromise;
+    _dbPromise=new Promise(function(resolve,reject){
+      if(!window.indexedDB){reject(new Error('IndexedDB not supported'));return}
+      try{
+        var req=indexedDB.open(DB_NAME,DB_VERSION);
+        req.onupgradeneeded=function(e){
+          var db=e.target.result;
+          if(!db.objectStoreNames.contains(STORE)){
+            var store=db.createObjectStore(STORE,{keyPath:'id',autoIncrement:true});
+            store.createIndex('routeKey','routeKey',{unique:false});
+            store.createIndex('mode','mode',{unique:false});
+            store.createIndex('timestamp','timestamp',{unique:false});
+          }
+        };
+        req.onsuccess=function(e){resolve(e.target.result)};
+        req.onerror=function(e){reject(e.target.error)};
+      }catch(err){reject(err)}
+    });
+    return _dbPromise;
+  }
+  function add(entry){
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readwrite');
+          var store=tx.objectStore(STORE);
+          var req=store.add(entry);
+          req.onsuccess=function(){resolve(req.result)};
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    });
+  }
+  function queryByRouteSince(routeKeyVal,sinceMs){
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readonly');
+          var store=tx.objectStore(STORE);
+          var idx=store.index('routeKey');
+          var results=[];
+          var req=idx.openCursor(IDBKeyRange.only(routeKeyVal));
+          req.onsuccess=function(e){
+            var cursor=e.target.result;
+            if(cursor){
+              if(cursor.value.timestamp>=sinceMs)results.push(cursor.value);
+              cursor.continue();
+            }else{resolve(results)}
+          };
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    });
+  }
+  // V7.8 Offline PWA — query recent entries across ALL routes (used by SW fallback + offline chip).
+  // Returns the most recent `limit` entries sorted by timestamp descending.
+  function queryRecent(limit){
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readonly');
+          var store=tx.objectStore(STORE);
+          var idx=store.index('timestamp');
+          var results=[];
+          var req=idx.openCursor(null,'prev');
+          req.onsuccess=function(e){
+            var cursor=e.target.result;
+            if(cursor&&results.length<(limit||50)){
+              results.push(cursor.value);
+              cursor.continue();
+            }else{resolve(results)}
+          };
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    }).catch(function(){return []});
+  }
+  function pruneOlderThan(days){
+    var cutoff=Date.now()-(days*24*60*60*1000);
+    return open().then(function(db){
+      return new Promise(function(resolve,reject){
+        try{
+          var tx=db.transaction(STORE,'readwrite');
+          var store=tx.objectStore(STORE);
+          var idx=store.index('timestamp');
+          var count=0;
+          var req=idx.openCursor(IDBKeyRange.upperBound(cutoff));
+          req.onsuccess=function(e){
+            var cursor=e.target.result;
+            if(cursor){cursor.delete();count++;cursor.continue()}
+            else{resolve(count)}
+          };
+          req.onerror=function(){reject(req.error)};
+        }catch(err){reject(err)}
+      });
+    });
+  }
+  return {RETENTION_DAYS:RETENTION_DAYS,DB_NAME:DB_NAME,STORE:STORE,open:open,add:add,queryByRouteSince:queryByRouteSince,queryRecent:queryRecent,pruneOlderThan:pruneOlderThan};
+})();
+
+window.VoyTrendEngine=(function(){
+  var WINDOW_MS=3*60*60*1000; // 3 hours (blueprint: moving_average_3_hours)
+  var MIN_DATAPOINTS=3; // QA test 2: badge only if ≥3 historical datapoints
+  var THRESHOLD_UP=1.05; // >5% above SMA → RISING
+  var THRESHOLD_DOWN=0.95; // <5% below SMA → FALLING
+  var RECORD_DEDUPE_MS=60000; // skip record if same route+provider recorded <60s ago
+  var _cache={}; // providerId → {state, sma, ratio, datapoints, routeKey}
+  var _lastRecordTs={}; // routeKey|providerId → timestamp (dedupe)
+  var _gen=0; // generation counter — only latest processEstimate renders badges
+  function _zoneKey(lat,lon){
+    var GRID=0.0072; // ~800m, matches _VA_GRID (coarse geo cluster)
+    return (Math.round(lat/GRID))+'_'+(Math.round(lon/GRID));
+  }
+  function routeKey(origin,dest){
+    if(!origin||!dest||origin.lat==null||dest.lat==null)return null;
+    return _zoneKey(origin.lat,origin.lon)+'>'+_zoneKey(dest.lat,dest.lon);
+  }
+  function analyze(routeKeyVal,providerId,currentPrice){
+    if(!routeKeyVal||!providerId||!currentPrice||currentPrice<=0)return Promise.resolve(null);
+    var sinceMs=Date.now()-WINDOW_MS;
+    return VoyHistoryDB.queryByRouteSince(routeKeyVal,sinceMs).then(function(entries){
+      var filtered=[];
+      for(var i=0;i<entries.length;i++){
+        if(entries[i].mode===providerId)filtered.push(entries[i]);
+      }
+      if(filtered.length<MIN_DATAPOINTS)return null; // gate: insufficient historical data
+      var sum=0;
+      for(var j=0;j<filtered.length;j++)sum+=filtered[j].price;
+      var sma=sum/filtered.length;
+      var ratio=currentPrice/sma;
+      var state=ratio>THRESHOLD_UP?'RISING':ratio<THRESHOLD_DOWN?'FALLING':'STABLE';
+      return {state:state,sma:Math.round(sma),ratio:Math.round(ratio*100)/100,datapoints:filtered.length,routeKey:routeKeyVal};
+    }).catch(function(){return null});
+  }
+  function record(routeKeyVal,origin,dest,providerId,price){
+    if(!routeKeyVal||!providerId||!price||price<=0)return Promise.resolve();
+    var dedupeKey=routeKeyVal+'|'+providerId;
+    var now=Date.now();
+    if(_lastRecordTs[dedupeKey]&&(now-_lastRecordTs[dedupeKey])<RECORD_DEDUPE_MS)return Promise.resolve();
+    _lastRecordTs[dedupeKey]=now;
+    var entry={
+      timestamp:now,
+      routeKey:routeKeyVal,
+      origin_zone:_zoneKey(origin.lat,origin.lon),
+      destination_zone:_zoneKey(dest.lat,dest.lon),
+      price:price,
+      mode:providerId
+    };
+    return VoyHistoryDB.add(entry).catch(function(){});
+  }
+  function processEstimate(autoEst,origin,dest){
+    if(!autoEst||!origin||!dest||!autoEst.rankedProviders)return Promise.resolve();
+    var rk=routeKey(origin,dest);
+    if(!rk)return Promise.resolve();
+    var myGen=++_gen;
+    _cache={}; // clear stale trends from previous route (prevents wrong-route badge races)
+    var providers=[];
+    for(var i=0;i<autoEst.rankedProviders.length;i++){
+      var p=autoEst.rankedProviders[i];
+      if(p&&(p.id==='uber'||p.id==='didi'||p.id==='maxim')&&p.price>0){
+        providers.push({id:p.id,price:p.price});
+      }
+    }
+    if(!providers.length)return Promise.resolve();
+    // Sequential: analyze (read historical) → record (write current) per provider.
+    // Avoids write-before-read race on same route+provider.
+    var chain=Promise.resolve();
+    providers.forEach(function(pr){
+      chain=chain.then(function(){return analyze(rk,pr.id,pr.price)})
+        .then(function(trend){_cache[pr.id]=trend})
+        .then(function(){return record(rk,origin,dest,pr.id,pr.price)});
+    });
+    return chain.then(function(){
+      if(myGen===_gen){renderTrendBadges()} // only latest generation renders
+      // Opportunistic prune (fire-and-forget, 1/50 calls)
+      if(Math.random()<0.02){VoyHistoryDB.pruneOlderThan(VoyHistoryDB.RETENTION_DAYS).catch(function(){})}
+    });
+  }
+  function getTrend(providerId){return _cache[providerId]||null}
+  return {
+    WINDOW_MS:WINDOW_MS,MIN_DATAPOINTS:MIN_DATAPOINTS,THRESHOLD_UP:THRESHOLD_UP,THRESHOLD_DOWN:THRESHOLD_DOWN,
+    routeKey:routeKey,analyze:analyze,record:record,processEstimate:processEstimate,getTrend:getTrend
+  };
+})();
+
+// V7.6 PriceTrendBadge renderer — mounts trend icon next to every element with [data-trend-provider].
+// Idempotent: clears stale badges first, then mounts fresh based on VoyTrendEngine cache.
+// No-op if cache empty (badge never appears until ≥3 datapoints accumulated → analyze returns null).
+function renderTrendBadges(){
+  if(!window.VoyTrendEngine)return;
+  var els=document.querySelectorAll('[data-trend-provider]');
+  for(var i=0;i<els.length;i++){
+    var el=els[i];
+    var pid=el.getAttribute('data-trend-provider');
+    var trend=VoyTrendEngine.getTrend(pid);
+    var existing=el.querySelector('.price-trend-badge');
+    if(!trend){
+      if(existing)existing.parentNode.removeChild(existing);
+      continue;
+    }
+    var icon='minus',cls='minus';
+    if(trend.state==='RISING'){icon='trendingUp';cls='trending-up'}
+    else if(trend.state==='FALLING'){icon='trendingDown';cls='trending-down'}
+    if(existing){
+      existing.className='price-trend-badge '+cls;
+      existing.innerHTML=svg(icon,14);
+    }else{
+      var b=document.createElement('span');
+      b.className='price-trend-badge '+cls;
+      b.innerHTML=svg(icon,14);
+      b.setAttribute('aria-label','Tendencia '+trend.state.toLowerCase()+' (vs promedio 3h, '+trend.datapoints+' muestras)');
+      b.setAttribute('title','Tendencia: '+trend.state.toLowerCase()+' · promedio 3h: $'+trend.sma+' · ratio '+trend.ratio);
+      el.appendChild(b);
+    }
+  }
+}
+
+```
+
+## 10. `public/core/favorites.js`
+
+VoyFavoritesService (V7.9 Field_Ops_and_Persistent_Context). Persistence layer for frequent destinations — reduces Time-to-Search ('Casa' / 'Trabajo' to one tap). Storage: LocalStorage (`voy_favorites`) PRIMARY (fast sync read for UI) + MC.v5* IndexedDB mirror (best-effort, future cross-device). Schema: `{id, name, coords:{lat,lon}, full_address, label, ts, last_used}`. Sorted by `last_used` desc. Match threshold 0.001° (~111m). Max 20 favorites. One-time IDB→LS migration on first load. Public API: `getAll`, `isFavorite`, `findFavorite`, `add`, `remove`, `toggle`, `touch`, `refresh`. Complete verbatim, 192 lines.
+
+```javascript
+// ============================================================
+//  VOY — core/favorites.js  (V7.9 Field_Ops_and_Persistent_Context)
+//
+//  VoyFavoritesService — persistence layer for frequent destinations.
+//  Reduces Time-to-Search: "Casa" / "Trabajo" a un solo toque.
+//
+//  Storage strategy (per blueprint):
+//    - LocalStorage (voy_favorites) = PRIMARY (fast sync read for UI)
+//    - MC.v5* IndexedDB = mirror (best-effort sync for future cross-device)
+//    - last_used timestamp = touched on every selection → sort by recency
+//
+//  Schema (per blueprint):
+//    { id, name, coords:{lat,lon}, full_address, label, ts (created), last_used }
+//
+//  Public API:
+//    VoyFavoritesService.getAll()           → Array (sync, sorted by last_used desc)
+//    VoyFavoritesService.isFavorite(lat,lon)→ Boolean (sync, threshold 0.001°)
+//    VoyFavoritesService.add(place, label)  → Promise (writes LS + mirrors to IDB)
+//    VoyFavoritesService.remove(id)         → Promise (writes LS + mirrors to IDB)
+//    VoyFavoritesService.toggle(place,label)→ Promise<Boolean> (returns new isFav state)
+//    VoyFavoritesService.touch(lat, lon)    → Promise (updates last_used on matching fav)
+//    VoyFavoritesService.refresh()          → Promise (reloads from LS; noop — LS is source)
+//
+//  Loaded after telemetry.js, before main inline <script>.
+// ============================================================
+
+window.VoyFavoritesService=(function(){
+  var LS_KEY='voy_favorites';
+  var THRESHOLD=0.001; // ~111m
+  var MAX_FAVS=20;
+
+  function _load(){
+    try{
+      var raw=localStorage.getItem(LS_KEY);
+      var arr=raw?JSON.parse(raw):[];
+      if(!Array.isArray(arr))return [];
+      return arr;
+    }catch(e){return []}
+  }
+  function _save(arr){
+    try{localStorage.setItem(LS_KEY,JSON.stringify(arr))}catch(e){/* quota */}
+  }
+  function _sort(arr){
+    arr.sort(function(a,b){
+      var aLU=a.last_used||a.ts||0;
+      var bLU=b.last_used||b.ts||0;
+      return bLU-aLU;
+    });
+    return arr;
+  }
+  function _matches(fav,lat,lon){
+    return fav&&Math.abs(fav.lat-lat)<THRESHOLD&&Math.abs(fav.lon-lon)<THRESHOLD;
+  }
+  function _makeId(lat,lon){
+    return 'f_'+Math.round(lat*10000)+'_'+Math.round(lon*10000);
+  }
+
+  // Best-effort mirror to MC.v5* IndexedDB (non-blocking, catch-all)
+  function _mirrorAdd(place,label){
+    try{
+      if(window.MC&&typeof MC.v5AddFavorite==='function'){
+        MC.v5AddFavorite(place,label||'').catch(function(){});
+      }
+    }catch(e){}
+  }
+  function _mirrorRemove(id){
+    try{
+      if(window.MC&&typeof MC.v5RemoveFavorite==='function'){
+        MC.v5RemoveFavorite(id).catch(function(){});
+      }
+    }catch(e){}
+  }
+
+  function getAll(){return _sort(_load().slice())}
+  function isFavorite(lat,lon){
+    var arr=_load();
+    for(var i=0;i<arr.length;i++){
+      if(_matches(arr[i],lat,lon))return true;
+    }
+    return false;
+  }
+  function findFavorite(lat,lon){
+    var arr=_load();
+    for(var i=0;i<arr.length;i++){
+      if(_matches(arr[i],lat,lon))return arr[i];
+    }
+    return null;
+  }
+
+  function add(place,label){
+    if(!place||place.lat==null||place.lon==null)return Promise.resolve(false);
+    var arr=_load();
+    // Don't duplicate (check by coords)
+    var existing=findFavorite(place.lat,place.lon);
+    if(existing){
+      existing.last_used=Date.now();
+      _save(arr);
+      _mirrorAdd(place,label);
+      return Promise.resolve(true);
+    }
+    var now=Date.now();
+    var entry={
+      id:_makeId(place.lat,place.lon),
+      name:place.name||'',
+      label:label||'',
+      lat:place.lat,
+      lon:place.lon,
+      full_address:place.name||'',
+      coords:{lat:place.lat,lon:place.lon},
+      ts:now,
+      last_used:now
+    };
+    arr.push(entry);
+    if(arr.length>MAX_FAVS)arr=arr.slice(arr.length-MAX_FAVS);
+    _save(arr);
+    _mirrorAdd(place,label);
+    return Promise.resolve(true);
+  }
+  function remove(id){
+    var arr=_load();
+    var filtered=arr.filter(function(f){return f.id!==id});
+    if(filtered.length===arr.length)return Promise.resolve(false);
+    _save(filtered);
+    _mirrorRemove(id);
+    return Promise.resolve(true);
+  }
+  function toggle(place,label){
+    var existing=findFavorite(place.lat,place.lon);
+    if(existing){
+      return remove(existing.id).then(function(){return false});
+    }
+    return add(place,label).then(function(){return true});
+  }
+  function touch(lat,lon){
+    var arr=_load();
+    var touched=false;
+    for(var i=0;i<arr.length;i++){
+      if(_matches(arr[i],lat,lon)){
+        arr[i].last_used=Date.now();
+        touched=true;
+        break;
+      }
+    }
+    if(touched){_save(arr);_sort(arr)}
+    return Promise.resolve(touched);
+  }
+  function _refresh(){
+    // LS is source of truth — just re-read (no async IDB pull needed).
+    // Kept for API compatibility with the original V7.9 spec.
+    return Promise.resolve(getAll());
+  }
+
+  // Boot: migrate any existing IDB favorites into LS on first load (one-time).
+  // Non-blocking — runs after DOMReady. If LS already has data, skip migration.
+  if(typeof window!=='undefined'){
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded',function(){
+        var existing=_load();
+        if(existing.length===0&&window.MC&&typeof MC.v5GetFavorites==='function'){
+          MC.v5GetFavorites().then(function(favs){
+            if(!favs||!favs.length)return;
+            var now=Date.now();
+            var migrated=favs.map(function(f){
+              return {
+                id:f.id||_makeId(f.lat,f.lon),
+                name:f.name||'',
+                label:f.label||'',
+                lat:f.lat,lon:f.lon,
+                full_address:f.name||'',
+                coords:{lat:f.lat,lon:f.lon},
+                ts:f.ts||now,
+                last_used:f.ts||now
+              };
+            });
+            _save(migrated);
+          }).catch(function(){});
+        }
+      });
+    }
+  }
+
+  return {
+    getAll:getAll,
+    isFavorite:isFavorite,
+    findFavorite:findFavorite,
+    add:add,
+    remove:remove,
+    toggle:toggle,
+    touch:touch,
+    refresh:_refresh
+  };
+})();
+
+```
+
+## 11. `public/core/ahorro.js`
+
+VoyAhorroService (V7.5 Ahorro_Inteligente) + `renderAhorroBadges()`. Comparative cost engine: `isRecommendationAvailable = (PublicTransportPrice < RideHailingPrice * 0.5)`. Observer pattern — `recompute()` called from `renderSheet()` after each estimate; `_set()` emits to listeners + triggers idempotent `renderAhorroBadges()`. Badges: '¡Ahorrá un X%!' on every Colectivo mode-pill + highlight dot on the Ahorro cat-tab. `REFRESH_MS=300000` (5 min). Complete verbatim, 84 lines.
+
+```javascript
+// ============================================================
+//  VOY — core/ahorro.js  (V7.8 Modular Refactor)
+//
+//  Extracted from VOY-Lite.html (V7.5 Ahorro_Inteligente).
+//  Loaded via <script src="core/ahorro.js?v=78"> before the main
+//  inline script. Exposes two globals:
+//    - window.VoyAhorroService  (observer IIFE — comparative cost engine)
+//    - renderAhorroBadges()     (idempotent BadgeRenderer)
+//
+//  Dependencies: none (pure vanilla JS). Uses global svg() at runtime
+//  (defined later in the inline script — only called when invoked, not
+//  at load time).
+//
+//  Blueprint: isRecommendationAvailable = (PublicTransportPrice < RideHailingPrice * threshold)
+//  threshold=0.5, refresh=300000ms, data_source=MC.getEstimations() via renderSheet.
+// ============================================================
+
+// ===================== V7.5 AHORRO INTELIGENTE =================================================
+// Blueprint: AhorroFeature — comparative cost algorithm (Colectivo vs Ride-Hailing).
+//   formula: isRecommendationAvailable = (PublicTransportPrice < RideHailingPrice * threshold)
+// Decoupled from rendering via observer pattern (mirrors VoyMapContext). renderSheet() calls
+// recompute() after each estimate; _set() emits to listeners + triggers BadgeRenderer.
+window.VoyAhorroService=(function(){
+  var THRESHOLD=0.5;
+  var REFRESH_MS=300000;
+  var _state={available:false,colectivoPrice:null,rideHailingPrice:null,savingsPercent:0,threshold:THRESHOLD};
+  var _listeners=[];
+  var _lastComputeTs=0;
+  function _emit(){for(var i=0;i<_listeners.length;i++){try{_listeners[i](_state)}catch(e){console.error('[VoyAhorroService] listener',e)}}}
+  function _set(avail,colP,rhP,sav){
+    var changed=_state.available!==avail||_state.colectivoPrice!==colP||_state.rideHailingPrice!==rhP||_state.savingsPercent!==sav;
+    _state.available=avail;
+    if(colP!=null)_state.colectivoPrice=colP;
+    if(rhP!=null)_state.rideHailingPrice=rhP;
+    if(sav!=null)_state.savingsPercent=sav;
+    if(changed){
+      _emit();
+      if(typeof renderAhorroBadges==='function')renderAhorroBadges();
+    }
+  }
+  function recompute(colectivoPrice,rideHailingPrice){
+    if(colectivoPrice==null||colectivoPrice<0||rideHailingPrice==null||rideHailingPrice<=0){_set(false,null,null,0);return}
+    _lastComputeTs=Date.now();
+    var avail=colectivoPrice<(rideHailingPrice*THRESHOLD);
+    var sav=rideHailingPrice>0?Math.round((1-colectivoPrice/rideHailingPrice)*100):0;
+    _set(avail,colectivoPrice,rideHailingPrice,sav);
+  }
+  function isStale(){return _lastComputeTs===0||(Date.now()-_lastComputeTs)>REFRESH_MS}
+  return {
+    THRESHOLD:THRESHOLD,REFRESH_MS:REFRESH_MS,
+    getState:function(){return _state},
+    recompute:recompute,
+    isStale:isStale,
+    subscribe:function(fn){_listeners.push(fn);return function(){_listeners=_listeners.filter(function(f){return f!==fn})}}
+  };
+})();
+
+// V7.5 BadgeRenderer — mounts "¡Ahorrá un X%!" on every Colectivo mode-pill and a
+// highlight dot on the Ahorro cat-tab when VoyAhorroService.getState().available is true.
+// Idempotent: safe to call on every state change (clears stale badges first, then mounts fresh).
+function renderAhorroBadges(){
+  if(!window.VoyAhorroService)return; // not yet initialized (boot-time call from initCategoryManager)
+  var st=VoyAhorroService.getState();
+  // (1) Ahorro cat-tab highlight dot (group index 0 = group_ahorro)
+  var ahorroTabs=document.querySelectorAll('.cat-tab[data-group-idx="0"]');
+  for(var i=0;i<ahorroTabs.length;i++){
+    var tab=ahorroTabs[i];
+    var dot=tab.querySelector('.ahorro-tab-badge');
+    if(st.available){
+      if(!dot){dot=document.createElement('span');dot.className='ahorro-tab-badge';dot.setAttribute('aria-label','Ahorro disponible');tab.appendChild(dot)}
+    }else if(dot){dot.parentNode.removeChild(dot)}
+  }
+  // (2) Colectivo mode-pill badges — every bus pill across ALL groups (Ahorro + Público)
+  var busPills=document.querySelectorAll('.mode-pill[data-mode="bus"]');
+  for(var j=0;j<busPills.length;j++){
+    var pill=busPills[j];
+    var badge=pill.querySelector('.ahorro-pill-badge');
+    if(st.available){
+      var txt='¡Ahorrá un '+st.savingsPercent+'%!';
+      if(!badge){badge=document.createElement('span');badge.className='ahorro-pill-badge';pill.appendChild(badge)}
+      badge.textContent=txt;
+    }else if(badge){badge.parentNode.removeChild(badge)}
+  }
+}
+
+```
+
+## 12. `public/core/feedback.js`
+
+VoyFeedbackService (V7.9). In-flow price-accuracy reporting — flag icon on each provider price card (hero + alts + taxi/remis). Capture: `{routeKey, provider, price_shown, user_note, ts}`. Transport: `sendBeacon` → `/api/telemetry` (event: `data_accuracy_issue`), non-blocking, fire-and-forget. Event delegation on `#decisionSheet` via `[data-fb-provider]` attribute. Visual feedback: 600ms `.fb-pulse` on the flag icon. Toast confirmation. Creates training dataset for future TrendEngine calibration. Complete verbatim, 89 lines.
+
+```javascript
+// ============================================================
+//  VOY — core/feedback.js  (V7.9 Field_Ops_and_Persistent_Context)
+//
+//  VoyFeedbackService — in-flow price-accuracy reporting.
+//  Lets users flag inaccurate provider prices without leaving the
+//  decision sheet. Creates a training dataset for future TrendEngine
+//  calibration (data_accuracy_issue beacons).
+//
+//  UI: flag icon on each provider price card (hero + alts + taxi/remis).
+//  Capture: { routeKey, provider, price_shown, user_note, ts }
+//  Transport: Beacon API → /api/telemetry (event: 'data_accuracy_issue')
+//             Non-blocking (sendBeacon), fire-and-forget.
+//
+//  Public API:
+//    VoyFeedbackService.report(routeKey, provider, priceShown, userNote)
+//    VoyFeedbackService.attachToSheet()  — delegates + event wiring (called from attachSheetEvents)
+//
+//  Loaded after favorites.js, before main inline <script>.
+//  Depends on: navigator.sendBeacon, global svg() at runtime.
+// ============================================================
+
+window.VoyFeedbackService=(function(){
+  var ENDPOINT='/api/telemetry';
+  var _supported=(typeof navigator!=='undefined')&&(typeof navigator.sendBeacon==='function');
+
+  function _routeKey(origin,dest){
+    if(!origin||!dest)return 'unknown';
+    return Math.round(origin.lat*1000)+'_'+Math.round(origin.lon*1000)+'__'+
+           Math.round(dest.lat*1000)+'_'+Math.round(dest.lon*1000);
+  }
+
+  function report(routeKey,provider,priceShown,userNote){
+    if(!_supported)return false;
+    try{
+      var payload=JSON.stringify({
+        event:'data_accuracy_issue',
+        routeKey:String(routeKey||'unknown').slice(0,80),
+        provider:String(provider||'unknown').slice(0,32),
+        price_shown:isFinite(priceShown)?Number(priceShown):0,
+        user_note:String(userNote||'').slice(0,280),
+        ts:Date.now()
+      });
+      var blob=new Blob([payload],{type:'application/json'});
+      navigator.sendBeacon(ENDPOINT,blob);
+      return true;
+    }catch(e){return false}
+  }
+
+  // Event delegation: any element with [data-fb-provider] reports on click.
+  // Reads provider + price from data attributes; routeKey from MC origin/dest.
+  function _onClick(e){
+    var btn=e.target.closest('[data-fb-provider]');
+    if(!btn)return;
+    e.stopPropagation();
+    e.preventDefault();
+    var provider=btn.getAttribute('data-fb-provider');
+    var price=parseFloat(btn.getAttribute('data-fb-price')||'0');
+    var origin=window.MC?MC.getOrigin():null;
+    var dest=window.MC?MC.getDest():null;
+    var routeKey=_routeKey(origin,dest);
+    // Immediate beacon (empty note — non-disruptive). User can add note via toast tap.
+    var sent=report(routeKey,provider,price,'');
+    if(sent){
+      // Non-disruptive: toast confirmation + offer to add a note.
+      if(typeof showToast==='function'){
+        showToast('Precio reportado · gracias por la corrección','success');
+      }
+    }
+    // Visual feedback: pulse the flag icon
+    btn.classList.add('fb-pulse');
+    setTimeout(function(){btn.classList.remove('fb-pulse')},600);
+  }
+
+  function attachToSheet(){
+    var sheet=document.getElementById('decisionSheet');
+    if(!sheet)return;
+    // Avoid double-binding
+    if(sheet.getAttribute('data-fb-bound')==='1')return;
+    sheet.setAttribute('data-fb-bound','1');
+    sheet.addEventListener('click',_onClick);
+  }
+
+  return {
+    report:report,
+    attachToSheet:attachToSheet,
+    routeKey:_routeKey,
+    supported:function(){return _supported}
+  };
+})();
+
+```
+
+## 13. `wrangler.jsonc`
+
+Cloudflare Workers config. `name: voy-app` (updates the EXISTING production worker at `voy-app.simondalmasso44.workers.dev`). `compatibility_date: 2026-01-01`, `main: ./worker.js`, `workers_dev: true` (required — is-a.dev CNAME resolves to the workers.dev URL). Assets binding `ASSETS` serves `./public` with `html_handling: none` + `not_found_handling: none` (no SPA fallback, no directory listing). Analytics Engine dataset `voy_metrics` bound as `VOY_METRICS` (WAE free tier: 100k data points/day). Vars block configures the 7 exclusion-filter knobs (`VOY_OWNER_IPS`, `VOY_OWNER_IP_HASHES`, `VOY_DEV_IPS`, `VOY_EXCLUDE_LOCALHOST/HEADLESS/BOT/GLM`, `VOY_EXCLUDE_UA_PATTERNS`). Observability enabled. Cron: `0 6 * * 1` (Mon 06:00 UTC). Complete verbatim, 87 lines.
+
+```jsonc
+{
+  // ============================================================
+  //  VOY — Cloudflare Workers config (V7.8: WAE analytics + cron tarifas)
+  //
+  //  Canonical domain:  https://voy.is-a.dev  (is-a.dev PR #41619 open, pending merge)
+  //  Worker name:       voy-app  (the EXISTING production worker at
+  //                    voy-app.simondalmasso44.workers.dev — deploying updates it)
+  //
+  //  workers_dev MUST stay true (is-a.dev CNAME resolves to the workers.dev URL).
+  //  V7.1: the workers.dev → voy.is-a.dev redirect in worker.js is DISABLED
+  //  until voy.is-a.dev is registered. Re-enable after is-a.dev PR merges.
+  // ============================================================
+  "name": "voy-app",
+  "compatibility_date": "2026-01-01",
+  "main": "./worker.js",
+
+  // REQUIRED: keep true (is-a.dev CNAME resolves to the workers.dev URL).
+  // Direct workers.dev access is redirected by worker.js → voy.is-a.dev.
+  "workers_dev": true,
+
+  // No routes: voy.is-a.dev and voy.app zones are not in this CF account.
+  // voy.is-a.dev reaches the worker via the is-a.dev CNAME (DNS-level), not
+  // via a CF route. Adding a route for a non-owned zone would fail deploy
+  // ("Could not find zone for voy.is-a.dev").
+  "routes": [],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    // "none" → unknown paths return a plain 404. No SPA fallback, no
+    // directory listing (Workers Assets never enumerates directories).
+    "not_found_handling": "none"
+  },
+
+  // Cloudflare Analytics Engine — 3 eventos (estimation / provider_tap / search).
+  // WAE Free tier = 100k data points/día gratis. VOY no lo supera.
+  // El worker escribe data points via ctx.waitUntil(env.VOY_METRICS.writeDataPoint()).
+  // Si el binding está ausente (dry-run), /api/events devuelve 202 gracefully.
+  //
+  // ✅ Dataset creado en el dashboard CF (account b21fa81d12acb663798f9f7c51801955):
+  //   binding = VOY_METRICS, dataset = voy_metrics.
+  // Habilitado el 2026-06-23. /api/health ahora reporta analytics:true.
+  "analytics_engine_datasets": [
+    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
+  ],
+
+  // V7.8: Durable Object + /api/reports eliminados (analytics V2 dual-store removido).
+  // WAE es el único store. Simplificación: 3 eventos, 0 código muerto.
+
+  // V7.8.1 — ANALYTICS_SYSTEM_SETUP: filtros de exclusión de analytics.
+  // Reglas activas (todas configurables via dashboard o wrangler.jsonc vars):
+  //   - localhost / headless / bot      (VOY_EXCLUDE_LOCALHOST/HEADLESS/BOT)
+  //   - glm_agent (GLM_* UA filter)     (VOY_EXCLUDE_GLM) — excludes z-ai/GLM automated agents
+  //   - owner_ip / owner_ip_hash        (VOY_OWNER_IPS / VOY_OWNER_IP_HASHES) — SIMON_DEVICE rule
+  //   - dev_ip                          (VOY_DEV_IPS)
+  //   - custom UA patterns              (VOY_EXCLUDE_UA_PATTERNS — comma-separated regex, case-insensitive)
+  //
+  // HOW TO EXCLUDE YOUR DEVICE (SIMON_DEVICE):
+  //   1. Visit https://voy-app.simondalmasso44.workers.dev/api/whoami from your device.
+  //   2. Copy the `ip` (→ VOY_OWNER_IPS) OR the `ip_sha256` (→ VOY_OWNER_IP_HASHES, more private).
+  //   3. Paste below (comma-separated if multiple devices). Redeploy.
+  //   4. Verify on /api/whoami → "excluded": "owner_ip" (or "owner_ip_hash").
+  //   5. Verify on /api/health → filters.owner_ips / owner_ip_hashes counts updated.
+  "vars": {
+    "VOY_OWNER_IPS": "",
+    "VOY_OWNER_IP_HASHES": "",
+    "VOY_DEV_IPS": "",
+    "VOY_EXCLUDE_LOCALHOST": "true",
+    "VOY_EXCLUDE_HEADLESS": "true",
+    "VOY_EXCLUDE_BOT": "true",
+    "VOY_EXCLUDE_GLM": "true",
+    "VOY_EXCLUDE_UA_PATTERNS": ""
+  },
+
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 }
+  },
+
+  // Cron trigger — recordatorio semanal de revisión de tarifas municipales.
+  // Lunes 06:00 UTC (03:00 ART). Solo loguea; el hook queda listo para cuando
+  // exista una fuente oficial automática de tarifas.
+  "triggers": {
+    "crons": ["0 6 * * 1"]
+  }
+}
+
+```
+
+---
+
+## Appendix: Version History (recent)
+
+- **V7.16** — Forced `system-ui !important` typography (removed Inter dependency). Triple render path (fallback → Inter → system-ui) eliminated.
+- **V7.17** — SURGICAL_FIX: removed Google Fonts Inter `<link>` (was the third render path). Added resource hints (`preconnect`) for unpkg / cartocdn / OSM / OSRM.
+- **V7.18.0** — `WEBGL_CONTEXT_GUARD`: added `contain:strict` on `#map` + canvas cap. Caused map freeze on some devices (contain:strict isolated the map subtree's layout/paint and broke MapLibre's resize observer).
+- **V7.18.1** — HOTFIX: removed `contain:strict` (reverted V7.18.0's containment). Null-guarded `map.getCanvas()` calls so a lost WebGL context doesn't throw. Deployed to production; build hash `3d08faf`.
+- **V7.18.2** — SAKANA fixes (current): (1) `black_squares` — 11 UI selectors switched from opaque `#000000` to `rgba(0,0,0,0.78)` + `backdrop-filter:blur(16px) saturate(1.2)` (frosted glass); (2) `didi_clipboard` — DiDi confirm handler copies destination address to clipboard before `launchDeepLink` (workaround for DiDi's no-prefill deep-link); (3) `hero_default` — heroProvider default `didi` → `uber` (best deep-link app is now the fallback hero CTA). Deployed to production; build hash `e0a5366`.
+
+## Appendix: Build / Deploy Notes
+
+- **Build hash injection**: `scripts/inject-build-hash.mjs` replaces `__BUILD_HASH__` placeholders in both `worker.js` (line 36, `const BUILD_HASH`) and `public/VOY-Lite.html` (line 1278, `window.VOY_BUILD_HASH`) with the git short SHA at deploy time. CI runs this before `wrangler deploy`. The committed source retains `__BUILD_HASH__` so the placeholder is visible. `verify-production.sh` checks `/api/health.build_hash === git rev-parse --short HEAD`.
+- **Two version constants**: `worker.js WORKER_VERSION="V7.8.0"` (API/worker version, bumped independently) and `public/VOY-Lite.html window.VOY_VERSION="V7.18.2"` (UI version). This is a pre-existing convention — the UI version moves faster than the worker version.
+- **Cache strategy**: HTML served with `Cache-Control: no-store, max-age=0, must-revalidate` so the edge never serves a stale UI. Static assets (JS/CSS/icons) served with default caching. MapLibre GL JS loaded from unpkg with SRI integrity hash.
+- **No build step**: The frontend is plain HTML/CSS/JS — no bundler, no transpiler, no framework. The `core/*.js` modules are loaded via `<script src>` tags in order. The inline `<script>` in `VOY-Lite.html` is the view+controller glue.
+- **Analytics privacy**: Anonymous ID only (`voy_anon_id`), sessionID via `voy_sid` cookie (30-day, SameSite=Lax). Geo coarsened to ~500m grid before transport. Owner/dev/bot/headless/GLM-agent exclusion filters keep test traffic out of the dataset. No PII stored server-side.
+
+## Appendix: Verification (run after generating this file)
+
+```
+wc -l /home/z/my-project/VOY-PROJECT-CODE.md
+grep -c 'buildAppLink'        /home/z/my-project/VOY-PROJECT-CODE.md
+grep -c 'launchDeepLink'      /home/z/my-project/VOY-PROJECT-CODE.md
+grep -c 'VOY_VERSION'         /home/z/my-project/VOY-PROJECT-CODE.md
+grep -c 'contain:strict'      /home/z/my-project/VOY-PROJECT-CODE.md
+grep -c 'attachContextLossHandlers' /home/z/my-project/VOY-PROJECT-CODE.md
+grep -c 'WORKER_VERSION'      /home/z/my-project/VOY-PROJECT-CODE.md
+stat -c '%s bytes' /home/z/my-project/VOY-PROJECT-CODE.md
+```

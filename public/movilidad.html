@@ -1,0 +1,2175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VOY – Asistente de Movilidad Santa Fe</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+:root{
+  --bg:#f5f5f5;--bg2:#fff;--bg3:#e8e8e8;--text:#1a1a1a;--text2:#555;--accent:#2563eb;
+  --green:#16a34a;--red:#dc2626;--orange:#f97316;--purple:#8b5cf6;--card-bg:#fff;
+  --card-border:#e5e5e5;--shadow:0 1px 3px rgba(0,0,0,.1);--radius:12px;
+  --header-bg:#1e293b;--footer-bg:#1e293b;
+}
+[data-theme="dark"]{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--text:#e2e8f0;--text2:#94a3b8;
+  --card-bg:#1e293b;--card-border:#334155;--shadow:0 1px 3px rgba(0,0,0,.4);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100dvh;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent}
+/* HEADER */
+.header{background:var(--header-bg);color:#fff;padding:8px 12px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:800;letter-spacing:1px;flex:1}
+.header .gps-status{font-size:12px;display:flex;align-items:center;gap:2px}
+.header .weather{font-size:14px;cursor:pointer}
+/* INPUTS */
+.inputs{background:var(--bg2);padding:10px 12px;border-bottom:1px solid var(--card-border)}
+.input-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative}
+.input-row:last-child{margin-bottom:0}
+.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.dot.green{background:var(--green)}.dot.red{background:var(--red)}
+.input-label{font-size:11px;color:var(--text2);min-width:44px}
+.input-field{flex:1;border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--bg);color:var(--text);outline:none;min-width:0}
+.input-field:focus{border-color:var(--accent)}
+.input-btn{font-size:10px;padding:4px 6px;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.btn-locate{background:#dbeafe;color:#1d4ed8}
+.btn-map{background:#fef3c7;color:#92400e}
+/* Autocomplete dropdown */
+.ac-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--card-border);border-top:none;border-radius:0 0 8px 8px;z-index:50;max-height:150px;overflow-y:auto;box-shadow:var(--shadow)}
+.ac-dropdown.show{display:block}
+.ac-item{padding:8px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--card-border)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:active{background:var(--bg3)}
+.ac-item small{color:var(--text2);font-size:11px;display:block;margin-top:2px}
+/* MAP - height fija para mobile (MapLibre requiere height>0 al init) */
+#map{width:100%;height:220px;min-height:160px;background:#e8e0d8;position:relative}
+@media(min-width:600px){#map{height:320px}}
+#map.crosshair .maplibregl-canvas{cursor:crosshair!important}
+/* Map floating labels */
+.voy-label{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;line-height:1.3;pointer-events:none}
+.voy-label--green{background:#16a34a;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.voy-label--red{background:#dc2626;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.voy-label-popup .maplibregl-popup-content{padding:0!important;background:transparent!important;box-shadow:none!important;border-radius:0!important}
+.voy-label-popup .maplibregl-popup-tip{display:none}
+.voy-label--amber{background:#f59e0b;color:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+/* MAP HINT */
+.map-hint{display:none;padding:6px 12px;background:#eff6ff;color:#1d4ed8;font-size:12px;border-bottom:1px solid #bfdbfe}
+.map-hint.show{display:block}
+/* ROUTE CARDS */
+.cards{flex:1;padding:8px 12px;overflow-y:auto;padding-bottom:80px}
+.route-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:12px;margin-bottom:8px;box-shadow:var(--shadow);position:relative;transition:transform .15s}
+.route-card.dragging{opacity:.6;transform:scale(.97)}
+.route-card.drag-over{border-top:3px solid var(--accent)}
+.rc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rc-icon{font-size:20px}
+.rc-title{font-size:14px;font-weight:700;flex:1}
+.rc-time{font-size:12px;color:var(--text2)}
+.rc-subtitle{font-size:13px;color:var(--text2);margin-bottom:6px;white-space:pre-line;line-height:1.5}
+/* Provider row */
+.provider-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--card-border)}
+.provider-name{font-size:12px;font-weight:600;min-width:70px}
+.provider-color{width:4px;height:24px;border-radius:2px;flex-shrink:0}
+.card-action-row{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.btn-pedir{background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:44px}
+.btn-pedir:active{transform:scale(.95)}
+.card-price{font-size:14px;font-weight:700}
+/* Action buttons in cards */
+.rc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rc-action{padding:6px 12px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#fff;min-height:44px}
+.rc-action.uber{background:#000}.rc-action.didi{background:var(--orange)}
+.rc-action.maxim{background:var(--purple)}.rc-action.radiotaxi{background:#d97706}
+.rc-action.remis{background:#6b7280}.rc-action.taxiapp{background:#25d366}
+.rc-action.moto-uber{background:#000}.rc-action.moto-didi{background:var(--orange)}
+.rc-action.moto-maxim{background:var(--purple)}.rc-action.moto-taxi{background:#d97706}
+.rc-action.moto-remis{background:#6b7280}.rc-action.moto-taxiapp{background:#25d366}
+.rc-action.bike{background:var(--green)}.rc-action.bus{background:#2563eb}
+.rc-action.walk{background:var(--green)}
+/* Unavailable cards */
+.route-card--unavailable{opacity:.45;filter:grayscale(.6);pointer-events:none}
+.unavailable-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2}
+.unavailable-overlay span{background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;letter-spacing:.5px}
+.unavailable-summary{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px;color:var(--text2);opacity:.6;border-top:1px solid var(--card-border);margin-top:4px}
+.unavailable-summary span{margin-left:auto;font-size:11px}
+/* Footer */
+.footer{position:fixed;bottom:0;left:0;right:0;background:var(--footer-bg);color:#94a3b8;font-size:10px;padding:6px 12px;text-align:center;z-index:100}
+/* Toast */
+.toast-container{position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;animation:toastIn .3s ease;pointer-events:auto;max-width:90vw;text-align:center}
+.toast.info{background:#2563eb}.toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.warn{background:#f59e0b;color:#1a1a1a}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+/* Drag handle */
+.drag-handle{position:absolute;top:4px;right:8px;font-size:16px;cursor:grab;color:var(--text2);opacity:.4}
+.drag-handle:active{cursor:grabbing}
+</style>
+</head>
+<body data-theme="light">
+
+<!-- HEADER -->
+<div class="header">
+  <h1>VOY</h1>
+  <div class="gps-status" id="gpsStatus">📍❌</div>
+  <div class="weather" id="weatherInfo" title="Clima en Santa Fe">🌤️</div>
+</div>
+
+<!-- INPUTS - FIX 4: permanent open bars, FIX 7: 📌 Elegir -->
+<div class="inputs">
+  <div class="input-row">
+    <div class="dot green"></div>
+    <span class="input-label">Origen</span>
+    <input type="text" id="originInput" class="input-field" placeholder="Tocá 📍 para localizarte" oninput="onFieldInput('origin')" onfocus="onFieldFocus('origin')">
+    <button class="input-btn btn-locate" onclick="locateMe()">📍</button>
+    <button class="input-btn btn-map" onclick="activateMapOrigin()">📌 Elegir</button>
+    <div class="ac-dropdown" id="originDropdown"></div>
+  </div>
+  <div class="input-row">
+    <div class="dot red"></div>
+    <span class="input-label">Destino</span>
+    <input type="text" id="destInput" class="input-field" placeholder="Ingresá tu destino" oninput="onFieldInput('dest')" onfocus="onFieldFocus('dest')">
+    <button class="input-btn btn-map" onclick="activateMapDest()">📌 Elegir</button>
+    <div class="ac-dropdown" id="destDropdown"></div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div style="position:relative">
+<div id="map"></div>
+<div id="mapLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg2);font-size:13px;color:var(--text2);pointer-events:none;z-index:5">Cargando mapa...</div>
+<button id="centerRouteBtn" onclick="centerRoute()" style="position:absolute;bottom:8px;right:8px;z-index:10;background:var(--bg2);border:1px solid var(--card-border);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);display:none;color:var(--text)">🎯 Centrar</button>
+</div>
+
+<!-- MAP HINT -->
+<div class="map-hint" id="mapHint">🗺️ Ruta en mapa · Arrastrá para cambiar</div>
+
+<!-- RECOMMENDATION BLOCK -->
+<div id="recommendationBlock" style="display:none;background:var(--card-bg);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 12px;margin:8px 12px 0;box-shadow:0 0 0 1px rgba(37,99,235,.1)"></div>
+
+<!-- PREFERENCES PANEL -->
+<div id="prefsPanel"></div>
+
+<!-- ROUTE CARDS -->
+<div class="cards" id="cardsContainer"></div>
+
+<!-- FOOTER -->
+<div class="footer">VOY v2 · Asistente de movilidad Santa Fe · Datos informativos, no contractuales · Resolución N°217/2026</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ANALYTICS DASHBOARD (hidden, 5 taps on header) -->
+<div id="vaDash"></div>
+
+<script>
+// ===================== DATA =====================
+var BUS_STOPS=[
+  {linea:'1',nombre:'Terminal',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
+  {linea:'1',nombre:'Plaza Mayor',lat:-31.6313,lon:-60.7008,calles:'San Martín y Rivadavia'},
+  {linea:'4',nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {linea:'4',nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'},
+  {linea:'8',nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {linea:'8',nombre:'Avenida Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {linea:'11',nombre:'Centro Cívico',lat:-31.6354,lon:-60.6999,calles:'25 de Mayo y San Martín'},
+  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y España'},
+  {linea:'16',nombre:'Plaza Pueyrredón',lat:-31.6445,lon:-60.7087,calles:'Cándido Pujato y Aristóbulo'},
+  {linea:'16',nombre:'Belgrano',lat:-31.6312,lon:-60.6945,calles:'Belgrano y Rivadavia'}
+];
+
+var BIKE_STATIONS=[
+  {nombre:'Municipalidad',lat:-31.6349,lon:-60.7007,calles:'25 de Mayo y San Martín'},
+  {nombre:'Plaza 25 de Mayo',lat:-31.6311,lon:-60.6990,calles:'San Martín y Rivadavia'},
+  {nombre:'Teatro Municipal',lat:-31.6325,lon:-60.7012,calles:'San Martín y Córdoba'},
+  {nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Estación Mitre',lat:-31.6356,lon:-60.7089,calles:'Bvd. Pellegrini y Rivadavia'},
+  {nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
+  {nombre:'Av. Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
+  {nombre:'Plaza Constituyentes',lat:-31.6401,lon:-60.7001,calles:'Rivadavia y Tucumán'},
+  {nombre:'Legislatura',lat:-31.6298,lon:-60.6955,calles:'Amenábar y 25 de Mayo'},
+  {nombre:'Plaza del Soldado',lat:-31.6337,lon:-60.6978,calles:'San Jerónimo y Tucumán'},
+  {nombre:'Hospital Iturraspe',lat:-31.6445,lon:-60.6934,calles:'Bvd. Gálvez y Francia'},
+  {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'}
+];
+
+var LANDMARKS=[
+  {nombre:'Puente Colgante',lat:-31.6230,lon:-60.6850,calles:'Av. Costanera y Av. del Valle'},
+  {nombre:'Catedral Metropolitana',lat:-31.6315,lon:-60.7010,calles:'San Martín y San Jerónimo'},
+  {nombre:'Universidad Nacional del Litoral',lat:-31.6340,lon:-60.6990,calles:'9 de Julio y San Jerónimo'},
+  {nombre:'Parque del Encuentro',lat:-31.6270,lon:-60.6800,calles:'Av. Costanera Oeste'},
+  {nombre:'Museo Histórico',lat:-31.6330,lon:-60.7015,calles:'San Martín y 25 de Mayo'},
+  {nombre:'Puente Oroño',lat:-31.6190,lon:-60.6820,calles:'Av. Costanera y Bvd. Pellegrini'},
+  {nombre:'Mercado Norte',lat:-31.6360,lon:-60.6980,calles:'San Martín y Tucumán'},
+  {nombre:'Iglesia San Francisco',lat:-31.6320,lon:-60.7030,calles:'San Martín y Ameghino'},
+  {nombre:'Shopping La Estación',lat:-31.6290,lon:-60.6895,calles:'Gral. López y Javier de la Rosa'},
+  {nombre:'Barrio Candioti',lat:-31.6080,lon:-60.6900,calles:'Norte de la ciudad'},
+  {nombre:'Barrio Guadalupe',lat:-31.6380,lon:-60.6800,calles:'Noreste de la ciudad'},
+  {nombre:'Barrio Centenario',lat:-31.6140,lon:-60.7100,calles:'Oeste de la ciudad'}
+];
+
+var PROVIDERS={
+  uber:{name:'Uber',available:true,color:'#000',confirmed:true,source:'uber.com + operadores locales'},
+  didi:{name:'DiDi',available:true,color:'#f97316',confirmed:true,source:'DiDi Argentina - operativo desde Nov 2024'},
+  maxim:{name:'Maxim',available:true,color:'#8b5cf6',confirmed:true,source:'maxim.taxi + noticias locales'},
+  cabify:{name:'Cabify',available:true,color:'#2DC4B2',confirmed:true,price:null,source:'cabify.com lista Santa Fe'},
+  indriver:{name:'inDriver',available:false,confirmed:true,source:'No opera en Argentina'},
+  bolt:{name:'Bolt',available:false,confirmed:true,source:'No opera en Argentina'},
+  taxi:{name:'Radiotaxi',available:true,color:'#d97706',confirmed:true,source:'wa.link/n7u2e7 servicio local'},
+  remis:{name:'Remises Real',available:true,color:'#6b7280',confirmed:true,source:'wa.link/rqov56 servicio local'},
+  taxiapp:{name:'TaxiApp',available:true,color:'#25d366',confirmed:true,source:'@taxiapp_santafe app local'},
+  uber_moto:{name:'Uber Moto',available:true,color:'#000',confirmed:true,source:'YouTube/TikTok - operativo en Santa Fe'},
+  didi_moto:{name:'DiDi Moto',available:true,color:'#f97316',confirmed:false,price:null,source:'Disponible en Argentina, no confirmado en SF'}
+};
+
+// ===================== FARE REGISTRY =====================
+var FareRegistry={
+  taxi:{
+    diurno:{bajada:1600,ficha:160,distFicha:130},
+    nocturno:{bajada:1840,ficha:184,distFicha:130},
+    source:'Resolución N°217/2026',
+    updated_at:'2026-01-01'
+  },
+  bus:{
+    sube:1900,
+    cash:2111,
+    source:'SUBE tariff table Argentina',
+    updated_at:'2025-06-01'
+  },
+  apps:{
+    uber:{base:1000,km:500,min:65,minFare:3000,source:'Uber app estimate range',updated_at:'2025-12-01'},
+    didi:{base:900,km:440,min:55,minFare:2500,source:'DiDi app estimate range',updated_at:'2025-12-01'},
+    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'},
+    cabify:{base:null,km:null,min:null,minFare:null,source:'Cabify - sin tarifa pública',updated_at:'2025-12-01'}
+  },
+  moto:{
+    discount:0.75,
+    source:'Estimado: precio auto * 0.75',
+    updated_at:'2025-12-01'
+  }
+};
+
+// ===================== STATE =====================
+var _origin=null; // {lat,lon,name,source}
+var _dest=null;
+var _originManual=false; // FIX 4: true when user typed/searched origin manually
+var _manualOriginMode=false; // map pin mode
+var _manualDestMode=false;
+var _gpsWatch=null;
+var _map=null;
+var _originMarker=null;
+var _destMarker=null;
+var _originPopup=null;
+var _destPopup=null;
+var _busStopMarkers=[];
+var _busStopPopups=[];
+var _busRouteActive=false;
+var _busRouteIdx=-1;
+var _estimations=null; // array of {mode,...}
+var _lastSearchTime=0;
+var _acTimeout=null; // autocomplete debounce
+var _acReqId=0; // PATCH P1-3: stale response guard
+var _prefs={avoidMoto:false,prioritizePrice:false,prioritizeSpeed:false,avoidLongWalks:false,avoidTransfers:false,withLuggage:false,withChildren:false};
+var _prefsOpen=false; // panel collapse state
+
+// ===================== VISITOR ANALYTICS (local-first, <10KB) =====================
+var _VA_KEY='voy_va';
+var _VA_MAX=300; // FIFO cap
+var _VA_GRID=0.0072; // ~800m geo cluster
+var _vaS={o:0,os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0}; // current session
+
+function _vaCluster(lat,lon){return(lat/_VA_GRID).toFixed(0)+'_'+(lon/_VA_GRID).toFixed(0)}
+
+function va_open(){
+  _vaS={o:Date.now(),os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0};
+}
+
+function va_origin(src){
+  if(!_vaS.o)return;
+  var m={gps:'g',cache:'c',map:'m',search:'s'};
+  _vaS.os=m[src]||'n';
+}
+
+function va_dest(name,lat,lon){
+  if(!_vaS.o||_vaS.dt)return; // solo primer destino por sesión
+  _vaS.dt=Date.now();
+  _vaS.dn=(name||'').substring(0,25);
+  _vaS.dc=_vaCluster(lat,lon);
+}
+
+function va_cards(){
+  if(!_vaS.o||!_estimations)return;
+  if(!_vaS.ct)_vaS.ct=Date.now();
+  var modeMap={walk:'w',bus:'b',bike:'i',moto:'m',auto:'a'};
+  _vaS.ms=_estimations.map(function(e){return modeMap[e.mode]||'?'}).join(',');
+}
+
+function va_cta(mode){
+  if(!_vaS.o)return;
+  _vaS.cm=mode||'';
+  _vaS.ct2=Date.now();
+}
+
+function va_close(){
+  if(!_vaS.o)return;
+  _vaS.x=Date.now();
+  if(_vaS.x-_vaS.o<500)return; // descarta bounces <500ms
+  try{
+    var raw=localStorage.getItem(_VA_KEY);
+    var arr=raw?JSON.parse(raw):[];
+    if(!Array.isArray(arr))arr=[];
+    arr.push(_vaS);
+    if(arr.length>_VA_MAX)arr=arr.slice(arr.length-_VA_MAX);
+    localStorage.setItem(_VA_KEY,JSON.stringify(arr));
+  }catch(e){}
+}
+
+function va_load(){
+  try{var r=localStorage.getItem(_VA_KEY);return r?JSON.parse(r):[]}catch(e){return[]}
+}
+
+function va_metrics(){
+  var s=va_load();
+  var n=s.length;
+  if(!n)return{total:0};
+  var m={total:n,ctaRate:0,abandonRate:0,avgToCTA:0,avgDecision:0,topDest:[],providerWins:{},deadCards:{}};
+  var ctaCount=0,abandonCount=0,sumToCTA=0,sumDecision=0;
+  var destCounts={},provCounts={},modeShown={},modeChosen={};
+  s.forEach(function(r){
+    if(!r.dt)abandonCount++;
+    if(r.ct2>0){ctaCount++;if(r.ct2>r.o)sumToCTA+=r.ct2-r.o;if(r.ct2>r.ct&&r.ct>0)sumDecision+=r.ct2-r.ct}
+    if(r.cm)provCounts[r.cm]=(provCounts[r.cm]||0)+1;
+    if(r.dc){var dk=r.dc+(r.dn?'|'+r.dn:'');destCounts[dk]=(destCounts[dk]||0)+1}
+    if(r.ms){r.ms.split(',').forEach(function(c){modeShown[c]=(modeShown[c]||0)+1})}
+    if(r.cm){var cm=r.cm.indexOf('_')>=0?r.cm.split('_')[0]:r.cm;var ck={uber:'a',didi:'a',maxim:'a',taxi:'a',remis:'a',taxiapp:'a',cabify:'a',uber_moto:'m',didi_moto:'m',bus:'b',walk:'w',bike:'i'}[r.cm]||'?';modeChosen[ck]=(modeChosen[ck]||0)+1}
+  });
+  m.ctaRate=ctaCount/n;m.abandonRate=abandonCount/n;
+  if(ctaCount){m.avgToCTA=Math.round(sumToCTA/ctaCount);m.avgDecision=Math.round(sumDecision/ctaCount)}
+  var sorted=Object.keys(destCounts).sort(function(a,b){return destCounts[b]-destCounts[a]});
+  m.topDest=sorted.slice(0,5).map(function(k){return{name:k.split('|')[1]||k.split('|')[0],count:destCounts[k]}});
+  m.providerWins=provCounts;
+  var modeNames={w:'Caminata',b:'Colectivo',i:'Bicicleta',m:'Moto',a:'Auto'};
+  Object.keys(modeShown).forEach(function(k){if(!modeChosen[k]&&modeShown[k]>=2)m.deadCards[modeNames[k]||k]=modeShown[k]});
+  return m;
+}
+
+function va_dashboard(){
+  var m=va_metrics();
+  if(!m.total)return;
+  var el=document.getElementById('vaDash');
+  if(!el)return;
+  var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;color:#fff;font-size:13px;padding:16px;overflow-y:auto;font-family:monospace">';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:12px"><b style="font-size:16px">📊 VOY Analytics</b><span style="cursor:pointer;font-size:20px" onclick="document.getElementById(\'vaDash\').innerHTML=\'\'">✕</span></div>';
+  h+='<div style="margin-bottom:12px">Sesiones: <b>'+m.total+'</b></div>';
+  h+='<table style="width:100%;border-collapse:collapse;margin-bottom:12px">';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Conversión CTA</td><td style="padding:4px;text-align:right"><b>'+(m.ctaRate*100).toFixed(1)+'%</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Abandono sin destino</td><td style="padding:4px;text-align:right"><b>'+(m.abandonRate*100).toFixed(1)+'%</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Tiempo medio→CTA</td><td style="padding:4px;text-align:right"><b>'+(m.avgToCTA?((m.avgToCTA/1000).toFixed(1)+'s'):'—')+'</b></td></tr>';
+  h+='<tr style="border-bottom:1px solid #444"><td style="padding:4px">Tiempo medio decisión</td><td style="padding:4px;text-align:right"><b>'+(m.avgDecision?((m.avgDecision/1000).toFixed(1)+'s'):'—')+'</b></td></tr>';
+  h+='</table>';
+  if(Object.keys(m.providerWins).length){
+    h+='<div style="margin-bottom:12px"><b>🏆 Proveedores elegidos</b>';
+    var sorted=Object.keys(m.providerWins).sort(function(a,b){return m.providerWins[b]-m.providerWins[a]});
+    sorted.forEach(function(k){var pct=(m.providerWins[k]/m.total*100).toFixed(0);h+='<div style="margin:2px 0">'+k+': '+m.providerWins[k]+' ('+pct+'%) <span style="background:#2563eb;height:8px;display:inline-block;width:'+(pct*1.5)+'px;border-radius:2px"></span></div>'});
+    h+='</div>';
+  }
+  if(m.topDest.length){
+    h+='<div style="margin-bottom:12px"><b>📍 Top destinos</b>';
+    m.topDest.forEach(function(d){h+='<div style="margin:2px 0">'+d.name+': '+d.count+'</div>'});
+    h+='</div>';
+  }
+  if(Object.keys(m.deadCards).length){
+    h+='<div style="margin-bottom:12px"><b>👻 Cards vistas nunca elegidas</b>';
+    Object.keys(m.deadCards).forEach(function(k){h+='<div style="margin:2px 0;color:#f97316">'+k+': vista '+m.deadCards[k]+'x, nunca elegida</div>'});
+    h+='</div>';
+  }
+  h+='<div style="margin-top:16px;font-size:10px;color:#666">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div>';
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// Hidden dashboard trigger: 5 taps on header
+var _vaTapCount=0,_vaTapTimer=null;
+
+// ===================== END VISITOR ANALYTICS =====================
+
+// ===================== TEMPORAL MEMORY LAYER v1 =====================
+// VOY aprende preferencias implícitas SIN mostrarlo nunca.
+// No es personalización visible. No es recomendación explícita. Es sesgo invisible.
+
+var _TM_KEY='voy_temporal_memory';
+var _TM_MAX=200; // FIFO max entries
+var _TM_MIN_INTERACTIONS=5; // minimum before bias activates
+var _TM_SOFT_BIAS_THRESHOLD=0.12; // only bias when score diff < this
+var _TM_BIAS_DOMINANCE_LIMIT=0.80; // >80% toward one mode → rebalance
+
+// --- Memory Store ---
+var _tmCache=null;
+var _tmCacheDirty=true;
+
+function tmLoad(){
+  if(!_tmCacheDirty&&_tmCache)return _tmCache;
+  try{
+    var raw=localStorage.getItem(_TM_KEY);
+    if(!raw){_tmCache=[];_tmCacheDirty=false;return[]}
+    var parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed)){_tmCache=[];_tmCacheDirty=false;return[]}
+    _tmCache=parsed;
+    _tmCacheDirty=false;
+    return parsed;
+  }catch(e){_tmCache=[];_tmCacheDirty=false;return[]}
+}
+
+function tmSave(entries){
+  try{
+    // Always enforce FIFO max
+    if(entries.length>_TM_MAX){
+      entries=entries.slice(entries.length-_TM_MAX);
+    }
+    localStorage.setItem(_TM_KEY,JSON.stringify(entries));
+    _tmCache=entries;
+    _tmCacheDirty=false;
+  }catch(e){}
+}
+
+// Normalize provider action key to a canonical mode for memory
+function tmNormalizeMode(actionKey){
+  if(!actionKey)return'unknown';
+  var k=actionKey.toLowerCase();
+  if(k==='uber'||k==='uber_moto')return'uber';
+  if(k==='didi'||k==='didi_moto')return'didi';
+  if(k==='maxim')return'maxim';
+  if(k==='taxi'||k==='radiotaxi')return'taxi';
+  if(k==='remis')return'remis';
+  if(k==='taxiapp')return'taxiapp';
+  if(k==='cabify')return'cabify';
+  if(k.indexOf('moto')>=0)return'moto';
+  if(k==='bus')return'bus';
+  if(k==='walk')return'walk';
+  if(k==='bike')return'bike';
+  return'auto'; // default for car providers
+}
+
+// --- Context Clustering ---
+// Simple grid-based geo clustering: ~800m cells
+function tmClusterGeo(lat,lon){
+  if(lat==null||lon==null)return'__';
+  // Round to ~0.0072 degrees ≈ 800m at this latitude
+  var gridLat=Math.round(lat/0.0072)*0.0072;
+  var gridLon=Math.round(lon/0.0072)*0.0072;
+  return gridLat.toFixed(4)+'_'+gridLon.toFixed(4);
+}
+
+function tmTimeOfDay(){
+  var h=new Date().getHours();
+  if(h>=6&&h<12)return'morning';
+  if(h>=12&&h<20)return'afternoon';
+  return'night';
+}
+
+function tmWeekday(){
+  return new Date().getDay(); // 0=Sun, 6=Sat
+}
+
+function tmPriceRange(price){
+  if(price==null)return'mid';
+  if(price<=2500)return'low';
+  if(price<=5000)return'mid';
+  return'high';
+}
+
+// --- Record a learning event (ONLY on confirmed ride action) ---
+function tmLearn(actionKey,price){
+  if(!_origin||!_dest)return; // need context
+  var mode=tmNormalizeMode(actionKey);
+  var entry={
+    mode:mode,
+    originCluster:tmClusterGeo(_origin.lat,_origin.lon),
+    destCluster:tmClusterGeo(_dest.lat,_dest.lon),
+    timeOfDay:tmTimeOfDay(),
+    weekday:tmWeekday(),
+    priceRange:tmPriceRange(price),
+    timestamp:Date.now()
+  };
+  var memory=tmLoad();
+  memory.push(entry);
+  // FIFO: keep max _TM_MAX entries
+  if(memory.length>_TM_MAX){
+    memory=memory.slice(memory.length-_TM_MAX);
+  }
+  tmSave(memory);
+  _tmCacheDirty=true; // invalidate cache after write
+}
+
+// --- Temporal Decay ---
+// Returns weight 0-1 based on entry age
+function tmDecayWeight(timestamp){
+  var now=Date.now();
+  var ageMs=now-timestamp;
+  var ageDays=ageMs/(1000*60*60*24);
+  if(ageDays<=7)return 1.0;     // last 7 days → 100%
+  if(ageDays<=30)return 0.6;    // 7-30 days → 60%
+  if(ageDays<=90)return 0.3;    // 30-90 days → 30%
+  return 0;                      // >90 days → ignore
+}
+
+// --- Compute User Preference Score ---
+// Returns 0-1 score for how well an option matches user's implicit preferences
+function computeUserPreferenceScore(optionMode,optionPrice,context){
+  var memory=tmLoad();
+  if(memory.length<_TM_MIN_INTERACTIONS)return 0; // not enough data
+
+  // Apply temporal decay
+  var weighted=memory.map(function(entry){
+    return Object.assign({},entry,{_w:tmDecayWeight(entry.timestamp)});
+  }).filter(function(entry){
+    return entry._w>0; // discard >90 day old entries
+  });
+
+  if(weighted.length<_TM_MIN_INTERACTIONS)return 0;
+
+  // Anti-overfitting: check if one mode dominates >80%
+  var modeCounts={};
+  weighted.forEach(function(e){
+    if(!modeCounts[e.mode])modeCounts[e.mode]=0;
+    modeCounts[e.mode]+=e._w;
+  });
+  var totalWeight=weighted.reduce(function(s,e){return s+e._w},0);
+  if(totalWeight===0)return 0;
+
+  // Find dominant mode
+  var dominantMode=null;
+  var dominantRatio=0;
+  Object.keys(modeCounts).forEach(function(m){
+    var ratio=modeCounts[m]/totalWeight;
+    if(ratio>dominantRatio){dominantRatio=ratio;dominantMode=m}
+  });
+
+  // Safety clause: if >80% bias toward one mode, cap its weight
+  var rebalancedWeighted=weighted;
+  if(dominantRatio>_TM_BIAS_DOMINANCE_LIMIT){
+    // Reduce weight of dominant mode entries by 50%
+    rebalancedWeighted=weighted.map(function(e){
+      if(e.mode===dominantMode){
+        return Object.assign({},e,{_w:e._w*0.5});
+      }
+      return e;
+    });
+    // Recalculate total weight
+    totalWeight=rebalancedWeighted.reduce(function(s,e){return s+e._w},0);
+    if(totalWeight===0)return 0;
+  }
+
+  // A) MODE BIAS (40%) - frequency of this mode in history
+  var modeWeight=0;
+  rebalancedWeighted.forEach(function(e){
+    if(e.mode===optionMode)modeWeight+=e._w;
+  });
+  var modeScore=totalWeight>0?modeWeight/totalWeight:0; // 0-1
+
+  // B) TIME CONTEXT BIAS (20%) - does user prefer this mode at this time?
+  var currentTime=tmTimeOfDay();
+  var currentWeekday=tmWeekday();
+  var timeMatchWeight=0;
+  var timeTotalWeight=0;
+  rebalancedWeighted.forEach(function(e){
+    if(e.timeOfDay===currentTime&&e.weekday===currentWeekday){
+      timeTotalWeight+=e._w;
+      if(e.mode===optionMode)timeMatchWeight+=e._w;
+    }
+  });
+  var timeScore=timeTotalWeight>0?timeMatchWeight/timeTotalWeight:modeScore; // fallback to modeScore
+
+  // C) DISTANCE BIAS (15%) - does user prefer this mode for this distance?
+  var distKm=context&&context.distance?context.distance:0;
+  var distCategory=distKm<=3?'short':distKm<=8?'medium':'long';
+  var distMatchWeight=0;
+  var distTotalWeight=0;
+  rebalancedWeighted.forEach(function(e){
+    // Infer distance category from origin/dest clusters
+    // We approximate: use price range as a proxy for distance category
+    // Low price ≈ short, mid ≈ medium, high ≈ long
+    var eDistCategory=e.priceRange==='low'?'short':e.priceRange==='high'?'long':'medium';
+    if(eDistCategory===distCategory){
+      distTotalWeight+=e._w;
+      if(e.mode===optionMode)distMatchWeight+=e._w;
+    }
+  });
+  var distScore=distTotalWeight>0?distMatchWeight/distTotalWeight:modeScore;
+
+  // D) PRICE SENSITIVITY (25%) - does user tend to choose cheaper options?
+  // If user always picks low-price options, penalize expensive ones
+  var lowPriceCount=0;
+  var highPriceCount=0;
+  rebalancedWeighted.forEach(function(e){
+    if(e.priceRange==='low')lowPriceCount+=e._w;
+    if(e.priceRange==='high')highPriceCount+=e._w;
+  });
+  var priceSensitivity=totalWeight>0?(lowPriceCount-highPriceCount)/totalWeight:0;
+  // priceSensitivity: -1 (always expensive) to +1 (always cheap)
+  var priceScore=0.5; // neutral
+  if(optionPrice!=null){
+    var optionPriceRange=tmPriceRange(optionPrice);
+    if(priceSensitivity>0.3){
+      // User prefers cheap → boost low price, penalize high
+      priceScore=optionPriceRange==='low'?0.9:optionPriceRange==='mid'?0.5:0.2;
+    }else if(priceSensitivity<-0.3){
+      // User prefers expensive → slight inverse
+      priceScore=optionPriceRange==='high'?0.7:optionPriceRange==='mid'?0.5:0.4;
+    }
+  }
+
+  // Combine with specified weights
+  var finalPrefScore=modeScore*0.40+timeScore*0.20+distScore*0.15+priceScore*0.25;
+  // Clamp to 0-1
+  return Math.max(0,Math.min(1,finalPrefScore));
+}
+
+// --- Decision Injection ---
+// Adjusts alternative scores with user preference (soft bias only)
+function tmInjectPreference(alternatives){
+  if(!alternatives||alternatives.length<2)return; // need at least 2 to bias
+  var memory=tmLoad();
+  if(memory.length<_TM_MIN_INTERACTIONS)return; // not enough data yet
+
+  var distKm=(_origin&&_dest)?haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon):0;
+
+  // Compute preference score for each alternative
+  alternatives.forEach(function(a){
+    var context={distance:distKm};
+    a._prefScore=computeUserPreferenceScore(a.mode,a.price,context);
+  });
+
+  // SOFT BIAS RULE: Only apply if top 2 scores are within _TM_SOFT_BIAS_THRESHOLD
+  var sorted=alternatives.slice().sort(function(a,b){return a.score-b.score});
+  var best=sorted[0];
+  var second=sorted.length>1?sorted[1]:null;
+
+  if(second&&Math.abs(best.score-second.score)>=_TM_SOFT_BIAS_THRESHOLD){
+    // Clear winner → memory does NOT intervene
+    return;
+  }
+
+  // Inject: finalScore = baseScore * 0.7 + prefScore * 0.3
+  // But only for alternatives that have a meaningful preference score
+  alternatives.forEach(function(a){
+    if(a._prefScore!=null&&a._prefScore>0){
+      a.score=a.score*0.70+a._prefScore*0.30;
+    }
+  });
+}
+
+// ===================== END TEMPORAL MEMORY LAYER =====================
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded',function(){
+  va_open();
+  initMap();
+  initGPS();
+  initDarkMode();
+  fetchWeather();
+  renderCards();
+  loadPrefs();
+  renderPrefsPanel();
+  // FIX 4: blur handlers to close autocomplete with delay
+  document.getElementById('originInput').addEventListener('blur',function(){
+    setTimeout(function(){hideAc('origin')},200);
+  });
+  document.getElementById('destInput').addEventListener('blur',function(){
+    setTimeout(function(){hideAc('dest')},200);
+  });
+  // VA: 5 taps on header → dashboard
+  document.querySelector('.header h1').addEventListener('click',function(){
+    _vaTapCount++;clearTimeout(_vaTapTimer);
+    _vaTapTimer=setTimeout(function(){_vaTapCount=0},1500);
+    if(_vaTapCount>=5){_vaTapCount=0;va_dashboard()}
+  });
+});
+
+var CARTO_STYLE='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+var FALLBACK_STYLE={
+  version:8,
+  sources:{
+    osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}
+  },
+  layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]
+};
+
+function initMap(){
+  try{
+    _map=new maplibregl.Map({
+      container:'map',
+      style:CARTO_STYLE,
+      center:[-60.7087,-31.6256],
+      zoom:13,
+      attributionControl:false
+    });
+    _map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
+    _map.on('click',onMapClick);
+    _map.on('error',function(e){
+      console.warn('[MAP] CARTO style error, switching to OSM fallback:',e);
+      _map.setStyle(FALLBACK_STYLE);
+      var ml=document.getElementById('mapLoading');if(ml)ml.style.display='none';
+    });
+    _map.on('load',function(){
+      _map.resize();
+      var ml=document.getElementById('mapLoading');if(ml)ml.style.display='none';
+    });
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){if(_map)_map.resize()});
+    });
+  }catch(e){
+    console.error('[MAP] Init failed:',e);
+    var ml=document.getElementById('mapLoading');if(ml)ml.textContent='Mapa no disponible';
+  }
+}
+
+function initDarkMode(){
+  if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
+    document.body.setAttribute('data-theme','dark');
+  }
+}
+
+// ===================== GPS: silent, cache, retry =====================
+var _gpsRetryCount=0;
+var _gpsMaxRetries=3;
+var _gpsRetryTimer=null;
+var _lastGpsOrigin=null;
+var _gpsDebounceTimer=null;
+var GPS_MIN_MOVEMENT_KM=0.03; // 30m minimum to trigger re-estimation
+var GPS_DEBOUNCE_MS=3000; // 3s debounce to prevent GPS jitter cascade
+
+function initGPS(){
+  if(!navigator.geolocation){updateGPSStatus(false);loadCachedPosition();return}
+  _gpsWatch=navigator.geolocation.watchPosition(function(pos){
+    _gpsRetryCount=0;
+    updateGPSStatus(true);
+    var newLat=pos.coords.latitude;
+    var newLon=pos.coords.longitude;
+    cachePosition(newLat,newLon);
+
+    // FIX 1: Minimum movement gate — ignore GPS jitter <30m
+    if(_lastGpsOrigin){
+      var dist=haversine(_lastGpsOrigin.lat,_lastGpsOrigin.lon,newLat,newLon);
+      if(dist<GPS_MIN_MOVEMENT_KM)return;
+    }
+    _lastGpsOrigin={lat:newLat,lon:newLon};
+
+    // FIX 1: Debounce — only re-estimate after movement settles
+    clearTimeout(_gpsDebounceTimer);
+    _gpsDebounceTimer=setTimeout(function(){
+      // PATCH P1-5: also guard against _manualOriginMode (pin-in-progress)
+      if(!_originManual&&!_manualOriginMode&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
+        _origin={lat:newLat,lon:newLon,name:'Mi ubicación',source:'gps'};
+        va_origin('gps');
+        updateOriginUI();
+        updateMapMarkers();
+        if(_dest)runEstimations();
+      }
+    },GPS_DEBOUNCE_MS);
+  },function(err){
+    updateGPSStatus(false);
+    loadCachedPosition();
+    // Silent retry with backoff
+    if(_gpsRetryCount<_gpsMaxRetries){
+      _gpsRetryCount++;
+      clearTimeout(_gpsRetryTimer);
+      _gpsRetryTimer=setTimeout(function(){
+        navigator.geolocation.getCurrentPosition(function(pos){
+          _gpsRetryCount=0;
+          updateGPSStatus(true);
+          var retryLat=pos.coords.latitude;
+          var retryLon=pos.coords.longitude;
+          cachePosition(retryLat,retryLon);
+          _lastGpsOrigin={lat:retryLat,lon:retryLon};
+          // PATCH P1-5: also guard against _manualOriginMode (pin-in-progress)
+          if(!_originManual&&!_manualOriginMode&&(!_origin||_origin.source==='gps'||_origin.source==='cache')){
+            _origin={lat:retryLat,lon:retryLon,name:'Mi ubicación',source:'gps'};
+            va_origin('gps');
+            updateOriginUI();
+            updateMapMarkers();
+            if(_dest)runEstimations();
+          }
+        },function(){},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+      },_gpsRetryCount*5000);
+    }
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+}
+
+function updateGPSStatus(ok){
+  var el=document.getElementById('gpsStatus');
+  el.textContent=ok?'📍🟢':'📍❌';
+}
+
+function cachePosition(lat,lon){
+  try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon}))}catch(e){}
+}
+
+function loadCachedPosition(){
+  try{
+    var cached=localStorage.getItem('voy_last_pos');
+    if(cached){
+      var pos=JSON.parse(cached);
+      if(!_origin){
+        _origin={lat:pos.lat,lon:pos.lon,name:'Ubicación guardada',source:'cache'};
+        va_origin('cache');
+        updateOriginUI();
+        updateMapMarkers();
+      }
+    }
+  }catch(e){}
+}
+
+function locateMe(){
+  if(!navigator.geolocation){return}
+  navigator.geolocation.getCurrentPosition(function(pos){
+    _originManual=false;
+    _origin={lat:pos.coords.latitude,lon:pos.coords.longitude,name:'Mi ubicación',source:'gps'};
+    va_origin('gps');
+    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    updateOriginUI();
+    updateMapMarkers();
+    _map.flyTo({center:[_origin.lon,_origin.lat],zoom:15});
+    if(_dest)runEstimations();
+  },function(){
+    // FIX 11: silent fallback, no emotional messages
+    loadCachedPosition();
+  },{enableHighAccuracy:true,timeout:10000});
+}
+
+// ===================== MAP CLICK / MANUAL PIN =====================
+var _manualModeTimer=null;
+var MANUAL_MODE_TIMEOUT_MS=15000; // PATCH P1-8: auto-cancel pin mode after 15s
+
+function _clearManualMode(){
+  _manualOriginMode=false;
+  _manualDestMode=false;
+  document.getElementById('map').classList.remove('crosshair');
+  clearTimeout(_manualModeTimer);
+  _manualModeTimer=null;
+}
+
+function activateMapOrigin(){
+  _manualOriginMode=true;
+  _manualDestMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el origen','info');
+  clearTimeout(_manualModeTimer);
+  _manualModeTimer=setTimeout(_clearManualMode,MANUAL_MODE_TIMEOUT_MS);
+}
+
+function activateMapDest(){
+  _manualDestMode=true;
+  _manualOriginMode=false;
+  document.getElementById('map').classList.add('crosshair');
+  showToast('Tocá el mapa para fijar el destino','info');
+  clearTimeout(_manualModeTimer);
+  _manualModeTimer=setTimeout(_clearManualMode,MANUAL_MODE_TIMEOUT_MS);
+}
+
+function onMapClick(e){
+  if(!_manualOriginMode&&!_manualDestMode)return;
+  var lat=e.lngLat.lat;
+  var lon=e.lngLat.lng;
+  clearTimeout(_manualModeTimer);_manualModeTimer=null; // PATCH P1-8: cancel timeout on success
+
+  if(_manualDestMode){
+    _manualDestMode=false;
+    document.getElementById('map').classList.remove('crosshair');
+    _dest={lat:lat,lon:lon,name:'',source:'map'};
+    va_dest('',lat,lon);
+    reverseGeocodeDest(lat,lon);
+    updateMapMarkers();
+    if(_origin)runEstimations();
+    return;
+  }
+
+  if(_manualOriginMode){
+    _manualOriginMode=false;
+    _originManual=true;
+    document.getElementById('map').classList.remove('crosshair');
+    _origin={lat:lat,lon:lon,name:'',source:'map'};
+    va_origin('map');
+    reverseGeocodeOrigin(lat,lon);
+    updateOriginUI();
+    updateMapMarkers();
+    if(_dest)runEstimations();
+  }
+}
+
+function reverseGeocodeOrigin(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        if(!_origin||_origin.lat!==lat||_origin.lon!==lon)return; // PATCH C-2: stale callback guard
+        _origin.name=d.display_name.split(',').slice(0,2).join(', ');
+        updateOriginUI();
+        refreshOriginLabel();
+      }
+    }).catch(function(){});
+}
+
+function reverseGeocodeDest(lat,lon){
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.display_name){
+        if(!_dest||_dest.lat!==lat||_dest.lon!==lon)return; // PATCH C-3: stale callback guard
+        _dest.name=d.display_name.split(',').slice(0,2).join(', ');
+        updateDestUI();
+        refreshDestLabel();
+      }
+    }).catch(function(){});
+}
+
+// ===================== MAP MARKERS =====================
+function updateMapMarkers(){
+  // PATCH P0-9: defer map updates during double-tap confirmation
+  if(_renderLocked){_renderPending=true;return}
+  if(_originMarker){_originMarker.remove();_originMarker=null}
+  if(_destMarker){_destMarker.remove();_destMarker=null}
+  if(_originPopup){_originPopup.remove();_originPopup=null}
+  if(_destPopup){_destPopup.remove();_destPopup=null}
+
+  if(_origin){
+    const el=document.createElement('div');
+    el.style.cssText='width:18px;height:18px;background:#16a34a;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    _originMarker=new maplibregl.Marker({element:el}).setLngLat([_origin.lon,_origin.lat]).addTo(_map);
+    const oLabel=_origin.name||'Origen';
+    _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([_origin.lon,_origin.lat])
+      .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
+      .addTo(_map);
+  }
+  if(_dest){
+    const el2=document.createElement('div');
+    el2.style.cssText='width:18px;height:18px;background:#dc2626;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)';
+    _destMarker=new maplibregl.Marker({element:el2}).setLngLat([_dest.lon,_dest.lat]).addTo(_map);
+    const dLabel=_dest.name||'Destino';
+    _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([_dest.lon,_dest.lat])
+      .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
+      .addTo(_map);
+  }
+
+  if(_origin&&_dest){
+    const bounds=new maplibregl.LngLatBounds();
+    bounds.extend([_origin.lon,_origin.lat]);
+    bounds.extend([_dest.lon,_dest.lat]);
+    _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:800});
+  } else if(_origin){
+    _map.flyTo({center:[_origin.lon,_origin.lat],zoom:15});
+  }
+
+  if(_busRouteActive)clearBusRoute();
+  drawRouteLine();
+
+  const cBtn=document.getElementById('centerRouteBtn');
+  if(cBtn)cBtn.style.display=(_origin&&_dest)?'block':'none';
+}
+
+function drawRouteLine(){
+  if(!_origin||!_dest||!_map)return;
+  // PATCH P1-4: defer if style is transitioning (e.g. CARTO→OSM fallback)
+  if(!_map.isStyleLoaded()){_map.once('style.load',function(){drawRouteLine()});return}
+  if(_map.getSource('route-src')){
+    if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
+    if(_map.getLayer('route-line'))_map.removeLayer('route-line');
+    _map.removeSource('route-src');
+  }
+  var geojson={
+    type:'Feature',
+    geometry:{type:'LineString',coordinates:[[_origin.lon,_origin.lat],[_dest.lon,_dest.lat]]}
+  };
+  _map.addSource('route-src',{type:'geojson',data:geojson});
+  _map.addLayer({id:'route-shadow',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
+  _map.addLayer({id:'route-line',type:'line',source:'route-src',layout:{'line-cap':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.8}});
+}
+
+function centerRoute(){
+  if(!_origin||!_dest)return;
+  var bounds=new maplibregl.LngLatBounds();
+  bounds.extend([_origin.lon,_origin.lat]);
+  bounds.extend([_dest.lon,_dest.lat]);
+  _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
+}
+
+function refreshOriginLabel(){
+  if(!_origin||!_originMarker)return;
+  if(_originPopup){_originPopup.remove();_originPopup=null}
+  var oLabel=_origin.name||'Origen';
+  _originPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+    .setLngLat([_origin.lon,_origin.lat])
+    .setHTML('<div class="voy-label voy-label--green">'+escapeHtml(oLabel)+'</div>')
+    .addTo(_map);
+}
+
+function refreshDestLabel(){
+  if(!_dest||!_destMarker)return;
+  if(_destPopup){_destPopup.remove();_destPopup=null}
+  var dLabel=_dest.name||'Destino';
+  _destPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:22,anchor:'bottom',className:'voy-label-popup'})
+    .setLngLat([_dest.lon,_dest.lat])
+    .setHTML('<div class="voy-label voy-label--red">'+escapeHtml(dLabel)+'</div>')
+    .addTo(_map);
+}
+
+// ===================== BUS ROUTE OVERLAY =====================
+function drawBusRoute(est){
+  if(!est||!est.stopOrigen||!_origin||!_dest||!_map)return;
+  // PATCH P0-6: defer if style is transitioning (same guard as drawRouteLine)
+  if(!_map.isStyleLoaded()){_map.once('style.load',function(){drawBusRoute(est)});return}
+
+  // Remove normal route line first
+  if(_map.getSource('route-src')){
+    if(_map.getLayer('route-shadow'))_map.removeLayer('route-shadow');
+    if(_map.getLayer('route-line'))_map.removeLayer('route-line');
+    _map.removeSource('route-src');
+  }
+
+  // Build segment coordinates
+  var walkSegs=[];
+  var rideSegs=[];
+  var transSegs=[];
+
+  if(est.combination){
+    // Guard: stopTransbordo2 puede no existir en datos legacy
+    if(!est.stopTransbordo2) est.stopTransbordo2 = est.stopTransbordo;
+    // 5 segments: walk→ride1→trans→ride2→walk
+    walkSegs.push([[_origin.lon,_origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
+    rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopTransbordo.lon,est.stopTransbordo.lat]]);
+    transSegs.push([[est.stopTransbordo.lon,est.stopTransbordo.lat],[est.stopTransbordo2.lon,est.stopTransbordo2.lat]]);
+    rideSegs.push([[est.stopTransbordo2.lon,est.stopTransbordo2.lat],[est.stopDest.lon,est.stopDest.lat]]);
+    walkSegs.push([[est.stopDest.lon,est.stopDest.lat],[_dest.lon,_dest.lat]]);
+  }else{
+    // 3 segments: walk→ride→walk
+    walkSegs.push([[_origin.lon,_origin.lat],[est.stopOrigen.lon,est.stopOrigen.lat]]);
+    rideSegs.push([[est.stopOrigen.lon,est.stopOrigen.lat],[est.stopDest.lon,est.stopDest.lat]]);
+    walkSegs.push([[est.stopDest.lon,est.stopDest.lat],[_dest.lon,_dest.lat]]);
+  }
+
+  // Add walk segments (green dashed)
+  if(walkSegs.length){
+    _map.addSource('bus-walk-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:walkSegs}}});
+    _map.addLayer({id:'bus-walk-line',type:'line',source:'bus-walk-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#22c55e','line-width':3,'line-opacity':0.75,'line-dasharray':[2,2]}});
+  }
+
+  // Add ride segments (blue solid + shadow)
+  if(rideSegs.length){
+    _map.addSource('bus-ride-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:rideSegs}}});
+    _map.addLayer({id:'bus-ride-shadow',type:'line',source:'bus-ride-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':10,'line-opacity':0.15}});
+    _map.addLayer({id:'bus-ride-line',type:'line',source:'bus-ride-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#2563eb','line-width':4,'line-opacity':0.9}});
+  }
+
+  // Add transfer segment (orange dashed)
+  if(transSegs.length){
+    _map.addSource('bus-trans-src',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiLineString',coordinates:transSegs}}});
+    _map.addLayer({id:'bus-trans-line',type:'line',source:'bus-trans-src',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#f59e0b','line-width':3,'line-opacity':0.8,'line-dasharray':[3,2]}});
+  }
+
+  // Add stop markers
+  var stops=[];
+  stops.push({point:est.stopOrigen,label:'Subida'});
+  stops.push({point:est.stopDest,label:'Bajada'});
+  if(est.combination && est.stopTransbordo){
+    stops.push({point:est.stopTransbordo,label:'Bajada transbordo'});
+    stops.push({point:est.stopTransbordo2||est.stopTransbordo,label:'Subida transbordo'});
+  }
+
+  stops.forEach(function(s){
+    var el=document.createElement('div');
+    el.style.cssText='width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+    var marker=new maplibregl.Marker({element:el}).setLngLat([s.point.lon,s.point.lat]).addTo(_map);
+    _busStopMarkers.push(marker);
+    var popup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:14,anchor:'bottom',className:'voy-label-popup'})
+      .setLngLat([s.point.lon,s.point.lat])
+      .setHTML('<div class="voy-label voy-label--amber">'+escapeHtml(s.point.nombre)+' · '+s.label+'</div>')
+      .addTo(_map);
+    _busStopPopups.push(popup);
+  });
+
+  // Fit bounds to include all stops + origin/dest
+  var bounds=new maplibregl.LngLatBounds();
+  bounds.extend([_origin.lon,_origin.lat]);
+  bounds.extend([_dest.lon,_dest.lat]);
+  stops.forEach(function(s){bounds.extend([s.point.lon,s.point.lat])});
+  _map.fitBounds(bounds,{padding:40,maxZoom:16,duration:600});
+}
+
+function clearBusRoute(){
+  // Remove bus route sources/layers
+  ['bus-walk-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-ride-shadow','bus-ride-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-trans-line'].forEach(function(id){if(_map.getLayer(id))_map.removeLayer(id)});
+  ['bus-walk-src','bus-ride-src','bus-trans-src'].forEach(function(id){if(_map.getSource(id))_map.removeSource(id)});
+
+  // Remove stop markers & popups
+  _busStopMarkers.forEach(function(m){m.remove()});
+  _busStopPopups.forEach(function(p){p.remove()});
+  _busStopMarkers=[];
+  _busStopPopups=[];
+
+  _busRouteActive=false;
+  _busRouteIdx=-1;
+}
+
+function toggleBusRoute(idx){
+  if(!_estimations||!_estimations[idx])return;
+  var est=_estimations[idx];
+
+  if(_busRouteActive&&_busRouteIdx===idx){
+    // Toggle OFF
+    clearBusRoute();
+    drawRouteLine();
+    // Update button text
+    var btn=document.querySelector('[data-action="bus-detail"][data-bus-idx="'+idx+'"]');
+    if(btn)btn.textContent='Ver recorrido';
+  }else{
+    // Toggle ON (or switch to different bus)
+    if(_busRouteActive)clearBusRoute();
+    drawBusRoute(est);
+    _busRouteActive=true;
+    _busRouteIdx=idx;
+    // Update all bus buttons
+    document.querySelectorAll('[data-action="bus-detail"]').forEach(function(b){
+      var bIdx=parseInt(b.getAttribute('data-bus-idx'));
+      b.textContent=(bIdx===idx)?'Ocultar recorrido':'Ver recorrido';
+    });
+  }
+}
+
+// ===================== FIX 4+5+6: INLINE AUTOCOMPLETE =====================
+function onFieldInput(field){
+  var inputId=field==='origin'?'originInput':'destInput';
+  var q=document.getElementById(inputId).value.trim();
+  if(q.length<2){
+    hideAc(field);
+    if(q.length===0){
+      // PATCH P0-1+P0-2: always clear origin when input empty, reset _originManual
+      if(field==='origin'){
+        _origin=null;_originManual=false;_estimations=null;renderCards();updateMapMarkers();
+      }else{
+        _dest=null;_estimations=null;renderCards();updateMapMarkers();
+      }
+    }
+    return;
+  }
+  if(field==='origin'){
+    _originManual=true;
+    // PATCH M-1: clear stale origin when input diverges from _origin.name
+    if(_origin&&q!==_origin.name){
+      _origin=null;_estimations=null;renderCards();updateMapMarkers();
+    }
+  }
+  if(_acTimeout)clearTimeout(_acTimeout);
+  _acTimeout=setTimeout(function(){searchPlaces(q,field)},400);
+}
+
+function onFieldFocus(field){
+  // Just track which field is active, autocomplete shows on type
+}
+
+function searchPlaces(q,field){
+  var now=Date.now();
+  if(now-_lastSearchTime<1100)return;
+  _lastSearchTime=now;
+  var reqId=++_acReqId; // PATCH P1-3: invalidate stale responses
+
+  // FIX 6: fuzzy search local data
+  var localResults=[];
+  var nq=normalize(q);
+
+  BUS_STOPS.forEach(function(s){
+    var score=Math.max(
+      fuzzyScore(q,s.nombre),
+      fuzzyScore(q,s.calles),
+      fuzzyScore(q,'Línea '+s.linea)
+    );
+    if(score>0){
+      localResults.push({type:'bus',name:'Línea '+s.linea+' – '+s.nombre,sub:s.calles,lat:s.lat,lon:s.lon,score:score});
+    }
+  });
+
+  BIKE_STATIONS.forEach(function(s){
+    var score=Math.max(
+      fuzzyScore(q,s.nombre),
+      fuzzyScore(q,s.calles)
+    );
+    if(score>0){
+      localResults.push({type:'bike',name:'🚲 '+s.nombre,sub:s.calles,lat:s.lat,lon:s.lon,score:score});
+    }
+  });
+
+  // Search landmarks (Puente Colgante, Catedral, etc.)
+  LANDMARKS.forEach(function(s){
+    var score=Math.max(
+      fuzzyScore(q,s.nombre),
+      fuzzyScore(q,s.calles)
+    );
+    if(score>0){
+      localResults.push({type:'place',name:s.nombre,sub:s.calles,lat:s.lat,lon:s.lon,score:score});
+    }
+  });
+
+  // Nominatim remote search
+  var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Santa Fe, Argentina')+'&format=json&limit=5&accept-language=es&viewbox=-60.75,-31.58,-60.63,-31.69&bounded=1';
+  fetch(url).then(function(r){return r.json()}).then(function(data){
+    if(reqId!==_acReqId)return; // PATCH P1-3: discard stale
+    var remoteResults=(data||[]).map(function(d,i){
+      return {type:'place',name:d.display_name.split(',').slice(0,2).join(', '),sub:d.display_name,lat:parseFloat(d.lat),lon:parseFloat(d.lon),score:70-i*5};
+    });
+    var all=localResults.concat(remoteResults);
+    all.sort(function(a,b){return b.score-a.score});
+    var seen={};
+    var deduped=[];
+    all.forEach(function(r){
+      var key=normalize(r.name);
+      if(!seen[key]){seen[key]=true;deduped.push(r)}
+    });
+    renderAc(field,deduped.slice(0,3));
+  }).catch(function(){
+    if(reqId!==_acReqId)return; // PATCH P1-3: discard stale
+    localResults.sort(function(a,b){return b.score-a.score});
+    var seen={};
+    var deduped=[];
+    localResults.forEach(function(r){
+      var key=normalize(r.name);
+      if(!seen[key]){seen[key]=true;deduped.push(r)}
+    });
+    renderAc(field,deduped.slice(0,3));
+  });
+}
+
+function renderAc(field,results){
+  var el=document.getElementById(field==='origin'?'originDropdown':'destDropdown');
+  var html='';
+  results.forEach(function(r){
+    var icon=r.type==='bus'?'🚌':r.type==='bike'?'🚲':'📍';
+    html+='<div class="ac-item" onclick="selectAc(\''+field+'\','+r.lat+','+r.lon+',\''+escapeStr(r.name)+'\')">'+icon+' '+r.name+'<small>'+r.sub+'</small></div>';
+  });
+  if(!results.length)html='<div class="ac-item" style="color:var(--text2)">Sin resultados</div>';
+  el.innerHTML=html;
+  el.classList.add('show');
+}
+
+function hideAc(field){
+  document.getElementById(field==='origin'?'originDropdown':'destDropdown').classList.remove('show');
+}
+
+function hideAllAc(){hideAc('origin');hideAc('dest')}
+
+function selectAc(field,lat,lon,name){
+  if(field==='origin'){
+    _originManual=true;
+    _origin={lat:lat,lon:lon,name:name,source:'search'};
+    va_origin('search');
+    document.getElementById('originInput').value=name;
+    hideAc('origin');
+    updateMapMarkers();
+    if(_dest)runEstimations();
+  }else{
+    _dest={lat:lat,lon:lon,name:name,source:'search'};
+    va_dest(name,lat,lon);
+    document.getElementById('destInput').value=name;
+    hideAc('dest');
+    updateMapMarkers();
+    if(_origin)runEstimations();
+  }
+}
+
+// ===================== FIX 6: FUZZY SEARCH =====================
+function normalize(s){
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+
+function fuzzyScore(query,target){
+  var nq=normalize(query);
+  var nt=normalize(target);
+  var idx=nt.indexOf(nq);
+  if(idx>=0){
+    return idx===0?100:80; // substring match, higher at start
+  }
+  // character-by-character matching
+  var qi=0,score=0;
+  for(var ti=0;ti<nt.length&&qi<nq.length;ti++){
+    if(nt[ti]===nq[qi]){
+      score+=10;
+      if(ti===0||nt[ti-1]===' ')score+=5; // word boundary bonus
+      qi++;
+    }
+  }
+  return qi===nq.length?score:0;
+}
+
+// ===================== WEATHER - FIX 12: emoji only =====================
+function fetchWeather(){
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=-31.6333&longitude=-60.7000&current_weather=true')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d&&d.current_weather){
+        var w=d.current_weather;
+        document.getElementById('weatherInfo').textContent=weatherEmoji(w.weathercode,w.is_day,w.temperature);
+      }
+    }).catch(function(){});
+}
+
+function weatherEmoji(code,isDay,temp){
+  if(temp>=35)return'🥵';
+  if(temp<=0)return'🥶';
+  if(code===0)return isDay?'☀️':'🌙';
+  if(code<=3)return isDay?'🌤️':'🌙';
+  if(code<=48)return'🌫️';
+  if(code<=57)return'🌧️';
+  if(code<=67)return'🌧️';
+  if(code<=77)return'🌨️';
+  if(code<=82)return'🌧️';
+  if(code<=86)return'🌨️';
+  if(code<=99)return'⛈️';
+  return isDay?'🌤️':'🌙';
+}
+
+// ===================== UTILS =====================
+function haversine(lat1,lon1,lat2,lon2){
+  var R=6371;var dLat=(lat2-lat1)*Math.PI/180;var dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function formatPrice(n){return '$'+n.toLocaleString('es-AR')}
+function formatMin(m){return Math.ceil(m)+' min'}
+function escapeStr(s){return s.replace(/'/g,"\\'").replace(/"/g,'&quot;')}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// ===================== ESTIMATION ENGINE =====================
+function runEstimations(){
+  if(!_origin||!_dest)return;
+  var distKm=haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon);
+
+  _estimations=[];
+  if(_busRouteActive)clearBusRoute();
+
+  // 1. Walk
+  var walkMin=(distKm/5)*60;
+  var walkPri=distKm<=0.8?1:3;
+  _estimations.push({mode:'walk',icon:'🚶',title:'Caminando',timeMin:walkMin,distance:distKm,priority:walkPri});
+
+  // 2. Bus — FIX 2: guard against zero-price/zero-time display
+  var busResult=estimateBus(distKm);
+  if(busResult&&busResult.totalMin>0&&busResult.price>0){
+    busResult.timeMin=busResult.totalMin;
+    _estimations.push(Object.assign({mode:'bus',icon:'🚌',title:'Colectivo',priority:2,distance:distKm},busResult));
+  }else{
+    _estimations.push({mode:'bus',icon:'🚌',title:'Colectivo',priority:2,distance:distKm,
+      timeMin:null,totalMin:null,price:null,unavailable:true,unavailableReason:'Sin paradas cercanas'});
+  }
+
+  // 3. Bike
+  var bikeMin=(distKm/15)*60;
+  var nearBike=findNearestBikeStation(_origin);
+  var nearDestBike=_dest?findNearestBikeStation(_dest):null;
+  _estimations.push({mode:'bike',icon:'🚲',title:'Bicicleta',timeMin:bikeMin,distance:distKm,priority:2,nearStation:nearBike,nearDestStation:nearDestBike});
+
+  // 4. Moto - uses FareRegistry.moto.discount
+  var motoResult=estimateMoto(distKm);
+  _estimations.push(Object.assign({mode:'moto',icon:'🏍️',title:'Moto',priority:3,distance:distKm},motoResult));
+
+  // 5. Auto
+  var autoResult=estimateAuto(distKm);
+  _estimations.push(Object.assign({mode:'auto',icon:'🚗',title:'Auto',priority:4,distance:distKm},autoResult));
+
+  _estimations.sort(function(a,b){return a.priority-b.priority||a.timeMin-b.timeMin});
+
+  va_cards();
+  renderCards();
+  updateMapHint();
+}
+
+function estimateBus(distKm){
+  var stopsByLine={};
+  BUS_STOPS.forEach(function(s){
+    if(!stopsByLine[s.linea])stopsByLine[s.linea]=[];
+    stopsByLine[s.linea].push(s);
+  });
+
+  var bestDirect=null;
+  var bestCombo=null;
+
+  Object.keys(stopsByLine).forEach(function(linea){
+    var stops=stopsByLine[linea];
+    var nearOrig=null,nearDest=null;
+    var minDO=Infinity,minDD=Infinity;
+    stops.forEach(function(s){
+      var dO=haversine(_origin.lat,_origin.lon,s.lat,s.lon);
+      var dD=haversine(_dest.lat,_dest.lon,s.lat,s.lon);
+      if(dO<minDO){minDO=dO;nearOrig=s}
+      if(dD<minDD){minDD=dD;nearDest=s}
+    });
+    if(nearOrig&&nearDest&&stops.length>=2){
+      var rideDist=haversine(nearOrig.lat,nearOrig.lon,nearDest.lat,nearDest.lon);
+      var walkToMin=minDO/5*60+3;
+      var rideMin=rideDist/15*60;
+      var walkFromMin=minDD/5*60+5;
+      var totalMin=walkToMin+rideMin+walkFromMin;
+      var price=FareRegistry.bus.sube;
+      if(!bestDirect||totalMin<bestDirect.totalMin){
+        bestDirect={linea:linea,stopOrigen:nearOrig,stopDest:nearDest,
+          walkToStopMin:Math.ceil(walkToMin),rideMin:Math.ceil(rideMin),
+          walkFromStopMin:Math.ceil(walkFromMin),totalMin:Math.ceil(totalMin),
+          price:price,boletos:1,combination:false,
+          stopOrigenCalles:nearOrig.calles,stopDestCalles:nearDest.calles};
+      }
+    }
+  });
+
+  var lines=Object.keys(stopsByLine);
+  for(var i=0;i<lines.length;i++){
+    for(var j=0;j<lines.length;j++){
+      if(i===j)continue;
+      var line1=lines[i];var line2=lines[j];
+      var stops1=stopsByLine[line1];var stops2=stopsByLine[line2];
+      var bestS1=null,minD1=Infinity;
+      stops1.forEach(function(s){var d=haversine(_origin.lat,_origin.lon,s.lat,s.lon);if(d<minD1){minD1=d;bestS1=s}});
+      var bestS2=null,minD2=Infinity;
+      stops2.forEach(function(s){var d=haversine(_dest.lat,_dest.lon,s.lat,s.lon);if(d<minD2){minD2=d;bestS2=s}});
+      var bestTrans1=null,bestTrans2=null,minTrans=Infinity;
+      stops1.forEach(function(s1){
+        stops2.forEach(function(s2){
+          var d=haversine(s1.lat,s1.lon,s2.lat,s2.lon);
+          if(d<minTrans){minTrans=d;bestTrans1=s1;bestTrans2=s2}
+        });
+      });
+      if(bestS1&&bestS2&&bestTrans1&&bestTrans2&&minTrans<0.8){
+        var seg1Dist=haversine(bestS1.lat,bestS1.lon,bestTrans1.lat,bestTrans1.lon);
+        var seg2Dist=haversine(bestTrans2.lat,bestTrans2.lon,bestS2.lat,bestS2.lon);
+        var walkToMin1=minD1/5*60+3;
+        var ride1Min=seg1Dist/15*60;
+        var transWalkMin=minTrans/5*60;
+        var ride2Min=seg2Dist/15*60;
+        var walkFromMin2=minD2/5*60+5;
+        var totalMin=walkToMin1+ride1Min+transWalkMin+ride2Min+walkFromMin2;
+        var price=FareRegistry.bus.sube*2;
+        if(!bestCombo||totalMin<bestCombo.totalMin){
+          bestCombo={linea1:line1,linea2:line2,
+            stopOrigen:bestS1,stopTransbordo:bestTrans1,stopTransbordo2:bestTrans2,stopDest:bestS2,
+            walkToStopMin:Math.ceil(walkToMin1),ride1Min:Math.ceil(ride1Min),
+            transWalkMin:Math.ceil(transWalkMin),ride2Min:Math.ceil(ride2Min),
+            walkFromStopMin:Math.ceil(walkFromMin2),totalMin:Math.ceil(totalMin),
+            price:price,boletos:2,combination:true,
+            stopOrigenCalles:bestS1.calles,stopTransbordoCalles:bestTrans1.calles};
+        }
+      }
+    }
+  }
+
+  var chosen=bestCombo||bestDirect;
+  if(!chosen){
+    chosen={totalMin:Math.ceil((distKm/15)*60+8),price:FareRegistry.bus.sube,boletos:1,combination:false,
+      linea:'?',stopOrigenCalles:'—',walkToStopMin:3};
+  }
+  return chosen;
+}
+
+function findNearestBikeStation(point){
+  var best=null,minD=Infinity;
+  BIKE_STATIONS.forEach(function(s){
+    var d=haversine(point.lat,point.lon,s.lat,s.lon);
+    if(d<minD){minD=d;best=s}
+  });
+  return best;
+}
+
+// Moto: solo Uber Moto confirmado, DiDi Moto sin confirmar → Consultar
+function estimateMoto(distKm){
+  var durMoto=(distKm/35)*60;
+  var autoResult=estimateAuto(distKm);
+  var d=FareRegistry.moto.discount;
+  return{
+    timeMin:Math.round(durMoto),
+    uberMotoTimeMin:Math.round(durMoto*1.00),
+    didiMotoTimeMin:Math.round(durMoto*1.04),
+    uberMotoPrice:autoResult.uberPrice!=null?Math.ceil(autoResult.uberPrice*d):null,
+    didiMotoPrice:null // No confirmado en Santa Fe → Consultar
+  };
+}
+
+function estimateAuto(distKm){
+  var durCar=(distKm/25)*60;
+  var uberPrice=calcAppPrice('uber',distKm,durCar);
+  var didiPrice=calcAppPrice('didi',distKm,durCar);
+  var maximPrice=calcAppPrice('maxim',distKm,durCar);
+  var cabifyPrice=calcAppPrice('cabify',distKm,durCar); // null
+  var taxiPrice=estimateTaxi(distKm);
+  var remisPrice=taxiPrice;
+  var taxiappPrice=taxiPrice;
+  return{timeMin:Math.round(durCar),
+    uberTimeMin:Math.round(durCar*1.00),
+    didiTimeMin:Math.round(durCar*1.03),
+    maximTimeMin:Math.round(durCar*1.05),
+    taxiTimeMin:Math.round(durCar*1.10),
+    remisTimeMin:Math.round(durCar*1.08),
+    taxiappTimeMin:Math.round(durCar*1.07),
+    uberPrice:uberPrice,didiPrice:didiPrice,
+    maximPrice:maximPrice,cabifyPrice:cabifyPrice,
+    taxiPrice:taxiPrice,remisPrice:remisPrice,taxiappPrice:taxiappPrice};
+}
+
+function calcAppPrice(fareKey,distKm,timeMin){
+  var f=FareRegistry.apps[fareKey];
+  if(!f||f.base===null)return null;
+  var price=f.base+f.km*distKm+f.min*timeMin;
+  return Math.max(price,f.minFare);
+}
+
+function estimateTaxi(distKm){
+  var h=new Date().getHours();
+  var t=(h>=6&&h<22)?FareRegistry.taxi.diurno:FareRegistry.taxi.nocturno;
+  var fichas=Math.floor(distKm*1000/t.distFicha);
+  return t.bajada+fichas*t.ficha;
+}
+
+// ===================== MAP HINT =====================
+function updateMapHint(){
+  var el=document.getElementById('mapHint');
+  if(!_estimations||!_estimations.length){el.classList.remove('show');return}
+  el.classList.add('show');
+  var modeNames={walk:'caminando',bus:'colectivo',bike:'bicicleta',moto:'moto',auto:'auto'};
+  var first=_estimations[0];
+  var modeLabel=modeNames[first.mode]||first.mode;
+  el.textContent='🗺️ Ruta en mapa: '+modeLabel+' · Arrastrá para cambiar';
+}
+
+// ===================== RENDER CARDS =====================
+function renderCards(){
+  // FIX 3: defer renders during active double-tap confirmation
+  if(_renderLocked){
+    _renderPending=true;
+    return;
+  }
+  var container=document.getElementById('cardsContainer');
+  var html='';
+
+  // FIX 3: if no origin or dest, show only message
+  if(!_origin||!_dest){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
+      'Elegí origen y destino</div>';
+  }else if(!_estimations||!_estimations.length){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text2);font-size:14px">'+
+      'Calculando rutas...</div>';
+  }else{
+    _estimations.forEach(function(est,idx){
+      html+=renderActiveCard(est,idx);
+    });
+    // Unavailable: 1 línea compacta
+    html+='<div class="unavailable-summary">🚆 Tren &nbsp;·&nbsp; 🚇 Subte &nbsp;·&nbsp; ✈️ Avión <span>No disponibles en Santa Fe</span></div>';
+  }
+
+  container.innerHTML=html;
+  initDragAndDrop();
+  attachButtonEvents();
+  renderRecommendation();
+}
+
+function renderActiveCard(est,idx){
+  // FIX 2: unavailable modes render as unavailable card
+  if(est.unavailable){
+    return renderUnavailableCard(est.icon,est.title||est.mode,est.unavailableReason||'No disponible');
+  }
+  var h='<div class="route-card" data-mode="'+est.mode+'" data-idx="'+idx+'" draggable="true">';
+  h+='<span class="drag-handle" title="Arrastrar">⋮⋮</span>';
+
+  if(est.mode==='walk'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km a pie · GRATIS</div>';
+  }
+
+  else if(est.mode==='bus'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">Colectivo</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    var busText=formatBusText(est);
+    h+='<p class="rc-subtitle" style="font-size:13px;line-height:1.5;white-space:pre-line">'+busText+'</p>';
+    h+='<div class="rc-actions">';
+    if(est.stopOrigen){
+      h+='<button class="rc-action bus" data-action="bus-detail" data-bus-idx="'+idx+'">Ver recorrido</button>';
+    }
+    h+='</div>';
+  }
+
+  else if(est.mode==='bike'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle" style="white-space:pre-line">'+est.distance.toFixed(1)+' km · GRATIS';
+    if(est.nearStation){
+      h+='\n📍 Retirar en: '+est.nearStation.nombre+' ('+est.nearStation.calles+')';
+    }
+    if(est.nearDestStation){
+      h+='\n📍 Dejar en: '+est.nearDestStation.nombre+' ('+est.nearDestStation.calles+')';
+    }
+    h+='</div>';
+    h+='<div class="rc-actions">';
+    var bikeLink=buildBikeLink();
+    h+='<a href="'+bikeLink+'" class="rc-action bike" target="_blank">Bicicleta</a>';
+    h+='</div>';
+  }
+
+  // Moto: providers ordenados por precio ascendente
+  else if(est.mode==='moto'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
+    var motoProvidersList=[
+      {id:'uber_moto',name:'Uber Moto',price:est.uberMotoPrice,timeMin:est.uberMotoTimeMin},
+      {id:'didi_moto',name:'DiDi Moto',price:est.didiMotoPrice,timeMin:est.didiMotoTimeMin}
+    ].filter(function(p){return p.price!=null}).sort(function(a,b){return a.price-b.price});
+    motoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin);
+    });
+  }
+
+  else if(est.mode==='auto'){
+    h+='<div class="rc-header"><span class="rc-icon">'+est.icon+'</span><span class="rc-title">'+est.title+'</span><span class="rc-time">'+formatMin(est.timeMin)+'</span></div>';
+    h+='<div class="rc-subtitle">'+est.distance.toFixed(1)+' km</div>';
+    var autoProvidersList=[
+      {id:'uber',name:'Uber',price:est.uberPrice,timeMin:est.uberTimeMin,url:null},
+      {id:'didi',name:'DiDi',price:est.didiPrice,timeMin:est.didiTimeMin,url:null},
+      {id:'maxim',name:'Maxim',price:est.maximPrice,timeMin:est.maximTimeMin,url:null},
+      {id:'taxi',name:'Radiotaxi',price:est.taxiPrice,timeMin:est.taxiTimeMin,url:'https://wa.link/n7u2e7'},
+      {id:'remis',name:'Remises Real',price:est.remisPrice,timeMin:est.remisTimeMin,url:'https://wa.link/rqov56'},
+      {id:'taxiapp',name:'TaxiApp',price:est.taxiappPrice,timeMin:est.taxiappTimeMin,url:'https://wa.link/vavbcl'}
+    ].filter(function(p){return p.price!=null&&PROVIDERS[p.id]&&PROVIDERS[p.id].available}).sort(function(a,b){return a.price-b.price});
+    autoProvidersList.forEach(function(p){
+      h+=renderProviderRow(p.id,p.name,p.price,p.id,p.timeMin,p.url);
+    });
+    // Cabify: price=null → siempre al final como "Consultar"
+    h+=renderProviderRow('cabify','Cabify',est.cabifyPrice,'cabify');
+  }
+
+  h+='</div>';
+  return h;
+}
+
+function renderProviderRow(key,name,price,colorKey,timeOverride,waLink,waText){
+  var provider=PROVIDERS[key];
+  if(!provider||!provider.available)return'';
+  var color=provider.color||'#666';
+  var t=timeOverride?formatMin(timeOverride):'';
+  var url='';
+  if(key==='uber'||key==='uber_moto')url=buildUberLink();
+  else if(key==='didi'||key==='didi_moto')url=buildDiDiLink();
+  else if(key==='maxim')url=buildMaximLink();
+  else if(key==='cabify')url='https://cabify.com/';
+  else if(waLink)url=waLink;
+
+  var h='<div class="provider-row">';
+  h+='<div class="provider-color" style="background:'+color+'"></div>';
+  h+='<span class="provider-name">'+name+'</span>';
+  h+='<div class="card-action-row">';
+  if(url){
+    h+='<button class="btn-pedir" data-action="'+key+'" data-url="'+url+'">Pedir</button>';
+  }
+  h+='<span class="card-price">'+(price!=null?formatPrice(price):'Consultar')+'</span>';
+  if(t)h+='<span class="rc-time" style="margin-left:4px">'+t+'</span>';
+  h+='</div></div>';
+  return h;
+}
+
+// Removed: renderMotoProviderRow - moto now uses same renderProviderRow as auto
+
+function renderUnavailableCard(icon,title,reason){
+  return '<div class="route-card route-card--unavailable" draggable="false">'+
+    '<div class="unavailable-overlay"><span>NO DISPONIBLE</span></div>'+
+    '<div class="rc-header"><span class="rc-icon">'+icon+'</span><span class="rc-title">'+title+'</span></div>'+
+    '<div class="rc-subtitle">'+reason+'</div></div>';
+}
+
+function formatBusText(r){
+  if(!r.combination){
+    return 'La Línea '+r.linea+' te lleva directo.\n'+
+           'Subite a '+r.walkToStopMin+' min, en '+r.stopOrigenCalles+'.\n'+
+           'En '+r.totalMin+' min llegás. Te sale '+formatPrice(r.price)+'.';
+  }else{
+    return 'Podés combinar la Línea '+r.linea1+' con la Línea '+r.linea2+' para llegar.\n'+
+           'Subite a la '+r.linea1+' en '+r.stopOrigenCalles+'.\n'+
+           'Pasate a la '+r.linea2+' en '+r.stopTransbordoCalles+'.\n'+
+           'En total '+r.totalMin+' min. Te sale '+formatPrice(r.price)+' ('+r.boletos+' boletos).';
+  }
+}
+
+// ===================== LINK BUILDERS =====================
+function buildUberLink(){
+  if(!_origin||!_dest)return '#';
+  return 'https://m.uber.com/ul/?action=setPickup&pickup[latitude]='+_origin.lat+'&pickup[longitude]='+_origin.lon+
+    '&pickup[formatted_address]=Origen&dropoff[latitude]='+_dest.lat+'&dropoff[longitude]='+_dest.lon;
+}
+
+function buildDiDiLink(){
+  if(!_origin||!_dest)return '#';
+  return 'https://web.didiglobal.com/ar/passenger/ride/?pickup_lat='+_origin.lat+'&pickup_lng='+_origin.lon+
+    '&dropoff_lat='+_dest.lat+'&dropoff_lng='+_dest.lon;
+}
+
+function buildMaximLink(){
+  if(!_origin||!_dest||!_origin.lat||!_dest.lat) return 'https://taximaxim.com/ar/';
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  var isIOS=/iPhone|iPad/i.test(navigator.userAgent);
+  if(isAndroid){
+    var playStore='https://play.google.com/store/apps/details?id=com.taxsee.taxsee';
+    return 'intent://order?'+
+      'startLat='+Number(_origin.lat).toFixed(6)+
+      '&startLon='+Number(_origin.lon).toFixed(6)+
+      '&finishLat='+Number(_dest.lat).toFixed(6)+
+      '&finishLon='+Number(_dest.lon).toFixed(6)+
+      '#Intent'+
+      ';scheme=taxsee'+
+      ';package=com.taxsee.taxsee'+
+      ';S.browser_fallback_url='+encodeURIComponent(playStore)+
+      ';end';
+  }
+  if(isIOS){
+    return 'https://apps.apple.com/app/maxim/id893663029';
+  }
+  return 'https://taximaxim.com/ar/';
+}
+
+function buildBikeLink(){
+  var isAndroid=/Android/i.test(navigator.userAgent);
+  if(isAndroid)return 'intent://#Intent;scheme=lasbicis;package=com.santafe.lasbicis;end';
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS)return 'https://apps.apple.com/ar/app/id6444962582';
+  return 'https://www.santafe.gob.ar/index.php/educacionycultura/content/download/55027/283898/file/Las%20Bicis.pdf';
+}
+
+// ===================== DOUBLE TAP TO CONFIRM =====================
+var _confirmState={}; // now stores {time, price} instead of just timestamp
+var _renderLocked=false;  // FIX 3: lock renders during active double-tap
+var _renderPending=false; // FIX 3: deferred render flag
+function _anyConfirmActive(){for(var k in _confirmState){if(_confirmState[k])return true}return false}
+
+function _findPriceForMode(mode){
+  // Extract price the user SAW from current _estimations
+  if(!_estimations)return null;
+  var modeKey=mode.toLowerCase();
+  var ridePrice=null;
+  _estimations.forEach(function(est){
+    if(modeKey==='uber'&&est.uberPrice!=null)ridePrice=est.uberPrice;
+    else if(modeKey==='didi'&&est.didiPrice!=null)ridePrice=est.didiPrice;
+    else if(modeKey==='maxim'&&est.maximPrice!=null)ridePrice=est.maximPrice;
+    else if(modeKey==='taxi'&&est.taxiPrice!=null)ridePrice=est.taxiPrice;
+    else if(modeKey==='remis'&&est.remisPrice!=null)ridePrice=est.remisPrice;
+    else if(modeKey==='taxiapp'&&est.taxiappPrice!=null)ridePrice=est.taxiappPrice;
+    else if(modeKey==='uber_moto'&&est.uberMotoPrice!=null)ridePrice=est.uberMotoPrice;
+    else if(modeKey==='didi_moto'&&est.didiMotoPrice!=null)ridePrice=est.didiMotoPrice;
+    else if(modeKey==='bus'&&est.price!=null)ridePrice=est.price;
+    else if(modeKey==='walk')ridePrice=0;
+    else if(modeKey==='bike')ridePrice=0;
+  });
+  return ridePrice;
+}
+
+function requestRide(mode,url){
+  var now=Date.now();
+  var prev=_confirmState[mode];
+  var DOUBLE_TAP_MS=2000;
+  // PATCH P0-7: capture price at FIRST tap (what user sees), not second
+  if(prev&&now-prev.time<DOUBLE_TAP_MS){
+    _confirmState[mode]=null;
+    // PATCH C-1: unlock if no other confirms active (fixes overlapping double-taps)
+    if(!_anyConfirmActive()){_renderLocked=false;if(_renderPending){_renderPending=false;renderCards();updateMapMarkers()}}
+    // Use price captured at first tap — immune to _estimations mutation during lock
+    var ridePrice=prev.price;
+    tmLearn(mode,ridePrice);
+    va_cta(mode);
+    window.open(url,'_blank');
+  }else{
+    _confirmState[mode]={time:now,price:_findPriceForMode(mode)};
+    _renderLocked=true;  // FIX 3: lock renders while double-tap is active
+    showToast('Tocá de nuevo para confirmar','info');
+    setTimeout(function(){
+      _confirmState[mode]=null;
+      // PATCH C-1: only unlock if no other confirm windows still active
+      if(!_anyConfirmActive()){_renderLocked=false;if(_renderPending){_renderPending=false;renderCards();updateMapMarkers()}}
+    },DOUBLE_TAP_MS+100);
+  }
+}
+
+// ===================== BUTTON EVENTS =====================
+function attachButtonEvents(){
+  document.querySelectorAll('.btn-pedir').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var action=btn.getAttribute('data-action');
+      var url=btn.getAttribute('data-url');
+      if(url&&url!=='#'){
+        requestRide(action,url);
+      }
+    });
+  });
+
+  document.querySelectorAll('.rc-action.bike').forEach(function(a){
+    a.addEventListener('click',function(e){
+      e.stopPropagation();
+    });
+  });
+
+  document.querySelectorAll('[data-action="bus-detail"]').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      var idx=parseInt(btn.getAttribute('data-bus-idx'));
+      if(!isNaN(idx))toggleBusRoute(idx);
+    });
+  });
+}
+
+// ===================== DRAG AND DROP - FIX 10: update _estimations =====================
+function initDragAndDrop(){
+  var cards=document.querySelectorAll('.route-card:not(.route-card--unavailable)');
+  var dragSrc=null;
+
+  cards.forEach(function(card){
+    card.addEventListener('dragstart',function(e){
+      dragSrc=card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',card.getAttribute('data-mode'));
+    });
+
+    card.addEventListener('dragend',function(){
+      card.classList.remove('dragging');
+      document.querySelectorAll('.route-card').forEach(function(c){c.classList.remove('drag-over')});
+    });
+
+    card.addEventListener('dragover',function(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect='move';
+      if(card!==dragSrc){
+        card.classList.add('drag-over');
+      }
+    });
+
+    card.addEventListener('dragleave',function(){
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop',function(e){
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if(dragSrc&&dragSrc!==card){
+        var container=document.getElementById('cardsContainer');
+        var allCards=Array.from(container.querySelectorAll('.route-card:not(.route-card--unavailable)'));
+        var fromIdx=allCards.indexOf(dragSrc);
+        var toIdx=allCards.indexOf(card);
+        if(fromIdx<toIdx){
+          container.insertBefore(dragSrc,card.nextSibling);
+        }else{
+          container.insertBefore(dragSrc,card);
+        }
+        // FIX 10: reorder _estimations to match new visual order
+        syncEstimationsFromDOM();
+        // FIX 9: update map hint with ranking[0]
+        updateMapHint();
+      }
+    });
+  });
+}
+
+// FIX 10: sync _estimations array order with DOM order
+function syncEstimationsFromDOM(){
+  if(!_estimations)return;
+  var container=document.getElementById('cardsContainer');
+  var domCards=container.querySelectorAll('.route-card:not(.route-card--unavailable)');
+  var newOrder=[];
+  domCards.forEach(function(card){
+    var mode=card.getAttribute('data-mode');
+    var found=_estimations.find(function(e){return e.mode===mode});
+    if(found)newOrder.push(found);
+  });
+  if(newOrder.length===_estimations.length){
+    _estimations=newOrder;
+  }
+}
+
+// ===================== UI UPDATES =====================
+function updateOriginUI(){
+  document.getElementById('originInput').value=_origin?_origin.name:'';
+}
+
+function updateDestUI(){
+  document.getElementById('destInput').value=_dest?_dest.name:'';
+}
+
+// ===================== TOAST =====================
+function showToast(msg,type){
+  type=type||'info';
+  var container=document.getElementById('toastContainer');
+  var el=document.createElement('div');
+  el.className='toast '+type;
+  el.textContent=msg;
+  container.appendChild(el);
+  setTimeout(function(){
+    el.style.opacity='0';
+    el.style.transition='opacity .3s';
+    setTimeout(function(){el.remove()},300);
+  },2500);
+}
+
+// ===================== PREFERENCE ENGINE =====================
+var PREFS_KEY='voy_prefs';
+
+function loadPrefs(){
+  try{
+    var saved=localStorage.getItem(PREFS_KEY);
+    if(saved){
+      var parsed=JSON.parse(saved);
+      // Merge: only known keys
+      Object.keys(_prefs).forEach(function(k){if(k in parsed)_prefs[k]=!!parsed[k]});
+    }
+  }catch(e){}
+}
+
+function savePrefs(){
+  try{localStorage.setItem(PREFS_KEY,JSON.stringify(_prefs))}catch(e){}
+}
+
+function togglePref(key){
+  if(!(key in _prefs))return;
+  _prefs[key]=!_prefs[key];
+  // Mutually exclusive: price vs speed
+  if(key==='prioritizePrice'&&_prefs.prioritizePrice)_prefs.prioritizeSpeed=false;
+  if(key==='prioritizeSpeed'&&_prefs.prioritizeSpeed)_prefs.prioritizePrice=false;
+  savePrefs();
+  renderPrefsPanel();
+  renderRecommendation();
+}
+
+function renderPrefsPanel(){
+  var el=document.getElementById('prefsPanel');
+  if(!el)return;
+
+  var options=[
+    {key:'avoidMoto',label:'Evitar motos',icon:'🏍️'},
+    {key:'prioritizePrice',label:'Priorizar precio',icon:'💰'},
+    {key:'prioritizeSpeed',label:'Priorizar velocidad',icon:'⚡'},
+    {key:'avoidLongWalks',label:'Evitar caminatas largas',icon:'🚶'},
+    {key:'avoidTransfers',label:'Evitar transbordos',icon:'🔄'},
+    {key:'withLuggage',label:'Viajo con equipaje',icon:'🧳'},
+    {key:'withChildren',label:'Viajo con niños',icon:'👶'}
+  ];
+
+  var anyActive=Object.keys(_prefs).some(function(k){return _prefs[k]});
+
+  var h='<div style="margin:8px 12px 0;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);overflow:hidden">';
+  // Header - always visible
+  h+='<div onclick="_prefsOpen=!_prefsOpen;renderPrefsPanel()" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--text2)">';
+  h+='<span style="flex:1">⚙️ PREFERENCIAS'+(anyActive?' <span style="color:var(--accent);font-weight:600">(' +Object.keys(_prefs).filter(function(k){return _prefs[k]}).length+' activa'+(Object.keys(_prefs).filter(function(k){return _prefs[k]}).length>1?'s':'') + ')</span>':'')+'</span>';
+  h+='<span style="font-size:10px;color:var(--text2)">'+(_prefsOpen?'▲':'▼')+'</span>';
+  h+='</div>';
+
+  // Body - collapsible
+  if(_prefsOpen){
+    h+='<div style="padding:4px 12px 10px">';
+    options.forEach(function(opt){
+      var checked=_prefs[opt.key];
+      h+='<label style="display:flex;align-items:center;gap:6px;padding:5px 0;font-size:12px;cursor:pointer;color:var(--text);line-height:1.2">';
+      h+='<input type="checkbox" onchange="togglePref(\''+opt.key+'\')" '+(checked?'checked':'')+' style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">';
+      h+='<span>'+opt.icon+' '+opt.label+'</span>';
+      h+='</label>';
+    });
+    h+='</div>';
+  }
+
+  h+='</div>';
+  el.innerHTML=h;
+}
+
+// ===================== RECOMMENDATION ENGINE =====================
+function computeRecommendation(){
+  if(!_estimations||!_estimations.length)return null;
+  var alternatives=[];
+
+  // Determine weights from preferences
+  var priceW=0.6,timeW=0.4;
+  if(_prefs.prioritizePrice){priceW=0.8;timeW=0.2}
+  else if(_prefs.prioritizeSpeed){priceW=0.2;timeW=0.8}
+
+  _estimations.forEach(function(est){
+    // Skip walk/bike: free options trivialize price-based recommendations
+    if(est.mode==='walk'||est.mode==='bike')return;
+
+    if(est.mode==='bus'){
+      if(est.price!=null&&est.timeMin!=null&&est.timeMin>0){
+        var busWalkTo=est.walkToStopMin||0;
+        var busWalkFrom=est.walkFromStopMin||0;
+        var busHasCombo=!!est.combination;
+        alternatives.push({name:'Colectivo',price:est.price,time:Math.ceil(est.timeMin),mode:'bus',icon:'🚌',walkMin:busWalkTo+busWalkFrom,hasTransfer:busHasCombo});
+      }
+    }
+
+    if(est.mode==='moto'){
+      if(est.uberMotoPrice!=null){
+        alternatives.push({name:'Uber Moto',price:est.uberMotoPrice,time:est.uberMotoTimeMin||est.timeMin,mode:'moto',icon:'🏍️'});
+      }
+      // DiDi Moto price=null → excluded from recommendation (can't score without price)
+    }
+
+    if(est.mode==='auto'){
+      var autoProviders=[
+        {key:'uber',name:'Uber',priceKey:'uberPrice',timeKey:'uberTimeMin'},
+        {key:'didi',name:'DiDi',priceKey:'didiPrice',timeKey:'didiTimeMin'},
+        {key:'maxim',name:'Maxim',priceKey:'maximPrice',timeKey:'maximTimeMin'},
+        {key:'cabify',name:'Cabify',priceKey:'cabifyPrice',timeKey:null},
+        {key:'taxi',name:'Radiotaxi',priceKey:'taxiPrice',timeKey:'taxiTimeMin'},
+        {key:'remis',name:'Remises Real',priceKey:'remisPrice',timeKey:'remisTimeMin'},
+        {key:'taxiapp',name:'TaxiApp',priceKey:'taxiappPrice',timeKey:'taxiappTimeMin'}
+      ];
+      autoProviders.forEach(function(p){
+        if(est[p.priceKey]!=null&&PROVIDERS[p.key]&&PROVIDERS[p.key].available){
+          var pTime=p.timeKey&&est[p.timeKey]?est[p.timeKey]:est.timeMin;
+          alternatives.push({name:p.name,price:est[p.priceKey],time:pTime,mode:'auto',icon:'🚗'});
+        }
+      });
+    }
+  });
+
+  // Apply preference: avoidMoto → exclude moto alternatives
+  if(_prefs.avoidMoto){
+    alternatives=alternatives.filter(function(a){return a.mode!=='moto'});
+  }
+
+  if(!alternatives.length)return null;
+
+  // FIX 5: Absolute score normalization using reference benchmarks
+  // Instead of relative min/max of current alternatives (which shifts when
+  // providers are filtered), use absolute reference values based on distance.
+  // This makes scores STABLE regardless of which providers are in the set.
+  var distKm=(_origin&&_dest)?haversine(_origin.lat,_origin.lon,_dest.lat,_dest.lon):5;
+  var refMaxPrice=estimateTaxi(distKm)*1.3; // 30% above taxi = expensive benchmark
+  var refMinPrice=FareRegistry.bus.sube;    // bus SUBE = cheap benchmark
+  var refMaxTime=(distKm/12)*60;            // slow traffic speed
+  var refMinTime=(distKm/35)*60;            // moto speed
+
+  alternatives.forEach(function(a){
+    var priceNorm=refMaxPrice>refMinPrice?
+      Math.max(0,Math.min(1,(a.price-refMinPrice)/(refMaxPrice-refMinPrice))):0;
+    var timeNorm=refMaxTime>refMinTime?
+      Math.max(0,Math.min(1,(a.time-refMinTime)/(refMaxTime-refMinTime))):0;
+    a.score=priceNorm*priceW+timeNorm*timeW;
+
+    // Penalizaciones aditivas (lineales, independientes del score base)
+    if(_prefs.avoidLongWalks&&a.walkMin&&a.walkMin>8){
+      a.score+=0.20;
+    }
+    if(_prefs.avoidTransfers&&a.hasTransfer){
+      a.score+=0.25;
+    }
+    if(_prefs.withLuggage&&(a.mode==='bike'||a.mode==='walk')){
+      a.score+=0.30;
+    }
+    if(_prefs.withChildren&&a.mode==='moto'){
+      a.score+=0.35;
+    }
+    // Clamp score to max 1.0
+    a.score=Math.min(a.score,1.0);
+  });
+
+  // TEMPORAL MEMORY: inject implicit preference bias (invisible, soft only)
+  tmInjectPreference(alternatives);
+
+  // Sort by each criterion
+  var byPrice=alternatives.slice().sort(function(a,b){return a.price-b.price});
+  var byTime=alternatives.slice().sort(function(a,b){return a.time-b.time});
+  var byScore=alternatives.slice().sort(function(a,b){return a.score-b.score});
+
+  // Tie detection: < 5% difference → empate técnico
+  function getTied(arr,prop){
+    if(!arr.length)return[];
+    var best=arr[0];
+    var threshold=Math.abs(best[prop])*0.05;
+    return arr.filter(function(a){return Math.abs(a[prop]-best[prop])<=threshold});
+  }
+
+  // Build transparency reasons
+  var reasons=[];
+  if(_prefs.prioritizePrice)reasons.push('priorizás precio');
+  else if(_prefs.prioritizeSpeed)reasons.push('priorizás velocidad');
+  if(_prefs.avoidMoto)reasons.push('evitás motos');
+  if(_prefs.withLuggage)reasons.push('viajás con equipaje');
+  if(_prefs.withChildren)reasons.push('viajás con niños');
+  if(_prefs.avoidLongWalks)reasons.push('evitás caminatas largas');
+  if(_prefs.avoidTransfers)reasons.push('evitás transbordos');
+  var reasonText=reasons.length?'Motivo: '+reasons.join(', '):'Motivo: configuración estándar';
+
+  return{
+    cheapest:getTied(byPrice,'price'),
+    fastest:getTied(byTime,'time'),
+    balanced:getTied(byScore,'score'),
+    reason:reasonText
+  };
+}
+
+function renderRecommendation(){
+  var el=document.getElementById('recommendationBlock');
+  if(!el)return;
+
+  var rec=computeRecommendation();
+  if(!rec||(!rec.cheapest.length&&!rec.fastest.length&&!rec.balanced.length)){
+    el.style.display='none';
+    return;
+  }
+
+  el.style.display='block';
+  var html='';
+
+  // Header
+  html+='<div style="font-size:11px;font-weight:800;color:var(--accent);margin-bottom:6px;letter-spacing:.5px">🏆 RECOMENDACIÓN VOY</div>';
+
+  // Más barato
+  if(rec.cheapest.length){
+    html+='<div style="font-size:12px;margin-bottom:4px;line-height:1.4">💰 <b>Más barato:</b> ';
+    if(rec.cheapest.length>1){
+      html+='<span style="color:var(--orange);font-weight:600">Empate técnico</span> · '+
+        rec.cheapest.map(function(a){return a.name}).join(' / ');
+    }else{
+      html+=rec.cheapest[0].name+' — <b>'+formatPrice(rec.cheapest[0].price)+'</b>';
+    }
+    html+='</div>';
+  }
+
+  // Más rápido
+  if(rec.fastest.length){
+    html+='<div style="font-size:12px;margin-bottom:4px;line-height:1.4">⚡ <b>Más rápido:</b> ';
+    if(rec.fastest.length>1){
+      html+='<span style="color:var(--orange);font-weight:600">Empate técnico</span> · '+
+        rec.fastest.map(function(a){return a.name}).join(' / ');
+    }else{
+      html+=rec.fastest[0].icon+' '+rec.fastest[0].name+' — <b>'+formatMin(rec.fastest[0].time)+'</b>';
+    }
+    html+='</div>';
+  }
+
+  // Mejor equilibrio
+  if(rec.balanced.length){
+    html+='<div style="font-size:12px;line-height:1.4">⚖️ <b>Mejor equilibrio:</b> ';
+    if(rec.balanced.length>1){
+      html+='<span style="color:var(--orange);font-weight:600">Empate técnico</span> · '+
+        rec.balanced.map(function(a){return a.name}).join(' / ');
+    }else{
+      var b=rec.balanced[0];
+      html+=b.name+' — <b>'+formatPrice(b.price)+'</b> / '+formatMin(b.time);
+    }
+    html+='</div>';
+  }
+
+  // Transparency reason
+  if(rec.reason){
+    html+='<div style="font-size:10px;color:var(--text2);margin-top:4px;font-style:italic">'+rec.reason+'</div>';
+  }
+
+  el.innerHTML=html;
+}
+
+// ===================== DARK MODE AUTO =====================
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){
+    document.body.setAttribute('data-theme',e.matches?'dark':'light');
+  });
+}
+
+// ===================== VA: session close on leave =====================
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')va_close()});
+window.addEventListener('beforeunload',function(){va_close()});
+</body>
+</html>
