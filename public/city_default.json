@@ -1,0 +1,48 @@
+{
+  "city_id": "_default",
+  "name": "Desconocida",
+  "displayName": "Ciudad Desconocida",
+  "map": {
+    "center": [-34.6037, -58.3816],
+    "zoom": 12,
+    "bbox": {
+      "minLat": -34.70,
+      "maxLat": -34.50,
+      "minLon": -58.55,
+      "maxLon": -58.25
+    },
+    "viewbox": "-58.55,-34.70,-58.25,-34.50",
+    "recentCenter": [-58.38, -34.60]
+  },
+  "busStops": [],
+  "bikeStations": [],
+  "landmarks": [],
+  "providers": {
+    "uber": {"name":"Uber","available":false,"color":"#111111","category":"app","verified":false},
+    "didi": {"name":"DiDi","available":false,"color":"#FF6B00","category":"app","verified":false},
+    "maxim": {"name":"Maxim","available":false,"color":"#7C3AED","category":"app","verified":false},
+    "cabify": {"name":"Cabify","available":false,"color":"#00A99D","category":"app","verified":false}
+  },
+  "taxiCompanies": [],
+  "remisCompanies": [],
+  "fareRegistry": {
+    "taxi": {
+      "diurno": {"bajada":0,"ficha":0,"distFicha":130},
+      "nocturno": {"bajada":0,"ficha":0,"distFicha":130},
+      "source":"Sin verificar",
+      "updated_at":""
+    },
+    "bus": {
+      "sube":0,
+      "cash":0,
+      "source":"Sin verificar",
+      "updated_at":""
+    },
+    "apps": {
+      "uber": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""},
+      "didi": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""},
+      "maxim": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""},
+      "cabify": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""}
+    }
+  }
+}
