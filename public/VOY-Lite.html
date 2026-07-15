@@ -1282,116 +1282,129 @@ window.VOY_DEPLOY_TS='__DEPLOY_TS__';
 window.onerror=function(msg,src,line,col,err){console.error('[GLOBAL]',msg,src+':'+line+':'+col,err)};
 window.onunhandledrejection=function(ev){console.error('[REJECTION]',ev.reason)};
 
-// ===================== DATA (Santa Fe) =====================
-// VOY_COLLECTIVE_ENGINE_V1: expanded stops per line so route geometry is a real
-// polyline (not a 2-point straight line). Stops are geographically sequential
-// along each line's real corridor so nearest-neighbor chaining yields a coherent
-// path. Coordinates approximate the actual Santa Fe street grid.
-var BUS_STOPS=[
-  // Línea 1 — Terminal → Centro → Norte (Belgrano / San Martín corridor)
-  {linea:'1',nombre:'Terminal',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
-  {linea:'1',nombre:'Belgrano y Tucumán',lat:-31.6410,lon:-60.7015,calles:'Belgrano y Tucumán'},
-  {linea:'1',nombre:'Belgrano y Salta',lat:-31.6386,lon:-60.7019,calles:'Belgrano y Salta'},
-  {linea:'1',nombre:'San Martín y 25 de Mayo',lat:-31.6354,lon:-60.7002,calles:'San Martín y 25 de Mayo'},
-  {linea:'1',nombre:'San Martín y San Jerónimo',lat:-31.6328,lon:-60.7000,calles:'San Martín y San Jerónimo'},
-  {linea:'1',nombre:'Plaza Mayor',lat:-31.6313,lon:-60.7008,calles:'San Martín y Rivadavia'},
-  // Línea 4 — Hospital Cullen → Centro → Sur (Gral. López / Bvd. Gálvez corridor)
-  {linea:'4',nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
-  {linea:'4',nombre:'Gral. López y Javier de la Rosa',lat:-31.6225,lon:-60.6975,calles:'Gral. López y Javier de la Rosa'},
-  {linea:'4',nombre:'Gral. López y Mendoza',lat:-31.6260,lon:-60.6981,calles:'Gral. López y Mendoza'},
-  {linea:'4',nombre:'Gral. López y 25 de Mayo',lat:-31.6295,lon:-60.6989,calles:'Gral. López y 25 de Mayo'},
-  {linea:'4',nombre:'Bvd. Gálvez y Tucumán',lat:-31.6368,lon:-60.7012,calles:'Bvd. Gálvez y Tucumán'},
-  {linea:'4',nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'},
-  // Línea 8 — Estación Belgrano → Norte (Gral. López / Av. Freyre corridor)
-  {linea:'8',nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
-  {linea:'8',nombre:'Gral. López y Amenábar',lat:-31.6255,lon:-60.6935,calles:'Gral. López y Amenábar'},
-  {linea:'8',nombre:'Av. Freyre y Salvia',lat:-31.6210,lon:-60.7050,calles:'Av. Freyre y Salvia'},
-  {linea:'8',nombre:'Av. Freyre y Aristóbulo del Valle',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
-  {linea:'8',nombre:'Av. Freyre y Gorriti',lat:-31.6150,lon:-60.7082,calles:'Av. Freyre y Gorriti'},
-  {linea:'8',nombre:'Av. Freyre y Salvador del Carril',lat:-31.6122,lon:-60.7102,calles:'Av. Freyre y Salvador del Carril'},
-  // Línea 11 — Centro Cívico → Costanera (25 de Mayo / Av. Costanera corridor)
-  {linea:'11',nombre:'Centro Cívico',lat:-31.6354,lon:-60.6999,calles:'25 de Mayo y San Martín'},
-  {linea:'11',nombre:'25 de Mayo y Tucumán',lat:-31.6372,lon:-60.6993,calles:'25 de Mayo y Tucumán'},
-  {linea:'11',nombre:'25 de Mayo y Balcarce',lat:-31.6320,lon:-60.6920,calles:'25 de Mayo y Balcarce'},
-  {linea:'11',nombre:'Av. Costanera y España',lat:-31.6255,lon:-60.6852,calles:'Av. Costanera y España'},
-  {linea:'11',nombre:'Costanera',lat:-31.6201,lon:-60.6734,calles:'Av. Costanera y Av. del Valle'},
-  // Línea 16 — Plaza Pueyrredón → Belgrano (Cándido Pujato / Belgrano corridor)
-  {linea:'16',nombre:'Plaza Pueyrredón',lat:-31.6445,lon:-60.7087,calles:'Cándido Pujato y Aristóbulo'},
-  {linea:'16',nombre:'Cándido Pujato y Rivadavia',lat:-31.6428,lon:-60.7062,calles:'Cándido Pujato y Rivadavia'},
-  {linea:'16',nombre:'Belgrano y Salta',lat:-31.6386,lon:-60.7019,calles:'Belgrano y Salta'},
-  {linea:'16',nombre:'Belgrano y Tucumán',lat:-31.6362,lon:-60.6978,calles:'Belgrano y Tucumán'},
-  {linea:'16',nombre:'Belgrano y San Martín',lat:-31.6338,lon:-60.6955,calles:'Belgrano y San Martín'},
-  {linea:'16',nombre:'Belgrano',lat:-31.6312,lon:-60.6945,calles:'Belgrano y Rivadavia'}
-];
-var BIKE_STATIONS=[
-  {nombre:'Municipalidad',lat:-31.6349,lon:-60.7007,calles:'25 de Mayo y San Martín'},
-  {nombre:'Plaza 25 de Mayo',lat:-31.6311,lon:-60.6990,calles:'San Martín y Rivadavia'},
-  {nombre:'Teatro Municipal',lat:-31.6325,lon:-60.7012,calles:'San Martín y Córdoba'},
-  {nombre:'Estación Belgrano',lat:-31.6289,lon:-60.6891,calles:'Gral. López y Javier de la Rosa'},
-  {nombre:'Estación Mitre',lat:-31.6356,lon:-60.7089,calles:'Bvd. Pellegrini y Rivadavia'},
-  {nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
-  {nombre:'Av. Freyre',lat:-31.6178,lon:-60.7065,calles:'Av. Freyre y Aristóbulo del Valle'},
-  {nombre:'Plaza Constituyentes',lat:-31.6401,lon:-60.7001,calles:'Rivadavia y Tucumán'},
-  {nombre:'Legislatura',lat:-31.6298,lon:-60.6955,calles:'Amenábar y 25 de Mayo'},
-  {nombre:'Plaza del Soldado',lat:-31.6337,lon:-60.6978,calles:'San Jerónimo y Tucumán'},
-  {nombre:'Hospital Iturraspe',lat:-31.6445,lon:-60.6934,calles:'Bvd. Gálvez y Francia'},
-  {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'}
-];
-var LANDMARKS=[
-  {nombre:'Puente Colgante',lat:-31.6230,lon:-60.6850,calles:'Av. Costanera y Av. del Valle'},
-  {nombre:'Catedral Metropolitana',lat:-31.6315,lon:-60.7010,calles:'San Martín y San Jerónimo'},
-  {nombre:'Universidad Nacional del Litoral',lat:-31.6340,lon:-60.6990,calles:'9 de Julio y San Jerónimo'},
-  {nombre:'Parque del Encuentro',lat:-31.6270,lon:-60.6800,calles:'Av. Costanera Oeste'},
-  {nombre:'Museo Histórico',lat:-31.6330,lon:-60.7015,calles:'San Martín y 25 de Mayo'},
-  {nombre:'Puente Oroño',lat:-31.6190,lon:-60.6820,calles:'Av. Costanera y Bvd. Pellegrini'},
-  {nombre:'Mercado Norte',lat:-31.6360,lon:-60.6980,calles:'San Martín y Tucumán'},
-  {nombre:'Iglesia San Francisco',lat:-31.6320,lon:-60.7030,calles:'San Martín y Ameghino'},
-  {nombre:'Shopping La Estación',lat:-31.6290,lon:-60.6895,calles:'Gral. López y Javier de la Rosa'},
-  {nombre:'Barrio Candioti',lat:-31.6080,lon:-60.6900,calles:'Norte de la ciudad'},
-  {nombre:'Barrio Guadalupe',lat:-31.6380,lon:-60.6800,calles:'Noreste de la ciudad'},
-  {nombre:'Barrio Centenario',lat:-31.6140,lon:-60.7100,calles:'Oeste de la ciudad'},
-  {nombre:'Terminal de Ómnibus',lat:-31.6435,lon:-60.7011,calles:'Belgrano y Freyre'},
-  {nombre:'Hospital Cullen',lat:-31.6198,lon:-60.6978,calles:'Gral. López y Marcial Candioti'},
-  {nombre:'Plaza España',lat:-31.6402,lon:-60.7134,calles:'Bvd. Gálvez y San Jerónimo'}
-];
-var PROVIDERS={
-  uber:{name:'Uber',available:true,color:'#111111',category:'app'},
-  didi:{name:'DiDi',available:true,color:'#FF6B00',category:'app'},
-  maxim:{name:'Maxim',available:true,color:'#7C3AED',category:'app'},
-  // ISSUE-4 FIX: Cabify set to available:false — verified NOT operating in Santa Fe city
-  // (only legally "habilitada" with <40 drivers across ALL apps combined as of Mar 2026).
-  // Cabify's own operational driver page lists BA/Córdoba/Rosario/Mendoza/MdP/Corrientes/
-  // Tucumán/Bariloche — Santa Fe omitted. cabify.com/ar/tarifas/santa-fe returns 404.
-  // Hidden from UI via available:false; re-enable (flip to true) when Cabify actually launches.
-  cabify:{name:'Cabify',available:false,color:'#00A99D',category:'app'},
-  radiotaxi:{name:'Radiotaxi Santa Fe',available:true,color:'#F59E0B',category:'taxi'},
-  taxiapp:{name:'TaxiApp',available:true,color:'#22C55E',category:'taxi'},
-  remisreal:{name:'Remises Real',available:true,color:'#6B7280',category:'remis'}
-};
-var TAXI_COMPANIES=[
-  {id:'radiotaxi',name:'Radiotaxi Santa Fe',whatsapp:'https://wa.link/n7u2e7',app:null,web:null,phone:null},
-  // FIX-003: app field set to null — the previous '@taxiapp_santafe' rendered a dead
-  // data-url="#" button that toasted but never navigated. No verified native deep link
-  // exists for TaxiApp (com.aniversario.pasajero). WhatsApp (wa.link/vavbcl) remains
-  // the single verified working contact path. Button hidden via the if(co.app) guard.
-  {id:'taxiapp',name:'TaxiApp',whatsapp:'https://wa.link/vavbcl',app:null,web:null,phone:null}
-];
-var REMIS_COMPANIES=[
-  {id:'remisreal',name:'Remises Real',whatsapp:'https://wa.link/rqov56',app:null,web:null,phone:null}
-];
-var FareRegistry={
-  taxi:{diurno:{bajada:1600,ficha:160,distFicha:130},nocturno:{bajada:1840,ficha:184,distFicha:130},source:'Resolución N°217/2026',updated_at:'2026-01-01'},
-  bus:{sube:1900,cash:2111,source:'SUBE tariff table Argentina',updated_at:'2025-06-01'},
-  apps:{
-    uber:{base:1000,km:500,min:65,minFare:3000,source:'Uber app estimate range',updated_at:'2025-12-01'},
-    didi:{base:900,km:440,min:55,minFare:2500,source:'DiDi app estimate range',updated_at:'2025-12-01'},
-    maxim:{base:855,km:418,min:52,minFare:2375,source:'Maxim app estimate range',updated_at:'2025-12-01'},
-    // FIX-004: Cabify re-enabled — official help center (help.cabify.com/hc/es/articles/115000996089)
-    // confirms Cabify operates in Santa Fe. Fares are reference estimates (Mar del Plata
-    // tariff as proxy; Santa Fe-specific fares not publicly published). Marked as estimate range.
-    cabify:{base:1100,km:520,min:70,minFare:3300,source:'Cabify app estimate range (reference)',updated_at:'2025-12-01'}
+// ===================== DATA & MULTI-CITY LOADER =====================
+var CURRENT_CITY = null;
+var BUS_STOPS = [];
+var BIKE_STATIONS = [];
+var LANDMARKS = [];
+var PROVIDERS = {};
+var TAXI_COMPANIES = [];
+var REMIS_COMPANIES = [];
+var FareRegistry = {};
+
+function detectCity() {
+  var q = new URLSearchParams(window.location.search);
+  var cityId = q.get('city') || q.get('city_id');
+  if (cityId) return cityId;
+  try {
+    var cached = localStorage.getItem('voy_last_pos');
+    if (cached) {
+      var pos = JSON.parse(cached);
+      if (pos && pos.lat >= -31.67 && pos.lat <= -31.57 && pos.lon >= -60.75 && pos.lon <= -60.65) {
+        return 'santafe';
+      }
+    }
+  } catch (e) {
+    console.error('[detectCity]', e);
   }
-};
+  return '_default';
+}
+
+function createEmergencyDefault(cityId) {
+  var isSF = cityId === 'santafe';
+  return {
+    city_id: cityId,
+    name: isSF ? 'Santa Fe' : 'Desconocida',
+    displayName: isSF ? 'Santa Fe, Argentina' : 'Ciudad Desconocida',
+    map: {
+      center: isSF ? [-60.7087, -31.6256] : [-58.3816, -34.6037],
+      zoom: isSF ? 13 : 12,
+      bbox: isSF ? { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } : { minLat: -34.70, maxLat: -34.50, minLon: -58.55, maxLon: -58.25 },
+      viewbox: isSF ? "-60.75,-31.67,-60.65,-31.57" : "-58.55,-34.70,-58.25,-34.50",
+      recentCenter: isSF ? [-60.70, -31.61] : [-58.38, -34.60]
+    },
+    busStops: [],
+    bikeStations: [],
+    landmarks: [],
+    providers: {
+      uber: {name:'Uber',available:false,color:'#111111',category:'app',verified:false},
+      didi: {name:'DiDi',available:false,color:'#FF6B00',category:'app',verified:false},
+      maxim: {name:'Maxim',available:false,color:'#7C3AED',category:'app',verified:false},
+      cabify: {name:'Cabify',available:false,color:'#00A99D',category:'app',verified:false}
+    },
+    taxiCompanies: [],
+    remisCompanies: [],
+    fareRegistry: {
+      taxi: { diurno: {bajada:0,ficha:0,distFicha:130}, nocturno: {bajada:0,ficha:0,distFicha:130}, source:'Sin verificar', updated_at:'' },
+      bus: { sube:0, cash:0, source:'Sin verificar', updated_at:'' },
+      apps: {
+        uber: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''},
+        didi: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''},
+        maxim: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''},
+        cabify: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''}
+      }
+    }
+  };
+}
+
+function updateCityUI() {
+  if (!CURRENT_CITY) return;
+  document.title = 'VOY — Movilidad ' + CURRENT_CITY.name;
+  var metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) {
+    metaDesc.setAttribute('content', 'VOY — Asistente de movilidad urbana para ' + CURRENT_CITY.name + '. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.');
+  }
+  var mapEl = document.getElementById('map');
+  if (mapEl) {
+    mapEl.setAttribute('aria-label', 'Mapa de ' + CURRENT_CITY.name);
+  }
+  var footer = document.querySelector('.footer');
+  if (footer) {
+    for (var i = 0; i < footer.childNodes.length; i++) {
+      var node = footer.childNodes[i];
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.indexOf('Movilidad') >= 0) {
+        node.nodeValue = 'VOY · Movilidad ' + CURRENT_CITY.name + ' · Datos informativos';
+        break;
+      }
+    }
+  }
+}
+
+async function loadCityProfile(cityId) {
+  var url = 'city_' + cityId + '.json';
+  var data = null;
+  try {
+    var response = await fetch(url);
+    if (response.ok) {
+      data = await response.json();
+      localStorage.setItem('voy_city_cache_' + cityId, JSON.stringify(data));
+    } else {
+      throw new Error('Response status ' + response.status);
+    }
+  } catch (e) {
+    console.warn('[loadCityProfile] Fetch failed for ' + cityId + ', trying local cache...', e);
+    try {
+      var cached = localStorage.getItem('voy_city_cache_' + cityId);
+      if (cached) {
+        data = JSON.parse(cached);
+      }
+    } catch (cacheErr) {
+      console.error('[loadCityProfile] Cache retrieval failed', cacheErr);
+    }
+  }
+  if (!data) {
+    console.warn('[loadCityProfile] Cache fallback unavailable. Instantiating emergency default for ' + cityId);
+    data = createEmergencyDefault(cityId);
+  }
+  CURRENT_CITY = data;
+  BUS_STOPS = data.busStops || [];
+  BIKE_STATIONS = data.bikeStations || [];
+  LANDMARKS = data.landmarks || [];
+  PROVIDERS = data.providers || {};
+  TAXI_COMPANIES = data.taxiCompanies || [];
+  REMIS_COMPANIES = data.remisCompanies || [];
+  FareRegistry = data.fareRegistry || {};
+}
 
 // ===================== SVG ICON SYSTEM (no emojis) =====================
 function svg(name,size){
@@ -1556,7 +1569,7 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 function isMaximSupported(){return /android/i.test(navigator.userAgent||'')}
 
 // ===================== INIT =====================
-document.addEventListener('DOMContentLoaded',function(){
+document.addEventListener('DOMContentLoaded',async function(){
   // Inject SVG icons into buttons
   document.getElementById('sbSearchIcon').innerHTML=svg('search',22);
   document.getElementById('sbMapBtn').innerHTML=svg('mapPin',22);
@@ -1570,6 +1583,11 @@ document.addEventListener('DOMContentLoaded',function(){
   var fm=document.querySelector('.footer-mark');
   if(fm)fm.innerHTML='<svg width="12" height="12" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 24 32 L 60 92 L 96 32 L 60 56 Z"/></svg>';
 
+  // Resolve and load current city profile asynchronously
+  var cityId = detectCity();
+  await loadCityProfile(cityId);
+
+  // Initialize MobilityController with loaded city profile
   MC.init({busStops:BUS_STOPS,bikeStations:BIKE_STATIONS,landmarks:LANDMARKS,fareRegistry:FareRegistry,providers:PROVIDERS,recentKey:'voy_recent_searches',favsKey:'voy_favorites',favMetricsKey:'voy_fav_metrics'});
   MC.loadMemory();
   MC.v5NewSessionToken();
@@ -1590,6 +1608,7 @@ document.addEventListener('DOMContentLoaded',function(){
   document.body.setAttribute('data-map-state','SEARCH_FOCUS'); // V7.4: initial map state
   initFloatingChip(); // V7.4: wire floating chip click → SEARCH_FOCUS
   initOfflineChip(); // V7.8: wire offline chip + online/offline listeners
+  updateCityUI(); // Update texts/meta-data with current city details
   // app_ready → dismiss splash (exit_condition: app_ready_event)
   _signalAppReady();
 
@@ -1653,7 +1672,9 @@ var _mapLoadTimeout=null,_mapStyleLoaded=false;
 function initMap(){
   if(typeof maplibregl==='undefined'){console.error('[MAP] maplibregl missing');return}
   try{
-    _map=new maplibregl.Map({container:'map',style:CARTO_STYLE,center:[-60.7087,-31.6256],zoom:13,attributionControl:false,interactive:true});
+    var mapCenter = (CURRENT_CITY && CURRENT_CITY.map) ? CURRENT_CITY.map.center : [-60.7087,-31.6256];
+    var mapZoom = (CURRENT_CITY && CURRENT_CITY.map) ? CURRENT_CITY.map.zoom : 13;
+    _map=new maplibregl.Map({container:'map',style:CARTO_STYLE,center:mapCenter,zoom:mapZoom,attributionControl:false,interactive:true});
     _map.on('click',onMapClick);
     _map.on('dragstart',function(){ if(MC.getDest()) VoyMapContext.setState('FULL_MAP'); }); // V7.4: on_map_drag → FULL_MAP
     _map.on('error',function(e){if(_mapStyleLoaded)return;clearTimeout(_mapLoadTimeout);console.warn('[MAP] CARTO error, fallback OSM',e);_map.setStyle(FALLBACK_STYLE)});
@@ -2002,15 +2023,15 @@ async function onSearchInput(val){
     if(version!==_searchVersion)return;
     var merged=MC.dedupResults(localRanked.concat(remote||[]));
     if(version!==_searchVersion)return;
-    // V7.11 GEO_BIAS: detectar low confidence = primer resultado remoto fuera del bbox SF.
+    // V7.11 GEO_BIAS: detectar low confidence = primer resultado remoto fuera del bbox.
     //   Nominatim con bounded=1 aún puede retornar resultados edge-case fuera del bbox.
-    //   Si el top resultado está fuera, mostramos el label "¿Buscando en Santa Fe?".
+    //   Si el top resultado está fuera, mostramos el label "¿Buscando en la ciudad?".
     var lowConf=false;
     if(remote&&remote.length>0){
       var topR=remote[0];
-      if(topR&&typeof topR.lat==='number'&&typeof topR.lon==='number'){
-        // bbox SF: lat [-31.67, -31.57], lon [-60.75, -60.65]
-        if(topR.lat<-31.67||topR.lat>-31.57||topR.lon<-60.75||topR.lon>-60.65){lowConf=true}
+      if(topR&&typeof topR.lat==='number'&&typeof topR.lon==='number'&&CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox){
+        var bbox=CURRENT_CITY.map.bbox;
+        if(topR.lat<bbox.minLat||topR.lat>bbox.maxLat||topR.lon<bbox.minLon||topR.lon>bbox.maxLon){lowConf=true}
       }
     }
     if(merged.length){renderSearchDropdown(merged.slice(0,8),false,false,lowConf)}
@@ -2028,8 +2049,10 @@ function onSearchKeydown(e){
 }
 async function fallbackGeocode(q){
   try{
-    // V7.11 GEO_BIAS: viewbox sincronizado con mobilityController.searchNominatim (Santa Fe ciudad tight bbox).
-    var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', Santa Fe, Argentina')+'&format=json&limit=1&accept-language=es&viewbox=-60.75,-31.67,-60.65,-31.57&bounded=1';
+    // V7.11 GEO_BIAS: viewbox sincronizado con mobilityController.searchNominatim (ciudad tight bbox).
+    var displayName = CURRENT_CITY ? CURRENT_CITY.displayName : 'Santa Fe, Argentina';
+    var viewbox = (CURRENT_CITY && CURRENT_CITY.map) ? CURRENT_CITY.map.viewbox : '-60.75,-31.67,-60.65,-31.57';
+    var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', ' + displayName)+'&format=json&limit=1&accept-language=es&viewbox='+viewbox+'&bounded=1';
     var r=await fetch(url,{headers:{'User-Agent':'MovilidadAsistente/1.0'}});
     var data=await r.json();
     if(data&&data[0]){var lat=parseFloat(data[0].lat),lon=parseFloat(data[0].lon);var name=data[0].display_name.split(',').slice(0,2).join(', ');selectDest(lat,lon,data[0].display_name)}
@@ -2081,10 +2104,11 @@ function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
     dd.classList.remove('hidden');return;
   }
   var html='';
-  // V7.11 GEO_BIAS: si lowConfidence (primer resultado fuera del bbox SF), mostrar label
-  //   "¿Buscando en Santa Fe?" con botón re-centrar. Previere ambigüedad geográfica.
+  // V7.11 GEO_BIAS: si lowConfidence (primer resultado fuera del bbox), mostrar label
+  //   "¿Buscando en la ciudad?" con botón re-centrar. Previene ambigüedad geográfica.
   if(lowConfidence){
-    html+='<div class="sd-geo-hint" id="geoHint"><span class="sd-geo-hint-ic">'+svg('pin',14)+'</span><span class="sd-geo-hint-txt">¿Buscando en Santa Fe?</span><button class="sd-geo-hint-btn" id="geoHintBtn" aria-label="Re-centrar mapa en Santa Fe">Re-centrar</button></div>';
+    var cityName = CURRENT_CITY ? CURRENT_CITY.name : 'Santa Fe';
+    html+='<div class="sd-geo-hint" id="geoHint"><span class="sd-geo-hint-ic">'+svg('pin',14)+'</span><span class="sd-geo-hint-txt">¿Buscando en '+escapeHtml(cityName)+'?</span><button class="sd-geo-hint-btn" id="geoHintBtn" aria-label="Re-centrar mapa en '+escapeHtml(cityName)+'">Re-centrar</button></div>';
   }
   results.forEach(function(r){
     var lat=parseFloat(r.lat||r.latitude),lon=parseFloat(r.lon||r.longitude);
@@ -2114,7 +2138,9 @@ function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
   if(hintBtn){
     hintBtn.addEventListener('click',function(e){
       e.stopPropagation();e.preventDefault();
-      if(window._map){_map.flyTo({center:[-60.70,-31.61],zoom:14,duration:800})}
+      if(window._map&&CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.recentCenter){
+        _map.flyTo({center:CURRENT_CITY.map.recentCenter,zoom:14,duration:800})
+      }
       var hint=document.getElementById('geoHint');if(hint)hint.remove();
     });
   }
