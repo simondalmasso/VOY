@@ -2279,6 +2279,14 @@ function loadCachedPosition(){
     }
   } catch (e) {}
 }
+function locateMe(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    MC.setOriginManual(false);
+    cachePosition(pos.coords.latitude,pos.coords.longitude);
+    _handleGpsPosition(pos.coords.latitude,pos.coords.longitude);
+  },function(){loadCachedPosition()},{enableHighAccuracy:true,timeout:10000});
+}
 
 // ===================== VOY_NAVIGATOR (NAVIGATION_MODULE_MINIMAL_V1) =====================
 // OPTIONAL_TOGGLE_MODULE — lazy-loaded on first "Navegar" tap (do_not_auto_enable).
