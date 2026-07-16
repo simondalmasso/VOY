@@ -104,7 +104,11 @@ test.describe('Destination Resolution V2 browser smoke', () => {
     expect(page.__voyEvidence.geocodeCalls).toBe(0);
     await input.press('Enter');
     await expect.poll(() => page.__voyEvidence.geocodeCalls).toBe(1);
+    await expect(dropdown).toContainText('Bv. Gálvez 1150, Santa Fe');
+    expect(await page.evaluate(() => window.MC.getDest())).toBeNull();
+    await dropdown.locator('[data-candidate-index="0"]').click();
     await expect.poll(() => page.evaluate(() => window.MC.getDest() && window.MC.getDest().name)).toContain('Bv. Gálvez 1150');
+    expect(await page.evaluate(() => window.MC.getDest())).toMatchObject(BRIDGE);
 
     await input.fill('');
     await expect.poll(() => page.evaluate(() => window.MC.getDest())).toBeNull();
