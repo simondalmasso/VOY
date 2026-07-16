@@ -4,11 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const Resolver = require('../public/core/destinationResolver.js');
 
 function loadWorker(fetchImpl) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8')
     .replace('export class NominatimCoordinator', 'class NominatimCoordinator')
-    .replace(/export default worker;/, 'globalThis.__worker = worker; globalThis.__NominatimCoordinator = NominatimCoordinator;');
+    .replace(/export default worker;/, 'globalThis.__worker = worker; globalThis.__NominatimCoordinator = NominatimCoordinator; globalThis.__geocodeClients = _geocodeClients; globalThis.__geocodeRateAllowed = _geocodeRateAllowed; globalThis.__geocodeClientsMax = GEOCODE_CLIENTS_MAX;');
   const stored = new Map();
   const cache = {
     async match(request) { const response = stored.get(request.url); return response ? response.clone() : undefined; },
@@ -33,7 +34,17 @@ function loadWorker(fetchImpl) {
       get() { return { fetch: (url, options) => coordinator.fetch(new Request(url, options)) }; }
     }
   };
-  return { worker: context.__worker, cache, env, storage, durableData, Coordinator: context.__NominatimCoordinator };
+  return { worker: context.__worker, cache, env, storage, durableData, Coordinator: context.__NominatimCoordinator, clients: context.__geocodeClients, rateAllowed: context.__geocodeRateAllowed, clientsMax: context.__geocodeClientsMax };
+}
+
+function realisticAddress(overrides = {}) {
+  return {
+    display_name: '1150, Bulevar Gálvez, Santa Fe, La Capital, Santa Fe, Argentina',
+    lat: '-31.639764', lon: '-60.682736', osm_type: 'node', osm_id: 123456,
+    category: 'place', type: 'house', importance: 0.05,
+    address: { house_number: '1150', road: 'Bulevar Gálvez', city: 'Santa Fe', state: 'Santa Fe', country: 'Argentina', country_code: 'ar' },
+    namedetails: {}, ...overrides
+  };
 }
 
 function providerResult(overrides = {}) {
@@ -105,4 +116,55 @@ test('territorial search filters malformed and outside-city provider results', a
   const response = await worker.fetch(new Request('https://voy.test/api/geocode?q=San%20Mart%C3%ADn&city=santafe', { headers: { 'cf-connecting-ip': '192.0.2.5' } }), env, { waitUntil() {} });
   const body = await response.json();
   assert.equal(body.results.length, 1);
+});
+
+test('realistic Nominatim house shape maps structurally and resolves boulevard variants independent of importance', async () => {
+  const { worker, env } = loadWorker(async () => new Response(JSON.stringify([realisticAddress()])));
+  const response = await worker.fetch(new Request('https://voy.test/api/geocode?q=Bv.%20G%C3%A1lvez%201150&city=santafe', { headers: { 'cf-connecting-ip': '192.0.2.20' } }), env, { waitUntil() {} });
+  const candidate = (await response.json()).results[0];
+  assert.deepEqual({ name: candidate.name, address: candidate.address, houseNumber: candidate.houseNumber, road: candidate.road, city: candidate.city, state: candidate.state, countryCode: candidate.countryCode }, {
+    name: 'Bulevar Gálvez 1150', address: 'Bulevar Gálvez 1150, Santa Fe, Santa Fe', houseNumber: '1150', road: 'Bulevar Gálvez', city: 'Santa Fe', state: 'Santa Fe', countryCode: 'ar'
+  });
+  for (const query of ['Bv. Gálvez 1150', 'Bulevar Gálvez 1150', 'Bv Gálvez 1150']) {
+    assert.equal(Resolver.resolve(query, [candidate], { bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } }).status, 'resolved', query);
+  }
+  assert.notEqual(Resolver.resolve('Bv. Gálvez 1151', [candidate], { bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } }).status, 'resolved');
+  assert.notEqual(Resolver.resolve('Bv. Pellegrini 1150', [candidate], { bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } }).status, 'resolved');
+});
+
+test('house without structured number is not exact and close distinct OSM addresses require choice', async () => {
+  const { worker, env } = loadWorker(async () => new Response(JSON.stringify([
+    realisticAddress({ osm_id: 1, address: { road: 'Bulevar Gálvez', city: 'Santa Fe', state: 'Santa Fe', country_code: 'ar' } }),
+    realisticAddress({ osm_id: 2, lon: '-60.68270' }),
+    realisticAddress({ osm_id: 3, lon: '-60.68265' })
+  ])));
+  const response = await worker.fetch(new Request('https://voy.test/api/geocode?q=Bv.%20G%C3%A1lvez%201150&city=santafe', { headers: { 'cf-connecting-ip': '192.0.2.21' } }), env, { waitUntil() {} });
+  const candidates = (await response.json()).results;
+  const options = { bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } };
+  assert.equal(Resolver.structuredAddressMatch('Bv. Gálvez 1150', candidates[0]), false);
+  assert.notEqual(Resolver.resolve('Bv. Gálvez 1150', [candidates[0]], options).status, 'resolved');
+  assert.equal(Resolver.resolve('Bv. Gálvez 1150', candidates.slice(1), options).status, 'choose');
+});
+
+test('client rate map hashes keys, isolates clients, prunes expired windows and resets them', async () => {
+  const { clients, rateAllowed } = loadWorker(async () => new Response('[]'));
+  const requestA = new Request('https://voy.test/', { headers: { 'cf-connecting-ip': '192.0.2.31' } });
+  const requestB = new Request('https://voy.test/', { headers: { 'cf-connecting-ip': '192.0.2.32' } });
+  assert.equal(await rateAllowed(requestA), true);
+  assert.equal(await rateAllowed(requestB), true);
+  assert.equal(clients.size, 2);
+  assert.ok([...clients.keys()].every(key => !key.includes('192.0.2.')));
+  for (const entry of clients.values()) entry.startedAt = Date.now() - 60001;
+  assert.equal(await rateAllowed(requestA), true);
+  assert.equal(clients.size, 1);
+  assert.equal([...clients.values()][0].count, 1);
+});
+
+test('client rate map has an explicit maximum and rejects new clients after deterministic pruning', async () => {
+  const { clients, rateAllowed, clientsMax } = loadWorker(async () => new Response('[]'));
+  const now = Date.now();
+  for (let index = 0; index < clientsMax; index += 1) clients.set('hash-' + index, { startedAt: now, count: 1 });
+  const allowed = await rateAllowed(new Request('https://voy.test/', { headers: { 'cf-connecting-ip': '198.51.100.10' } }));
+  assert.equal(allowed, false);
+  assert.equal(clients.size, clientsMax);
 });

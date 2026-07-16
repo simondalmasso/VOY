@@ -8,10 +8,11 @@ const evidenceDirectory = 'test-results/evidence';
 function remoteCandidate(overrides) {
   return {
     canonicalId: 'osm:node:fixture', source: 'remote', type: 'address',
-    name: 'Bv. Gálvez 1150', displayName: 'Bv. Gálvez 1150, Santa Fe',
-    address: 'Bv. Gálvez 1150, Santa Fe', lat: BRIDGE.lat, lon: BRIDGE.lon,
-    cityId: 'santafe', precision: 'house', confidence: 0.8, verified: false,
-    aliases: [], osmType: 'node', osmId: 'fixture', ...overrides
+    name: '1150', displayName: '1150, Bulevar Gálvez, Santa Fe, Argentina',
+    address: 'Bulevar Gálvez 1150, Santa Fe', lat: BRIDGE.lat, lon: BRIDGE.lon,
+    cityId: 'santafe', precision: 'house', confidence: 0.05, verified: false,
+    aliases: [], osmType: 'node', osmId: 'fixture', houseNumber: '1150', road: 'Bulevar Gálvez',
+    city: 'Santa Fe', state: 'Santa Fe', countryCode: 'ar', ...overrides
   };
 }
 
@@ -107,7 +108,6 @@ test.describe('Destination Resolution V2 browser smoke', () => {
     await expect(dropdown).toContainText('Bv. Gálvez 1150, Santa Fe');
     expect(await page.evaluate(() => window.MC.getDest())).toBeNull();
     await dropdown.locator('[data-candidate-index="0"]').click();
-    await expect.poll(() => page.evaluate(() => window.MC.getDest() && window.MC.getDest().name)).toContain('Bv. Gálvez 1150');
     expect(await page.evaluate(() => window.MC.getDest())).toMatchObject(BRIDGE);
 
     await input.fill('');

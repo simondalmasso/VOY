@@ -47,7 +47,12 @@
       verified: raw.verified === true,
       aliases: Array.isArray(raw.aliases) ? raw.aliases.slice() : [],
       osmType: String(osmType || ''),
-      osmId: String(osmId || '')
+      osmId: String(osmId || ''),
+      houseNumber: String(raw.houseNumber || raw.house_number || ''),
+      road: String(raw.road || ''),
+      city: String(raw.city || ''),
+      state: String(raw.state || ''),
+      countryCode: String(raw.countryCode || raw.country_code || '').toLowerCase()
     };
   }
 
@@ -91,10 +96,21 @@
     return 'none';
   }
 
+  function structuredAddressMatch(query, candidate) {
+    if (!candidate || candidate.precision !== 'house' || !candidate.houseNumber || !candidate.road) return false;
+    var normalized = normalizeText(query);
+    var numberMatch = normalized.match(/\b(\d{1,5})\b/);
+    if (!numberMatch || numberMatch[1] !== String(candidate.houseNumber).trim()) return false;
+    var queryRoad = normalizeText(normalized.replace(/\b\d{1,5}\b/, ' '));
+    var candidateRoad = normalizeText(candidate.road);
+    return !!queryRoad && queryRoad === candidateRoad;
+  }
+
   function scoreCandidate(query, candidate, options) {
     options = options || {};
     var kind = matchKind(query, candidate);
-    var score = kind === 'exact' ? 0.52 : kind === 'alias' ? 0.47 : kind === 'tokens' ? 0.3 : kind === 'partial' ? 0.24 : 0;
+    var structuredAddress = structuredAddressMatch(query, candidate) && validateCandidate(candidate, options).valid;
+    var score = structuredAddress ? 0.58 : kind === 'exact' ? 0.52 : kind === 'alias' ? 0.47 : kind === 'tokens' ? 0.3 : kind === 'partial' ? 0.24 : 0;
     if (candidate.verified) score += 0.18;
     if (candidate.canonicalId) score += 0.06;
     score += PRECISION_WEIGHT[candidate.precision] || 0;
@@ -131,6 +147,7 @@
       var duplicate = out.findIndex(function (existing) {
         if (candidate.canonicalId && existing.canonicalId === candidate.canonicalId) return true;
         if (candidate.osmType && candidate.osmId && existing.osmType === candidate.osmType && existing.osmId === candidate.osmId) return true;
+        if (candidate.osmType && candidate.osmId && existing.osmType && existing.osmId) return false;
         return normalizeText(candidate.name) === normalizeText(existing.name) &&
           validateCandidate(candidate, { allowOutside: true }).valid && validateCandidate(existing, { allowOutside: true }).valid &&
           haversineMeters(candidate.lat, candidate.lon, existing.lat, existing.lon) < thresholdMeters;
@@ -165,7 +182,7 @@
     var second = ranked[1];
     var close = second && first.confidence - second.confidence < 0.09;
     var exactVerified = first.verified && (matchKind(query, first) === 'exact' || matchKind(query, first) === 'alias') && first.confidence >= 0.82;
-    var address = first.source === 'remote' && isCompleteAddress(query) && first.precision === 'house' && first.confidence >= 0.72;
+    var address = first.source === 'remote' && isCompleteAddress(query) && structuredAddressMatch(query, first) && first.precision === 'house' && first.confidence >= 0.72;
     if ((exactVerified || address) && !close) return { status: 'resolved', candidate: first, candidates: ranked };
     return { status: 'choose', candidates: ranked };
   }
@@ -205,6 +222,7 @@
     validateCandidate: validateCandidate,
     haversineMeters: haversineMeters,
     rankCandidates: rankCandidates,
+    structuredAddressMatch: structuredAddressMatch,
     deduplicateCandidates: deduplicateCandidates,
     searchLocalSources: searchLocalSources,
     reconcileRecents: reconcileRecents,

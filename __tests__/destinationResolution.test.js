@@ -93,7 +93,7 @@ test('complete address may resolve but ambiguous street and no-result queries do
     canonicalId: 'osm:node:1', source: 'remote', type: 'address', name: 'Bv. Gálvez 1150',
     displayName: 'Bv. Gálvez 1150, Santa Fe', address: 'Bv. Gálvez 1150, Santa Fe', lat: -31.639764,
     lon: -60.682736, cityId: 'santafe', precision: 'house', confidence: 0, verified: false, aliases: [],
-    osmType: 'node', osmId: '1'
+    osmType: 'node', osmId: '1', houseNumber: '1150', road: 'Bulevar Gálvez'
   };
   assert.equal(Resolver.resolve('Bv. Gálvez 1150', [address], { bbox }).status, 'resolved');
   assert.notEqual(Resolver.resolve('San Martín', [address], { bbox }).status, 'resolved');
@@ -166,7 +166,7 @@ test('favorites with canonical identity cannot displace their verified curated m
 
 test('remote fixtures cover height addresses, intersections and malformed results deterministically', () => {
   const fixtures = [
-    { name: 'San Martín 2000', precision: 'house', type: 'address', lat: -31.63, lon: -60.7, osmType: 'node', osmId: '1' },
+    { name: 'San Martín 2000', precision: 'house', type: 'address', lat: -31.63, lon: -60.7, osmType: 'node', osmId: '1', houseNumber: '2000', road: 'San Martín' },
     { name: '25 de Mayo y Tucumán', precision: 'intersection', type: 'intersection', lat: -31.64, lon: -60.7, osmType: 'node', osmId: '2' },
     { name: 'Bulevar Gálvez y Dorrego', precision: 'intersection', type: 'intersection', lat: -31.63, lon: -60.68, osmType: 'node', osmId: '3' },
     { name: 'Av. Freyre y Suipacha', precision: 'intersection', type: 'intersection', lat: -31.64, lon: -60.72, osmType: 'node', osmId: '4' }

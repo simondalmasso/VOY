@@ -41,6 +41,7 @@ const GEOCODE_CITIES = {
 const GEOCODE_QUERY_MAX_LENGTH = 120;
 const GEOCODE_RATE_LIMIT = 20;
 const GEOCODE_RATE_WINDOW_MS = 60000;
+const GEOCODE_CLIENTS_MAX = 1000;
 const GEOCODE_CONTRACT_VERSION = 'v2';
 const GEOCODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const NOMINATIM_MIN_INTERVAL_MS = 1100;
@@ -48,6 +49,7 @@ const NOMINATIM_MAX_QUEUE = 10;
 const NOMINATIM_MAX_WAIT_MS = 10000;
 const NOMINATIM_FETCH_TIMEOUT_MS = 8000;
 const _geocodeClients = new Map();
+const _geocodeClientSalt = crypto.randomUUID();
 
 // V7.8 — 3 eventos canónicos. Nombres legacy se mapean a estos.
 const V2_EVENTS = ['estimation', 'provider_tap', 'search'];
@@ -258,11 +260,16 @@ function _normalizedGeocodeQuery(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, GEOCODE_QUERY_MAX_LENGTH + 1);
 }
 
-function _geocodeRateAllowed(request) {
+async function _geocodeRateAllowed(request) {
   const now = Date.now();
-  const client = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anonymous').split(',')[0].trim();
+  for (const [key, entry] of _geocodeClients) {
+    if (now - entry.startedAt >= GEOCODE_RATE_WINDOW_MS) _geocodeClients.delete(key);
+  }
+  const clientIp = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anonymous').split(',')[0].trim();
+  const client = await _sha256Hex(_geocodeClientSalt + ':' + clientIp);
   const current = _geocodeClients.get(client);
   if (!current || now - current.startedAt >= GEOCODE_RATE_WINDOW_MS) {
+    if (_geocodeClients.size >= GEOCODE_CLIENTS_MAX) return false;
     _geocodeClients.set(client, { startedAt: now, count: 1 });
     return true;
   }
@@ -284,13 +291,21 @@ function _remoteCandidate(item, cityId) {
   const osmType = String(item.osm_type || '');
   const osmId = String(item.osm_id || '');
   const parts = displayName.split(',').map(part => part.trim()).filter(Boolean);
+  const structured = item.address && typeof item.address === 'object' ? item.address : {};
+  const houseNumber = String(structured.house_number || '').trim();
+  const road = String(structured.road || structured.pedestrian || structured.residential || structured.footway || structured.path || structured.cycleway || '').trim();
+  const city = String(structured.city || structured.town || structured.municipality || structured.village || '').trim();
+  const state = String(structured.state || '').trim();
+  const countryCode = String(structured.country_code || '').toLowerCase();
+  const structuredName = road && houseNumber ? `${road} ${houseNumber}` : '';
+  const structuredAddress = [structuredName || road, city, state].filter(Boolean).join(', ');
   return {
     canonicalId: osmType && osmId ? `osm:${osmType}:${osmId}` : '',
     source: 'remote',
     type: item.type || item.category || 'place',
-    name: item.name || (item.namedetails && (item.namedetails.name || item.namedetails['name:es'])) || parts[0] || '',
+    name: structuredName || item.name || (item.namedetails && (item.namedetails.name || item.namedetails['name:es'])) || parts[0] || '',
     displayName,
-    address: parts.slice(1, 4).join(', '),
+    address: structuredAddress || parts.slice(1, 4).join(', '),
     lat: Number(item.lat),
     lon: Number(item.lon),
     cityId,
@@ -299,7 +314,12 @@ function _remoteCandidate(item, cityId) {
     verified: false,
     aliases: [],
     osmType,
-    osmId
+    osmId,
+    houseNumber,
+    road,
+    city,
+    state,
+    countryCode
   };
 }
 
@@ -331,7 +351,7 @@ async function _handleGeocode(request, env, ctx) {
   const cacheKey = new Request(cacheUrl.toString(), { method: 'GET' });
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
-  if (!_geocodeRateAllowed(request)) return _geocodeJson({ error: 'rate_limited', results: [] }, 429, { 'Retry-After': '60' });
+  if (!(await _geocodeRateAllowed(request))) return _geocodeJson({ error: 'rate_limited', results: [] }, 429, { 'Retry-After': '60' });
   if (provider !== 'nominatim' && !env.VOY_GEOCODE_PROVIDER_URL) return _geocodeJson({ error: 'provider_not_configured', results: [] }, 503);
 
   if (!env.NOMINATIM_COORDINATOR) return _geocodeJson({ error: 'coordinator_unavailable', results: [] }, 503, { 'Retry-After': '5' });
