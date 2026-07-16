@@ -63,6 +63,7 @@ jobs:
       - name: Deploy to Cloudflare Workers
         id: deploy
         run: |
+          set -o pipefail
           npx wrangler deploy --minify 2>&1 | tee deploy.log
           # Extract the worker URL from the output
           WORKER_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1 || true)
