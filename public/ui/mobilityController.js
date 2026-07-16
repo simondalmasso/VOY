@@ -141,15 +141,18 @@
   }
 
   function setProfile(config) {
-    if (!config) config = {};
-    _config.profile = config.profile || { city_id: config.city_id || '_default' };
+    if (!config || !config.preparedMemoryState) {
+      throw new Error('preparedMemoryState is required');
+    }
+
+    _config.profile = config.profile || { city_id: '_default' };
     _config.busStops = config.busStops || [];
     _config.bikeStations = config.bikeStations || [];
     _config.landmarks = config.landmarks || [];
     _config.providers = config.providers || {};
     _config.fareRegistry = config.fareRegistry || {};
 
-    // Clear and reset obsolete states
+    // Clear and reset obsolete states síncronamente
     _origin = null;
     _dest = null;
     _estimations = null;
@@ -161,33 +164,22 @@
       _searchTimer = null;
     }
 
-    // Apply pre-resolved preparedMemoryState directly if provided
+    // Apply pre-resolved preparedMemoryState directly (strictly no storage reads!)
     resetMemoryState();
-    var memState = config.preparedMemoryState;
-    if (!memState) {
-      // Fallback: read directly from localStorage (backward compatibility for mock tests)
-      var targetCityId = (_config.profile && _config.profile.city_id) || '_default';
-      var saved = localStorage.getItem('voy_memory_' + targetCityId);
-      if (saved) {
-        try {
-          memState = JSON.parse(saved);
-        } catch (e) {}
-      }
-    }
-
-    if (memState) {
-      if (memState.favorites) {
-        if (memState.favorites.casa) _memory.favorites.casa = memState.favorites.casa;
-        if (memState.favorites.trabajo) _memory.favorites.trabajo = memState.favorites.trabajo;
-        if (memState.favorites.custom && Array.isArray(memState.favorites.custom)) {
-          _memory.favorites.custom = memState.favorites.custom.slice(0, CUSTOM_FAV_MAX);
+    var parsed = config.preparedMemoryState;
+    if (parsed) {
+      if (parsed.favorites) {
+        if (parsed.favorites.casa) _memory.favorites.casa = parsed.favorites.casa;
+        if (parsed.favorites.trabajo) _memory.favorites.trabajo = parsed.favorites.trabajo;
+        if (parsed.favorites.custom && Array.isArray(parsed.favorites.custom)) {
+          _memory.favorites.custom = parsed.favorites.custom.slice(0, CUSTOM_FAV_MAX);
         }
       }
-      if (memState.history && Array.isArray(memState.history)) {
-        _memory.history = memState.history.slice(0, HISTORY_MAX);
+      if (parsed.history && Array.isArray(parsed.history)) {
+        _memory.history = parsed.history.slice(0, HISTORY_MAX);
       }
-      if (memState.metrics) {
-        var m = memState.metrics;
+      if (parsed.metrics) {
+        var m = parsed.metrics;
         if (m.favTrips != null) _memory.metrics.favTrips = m.favTrips;
         if (m.histTrips != null) _memory.metrics.histTrips = m.histTrips;
         if (m.providerTrips != null) _memory.metrics.providerTrips = m.providerTrips;

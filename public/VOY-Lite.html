@@ -1407,25 +1407,6 @@ function updateCityUI() {
 
 let cityLoadGeneration = 0;
 window.cityLoadGeneration = 0;
-window.__testHooks = { failPrepareCityContext: false };
-
-function captureTerritorialSnapshot() {
-  return {
-    CURRENT_CITY: CURRENT_CITY ? JSON.stringify(CURRENT_CITY) : null,
-    BUS_STOPS: JSON.stringify(BUS_STOPS),
-    BIKE_STATIONS: JSON.stringify(BIKE_STATIONS),
-    LANDMARKS: JSON.stringify(LANDMARKS),
-    PROVIDERS: JSON.stringify(PROVIDERS),
-    TAXI_COMPANIES: JSON.stringify(TAXI_COMPANIES),
-    REMIS_COMPANIES: JSON.stringify(REMIS_COMPANIES),
-    FareRegistry: JSON.stringify(FareRegistry),
-    MC_origin: window.MC ? JSON.stringify(window.MC.getOrigin()) : null,
-    MC_dest: window.MC ? JSON.stringify(window.MC.getDest()) : null,
-    localStorage: JSON.stringify(localStorage),
-    document_title: document.title
-  };
-}
-window.captureTerritorialSnapshot = captureTerritorialSnapshot;
 
 async function loadCityProfile(cityId) {
   var generation = ++cityLoadGeneration;
@@ -1445,6 +1426,7 @@ async function loadCityProfileForGeneration(cityId, generation) {
   var controller = new AbortController();
   var timeoutId = setTimeout(function() { controller.abort(); }, 4000);
   var response = null;
+  var profileSource = 'remote';
 
   try {
     response = await fetch(url, { signal: controller.signal });
@@ -1463,12 +1445,16 @@ async function loadCityProfileForGeneration(cityId, generation) {
 
         if (isValidCitySchema(parsed, cityId)) {
           data = parsed;
+          profileSource = 'remote';
         } else {
           console.warn('[loadCityProfile] Fetched JSON schema is invalid for: ' + cityId);
           data = getValidCache(cityId);
-          if (!data) {
+          if (data) {
+            profileSource = 'cache';
+          } else {
             if (cityId === '_default') {
               data = createEmergencyDefault('_default');
+              profileSource = 'emergency';
             } else {
               return loadCityProfileForGeneration('_default', generation);
             }
@@ -1477,9 +1463,12 @@ async function loadCityProfileForGeneration(cityId, generation) {
       } catch (jsonErr) {
         console.error('[loadCityProfile] JSON parse failed for fetched ' + cityId, jsonErr);
         data = getValidCache(cityId);
-        if (!data) {
+        if (data) {
+          profileSource = 'cache';
+        } else {
           if (cityId === '_default') {
             data = createEmergencyDefault('_default');
+            profileSource = 'emergency';
           } else {
             return loadCityProfileForGeneration('_default', generation);
           }
@@ -1494,6 +1483,7 @@ async function loadCityProfileForGeneration(cityId, generation) {
           return loadCityProfileForGeneration('_default', generation);
         } else {
           data = createEmergencyDefault('_default');
+          profileSource = 'emergency';
         }
       } else {
         throw new Error('Response status ' + response.status);
@@ -1507,6 +1497,7 @@ async function loadCityProfileForGeneration(cityId, generation) {
     if (!data) {
       if (cityId === '_default') {
         data = createEmergencyDefault('_default');
+        profileSource = 'emergency';
       } else {
         return loadCityProfileForGeneration('_default', generation);
       }
@@ -1514,11 +1505,6 @@ async function loadCityProfileForGeneration(cityId, generation) {
 
     if (generation !== cityLoadGeneration) {
       return false;
-    }
-
-    // --- PREPARATION OF CONTEXT ---
-    if (window.__testHooks && window.__testHooks.failPrepareCityContext) {
-      throw new Error('Test Hook: Preparation failure');
     }
 
     // Pre-resolve preparedMemoryState síncronamente
@@ -1541,8 +1527,8 @@ async function loadCityProfileForGeneration(cityId, generation) {
       return false;
     }
 
-    // Write city cache (only for fetched valid remote data)
-    if (data && !data.__emergency && response && response.ok) {
+    // Write city cache ONLY when profileSource is 'remote'
+    if (profileSource === 'remote' && data && response && response.ok) {
       try {
         localStorage.setItem('voy_city_cache_' + cityId, JSON.stringify(data));
       } catch (cacheWriteErr) {}
@@ -1593,7 +1579,26 @@ async function loadCityProfileForGeneration(cityId, generation) {
           console.warn('[loadCityProfile] Cache fallback unavailable. Falling back to _default.');
           return loadCityProfileForGeneration('_default', generation);
         } else {
-          data = createEmergencyDefault('_default');
+          // If '_default' cache fails, construct and commit emergency default properly
+          var emergencyData = createEmergencyDefault('_default');
+          var emergencyContext = {
+            profile: emergencyData,
+            busStops: emergencyData.busStops || [],
+            bikeStations: emergencyData.bikeStations || [],
+            landmarks: emergencyData.landmarks || [],
+            providers: emergencyData.providers || {},
+            taxiCompanies: emergencyData.taxiCompanies || [],
+            remisCompanies: emergencyData.remisCompanies || [],
+            fareRegistry: emergencyData.fareRegistry || {},
+            preparedMemoryState: prepareMemoryStateForCity('_default')
+          };
+
+          if (generation !== cityLoadGeneration) {
+            return false;
+          }
+
+          commitCityContext(emergencyContext);
+          return true;
         }
       }
     } else {
@@ -2203,7 +2208,8 @@ function _handleGpsPosition(lat,lon){
     if (lat >= -31.67 && lat <= -31.57 && lon >= -60.75 && lon <= -60.65) {
       console.log('[GPS Tardío] Location confirmed in Santa Fe. Dynamically loading Santa Fe profile.');
       cachePosition(lat, lon);
-      loadCityProfile('santafe').then(function() {
+      loadCityProfile('santafe').then(function(committed) {
+        if (committed !== true) return;
         if (_map) {
           _map.setCenter(CURRENT_CITY.map.center);
           _map.setZoom(CURRENT_CITY.map.zoom);

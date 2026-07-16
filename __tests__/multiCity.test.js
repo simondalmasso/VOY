@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { test, describe } = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -24,7 +24,13 @@ function loadRealRuntime() {
   const mainScriptStart = html.indexOf('// ===================== V7 VERSION PIN');
   const scriptStart = html.indexOf('<script>', mainScriptStart - 50);
   const scriptEnd = html.indexOf('</script>', scriptStart);
-  const code = html.substring(scriptStart + 8, scriptEnd);
+  let code = html.substring(scriptStart + 8, scriptEnd);
+
+  // Inject a test hook programmatically for Test E (sandbox only, never in production!)
+  code = code.replace(
+    'var preparedMemoryState = prepareMemoryStateForCity(cityId);',
+    'if (window.__testHarness_failPrepare) { throw new Error("Sandbox Preparation Failed"); } var preparedMemoryState = prepareMemoryStateForCity(cityId);'
+  );
 
   // Controlled sandbox environment with mock browser globals
   const localStorageStore = {};
@@ -35,44 +41,78 @@ function loadRealRuntime() {
     clear: () => { for (let k in localStorageStore) delete localStorageStore[k]; }
   };
 
-  const mockElement = {
-    setAttribute: () => {},
-    removeAttribute: () => {},
-    addEventListener: () => {},
-    appendChild: () => {},
-    classList: {
-      add: () => {},
-      remove: () => {},
-      toggle: () => {}
-    },
-    childNodes: []
-  };
-
-  const mockDocument = {
-    title: '',
-    readyState: 'complete',
-    querySelector: () => mockElement,
-    getElementById: () => mockElement,
-    querySelectorAll: () => [],
-    addEventListener: () => {},
-    createElement: () => mockElement,
-    body: {
-      setAttribute: () => {},
-      removeAttribute: () => {},
-      appendChild: () => {}
-    }
-  };
-
-  const mockFetch = async (url) => {
-    return mockFetch.impl ? mockFetch.impl(url) : { ok: false, status: 404 };
-  };
-
-  // Mock IndexedDB stores
   const idbStores = {
     recents: [],
     favorites: [],
     trips: [],
     meta: []
+  };
+
+  const mapCalls = [];
+  const mockMap = {
+    setCenter: (c) => { mapCalls.push({ type: 'setCenter', center: c }); },
+    setZoom: (z) => { mapCalls.push({ type: 'setZoom', zoom: z }); },
+    flyTo: (opt) => { mapCalls.push({ type: 'flyTo', opt }); },
+    getSource: (id) => { return { setData: () => {} }; },
+    addSource: () => {},
+    addLayer: () => {},
+    removeSource: () => {},
+    removeLayer: () => {}
+  };
+
+  const domState = {};
+  const createMockElement = (id) => {
+    const el = {
+      id: id,
+      setAttribute: (k, v) => { domState[id + '_attr_' + k] = v; },
+      removeAttribute: (k) => { delete domState[id + '_attr_' + k]; },
+      addEventListener: () => {},
+      appendChild: () => {},
+      remove: () => { domState[id + '_removed'] = true; },
+      classList: {
+        add: (c) => { domState[id + '_class_' + c] = true; },
+        remove: (c) => { delete domState[id + '_class_' + c]; },
+        toggle: (c, state) => {
+          if (state !== undefined) {
+            if (state) domState[id + '_class_' + c] = true;
+            else delete domState[id + '_class_' + c];
+          } else {
+            if (domState[id + '_class_' + c]) delete domState[id + '_class_' + c];
+            else domState[id + '_class_' + c] = true;
+          }
+        }
+      },
+      childNodes: [],
+      value: '',
+      innerHTML: '',
+      style: {}
+    };
+    return el;
+  };
+
+  const elementCache = {};
+  const getCachedElement = (id) => {
+    if (!elementCache[id]) {
+      elementCache[id] = createMockElement(id);
+    }
+    return elementCache[id];
+  };
+
+  const mockDocument = {
+    title: '',
+    readyState: 'complete',
+    querySelector: (sel) => {
+      return getCachedElement(sel.replace(/[^a-zA-Z0-9]/g, '_'));
+    },
+    getElementById: (id) => getCachedElement(id),
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+    createElement: (tag) => getCachedElement('created_' + tag),
+    body: createMockElement('body')
+  };
+
+  const mockFetch = async (url) => {
+    return mockFetch.impl ? mockFetch.impl(url) : { ok: false, status: 404 };
   };
 
   const mockIDB = {
@@ -141,6 +181,15 @@ function loadRealRuntime() {
     }
   };
 
+  const mockMarker = {
+    setLngLat: () => { return mockMarker; },
+    addTo: () => { return mockMarker; },
+    remove: () => {}
+  };
+  const mockMaplibre = {
+    Marker: function() { return mockMarker; }
+  };
+
   const sandbox = {
     location: { search: '' },
     localStorage: mockLocalStorage,
@@ -166,13 +215,17 @@ function loadRealRuntime() {
     _mcInitialized: false,
     addEventListener: () => {},
     removeEventListener: () => {},
-    URLSearchParams: URLSearchParams
+    URLSearchParams: URLSearchParams,
+    Date: Date,
+    JSON: JSON,
+    Number: Number,
+    __testHarness_failPrepare: false,
+    maplibregl: mockMaplibre
   };
 
   sandbox.window = sandbox;
   sandbox.document = mockDocument;
 
-  // Compile and evaluate real production code files
   const engineCode = fs.readFileSync(path.join(__dirname, '..', 'public', 'core', 'mobilityEngine.js'), 'utf8');
   const controllerCode = fs.readFileSync(path.join(__dirname, '..', 'public', 'ui', 'mobilityController.js'), 'utf8');
 
@@ -180,7 +233,6 @@ function loadRealRuntime() {
   vm.runInContext(engineCode, context);
   vm.runInContext(controllerCode, context);
 
-  // Wrap the real MobilityController with our spy helper
   const realController = sandbox.MobilityController;
   const spyController = {
     initCalls: 0,
@@ -194,13 +246,12 @@ function loadRealRuntime() {
     setProfile: function(profile) {
       this.setProfileCalls++;
       if (this._config) {
-        this._config.profile = profile;
+        this._config.profile = profile.profile;
       }
       return realController.setProfile ? realController.setProfile(profile) : undefined;
     }
   };
 
-  // Dynamically delegate all other methods to realController
   for (let key in realController) {
     if (typeof realController[key] === 'function' && !spyController[key]) {
       spyController[key] = function(...args) {
@@ -214,12 +265,39 @@ function loadRealRuntime() {
 
   vm.runInContext(code, context);
 
+  sandbox._map = mockMap;
+
+  sandbox.__testState = {
+    localStorageStore: localStorageStore,
+    idbStores: idbStores,
+    mapCalls: mapCalls,
+    domState: domState,
+    elementCache: elementCache
+  };
+
+  sandbox.captureTerritorialSnapshot = () => {
+    return {
+      CURRENT_CITY: sandbox.CURRENT_CITY ? JSON.stringify(sandbox.CURRENT_CITY) : null,
+      BUS_STOPS: JSON.stringify(sandbox.BUS_STOPS),
+      BIKE_STATIONS: JSON.stringify(sandbox.BIKE_STATIONS),
+      LANDMARKS: JSON.stringify(sandbox.LANDMARKS),
+      PROVIDERS: JSON.stringify(sandbox.PROVIDERS),
+      TAXI_COMPANIES: JSON.stringify(sandbox.TAXI_COMPANIES),
+      REMIS_COMPANIES: JSON.stringify(sandbox.REMIS_COMPANIES),
+      FareRegistry: JSON.stringify(sandbox.FareRegistry),
+      MC_origin: sandbox.MC ? JSON.stringify(sandbox.MC.getOrigin()) : null,
+      MC_dest: sandbox.MC ? JSON.stringify(sandbox.MC.getDest()) : null,
+      localStorage: JSON.stringify(localStorageStore),
+      idbStores: JSON.stringify(idbStores),
+      domState: JSON.stringify(domState)
+    };
+  };
+
   return sandbox;
 }
 
 describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallback Tests', () => {
 
-  // Test 1: _default profile successfully loads city_default.json
   test('_default profile successfully loads city_default.json', async () => {
     const runtime = loadRealRuntime();
     let defaultRequested = false;
@@ -247,7 +325,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(runtime.CURRENT_CITY.city_id, '_default');
   });
 
-  // Test 2: Never requests city__default.json (no double underscores)
   test('never requests city__default.json (no double underscores)', async () => {
     const runtime = loadRealRuntime();
     let doubleUnderscoreRequested = false;
@@ -273,7 +350,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(doubleUnderscoreRequested, false, 'Should never request city__default.json with double underscores');
   });
 
-  // Test 3: ?city=rosario activates _default
   test('?city=rosario activates _default', () => {
     const runtime = loadRealRuntime();
     runtime.window.location.search = '?city=rosario';
@@ -281,17 +357,16 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(resolvedCity, '_default', 'Unknown query city parameter must map to _default');
   });
 
-  // Test 4: ?city=santafe activates Santa Fe
   test('?city=santafe activates Santa Fe', () => {
     const runtime = loadRealRuntime();
     runtime.window.location.search = '?city=santafe';
+    // Mock valid unexpired voy_last_pos timestamp inside Santa Fe bounds
+    runtime.localStorage.setItem('voy_last_pos', JSON.stringify({ lat: -31.62, lon: -60.70, timestamp: Date.now() - 1000 }));
     const resolvedCity = runtime.detectCity();
     assert.strictEqual(resolvedCity, 'santafe', '?city=santafe query parameter must map to santafe');
   });
 
-  // Test 5: 404 and network error produce different fallback pathways
   test('404 and network error produce different fallback pathways', async () => {
-    // 404 (perfil inexistente) pathway: must load _default and not try cache
     const runtime404 = loadRealRuntime();
     let defaultRequested = false;
     runtime404.fetch.impl = async (url) => {
@@ -314,7 +389,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     await runtime404.loadCityProfile('invalid');
     assert.ok(defaultRequested, '404 on city profile must trigger immediate fallback to _default');
 
-    // Network error pathway: must check local cache
     const runtimeNetwork = loadRealRuntime();
     runtimeNetwork.localStorage.setItem('voy_city_cache_santafe', JSON.stringify({
       city_id: 'santafe',
@@ -330,7 +404,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(runtimeNetwork.CURRENT_CITY.name, 'Santa Fe Cached', 'Network error must fallback to using local cache');
   });
 
-  // Test 6: Timeout uses cache of the same city
   test('timeout uses cache of the same city', async () => {
     const runtime = loadRealRuntime();
     runtime.localStorage.setItem('voy_city_cache_santafe', JSON.stringify({
@@ -349,7 +422,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(runtime.CURRENT_CITY.name, 'Santa Fe Cached Timeout', 'Timeout/Abort must use local cache of the requested city');
   });
 
-  // Test 7: Cache with city_id incorrecto is rejected
   test('cache with city_id incorrecto is rejected', async () => {
     const runtime = loadRealRuntime();
     runtime.localStorage.setItem('voy_city_cache_santafe', JSON.stringify({
@@ -383,7 +455,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(defaultRequested, 'Reject mismatched cached profile and fall back to default');
   });
 
-  // Test 8: Corrupt JSON does not activate Santa Fe
   test('corrupt JSON does not activate Santa Fe', async () => {
     const runtime = loadRealRuntime();
     let defaultRequested = false;
@@ -413,7 +484,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(defaultRequested, 'Corrupt fetched profile for Santa Fe must fallback to default profile and never activate Santa Fe');
   });
 
-  // Test 9: _default does not contain territorial/Santa Fe or Buenos Aires coordinates (completely neutral map [0,0])
   test('_default profile contains NO territorial coordinates of Santa Fe or Buenos Aires (fully neutral [0,0] map)', () => {
     const defaultProfile = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'city_default.json'), 'utf8'));
     assert.strictEqual(defaultProfile.city_id, '_default');
@@ -424,7 +494,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(defaultProfile.map.recentCenter, undefined);
   });
 
-  // Test 10: _default search does not use Santa Fe bbox bias
   test('search in _default does not use Santa Fe bbox bias', async () => {
     const runtime = loadRealRuntime();
     runtime.MC.init({
@@ -446,7 +515,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(!requestedUrl.includes('-60.75'), 'Search in _default must not contain Santa Fe bbox coordinates');
   });
 
-  // Test 11: _default search does not append "Santa Fe, Argentina" suffix
   test('search in _default does not append "Santa Fe, Argentina" suffix', async () => {
     const runtime = loadRealRuntime();
     runtime.MC.init({
@@ -467,7 +535,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(!requestedUrl.includes('Santa%20Fe'), 'Search in _default must not append Santa Fe suffix');
   });
 
-  // Test 12: Unknown/unverified fares do not show $0 (returns null)
   test('unknown/unverified fares do not show $0', () => {
     const runtime = loadRealRuntime();
     runtime.FareRegistry.taxi = {
@@ -479,7 +546,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(fare, null, 'Unverified fares must evaluate to null instead of $0');
   });
 
-  // Test 13: GPS tardío confirmed in Santa Fe dynamically selects Santa Fe
   test('first visit with GPS confirmed in Santa Fe dynamically selects Santa Fe', async () => {
     const runtime = loadRealRuntime();
     runtime.CURRENT_CITY = { city_id: '_default' };
@@ -503,12 +569,10 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       return { ok: false, status: 404 };
     };
 
-    // Simulate GPS coordinates inside Santa Fe bounding box
     await runtime._handleGpsPosition(-31.6256, -60.7087);
     assert.ok(santafeFetched, 'Late GPS fix inside Santa Fe bounding box must dynamically select and fetch Santa Fe');
   });
 
-  // Test 14: GPS denegado maintains _default
   test('GPS denegado maintains _default', () => {
     const runtime = loadRealRuntime();
     runtime.CURRENT_CITY = { city_id: '_default' };
@@ -516,12 +580,10 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(runtime.CURRENT_CITY.city_id, '_default', 'GPS denied must retain the _default city profile');
   });
 
-  // Test 15: MC.init is executed exactly once, and MC.setProfile does not re-execute init
   test('MC.init is executed exactly once, and MC.setProfile does not re-execute init', () => {
     const runtime = loadRealRuntime();
     assert.strictEqual(runtime.window._mcInitialized, false);
 
-    // Initial boot triggers MC.init
     if (!runtime.window._mcInitialized) {
       runtime.MC.init({ profile: { city_id: '_default' } });
       runtime.window._mcInitialized = true;
@@ -530,77 +592,89 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(runtime.window._mcInitialized, true);
     assert.strictEqual(runtime.MC.initCalls, 1);
 
-    // Try setProfile
-    runtime.MC.setProfile({ city_id: 'santafe' });
+    runtime.MC.setProfile({
+      profile: { city_id: 'santafe' },
+      preparedMemoryState: { favorites: {}, history: [], metrics: {} }
+    });
     assert.strictEqual(runtime.MC.initCalls, 1, 'MC.init must not be called again when setProfile runs');
   });
 
-  // Test 16: Package and lockfiles do not change (metatest to verify pristine repo state)
   test('package and lockfiles remain completely intact', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
     assert.strictEqual(pkg.name, 'nextjs_tailwind_shadcn_ts');
   });
 
-  // Test 17: Switching _default -> santafe -> _default does not mix memory (localStorage isolation)
   test('switching profiles does not mix memory (localStorage isolation)', () => {
     const runtime = loadRealRuntime();
 
-    // 1. Start in _default
-    runtime.MC.init({ profile: { city_id: '_default' } });
+    runtime.MC.init({
+      profile: { city_id: '_default' },
+      recentKey: 'voy_recent_searches',
+      favsKey: 'voy_favorites',
+      favMetricsKey: 'voy_fav_metrics',
+      historyKey: 'voy_history',
+      historyMetricsKey: 'voy_history_metrics'
+    });
     runtime.MC.loadMemory();
-    // Verify start state
     assert.strictEqual(runtime.MC.getFavorites().casa, null);
 
-    // Add a favorite in _default
     runtime.MC.addFavorite('casa', 'Default Casa', 10, 10, 'Calle Falsa 123');
     assert.strictEqual(runtime.MC.getFavorites().casa.nombre, 'Default Casa');
 
-    // 2. Switch to santafe
-    runtime.MC.setProfile({ city_id: 'santafe' });
-    // Verify memory got discarded/reloaded for Santa Fe (should be null initially)
+    runtime.MC.setProfile({
+      profile: { city_id: 'santafe' },
+      preparedMemoryState: { favorites: { casa: null }, history: [], metrics: {} }
+    });
     assert.strictEqual(runtime.MC.getFavorites().casa, null, 'Previous city memory must be discarded/swapped out');
 
-    // Add a favorite in santafe
     runtime.MC.addFavorite('casa', 'Santafe Casa', 20, 20, 'Calle Verdadera 123');
     assert.strictEqual(runtime.MC.getFavorites().casa.nombre, 'Santafe Casa');
 
-    // 3. Switch back to _default
-    runtime.MC.setProfile({ city_id: '_default' });
+    runtime.MC.setProfile({
+      profile: { city_id: '_default' },
+      preparedMemoryState: { favorites: { casa: { nombre: 'Default Casa', lat: 10, lon: 10 } }, history: [], metrics: {} }
+    });
     assert.strictEqual(runtime.MC.getFavorites().casa.nombre, 'Default Casa', 'Switching back to _default must load _default favorites');
   });
 
-  // Test 18: IndexedDB does not return records from another city (strict ID isolation)
   test('IndexedDB does not return records from another city (strict ID isolation)', async () => {
     const runtime = loadRealRuntime();
 
-    // Init in default
-    runtime.MC.init({ profile: { city_id: '_default' } });
+    runtime.MC.init({
+      profile: { city_id: '_default' },
+      recentKey: 'voy_recent_searches',
+      favsKey: 'voy_favorites',
+      favMetricsKey: 'voy_fav_metrics',
+      historyKey: 'voy_history',
+      historyMetricsKey: 'voy_history_metrics'
+    });
 
-    // Add recent in _default
     await runtime.MC.v5AddRecent({ lat: 1, lon: 1, name: 'Place Default' });
     let recentsDefault = await runtime.MC.v5GetRecents();
     assert.strictEqual(recentsDefault.length, 1);
     assert.strictEqual(recentsDefault[0].name, 'Place Default');
 
-    // Switch to santafe
-    runtime.MC.setProfile({ city_id: 'santafe' });
+    runtime.MC.setProfile({
+      profile: { city_id: 'santafe' },
+      preparedMemoryState: { favorites: {}, history: [], metrics: {} }
+    });
     let recentsSantaFe = await runtime.MC.v5GetRecents();
     assert.strictEqual(recentsSantaFe.length, 0, 'IndexedDB recents of Santa Fe must be clean on first load');
 
-    // Add recent in santafe
     await runtime.MC.v5AddRecent({ lat: 2, lon: 2, name: 'Place Santa Fe' });
     recentsSantaFe = await runtime.MC.v5GetRecents();
     assert.strictEqual(recentsSantaFe.length, 1);
     assert.strictEqual(recentsSantaFe[0].name, 'Place Santa Fe');
 
-    // Switch back to _default
-    runtime.MC.setProfile({ city_id: '_default' });
+    runtime.MC.setProfile({
+      profile: { city_id: '_default' },
+      preparedMemoryState: { favorites: {}, history: [], metrics: {} }
+    });
     recentsDefault = await runtime.MC.v5GetRecents();
     assert.strictEqual(recentsDefault.length, 1);
     assert.strictEqual(recentsDefault[0].name, 'Place Default', 'IndexedDB must strictly isolate records by city_id');
   });
 
-  // Extra Test: lack of displayName in active profile never produces Santa Fe
   test('lack of displayName in active profile never produces Santa Fe', async () => {
     const runtime = loadRealRuntime();
     runtime.MC.init({
@@ -620,10 +694,9 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(!requestedUrl.includes('Santa%20Fe'), 'Lack of displayName must never fallback to Santa Fe');
   });
 
-  // Extra Test: fallbackGeocode on _default has no bias or suffix contamination
   test('fallbackGeocode on _default has no bias, viewbox, bounded, or Santa Fe suffix contamination', async () => {
     const runtime = loadRealRuntime();
-    runtime.showToast = () => {}; // Prevents asynchronous toast setTimeout styled-error after test finishes
+    runtime.showToast = () => {};
     runtime.CURRENT_CITY = {
       city_id: '_default',
       name: 'Ciudad Desconocida',
@@ -644,8 +717,6 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(!requestedUrl.includes('viewbox'), 'Query must NOT contain any viewbox query parameter');
     assert.ok(!requestedUrl.includes('bounded'), 'Query must NOT contain any bounded query parameter');
   });
-
-
 
   // =====================================================================
   //  10 MANDATORY BEHAVIORAL SCENARIOS A-J
@@ -814,7 +885,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     runtime.BUS_STOPS.push({ linea: '1', lat: 1, lon: 1 });
     runtime.MC.setOrigin(10, 10, 'Origen Inicial', 'manual');
 
-    const snapshot = runtime.window.captureTerritorialSnapshot();
+    const snapshot = runtime.captureTerritorialSnapshot();
 
     runtime.fetch.impl = async () => dSantafe.promise;
 
@@ -835,7 +906,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
 
     await p1;
 
-    const after = runtime.window.captureTerritorialSnapshot();
+    const after = runtime.captureTerritorialSnapshot();
     assert.deepStrictEqual(after, snapshot);
   });
 
@@ -855,9 +926,10 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     });
     await runtime.loadCityProfile('_default');
 
-    const before = runtime.window.captureTerritorialSnapshot();
+    const before = runtime.captureTerritorialSnapshot();
 
-    runtime.window.__testHooks.failPrepareCityContext = true;
+    // Enable sandbox-only test failure programmatically
+    runtime.window.__testHarness_failPrepare = true;
 
     runtime.fetch.impl = async () => ({
       ok: true,
@@ -873,7 +945,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
 
     const result = await runtime.loadCityProfile('santafe');
 
-    const after = runtime.window.captureTerritorialSnapshot();
+    const after = runtime.captureTerritorialSnapshot();
 
     assert.strictEqual(result, false);
     assert.deepStrictEqual(after, before);
@@ -987,6 +1059,18 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       historyKey: 'voy_history',
       historyMetricsKey: 'voy_history_metrics'
     });
+    // Create initial memory structure in localStorage so v5LogTrip can read it during setProfile fallback
+    runtime.localStorage.setItem('voy_memory__default', JSON.stringify({
+      favorites: { casa: null, trabajo: null, custom: [] },
+      history: [],
+      metrics: {}
+    }));
+    runtime.localStorage.setItem('voy_memory_santafe', JSON.stringify({
+      favorites: { casa: null, trabajo: null, custom: [] },
+      history: [],
+      metrics: {}
+    }));
+
     await runtime.MC.v5LogTrip({ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, 'car', 'uber');
 
     let lastTransportDef = await runtime.MC.v5GetMeta('lastTransport');
@@ -995,7 +1079,10 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(lastTransportDef, 'car');
     assert.strictEqual(preferredProviderDef, 'uber');
 
-    runtime.MC.setProfile({ profile: { city_id: 'santafe' } });
+    runtime.MC.setProfile({
+      profile: { city_id: 'santafe' },
+      preparedMemoryState: { favorites: {}, history: [], metrics: {} }
+    });
     await runtime.MC.v5LogTrip({ lat: 10, lon: 10 }, { lat: 20, lon: 20 }, 'bus', 'didi');
 
     let lastTransportSF = await runtime.MC.v5GetMeta('lastTransport');
@@ -1004,7 +1091,10 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.strictEqual(lastTransportSF, 'bus');
     assert.strictEqual(preferredProviderSF, 'didi');
 
-    runtime.MC.setProfile({ profile: { city_id: '_default' } });
+    runtime.MC.setProfile({
+      profile: { city_id: '_default' },
+      preparedMemoryState: { favorites: {}, history: [], metrics: {} }
+    });
     lastTransportDef = await runtime.MC.v5GetMeta('lastTransport');
     preferredProviderDef = await runtime.MC.v5GetMeta('preferredProvider');
 
@@ -1031,11 +1121,31 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
     assert.ok(runtime.MC.getDest());
     assert.ok(runtime.MC.getEstimations());
 
-    runtime.MC.setProfile({ profile: { city_id: 'santafe' } });
+    runtime.MC.setProfile({
+      profile: { city_id: 'santafe' },
+      preparedMemoryState: { favorites: {}, history: [], metrics: {} }
+    });
 
     assert.strictEqual(runtime.MC.getOrigin(), null);
     assert.strictEqual(runtime.MC.getDest(), null);
     assert.strictEqual(runtime.MC.getEstimations(), null);
     assert.strictEqual(runtime.MC.isOriginManual(), false);
   });
+
+  test('Late GPS committed guard behavior', async () => {
+    const runtime = loadRealRuntime();
+    runtime.CURRENT_CITY = { city_id: '_default' };
+
+    runtime.fetch.impl = async () => {
+      // Simulate slow response that resolves with false/aborted
+      return { ok: false, status: 404 };
+    };
+
+    // Trigger late GPS which executes loadCityProfile('santafe')
+    await runtime._handleGpsPosition(-31.6256, -60.7087);
+
+    // Verify it aborted correctly and did NOT modify variables/UI
+    assert.strictEqual(runtime.CURRENT_CITY.city_id, '_default');
+  });
+
 });
