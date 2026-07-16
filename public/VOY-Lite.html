@@ -1316,9 +1316,23 @@ function detectCity() {
     var cached = localStorage.getItem('voy_last_pos');
     if (cached) {
       var pos = JSON.parse(cached);
-      if (pos && typeof pos.lat === 'number' && typeof pos.lon === 'number') {
-        if (pos.lat >= -31.67 && pos.lat <= -31.57 && pos.lon >= -60.75 && pos.lon <= -60.65) {
-          return 'santafe';
+      if (pos && typeof pos === 'object') {
+        var lat = pos.lat;
+        var lon = pos.lon;
+        var timestamp = pos.timestamp;
+
+        if (Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(timestamp) && timestamp > 0) {
+          if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+            var LAST_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
+            var MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+            var age = Date.now() - timestamp;
+
+            if (age >= -MAX_FUTURE_CLOCK_SKEW_MS && age <= LAST_POSITION_MAX_AGE_MS) {
+              if (lat >= -31.67 && lat <= -31.57 && lon >= -60.75 && lon <= -60.65) {
+                return 'santafe';
+              }
+            }
+          }
         }
       }
     }
@@ -1391,31 +1405,76 @@ function updateCityUI() {
   }
 }
 
+let cityLoadGeneration = 0;
+window.cityLoadGeneration = 0;
+
 async function loadCityProfile(cityId) {
+  var generation = ++cityLoadGeneration;
+  window.cityLoadGeneration = cityLoadGeneration;
+  return loadCityProfileForGeneration(cityId, generation);
+}
+
+async function loadCityProfileForGeneration(cityId, generation) {
+  if (generation !== cityLoadGeneration) {
+    return false;
+  }
+
   var fileId = cityId === '_default' ? 'default' : cityId;
   var url = 'city_' + fileId + '.json';
   var data = null;
   var is404 = false;
   var controller = new AbortController();
   var timeoutId = setTimeout(function() { controller.abort(); }, 4000);
+  var response = null;
+  var profileSource = 'remote';
+
   try {
-    var response = await fetch(url, { signal: controller.signal });
+    response = await fetch(url, { signal: controller.signal });
+    if (generation !== cityLoadGeneration) {
+      clearTimeout(timeoutId);
+      return false;
+    }
     clearTimeout(timeoutId);
+
     if (response.ok) {
       try {
-        data = await response.json();
-        if (isValidCitySchema(data, cityId)) {
-          localStorage.setItem('voy_city_cache_' + cityId, JSON.stringify(data));
+        var parsed = await response.json();
+        if (generation !== cityLoadGeneration) {
+          return false;
+        }
+
+        if (isValidCitySchema(parsed, cityId)) {
+          data = parsed;
+          profileSource = 'remote';
         } else {
           console.warn('[loadCityProfile] Fetched JSON schema is invalid for: ' + cityId);
-          data = null;
+          data = getValidCache(cityId);
+          if (data) {
+            profileSource = 'cache';
+          } else {
+            if (cityId === '_default') {
+              data = createEmergencyDefault('_default');
+              profileSource = 'emergency';
+            } else {
+              return loadCityProfileForGeneration('_default', generation);
+            }
+          }
         }
       } catch (jsonErr) {
+        if (generation !== cityLoadGeneration) {
+          return false;
+        }
         console.error('[loadCityProfile] JSON parse failed for fetched ' + cityId, jsonErr);
-        if (cityId === 'santafe') {
-          console.warn('[loadCityProfile] Corrupt Santa Fe JSON on network. Falling back to _default.');
-          await loadCityProfile('_default');
-          return;
+        data = getValidCache(cityId);
+        if (data) {
+          profileSource = 'cache';
+        } else {
+          if (cityId === '_default') {
+            data = createEmergencyDefault('_default');
+            profileSource = 'emergency';
+          } else {
+            return loadCityProfileForGeneration('_default', generation);
+          }
         }
       }
     } else {
@@ -1424,109 +1483,387 @@ async function loadCityProfile(cityId) {
         console.warn('[loadCityProfile] Profile not found (404) for: ' + cityId);
         if (cityId !== '_default') {
           console.warn('[loadCityProfile] Falling back to _default due to 404.');
-          await loadCityProfile('_default');
-          return;
+          return loadCityProfileForGeneration('_default', generation);
+        } else {
+          data = createEmergencyDefault('_default');
+          profileSource = 'emergency';
+        }
+      } else {
+        throw new Error('Response status ' + response.status);
+      }
+    }
+
+    if (generation !== cityLoadGeneration) {
+      return false;
+    }
+
+    if (!data) {
+      if (cityId === '_default') {
+        data = createEmergencyDefault('_default');
+        profileSource = 'emergency';
+      } else {
+        return loadCityProfileForGeneration('_default', generation);
+      }
+    }
+
+    if (generation !== cityLoadGeneration) {
+      return false;
+    }
+
+    // Pre-resolve preparedMemoryState síncronamente
+    var preparedMemoryState = prepareMemoryStateForCity(cityId);
+
+    // Prepare nextContext
+    var nextContext = {
+      profile: data,
+      busStops: data.busStops || [],
+      bikeStations: data.bikeStations || [],
+      landmarks: data.landmarks || [],
+      providers: data.providers || {},
+      taxiCompanies: data.taxiCompanies || [],
+      remisCompanies: data.remisCompanies || [],
+      fareRegistry: data.fareRegistry || {},
+      preparedMemoryState: preparedMemoryState
+    };
+
+    if (generation !== cityLoadGeneration) {
+      return false;
+    }
+
+    // Write city cache ONLY when profileSource is 'remote'
+    if (profileSource === 'remote' && data && response && response.ok) {
+      try {
+        localStorage.setItem('voy_city_cache_' + cityId, JSON.stringify(data));
+      } catch (cacheWriteErr) {}
+    }
+
+    // Ensure we have a saved memory state in storage for isolated city context
+    var memKey = 'voy_memory_' + cityId;
+    if (!localStorage.getItem(memKey)) {
+      try {
+        localStorage.setItem(memKey, JSON.stringify(preparedMemoryState));
+      } catch (e) {}
+    }
+
+    if (generation !== cityLoadGeneration) {
+      return false;
+    }
+
+    commitCityContext(nextContext);
+    return true;
+
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (generation !== cityLoadGeneration) {
+      return false;
+    }
+
+    // If fetch failed completely (network error / timeout) and NOT 404, try local cache before giving up
+    if (response === null && !is404) {
+      console.warn('[loadCityProfile] Fetch failed, trying local cache...', error);
+      var cachedData = getValidCache(cityId);
+      if (cachedData) {
+        var preparedMem = prepareMemoryStateForCity(cityId);
+        var cachedContext = {
+          profile: cachedData,
+          busStops: cachedData.busStops || [],
+          bikeStations: cachedData.bikeStations || [],
+          landmarks: cachedData.landmarks || [],
+          providers: cachedData.providers || {},
+          taxiCompanies: cachedData.taxiCompanies || [],
+          remisCompanies: cachedData.remisCompanies || [],
+          fareRegistry: cachedData.fareRegistry || {},
+          preparedMemoryState: preparedMem
+        };
+        if (generation !== cityLoadGeneration) {
+          return false;
+        }
+        commitCityContext(cachedContext);
+        return true;
+      } else {
+        if (cityId !== '_default') {
+          console.warn('[loadCityProfile] Cache fallback unavailable. Falling back to _default.');
+          return loadCityProfileForGeneration('_default', generation);
+        } else {
+          // If '_default' cache fails, construct and commit emergency default properly
+          var emergencyData = createEmergencyDefault('_default');
+          var emergencyContext = {
+            profile: emergencyData,
+            busStops: emergencyData.busStops || [],
+            bikeStations: emergencyData.bikeStations || [],
+            landmarks: emergencyData.landmarks || [],
+            providers: emergencyData.providers || {},
+            taxiCompanies: emergencyData.taxiCompanies || [],
+            remisCompanies: emergencyData.remisCompanies || [],
+            fareRegistry: emergencyData.fareRegistry || {},
+            preparedMemoryState: prepareMemoryStateForCity('_default')
+          };
+
+          if (generation !== cityLoadGeneration) {
+            return false;
+          }
+
+          commitCityContext(emergencyContext);
+          return true;
         }
       }
-      throw new Error('Response status ' + response.status);
+    } else {
+      console.error('[loadCityProfile] City context preparation failed', error);
+      return false;
+    }
+  }
+}
+
+function getValidCache(cityId) {
+  try {
+    var cached = localStorage.getItem('voy_city_cache_' + cityId);
+    if (cached) {
+      var parsed = JSON.parse(cached);
+      if (isValidCitySchema(parsed, cityId)) {
+        return parsed;
+      } else {
+        console.warn('[loadCityProfile] Cached JSON schema is invalid or mismatched for: ' + cityId);
+      }
     }
   } catch (e) {
-    clearTimeout(timeoutId);
-    if (!is404) {
-      console.warn('[loadCityProfile] Fetch failed for ' + cityId + ' (network error/timeout), trying local cache...', e);
-      try {
-        var cached = localStorage.getItem('voy_city_cache_' + cityId);
-        if (cached) {
-          var parsed = JSON.parse(cached);
-          if (isValidCitySchema(parsed, cityId)) {
-            data = parsed;
-          } else {
-            console.warn('[loadCityProfile] Cached JSON schema is invalid or mismatched for: ' + cityId);
-          }
-        }
-      } catch (cacheErr) {
-        console.error('[loadCityProfile] Cache retrieval or parsing failed', cacheErr);
-        if (cityId === 'santafe') {
-          console.warn('[loadCityProfile] Corrupt Santa Fe JSON in cache. Falling back to _default.');
-          await loadCityProfile('_default');
-          return;
-        }
+    console.error('[loadCityProfile] Cache retrieval or parsing failed', e);
+  }
+  return null;
+}
+
+function prepareMemoryStateForCity(targetCityId) {
+  if (targetCityId === 'santafe') {
+    migrateLegacyMemoryForCity(targetCityId);
+  }
+  return readPreparedMemoryState(targetCityId);
+}
+
+function migrateLegacyMemoryForCity(targetCityId) {
+  if (targetCityId !== 'santafe') {
+    return false;
+  }
+  if (localStorage.getItem('voy_memory_legacy_migrated_v1')) {
+    return false;
+  }
+  const targetKey = 'voy_memory_santafe';
+  if (localStorage.getItem(targetKey)) {
+    return false;
+  }
+
+  const migrated = buildLegacyMemorySnapshot();
+  localStorage.setItem(targetKey, JSON.stringify(migrated));
+
+  // Verificar que la escritura fue recuperable antes de borrar legacy.
+  const verification = JSON.parse(localStorage.getItem(targetKey));
+  if (!verification || !verification.favorites) {
+    throw new Error('Legacy memory verification failed');
+  }
+
+  removeMigratedLegacyKeys();
+  localStorage.setItem('voy_memory_legacy_migrated_v1', '1');
+  return true;
+}
+
+function buildLegacyMemorySnapshot() {
+  var migrated = {
+    favorites: {
+      casa: null,
+      trabajo: null,
+      custom: []
+    },
+    history: [],
+    metrics: {
+      favTrips: 0,
+      histTrips: 0,
+      providerTrips: 0,
+      totalCreated: 0,
+      byType: {
+        casa: 0,
+        trabajo: 0,
+        custom: 0
+      },
+      userCreatedFav: false
+    }
+  };
+
+  try {
+    var oldFavs = localStorage.getItem('voy_favorites');
+    if (oldFavs) {
+      var parsed = JSON.parse(oldFavs);
+      if (parsed.casa) migrated.favorites.casa = parsed.casa;
+      if (parsed.trabajo) migrated.favorites.trabajo = parsed.trabajo;
+      if (parsed.custom && Array.isArray(parsed.custom)) migrated.favorites.custom = parsed.custom.slice(0, 3);
+    }
+    var oldHistory = localStorage.getItem('voy_history');
+    if (oldHistory) {
+      var parsedH = JSON.parse(oldHistory);
+      if (Array.isArray(parsedH)) migrated.history = parsedH.slice(0, 10);
+    }
+    var oldFavMetrics = localStorage.getItem('voy_fav_metrics');
+    if (oldFavMetrics) {
+      var parsedFM = JSON.parse(oldFavMetrics);
+      if (parsedFM.tripsFromFavorite != null) migrated.metrics.favTrips = parsedFM.tripsFromFavorite;
+      if (parsedFM.totalCreated != null) migrated.metrics.totalCreated = parsedFM.totalCreated;
+      if (parsedFM.byType) {
+        if (parsedFM.byType.casa != null) migrated.metrics.byType.casa = parsedFM.byType.casa;
+        if (parsedFM.byType.trabajo != null) migrated.metrics.byType.trabajo = parsedFM.byType.trabajo;
+        if (parsedFM.byType.custom != null) migrated.metrics.byType.custom = parsedFM.byType.custom;
       }
+      if (parsedFM.userCreatedFav != null) migrated.metrics.userCreatedFav = parsedFM.userCreatedFav;
     }
-  }
-
-  if (!data) {
-    if (cityId === 'santafe') {
-      console.warn('[loadCityProfile] Santa Fe profile completely unavailable. Falling back to _default.');
-      await loadCityProfile('_default');
-      return;
+    var oldHistMetrics = localStorage.getItem('voy_history_metrics');
+    if (oldHistMetrics) {
+      var parsedHM = JSON.parse(oldHistMetrics);
+      if (parsedHM.totalTripsFromHistory != null) migrated.metrics.histTrips = parsedHM.totalTripsFromHistory;
+      if (parsedHM.totalTripsWithProvider != null) migrated.metrics.providerTrips = parsedHM.totalTripsWithProvider;
     }
-    console.warn('[loadCityProfile] Cache fallback unavailable. Instantiating emergency default for ' + cityId);
-    data = createEmergencyDefault(cityId);
-  }
+  } catch (e) {}
 
+  return migrated;
+}
+
+function removeMigratedLegacyKeys() {
+  localStorage.removeItem('voy_favorites');
+  localStorage.removeItem('voy_fav_metrics');
+  localStorage.removeItem('voy_history');
+  localStorage.removeItem('voy_history_metrics');
+}
+
+function readPreparedMemoryState(cityId) {
+  var memKey = 'voy_memory_' + cityId;
+  var saved = localStorage.getItem(memKey);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {}
+  }
+  return createEmptyMemoryState();
+}
+
+function createEmptyMemoryState() {
+  return {
+    favorites: { casa: null, trabajo: null, custom: [] },
+    history: [],
+    metrics: {
+      favTrips: 0, histTrips: 0, providerTrips: 0,
+      totalCreated: 0, byType: { casa: 0, trabajo: 0, custom: 0 }, userCreatedFav: false
+    }
+  };
+}
+
+function commitCityContext(nextContext) {
+  var data = nextContext.profile;
   CURRENT_CITY = data;
 
   BUS_STOPS.length = 0;
-  if (data.busStops) {
-    for (var i = 0; i < data.busStops.length; i++) {
-      BUS_STOPS.push(data.busStops[i]);
+  if (nextContext.busStops) {
+    for (var i = 0; i < nextContext.busStops.length; i++) {
+      BUS_STOPS.push(nextContext.busStops[i]);
     }
   }
 
   BIKE_STATIONS.length = 0;
-  if (data.bikeStations) {
-    for (var i = 0; i < data.bikeStations.length; i++) {
-      BIKE_STATIONS.push(data.bikeStations[i]);
+  if (nextContext.bikeStations) {
+    for (var i = 0; i < nextContext.bikeStations.length; i++) {
+      BIKE_STATIONS.push(nextContext.bikeStations[i]);
     }
   }
 
   LANDMARKS.length = 0;
-  if (data.landmarks) {
-    for (var i = 0; i < data.landmarks.length; i++) {
-      LANDMARKS.push(data.landmarks[i]);
+  if (nextContext.landmarks) {
+    for (var i = 0; i < nextContext.landmarks.length; i++) {
+      LANDMARKS.push(nextContext.landmarks[i]);
     }
   }
 
   for (var key in PROVIDERS) {
     if (PROVIDERS.hasOwnProperty(key)) delete PROVIDERS[key];
   }
-  if (data.providers) {
-    for (var key in data.providers) {
-      if (data.providers.hasOwnProperty(key)) {
-        PROVIDERS[key] = data.providers[key];
+  if (nextContext.providers) {
+    for (var key in nextContext.providers) {
+      if (nextContext.providers.hasOwnProperty(key)) {
+        PROVIDERS[key] = nextContext.providers[key];
       }
     }
   }
 
   TAXI_COMPANIES.length = 0;
-  if (data.taxiCompanies) {
-    for (var i = 0; i < data.taxiCompanies.length; i++) {
-      TAXI_COMPANIES.push(data.taxiCompanies[i]);
+  if (nextContext.taxiCompanies) {
+    for (var i = 0; i < nextContext.taxiCompanies.length; i++) {
+      TAXI_COMPANIES.push(nextContext.taxiCompanies[i]);
     }
   }
 
   REMIS_COMPANIES.length = 0;
-  if (data.remisCompanies) {
-    for (var i = 0; i < data.remisCompanies.length; i++) {
-      REMIS_COMPANIES.push(data.remisCompanies[i]);
+  if (nextContext.remisCompanies) {
+    for (var i = 0; i < nextContext.remisCompanies.length; i++) {
+      REMIS_COMPANIES.push(nextContext.remisCompanies[i]);
     }
   }
 
   for (var key in FareRegistry) {
     if (FareRegistry.hasOwnProperty(key)) delete FareRegistry[key];
   }
-  if (data.fareRegistry) {
-    for (var key in data.fareRegistry) {
-      if (data.fareRegistry.hasOwnProperty(key)) {
-        FareRegistry[key] = data.fareRegistry[key];
+  if (nextContext.fareRegistry) {
+    for (var key in nextContext.fareRegistry) {
+      if (nextContext.fareRegistry.hasOwnProperty(key)) {
+        FareRegistry[key] = nextContext.fareRegistry[key];
       }
     }
   }
 
   if (window.MC && typeof window.MC.setProfile === 'function') {
-    window.MC.setProfile(data);
+    window.MC.setProfile(nextContext);
   }
+
+  resetTerritorialUI();
+  updateCityUI();
+
+  if (_map && data.map) {
+    if (data.map.center) {
+      _map.setCenter(data.map.center);
+    }
+    if (data.map.zoom) {
+      _map.setZoom(data.map.zoom);
+    }
+  }
+}
+
+function resetTerritorialUI() {
+  closeAllDropdowns();
+  var dd = document.getElementById('destDropdown');
+  if (dd) {
+    dd.innerHTML = '';
+    dd.classList.add('hidden');
+  }
+
+  var inp = document.getElementById('destInput');
+  if (inp) {
+    inp.value = '';
+  }
+
+  updateOriginUI();
+
+  if (_originMarker) {
+    _originMarker.remove();
+    _originMarker = null;
+  }
+  if (_destMarker) {
+    _destMarker.remove();
+    _destMarker = null;
+  }
+
+  clearBusRoute();
+  if (_map && _map.getSource('route-src')) {
+    try {
+      if (_map.getLayer('route-shadow')) _map.removeLayer('route-shadow');
+      if (_map.getLayer('route-line')) _map.removeLayer('route-line');
+      _map.removeSource('route-src');
+    } catch (e) {}
+  }
+
+  _estimations = null;
+  renderSheet();
 }
 
 // ===================== SVG ICON SYSTEM (no emojis) =====================
@@ -1879,7 +2216,8 @@ function _handleGpsPosition(lat,lon){
     if (lat >= -31.67 && lat <= -31.57 && lon >= -60.75 && lon <= -60.65) {
       console.log('[GPS Tardío] Location confirmed in Santa Fe. Dynamically loading Santa Fe profile.');
       cachePosition(lat, lon);
-      loadCityProfile('santafe').then(function() {
+      loadCityProfile('santafe').then(function(committed) {
+        if (committed !== true) return;
         if (_map) {
           _map.setCenter(CURRENT_CITY.map.center);
           _map.setZoom(CURRENT_CITY.map.zoom);
@@ -1912,13 +2250,35 @@ function _startGpsWatch(){
 }
 function _stopGpsWatch(){if(_gpsWatch!==null){navigator.geolocation.clearWatch(_gpsWatch);_gpsWatch=null}}
 function updateGPSStatus(ok){var el=document.getElementById('opDot');if(el){el.className='op-dot '+(ok?'':'err')}}
-function cachePosition(lat,lon){try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon}))}catch(e){}}
-function loadCachedPosition(){try{var cached=localStorage.getItem('voy_last_pos');if(cached){var pos=JSON.parse(cached);if(!MC.getOrigin()){MC.setOrigin(pos.lat,pos.lon,'Ubicación guardada','cache');va_origin('cache');updateOriginUI();updateMapMarkers()}}}catch(e){}}
-function locateMe(){
-  if(!navigator.geolocation)return;
-  navigator.geolocation.getCurrentPosition(function(pos){MC.setOriginManual(false);MC.setOrigin(pos.coords.latitude,pos.coords.longitude,'Mi ubicación','gps');va_origin('gps');cachePosition(pos.coords.latitude,pos.coords.longitude);updateOriginUI();updateMapMarkers();var origin=MC.getOrigin();if(_map)_map.flyTo({center:[origin.lon,origin.lat],zoom:15});if(MC.getDest())runEstimations()},function(){loadCachedPosition()},{enableHighAccuracy:true,timeout:10000});
+function cachePosition(lat,lon){try{localStorage.setItem('voy_last_pos',JSON.stringify({lat:lat,lon:lon,timestamp:Date.now()}))}catch(e){}}
+function loadCachedPosition(){
+  try {
+    var cached = localStorage.getItem('voy_last_pos');
+    if (cached) {
+      var pos = JSON.parse(cached);
+      if (pos && typeof pos === 'object') {
+        var lat = pos.lat;
+        var lon = pos.lon;
+        var timestamp = pos.timestamp;
+        if (Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(timestamp) && timestamp > 0) {
+          if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+            var LAST_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
+            var MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+            var age = Date.now() - timestamp;
+            if (age >= -MAX_FUTURE_CLOCK_SKEW_MS && age <= LAST_POSITION_MAX_AGE_MS) {
+              if (!MC.getOrigin()) {
+                MC.setOrigin(lat, lon, 'Ubicación guardada', 'cache');
+                va_origin('cache');
+                updateOriginUI();
+                updateMapMarkers();
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
 }
-function reverseGeocodeOrigin(lat,lon){fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es').then(function(r){return r.json()}).then(function(d){if(d&&d.display_name){MC.setOriginName(d.display_name.split(',').slice(0,2).join(', '));updateOriginUI()}}).catch(function(){})}
 
 // ===================== VOY_NAVIGATOR (NAVIGATION_MODULE_MINIMAL_V1) =====================
 // OPTIONAL_TOGGLE_MODULE — lazy-loaded on first "Navegar" tap (do_not_auto_enable).

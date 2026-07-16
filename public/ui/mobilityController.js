@@ -140,9 +140,58 @@
     if (config.historyMetricsKey) _config.historyMetricsKey = config.historyMetricsKey;
   }
 
-  function setProfile(profile) {
-    _config.profile = profile;
-    loadMemory();
+  function setProfile(config) {
+    if (!config || !config.preparedMemoryState) {
+      throw new Error('preparedMemoryState is required');
+    }
+
+    _config.profile = config.profile || { city_id: '_default' };
+    _config.busStops = config.busStops || [];
+    _config.bikeStations = config.bikeStations || [];
+    _config.landmarks = config.landmarks || [];
+    _config.providers = config.providers || {};
+    _config.fareRegistry = config.fareRegistry || {};
+
+    // Clear and reset obsolete states síncronamente
+    _origin = null;
+    _dest = null;
+    _estimations = null;
+    _originManual = false;
+    _searchCache = {};
+    _lastSearchTime = 0;
+    if (_searchTimer) {
+      clearTimeout(_searchTimer);
+      _searchTimer = null;
+    }
+
+    // Apply pre-resolved preparedMemoryState directly (strictly no storage reads!)
+    resetMemoryState();
+    var parsed = config.preparedMemoryState;
+    if (parsed) {
+      if (parsed.favorites) {
+        if (parsed.favorites.casa) _memory.favorites.casa = parsed.favorites.casa;
+        if (parsed.favorites.trabajo) _memory.favorites.trabajo = parsed.favorites.trabajo;
+        if (parsed.favorites.custom && Array.isArray(parsed.favorites.custom)) {
+          _memory.favorites.custom = parsed.favorites.custom.slice(0, CUSTOM_FAV_MAX);
+        }
+      }
+      if (parsed.history && Array.isArray(parsed.history)) {
+        _memory.history = parsed.history.slice(0, HISTORY_MAX);
+      }
+      if (parsed.metrics) {
+        var m = parsed.metrics;
+        if (m.favTrips != null) _memory.metrics.favTrips = m.favTrips;
+        if (m.histTrips != null) _memory.metrics.histTrips = m.histTrips;
+        if (m.providerTrips != null) _memory.metrics.providerTrips = m.providerTrips;
+        if (m.totalCreated != null) _memory.metrics.totalCreated = m.totalCreated;
+        if (m.byType) {
+          if (m.byType.casa != null) _memory.metrics.byType.casa = m.byType.casa;
+          if (m.byType.trabajo != null) _memory.metrics.byType.trabajo = m.byType.trabajo;
+          if (m.byType.custom != null) _memory.metrics.byType.custom = m.byType.custom;
+        }
+        if (m.userCreatedFav != null) _memory.metrics.userCreatedFav = m.userCreatedFav;
+      }
+    }
   }
 
   // =====================================================================
@@ -507,8 +556,17 @@
    */
   function _migrateLegacyMemory() {
     try {
-      // If voy_memory already exists, no migration needed
-      if (localStorage.getItem(getMemoryKey())) return;
+      var activeCityId = (_config.profile && _config.profile.city_id) || '_default';
+      if (activeCityId !== 'santafe') {
+        return;
+      }
+
+      if (localStorage.getItem('voy_memory_legacy_migrated_v1')) {
+        return;
+      }
+
+      // If voy_memory_santafe already exists, no migration needed
+      if (localStorage.getItem('voy_memory_santafe')) return;
 
       var migrated = {
         favorites: { casa: null, trabajo: null, custom: [] },
@@ -558,13 +616,22 @@
       }
 
       // Save unified memory
-      localStorage.setItem(getMemoryKey(), JSON.stringify(migrated));
+      localStorage.setItem('voy_memory_santafe', JSON.stringify(migrated));
+
+      // Verify the target write before deleting any legacy source data.
+      var verification = JSON.parse(localStorage.getItem('voy_memory_santafe'));
+      if (!verification || !verification.favorites) {
+        throw new Error('Legacy memory verification failed');
+      }
 
       // Clean up legacy keys
       localStorage.removeItem(_config.favsKey);
       localStorage.removeItem(_config.favMetricsKey);
       localStorage.removeItem(_config.historyKey);
       localStorage.removeItem(_config.historyMetricsKey);
+
+      // Write one-time migrated flag
+      localStorage.setItem('voy_memory_legacy_migrated_v1', '1');
 
     } catch (e) { /* silent — if migration fails, start fresh */ }
   }
@@ -1055,20 +1122,32 @@
     return out;
   }
 
+  function cityMetaKey(baseKey) {
+    if (baseKey === 'lastTransport' || baseKey === 'preferredProvider') {
+      var cityId = (_config.profile && _config.profile.city_id) || '_default';
+      return baseKey + '_' + cityId;
+    }
+    return baseKey;
+  }
+
   function dbMetaGet(key) {
+    var targetKey = cityMetaKey(key);
     return openDB().then(function (d) {
       if (!d) return null;
       return new Promise(function (resolve) {
         try {
           var tx = d.transaction('meta', 'readonly');
-          var req = tx.objectStore('meta').get(key);
+          var req = tx.objectStore('meta').get(targetKey);
           req.onsuccess = function () { resolve(req.result ? req.result.value : null); };
           req.onerror = function () { resolve(null); };
         } catch (e) { resolve(null); }
       });
     });
   }
-  function dbMetaSet(key, value) { return dbPut('meta', { key: key, value: value }); }
+  function dbMetaSet(key, value) {
+    var targetKey = cityMetaKey(key);
+    return dbPut('meta', { key: targetKey, value: value });
+  }
 
   // ---- Recents ----
   async function v5AddRecent(place) {
