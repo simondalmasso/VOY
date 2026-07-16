@@ -45,6 +45,33 @@
   var HISTORY_MAX = 10;
   var CUSTOM_FAV_MAX = 3;
 
+  function getMemoryKey() {
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
+    return 'voy_memory_' + cityId;
+  }
+
+  function getRecentKey() {
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
+    return (_config.recentKey || 'voy_recent_searches') + '_' + cityId;
+  }
+
+  function resetMemoryState() {
+    _memory.favorites = {
+      casa: null,
+      trabajo: null,
+      custom: []
+    };
+    _memory.history = [];
+    _memory.metrics = {
+      favTrips: 0,
+      histTrips: 0,
+      providerTrips: 0,
+      totalCreated: 0,
+      byType: { casa: 0, trabajo: 0, custom: 0 },
+      userCreatedFav: false
+    };
+  }
+
   var _memory = {
     favorites: {
       casa: null,      // { nombre, lat, lon, direccion } | null
@@ -64,6 +91,7 @@
 
   // Config (injected via init)
   var _config = {
+    profile: null,
     busStops: [],
     bikeStations: [],
     landmarks: [],
@@ -87,6 +115,7 @@
    * Must be called before any other method.
    *
    * @param {object} config
+   * @param {object} [config.profile]     - city profile object reference
    * @param {Array}  config.busStops     - BUS_STOPS array
    * @param {Array}  config.bikeStations - BIKE_STATIONS array
    * @param {Array}  config.landmarks    - LANDMARKS array
@@ -96,6 +125,7 @@
    * @param {string} [config.prefsKey]   - localStorage key for preferences
    */
   function init(config) {
+    if (config.profile) _config.profile = config.profile;
     _config.busStops = config.busStops || [];
     _config.bikeStations = config.bikeStations || [];
     _config.landmarks = config.landmarks || [];
@@ -108,6 +138,11 @@
     if (config.favMetricsKey) _config.favMetricsKey = config.favMetricsKey;
     if (config.historyKey) _config.historyKey = config.historyKey;
     if (config.historyMetricsKey) _config.historyMetricsKey = config.historyMetricsKey;
+  }
+
+  function setProfile(profile) {
+    _config.profile = profile;
+    loadMemory();
   }
 
   // =====================================================================
@@ -397,15 +432,23 @@
     _lastSearchTime = Date.now();
 
     try {
-      // V7.11 GEO_BIAS: viewbox ajustado a Santa Fe ciudad (tighter bbox).
-      //   Antes: -60.85,-31.5,-60.55,-31.75 (incluía Santo Tomé, Recreo, etc → ambigüedad).
-      //   Ahora: -60.75,-31.67,-60.65,-31.57 (centro SF ciudad ~10km).
-      //   bounded=1 fuerza a Nominatim a priorizar resultados dentro del bbox.
-      //   "Puente Colgante" ahora retorna el de SF (no el de Argentina/otros).
+      var profile = _config.profile || { city_id: '_default', displayName: 'Ciudad Desconocida', map: {} };
+      var isDefault = (profile.city_id === '_default');
+
+      var queryText = q;
+      if (!isDefault && profile.displayName) {
+        queryText = q + ', ' + profile.displayName;
+      }
+
       var url = 'https://nominatim.openstreetmap.org/search?' +
-        'q=' + encodeURIComponent(q + ', Santa Fe, Argentina') +
-        '&format=json&limit=10&accept-language=es' +
-        '&viewbox=-60.75,-31.67,-60.65,-31.57&bounded=1&addressdetails=1';
+        'q=' + encodeURIComponent(queryText) +
+        '&format=json&limit=10&accept-language=es';
+
+      if (!isDefault && profile.map && profile.map.viewbox) {
+        url += '&viewbox=' + profile.map.viewbox + '&bounded=1';
+      }
+      url += '&addressdetails=1';
+
       var r = await fetch(url, { headers: { 'User-Agent': 'MovilidadAsistente/1.0' } });
       if (!r.ok) return [];
       var data = await r.json();
@@ -438,17 +481,17 @@
 
   function saveRecentSearch(result) {
     try {
-      var recent = JSON.parse(localStorage.getItem(_config.recentKey) || '[]');
+      var recent = JSON.parse(localStorage.getItem(getRecentKey()) || '[]');
       var displayName = result.display_name || result.name || '';
       var name = displayName.split(',')[0];
       var entry = { name: name, lat: result.lat, lon: result.lon, display: displayName };
       var filtered = recent.filter(function (r) { return r.name !== entry.name; });
-      localStorage.setItem(_config.recentKey, JSON.stringify([entry].concat(filtered).slice(0, 10)));
+      localStorage.setItem(getRecentKey(), JSON.stringify([entry].concat(filtered).slice(0, 10)));
     } catch (e) { /* silent */ }
   }
 
   function getRecentSearches() {
-    try { return JSON.parse(localStorage.getItem(_config.recentKey) || '[]'); }
+    try { return JSON.parse(localStorage.getItem(getRecentKey()) || '[]'); }
     catch (e) { return []; }
   }
 
@@ -465,7 +508,7 @@
   function _migrateLegacyMemory() {
     try {
       // If voy_memory already exists, no migration needed
-      if (localStorage.getItem(MEMORY_KEY)) return;
+      if (localStorage.getItem(getMemoryKey())) return;
 
       var migrated = {
         favorites: { casa: null, trabajo: null, custom: [] },
@@ -515,7 +558,7 @@
       }
 
       // Save unified memory
-      localStorage.setItem(MEMORY_KEY, JSON.stringify(migrated));
+      localStorage.setItem(getMemoryKey(), JSON.stringify(migrated));
 
       // Clean up legacy keys
       localStorage.removeItem(_config.favsKey);
@@ -531,11 +574,12 @@
    * Handles migration from legacy keys on first load.
    */
   function loadMemory() {
+    resetMemoryState();
     try {
       // Try migration first
       _migrateLegacyMemory();
 
-      var saved = localStorage.getItem(MEMORY_KEY);
+      var saved = localStorage.getItem(getMemoryKey());
       if (saved) {
         var parsed = JSON.parse(saved);
         // Favorites
@@ -572,7 +616,7 @@
    * Persist unified memory to localStorage.
    */
   function saveMemory() {
-    try { localStorage.setItem(MEMORY_KEY, JSON.stringify(_memory)); }
+    try { localStorage.setItem(getMemoryKey(), JSON.stringify(_memory)); }
     catch (e) { /* silent */ }
   }
 
@@ -1029,21 +1073,25 @@
   // ---- Recents ----
   async function v5AddRecent(place) {
     if (!place || place.lat == null || place.lon == null) return;
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var entry = {
-      id: 'r_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
+      id: cityId + '_r_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
       name: place.name || '',
       lat: place.lat, lon: place.lon,
       ts: Date.now()
     };
     await encPut('recents', entry);
     var all = await encGetAll('recents');
+    all = all.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
     all.sort(function (a, b) { return b.ts - a.ts; });
     if (all.length > RECENT_MAX_V5) {
       for (var i = RECENT_MAX_V5; i < all.length; i++) await dbDelete('recents', all[i].id);
     }
   }
   async function v5GetRecents(limit) {
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var all = await encGetAll('recents');
+    all = all.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
     all.sort(function (a, b) { return b.ts - a.ts; });
     return all.slice(0, limit || 10);
   }
@@ -1052,8 +1100,9 @@
   // ---- Favorites ----
   async function v5AddFavorite(place, label) {
     if (!place || place.lat == null || place.lon == null) return false;
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var entry = {
-      id: 'f_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
+      id: cityId + '_f_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
       name: place.name || '',
       label: label || '',
       lat: place.lat, lon: place.lon,
@@ -1061,14 +1110,19 @@
     };
     return encPut('favorites', entry);
   }
-  async function v5GetFavorites() { return encGetAll('favorites'); }
+  async function v5GetFavorites() {
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
+    var all = await encGetAll('favorites');
+    return all.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
+  }
   async function v5RemoveFavorite(id) { return dbDelete('favorites', id); }
 
   // ---- Trip logging (drives inference + frequent) ----
   async function v5LogTrip(origin, dest, mode, provider) {
     if (!origin || !dest) return;
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var entry = {
-      id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      id: cityId + '_t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
       ts: Date.now(),
       origin: { lat: origin.lat, lon: origin.lon, name: origin.name || '' },
       dest: { lat: dest.lat, lon: dest.lon, name: dest.name || '' },
@@ -1080,6 +1134,7 @@
     if (provider) await dbMetaSet('preferredProvider', provider);
     // Trim
     var all = await encGetAll('trips');
+    all = all.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
     all.sort(function (a, b) { return b.ts - a.ts; });
     if (all.length > TRIP_MAX_V5) {
       for (var i = TRIP_MAX_V5; i < all.length; i++) await dbDelete('trips', all[i].id);
@@ -1088,7 +1143,9 @@
 
   // ---- Home/Work inference ----
   async function v5InferHomeWork() {
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var trips = await encGetAll('trips');
+    trips = trips.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
     if (!trips.length) return { home: null, work: null };
     var night = {}, day = {};
     trips.forEach(function (t) {
@@ -1110,7 +1167,9 @@
 
   // ---- Frequent destinations ----
   async function v5GetFrequent(limit) {
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var trips = await encGetAll('trips');
+    trips = trips.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
     var counts = {};
     trips.forEach(function (t) {
       if (!t.dest) return;
@@ -1259,6 +1318,7 @@
   var MobilityController = {
     // Initialization
     init: init,
+    setProfile: setProfile,
 
     // State accessors (Bridge)
     getOrigin: getOrigin,
