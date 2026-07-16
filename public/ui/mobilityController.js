@@ -461,65 +461,32 @@
   // =====================================================================
 
   function searchLocal(q) {
-    return MobilityEngine.searchLocal(q, _config.busStops, _config.bikeStations, _config.landmarks);
+    if (typeof DestinationResolver === 'undefined') return MobilityEngine.searchLocal(q, _config.busStops, _config.bikeStations, _config.landmarks);
+    return DestinationResolver.rankCandidates(q, (_config.landmarks || []).map(function (item) {
+      return DestinationResolver.toCanonicalCandidate(item, 'curated', (_config.profile && _config.profile.city_id) || '_default');
+    }), { bbox: _config.profile && _config.profile.map && _config.profile.map.bbox });
   }
 
   function dedupResults(results) {
-    return MobilityEngine.dedupResults(results);
+    return typeof DestinationResolver === 'undefined' ? MobilityEngine.dedupResults(results) : DestinationResolver.deduplicateCandidates(results);
   }
 
-  async function searchNominatim(q) {
-    // P1/F1: normalize cache key (lowercase + strip accents) so "Belgrano" and "Bélgrano" share cache
-    var key = MobilityEngine.normalize(q).trim();
-    if (!key) return [];
+  async function searchRemote(q, options) {
+    var key = MobilityEngine.normalize(q).trim() + ((options && options.wide) ? ':wide' : '');
+    if (key.length < 2) return [];
     if (_searchCache[key]) return _searchCache[key];
-
-    // P1/F1: removed the 1100ms blocking rate-limiter — it returned [] on rapid typing,
-    // which broke mobile destination search. The 250ms debounce in the view + aggressive
-    // per-query caching is sufficient to respect Nominatim's usage policy for low-traffic demo use.
-    // If Nominatim returns 429, the catch returns [] and local results still render.
-    _lastSearchTime = Date.now();
-
     try {
-      var profile = _config.profile || { city_id: '_default', displayName: 'Ciudad Desconocida', map: {} };
-      var isDefault = (profile.city_id === '_default');
-
-      var queryText = q;
-      if (!isDefault && profile.displayName) {
-        queryText = q + ', ' + profile.displayName;
-      }
-
-      var url = 'https://nominatim.openstreetmap.org/search?' +
-        'q=' + encodeURIComponent(queryText) +
-        '&format=json&limit=10&accept-language=es';
-
-      if (!isDefault && profile.map && profile.map.viewbox) {
-        url += '&viewbox=' + profile.map.viewbox + '&bounded=1';
-      }
-      url += '&addressdetails=1';
-
-      var r = await fetch(url, { headers: { 'User-Agent': 'MovilidadAsistente/1.0' } });
+      var cityId = (_config.profile && _config.profile.city_id) || '_default';
+      var url = '/api/geocode?q=' + encodeURIComponent(q) + '&city=' + encodeURIComponent(cityId);
+      if (options && options.wide) url += '&wide=1';
+      var r = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!r.ok) return [];
       var data = await r.json();
-
-      var localResults = searchLocal(q);
-      var remoteResults = (data || []).map(function (d, i) {
-        return {
-          type: 'place',
-          name: d.display_name.split(',').slice(0, 2).join(', '),
-          sub: d.display_name.split(',').slice(2, 4).join(', ').trim(),
-          lat: parseFloat(d.lat),
-          lon: parseFloat(d.lon),
-          score: 70 - i * 5,
-          display_name: d.display_name
-        };
+      var results = Array.isArray(data) ? data : data.results;
+      _searchCache[key] = (results || []).map(function (item) {
+        return DestinationResolver.toCanonicalCandidate(item, 'remote', cityId);
       });
-
-      var all = localResults.concat(remoteResults);
-      all.sort(function (a, b) { return b.score - a.score; });
-      var deduped = dedupResults(all);
-      _searchCache[key] = deduped;
-      return deduped;
+      return _searchCache[key];
     } catch (e) {
       return [];
     }
@@ -1157,6 +1124,13 @@
       id: cityId + '_r_' + Math.round(place.lat * 10000) + '_' + Math.round(place.lon * 10000),
       name: place.name || '',
       lat: place.lat, lon: place.lon,
+      canonicalId: place.canonicalId || '',
+      source: 'recent',
+      type: place.type || 'poi',
+      address: place.address || '',
+      precision: place.precision || 'approximate',
+      verified: place.verified === true,
+      aliases: Array.isArray(place.aliases) ? place.aliases : [],
       ts: Date.now()
     };
     await encPut('recents', entry);
@@ -1171,6 +1145,16 @@
     var cityId = (_config.profile && _config.profile.city_id) || '_default';
     var all = await encGetAll('recents');
     all = all.filter(function (x) { return x.id && x.id.indexOf(cityId + '_') === 0; });
+    var migrationKey = 'destinationRecentsV2_' + cityId;
+    var migrated = await dbMetaGet(migrationKey);
+    if (!migrated && typeof DestinationResolver !== 'undefined') {
+      var reconciliation = DestinationResolver.reconcileRecents(all, _config.landmarks || [], { cityId: cityId, now: Date.now() });
+      if (reconciliation.changed) {
+        for (var i = 0; i < reconciliation.recents.length; i++) await encPut('recents', reconciliation.recents[i]);
+        all = reconciliation.recents;
+      }
+      await dbMetaSet(migrationKey, { version: 2, completedAt: Date.now() });
+    }
     all.sort(function (a, b) { return b.ts - a.ts; });
     return all.slice(0, limit || 10);
   }
@@ -1185,6 +1169,11 @@
       name: place.name || '',
       label: label || '',
       lat: place.lat, lon: place.lon,
+      canonicalId: place.canonicalId || '',
+      address: place.address || '',
+      precision: place.precision || 'approximate',
+      verified: place.verified === true,
+      aliases: Array.isArray(place.aliases) ? place.aliases : [],
       ts: Date.now()
     };
     return encPut('favorites', entry);
@@ -1337,49 +1326,16 @@
 
   // ---- Ranked search: favorites → recents → home/work → local → (remote by caller) ----
   async function v5SearchLocalRanked(query, gpsOrigin) {
-    var q = MobilityEngine.normalize(query || '').trim();
-    if (q.length < 2) return [];
-    var results = [];
-
+    if (MobilityEngine.normalize(query || '').trim().length < 2) return [];
     var favs = await v5GetFavorites();
-    favs.forEach(function (f) {
-      var s = MobilityEngine.fuzzyScore(q, f.name || '');
-      if (s > 0) results.push({ type: 'favorite', name: f.name, lat: f.lat, lon: f.lon, score: s + 55, label: f.label });
-    });
-
-    var hw = await v5InferHomeWork();
-    if (hw.home) {
-      var sh = MobilityEngine.fuzzyScore(q, 'casa');
-      if (sh > 0) results.push({ type: 'home', name: 'Casa', lat: hw.home.lat, lon: hw.home.lon, score: sh + 50 });
-    }
-    if (hw.work) {
-      var sw = MobilityEngine.fuzzyScore(q, 'trabajo');
-      if (sw > 0) results.push({ type: 'work', name: 'Trabajo', lat: hw.work.lat, lon: hw.work.lon, score: sw + 50 });
-    }
-
     var recents = await v5GetRecents(12);
-    recents.forEach(function (r) {
-      var s = MobilityEngine.fuzzyScore(q, r.name || '');
-      if (s > 0) results.push({ type: 'recent', name: r.name, lat: r.lat, lon: r.lon, score: s + 45 });
+    if (typeof DestinationResolver === 'undefined') return searchLocal(query);
+    return DestinationResolver.searchLocalSources(query, {
+      cityId: (_config.profile && _config.profile.city_id) || '_default',
+      landmarks: _config.landmarks || [], favorites: favs, recents: recents,
+      bbox: _config.profile && _config.profile.map && _config.profile.map.bbox,
+      gpsOrigin: gpsOrigin
     });
-
-    var local = searchLocal(query);
-    local.forEach(function (r) {
-      if (r && r.lat != null) results.push(r);
-    });
-
-    if (gpsOrigin) {
-      results.forEach(function (r) {
-        if (r.lat != null && r.lon != null) {
-          var d = MobilityEngine.haversine(gpsOrigin.lat, gpsOrigin.lon, r.lat, r.lon);
-          r.gpsBias = Math.max(0, 1 - d / 5);
-          r.score = (r.score || 0) + r.gpsBias * 20;
-        }
-      });
-    }
-
-    results.sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
-    return results.slice(0, 8);
   }
 
   // ---- Session token (for remote search dedup) ----
@@ -1427,7 +1383,7 @@
     // Search coordination
     searchLocal: searchLocal,
     dedupResults: dedupResults,
-    searchNominatim: searchNominatim,
+    searchRemote: searchRemote,
     getSearchTimer: getSearchTimer,
     setSearchTimer: setSearchTimer,
     saveRecentSearch: saveRecentSearch,

@@ -265,10 +265,12 @@ function loadRealRuntime() {
   sandbox.document = mockDocument;
 
   const engineCode = fs.readFileSync(path.join(__dirname, '..', 'public', 'core', 'mobilityEngine.js'), 'utf8');
+  const resolverCode = fs.readFileSync(path.join(__dirname, '..', 'public', 'core', 'destinationResolver.js'), 'utf8');
   const controllerCode = fs.readFileSync(path.join(__dirname, '..', 'public', 'ui', 'mobilityController.js'), 'utf8');
 
   const context = vm.createContext(sandbox);
   vm.runInContext(engineCode, context);
+  vm.runInContext(resolverCode, context);
   vm.runInContext(controllerCode, context);
 
   const realController = sandbox.MobilityController;
@@ -558,7 +560,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       return { ok: true, json: async () => [] };
     };
 
-    await runtime.MC.searchNominatim('Belgrano');
+    await runtime.MC.searchRemote('Belgrano');
     assert.ok(!requestedUrl.includes('bounded=1'), 'Search in _default must not contain bounded=1 bias');
     assert.ok(!requestedUrl.includes('-60.75'), 'Search in _default must not contain Santa Fe bbox coordinates');
   });
@@ -579,7 +581,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       return { ok: true, json: async () => [] };
     };
 
-    await runtime.MC.searchNominatim('Belgrano');
+    await runtime.MC.searchRemote('Belgrano');
     assert.ok(!requestedUrl.includes('Santa%20Fe'), 'Search in _default must not append Santa Fe suffix');
   });
 
@@ -738,7 +740,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       return { ok: true, json: async () => [] };
     };
 
-    await runtime.MC.searchNominatim('Belgrano');
+    await runtime.MC.searchRemote('Belgrano');
     assert.ok(!requestedUrl.includes('Santa%20Fe'), 'Lack of displayName must never fallback to Santa Fe');
   });
 
@@ -1233,7 +1235,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
           })
         };
       }
-      if (String(url).includes('nominatim')) {
+      if (String(url).includes('/api/geocode')) {
         searchFetches++;
         return {
           ok: true,
@@ -1243,8 +1245,8 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       return { ok: false, status: 404 };
     };
 
-    await runtime.MC.searchNominatim('cache probe');
-    await runtime.MC.searchNominatim('cache probe');
+    await runtime.MC.searchRemote('cache probe');
+    await runtime.MC.searchRemote('cache probe');
     assert.strictEqual(searchFetches, 1, 'precondition: the search result is cached');
 
     runtime.MC.setSearchTimer(setTimeout(() => {}, 60_000));
@@ -1289,7 +1291,7 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
       2
     );
 
-    await runtime.MC.searchNominatim('cache probe');
+    await runtime.MC.searchRemote('cache probe');
     assert.strictEqual(searchFetches, 2, 'city switch must empty the real search cache');
   });
 

@@ -1,0 +1,54 @@
+name: Validate Destination Resolution V2
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Tests
+        run: bun run test
+
+      - name: Wrangler dry-run
+        run: npx wrangler deploy --dry-run --minify
+
+      - name: Install Chromium 1.61.1
+        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+
+      - name: Browser smoke
+        run: bash scripts/run-browser-smoke.sh
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: destination-resolution-browser-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            test-results/
+            playwright-report/
