@@ -29,6 +29,7 @@ function loadRealRuntime() {
     setAttribute: () => {},
     removeAttribute: () => {},
     addEventListener: () => {},
+    appendChild: () => {},
     classList: {
       add: () => {},
       remove: () => {},
@@ -44,9 +45,11 @@ function loadRealRuntime() {
     getElementById: () => mockElement,
     querySelectorAll: () => [],
     addEventListener: () => {},
+    createElement: () => mockElement,
     body: {
       setAttribute: () => {},
-      removeAttribute: () => {}
+      removeAttribute: () => {},
+      appendChild: () => {}
     }
   };
 
@@ -605,6 +608,31 @@ describe('Multi-City Foundation v1 — Complete Integration, Isolation & Fallbac
 
     await runtime.MC.searchNominatim('Belgrano');
     assert.ok(!requestedUrl.includes('Santa%20Fe'), 'Lack of displayName must never fallback to Santa Fe');
+  });
+
+  // Extra Test: fallbackGeocode on _default has no bias or suffix contamination
+  test('fallbackGeocode on _default has no bias, viewbox, bounded, or Santa Fe suffix contamination', async () => {
+    const runtime = loadRealRuntime();
+    runtime.showToast = () => {}; // Prevents asynchronous toast setTimeout styled-error after test finishes
+    runtime.CURRENT_CITY = {
+      city_id: '_default',
+      name: 'Ciudad Desconocida',
+      map: { center: [0, 0], zoom: 2 }
+    };
+
+    let requestedUrl = '';
+    runtime.fetch.impl = async (url) => {
+      requestedUrl = url;
+      return { ok: true, json: async () => [] };
+    };
+
+    await runtime.fallbackGeocode('Belgrano');
+
+    assert.ok(requestedUrl.includes('q=Belgrano'), 'Query must contain the unmodified text');
+    assert.ok(!requestedUrl.includes('Santa%20Fe') && !requestedUrl.includes('Santa Fe'), 'Query must NOT contain Santa Fe suffix');
+    assert.ok(!requestedUrl.includes('Buenos%20Aires') && !requestedUrl.includes('Buenos Aires'), 'Query must NOT contain Buenos Aires suffix');
+    assert.ok(!requestedUrl.includes('viewbox'), 'Query must NOT contain any viewbox query parameter');
+    assert.ok(!requestedUrl.includes('bounded'), 'Query must NOT contain any bounded query parameter');
   });
 
 });
