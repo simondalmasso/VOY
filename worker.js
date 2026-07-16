@@ -49,7 +49,14 @@ const NOMINATIM_MAX_QUEUE = 10;
 const NOMINATIM_MAX_WAIT_MS = 10000;
 const NOMINATIM_FETCH_TIMEOUT_MS = 8000;
 const _geocodeClients = new Map();
-const _geocodeClientSalt = crypto.randomUUID();
+let _geocodeClientSalt = null;
+
+function _getGeocodeClientSalt() {
+  if (!_geocodeClientSalt) {
+    _geocodeClientSalt = crypto.randomUUID();
+  }
+  return _geocodeClientSalt;
+}
 
 // V7.8 — 3 eventos canónicos. Nombres legacy se mapean a estos.
 const V2_EVENTS = ['estimation', 'provider_tap', 'search'];
@@ -266,7 +273,7 @@ async function _geocodeRateAllowed(request) {
     if (now - entry.startedAt >= GEOCODE_RATE_WINDOW_MS) _geocodeClients.delete(key);
   }
   const clientIp = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anonymous').split(',')[0].trim();
-  const client = await _sha256Hex(_geocodeClientSalt + ':' + clientIp);
+  const client = await _sha256Hex(_getGeocodeClientSalt() + ':' + clientIp);
   const current = _geocodeClients.get(client);
   if (!current || now - current.startedAt >= GEOCODE_RATE_WINDOW_MS) {
     if (_geocodeClients.size >= GEOCODE_CLIENTS_MAX) return false;

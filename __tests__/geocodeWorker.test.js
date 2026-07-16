@@ -6,7 +6,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 const Resolver = require('../public/core/destinationResolver.js');
 
-function loadWorker(fetchImpl) {
+function loadWorker(fetchImpl, cryptoImpl = crypto) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8')
     .replace('export class NominatimCoordinator', 'class NominatimCoordinator')
     .replace(/export default worker;/, 'globalThis.__worker = worker; globalThis.__NominatimCoordinator = NominatimCoordinator; globalThis.__geocodeClients = _geocodeClients; globalThis.__geocodeRateAllowed = _geocodeRateAllowed; globalThis.__geocodeClientsMax = GEOCODE_CLIENTS_MAX;');
@@ -17,7 +17,7 @@ function loadWorker(fetchImpl) {
   };
   const context = vm.createContext({
     URL, URLSearchParams, Request, Response, Headers, TextEncoder, Uint8Array, AbortController,
-    crypto, console, setTimeout, clearTimeout, fetch: fetchImpl, caches: { default: cache }
+    crypto: cryptoImpl, console, setTimeout, clearTimeout, fetch: fetchImpl, caches: { default: cache }
   });
   vm.runInContext(source, context, { filename: 'worker.js' });
   const durableData = new Map();
@@ -158,6 +158,28 @@ test('client rate map hashes keys, isolates clients, prunes expired windows and 
   assert.equal(await rateAllowed(requestA), true);
   assert.equal(clients.size, 1);
   assert.equal([...clients.values()][0].count, 1);
+});
+
+test('geocode client salt is initialized lazily once per isolate and never stores raw IP keys', async () => {
+  let randomUUIDCalls = 0;
+  const cryptoImpl = {
+    subtle: crypto.subtle,
+    randomUUID() {
+      randomUUIDCalls += 1;
+      return '11111111-1111-4111-8111-111111111111';
+    }
+  };
+  const { clients, rateAllowed } = loadWorker(async () => new Response('[]'), cryptoImpl);
+  assert.equal(randomUUIDCalls, 0);
+  const firstIp = '192.0.2.41';
+  const secondIp = '192.0.2.42';
+  assert.equal(await rateAllowed(new Request('https://voy.test/', { headers: { 'cf-connecting-ip': firstIp } })), true);
+  assert.equal(randomUUIDCalls, 1);
+  assert.equal(await rateAllowed(new Request('https://voy.test/', { headers: { 'cf-connecting-ip': secondIp } })), true);
+  assert.equal(randomUUIDCalls, 1);
+  assert.equal(clients.size, 2);
+  assert.equal(new Set(clients.keys()).size, 2);
+  assert.ok([...clients.keys()].every(key => key !== firstIp && key !== secondIp && !key.includes('192.0.2.')));
 });
 
 test('client rate map has an explicit maximum and rejects new clients after deterministic pruning', async () => {
