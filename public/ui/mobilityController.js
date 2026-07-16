@@ -64,6 +64,7 @@
 
   // Config (injected via init)
   var _config = {
+    profile: null,
     busStops: [],
     bikeStations: [],
     landmarks: [],
@@ -87,6 +88,7 @@
    * Must be called before any other method.
    *
    * @param {object} config
+   * @param {object} [config.profile]     - city profile object reference
    * @param {Array}  config.busStops     - BUS_STOPS array
    * @param {Array}  config.bikeStations - BIKE_STATIONS array
    * @param {Array}  config.landmarks    - LANDMARKS array
@@ -96,6 +98,7 @@
    * @param {string} [config.prefsKey]   - localStorage key for preferences
    */
   function init(config) {
+    if (config.profile) _config.profile = config.profile;
     _config.busStops = config.busStops || [];
     _config.bikeStations = config.bikeStations || [];
     _config.landmarks = config.landmarks || [];
@@ -397,15 +400,19 @@
     _lastSearchTime = Date.now();
 
     try {
-      // V7.11 GEO_BIAS: viewbox ajustado a Santa Fe ciudad (tighter bbox).
-      //   Antes: -60.85,-31.5,-60.55,-31.75 (incluía Santo Tomé, Recreo, etc → ambigüedad).
-      //   Ahora: -60.75,-31.67,-60.65,-31.57 (centro SF ciudad ~10km).
-      //   bounded=1 fuerza a Nominatim a priorizar resultados dentro del bbox.
-      //   "Puente Colgante" ahora retorna el de SF (no el de Argentina/otros).
+      var profile = _config.profile || { city_id: '_default', displayName: 'Ciudad Desconocida', map: {} };
+      var isDefault = (profile.city_id === '_default');
+      var suffix = profile.displayName || 'Santa Fe, Argentina';
+
       var url = 'https://nominatim.openstreetmap.org/search?' +
-        'q=' + encodeURIComponent(q + ', Santa Fe, Argentina') +
-        '&format=json&limit=10&accept-language=es' +
-        '&viewbox=-60.75,-31.67,-60.65,-31.57&bounded=1&addressdetails=1';
+        'q=' + encodeURIComponent(q + ', ' + suffix) +
+        '&format=json&limit=10&accept-language=es';
+
+      if (!isDefault && profile.map && profile.map.viewbox) {
+        url += '&viewbox=' + profile.map.viewbox + '&bounded=1';
+      }
+      url += '&addressdetails=1';
+
       var r = await fetch(url, { headers: { 'User-Agent': 'MovilidadAsistente/1.0' } });
       if (!r.ok) return [];
       var data = await r.json();

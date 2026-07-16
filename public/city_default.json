@@ -27,22 +27,22 @@
   "remisCompanies": [],
   "fareRegistry": {
     "taxi": {
-      "diurno": {"bajada":0,"ficha":0,"distFicha":130},
-      "nocturno": {"bajada":0,"ficha":0,"distFicha":130},
+      "diurno": {"bajada":null,"ficha":null,"distFicha":130},
+      "nocturno": {"bajada":null,"ficha":null,"distFicha":130},
       "source":"Sin verificar",
       "updated_at":""
     },
     "bus": {
-      "sube":0,
-      "cash":0,
+      "sube":null,
+      "cash":null,
       "source":"Sin verificar",
       "updated_at":""
     },
     "apps": {
-      "uber": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""},
-      "didi": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""},
-      "maxim": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""},
-      "cabify": {"base":0,"km":0,"min":0,"minFare":0,"source":"Sin verificar","updated_at":""}
+      "uber": {"base":null,"km":null,"min":null,"minFare":null,"source":"Sin verificar","updated_at":""},
+      "didi": {"base":null,"km":null,"min":null,"minFare":null,"source":"Sin verificar","updated_at":""},
+      "maxim": {"base":null,"km":null,"min":null,"minFare":null,"source":"Sin verificar","updated_at":""},
+      "cabify": {"base":null,"km":null,"min":null,"minFare":null,"source":"Sin verificar","updated_at":""}
     }
   }
 }

@@ -1353,13 +1353,13 @@ function createEmergencyDefault(cityId) {
     taxiCompanies: [],
     remisCompanies: [],
     fareRegistry: {
-      taxi: { diurno: {bajada:0,ficha:0,distFicha:130}, nocturno: {bajada:0,ficha:0,distFicha:130}, source:'Sin verificar', updated_at:'' },
-      bus: { sube:0, cash:0, source:'Sin verificar', updated_at:'' },
+      taxi: { diurno: {bajada:null,ficha:null,distFicha:130}, nocturno: {bajada:null,ficha:null,distFicha:130}, source:'Sin verificar', updated_at:'' },
+      bus: { sube:null, cash:null, source:'Sin verificar', updated_at:'' },
       apps: {
-        uber: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''},
-        didi: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''},
-        maxim: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''},
-        cabify: {base:0,km:0,min:0,minFare:0,source:'Sin verificar',updated_at:''}
+        uber: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''},
+        didi: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''},
+        maxim: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''},
+        cabify: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''}
       }
     }
   };
@@ -1389,7 +1389,8 @@ function updateCityUI() {
 }
 
 async function loadCityProfile(cityId) {
-  var url = 'city_' + cityId + '.json';
+  var fileId = cityId === '_default' ? 'default' : cityId;
+  var url = 'city_' + fileId + '.json';
   var data = null;
   var is404 = false;
   var controller = new AbortController();
@@ -1462,13 +1463,63 @@ async function loadCityProfile(cityId) {
   }
 
   CURRENT_CITY = data;
-  BUS_STOPS = data.busStops || [];
-  BIKE_STATIONS = data.bikeStations || [];
-  LANDMARKS = data.landmarks || [];
-  PROVIDERS = data.providers || {};
-  TAXI_COMPANIES = data.taxiCompanies || [];
-  REMIS_COMPANIES = data.remisCompanies || [];
-  FareRegistry = data.fareRegistry || {};
+
+  BUS_STOPS.length = 0;
+  if (data.busStops) {
+    for (var i = 0; i < data.busStops.length; i++) {
+      BUS_STOPS.push(data.busStops[i]);
+    }
+  }
+
+  BIKE_STATIONS.length = 0;
+  if (data.bikeStations) {
+    for (var i = 0; i < data.bikeStations.length; i++) {
+      BIKE_STATIONS.push(data.bikeStations[i]);
+    }
+  }
+
+  LANDMARKS.length = 0;
+  if (data.landmarks) {
+    for (var i = 0; i < data.landmarks.length; i++) {
+      LANDMARKS.push(data.landmarks[i]);
+    }
+  }
+
+  for (var key in PROVIDERS) {
+    if (PROVIDERS.hasOwnProperty(key)) delete PROVIDERS[key];
+  }
+  if (data.providers) {
+    for (var key in data.providers) {
+      if (data.providers.hasOwnProperty(key)) {
+        PROVIDERS[key] = data.providers[key];
+      }
+    }
+  }
+
+  TAXI_COMPANIES.length = 0;
+  if (data.taxiCompanies) {
+    for (var i = 0; i < data.taxiCompanies.length; i++) {
+      TAXI_COMPANIES.push(data.taxiCompanies[i]);
+    }
+  }
+
+  REMIS_COMPANIES.length = 0;
+  if (data.remisCompanies) {
+    for (var i = 0; i < data.remisCompanies.length; i++) {
+      REMIS_COMPANIES.push(data.remisCompanies[i]);
+    }
+  }
+
+  for (var key in FareRegistry) {
+    if (FareRegistry.hasOwnProperty(key)) delete FareRegistry[key];
+  }
+  if (data.fareRegistry) {
+    for (var key in data.fareRegistry) {
+      if (data.fareRegistry.hasOwnProperty(key)) {
+        FareRegistry[key] = data.fareRegistry[key];
+      }
+    }
+  }
 }
 
 // ===================== SVG ICON SYSTEM (no emojis) =====================
@@ -1654,7 +1705,7 @@ document.addEventListener('DOMContentLoaded',async function(){
 
   // Initialize MobilityController with loaded city profile
   if (!window._mcInitialized) {
-    MC.init({busStops:BUS_STOPS,bikeStations:BIKE_STATIONS,landmarks:LANDMARKS,fareRegistry:FareRegistry,providers:PROVIDERS,recentKey:'voy_recent_searches',favsKey:'voy_favorites',favMetricsKey:'voy_fav_metrics'});
+    MC.init({profile:CURRENT_CITY,busStops:BUS_STOPS,bikeStations:BIKE_STATIONS,landmarks:LANDMARKS,fareRegistry:FareRegistry,providers:PROVIDERS,recentKey:'voy_recent_searches',favsKey:'voy_favorites',favMetricsKey:'voy_fav_metrics'});
     window._mcInitialized = true;
   }
   MC.loadMemory();
@@ -1815,6 +1866,29 @@ function _handleGpsPosition(lat,lon){
   if(_gpsLastUpdate&&now-_gpsLastUpdate<GPS_DEBOUNCE_MS)return;
   if(_gpsLastLat!=null){var dist=_haversineMeters(_gpsLastLat,_gpsLastLon,lat,lon);if(dist<GPS_MIN_MOVE_M)return}
   _gpsLastUpdate=now;_gpsLastLat=lat;_gpsLastLon=lon;
+
+  // Primera visita / GPS tardío: if we are in _default but user position is in Santa Fe, reload Santa Fe dynamically
+  if (CURRENT_CITY && CURRENT_CITY.city_id === '_default') {
+    if (lat >= -31.67 && lat <= -31.57 && lon >= -60.75 && lon <= -60.65) {
+      console.log('[GPS Tardío] Location confirmed in Santa Fe. Dynamically loading Santa Fe profile.');
+      cachePosition(lat, lon);
+      loadCityProfile('santafe').then(function() {
+        if (_map) {
+          _map.setCenter(CURRENT_CITY.map.center);
+          _map.setZoom(CURRENT_CITY.map.zoom);
+        }
+        updateCityUI();
+        MC.setOrigin(lat, lon, 'Mi ubicación', 'gps');
+        va_origin('gps');
+        updateOriginUI();
+        updateMapMarkers();
+        if (MC.getDest()) runEstimations();
+        else renderSheet();
+      });
+      return;
+    }
+  }
+
   MC.setOrigin(lat,lon,'Mi ubicación','gps');va_origin('gps');updateOriginUI();updateMapMarkers();
   if(!_gpsFirstFixDone){_gpsFirstFixDone=true;clearTimeout(_gpsReverseDebounceTimer);_gpsReverseDebounceTimer=setTimeout(function(){reverseGeocodeOrigin(_gpsLastLat,_gpsLastLon)},GPS_REVERSE_DEBOUNCE_MS)}
   if(!_gpsMapCenteredOnce){_gpsMapCenteredOnce=true;if(_map)_map.flyTo({center:[lon,lat],zoom:15})}
@@ -2312,13 +2386,13 @@ function runEstimations(){
 
 // ===================== FARE HELPERS =====================
 function computeTaxiFare(distKm,timeMin){
-  if (!FareRegistry || !FareRegistry.taxi || !FareRegistry.taxi.nocturno || !FareRegistry.taxi.diurno) return 0;
+  if (!FareRegistry || !FareRegistry.taxi || !FareRegistry.taxi.nocturno || !FareRegistry.taxi.diurno) return null;
   var hour=new Date().getHours();
   var t=(hour>=22||hour<6)?FareRegistry.taxi.nocturno:FareRegistry.taxi.diurno;
-  if (!t) return 0;
+  if (!t || t.bajada === null || t.ficha === null) return null;
   var distFicha = t.distFicha || 130;
   var fichas=Math.ceil(distKm*1000/distFicha);
-  var price=(t.bajada||0)+fichas*(t.ficha||0);
+  var price=t.bajada+fichas*t.ficha;
   return Math.round(price);
 }
 
