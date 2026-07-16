@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 53096)
-Total output lines: 3809
-
 <!--
 VOY V7.8.0 — Single source of truth (atomic deploy + cache bust + version pin)
 Build: 2026 VOY_V7_CLEAN_DEPLOY
@@ -1944,7 +1941,196 @@ var _vaS={o:0,os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0};
 function _vaCluster(lat,lon){return(lat/_VA_GRID).toFixed(0)+'_'+(lon/_VA_GRID).toFixed(0)}
 function va_open(){_vaS={o:Date.now(),os:'n',dt:0,dn:'',dc:'',ct:0,ms:'',cm:'',ct2:0,x:0}}
 function va_origin(src){if(!_vaS.o)return;var m={gps:'g',cache:'c',map:'m',search:'s'};_vaS.os=m[src]||'n'}
-function va_dest(name,lat,lon){if(!_vaS.o||_vaS.dt)return;_v…3096 tokens truncated…urces:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap'}},layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]};
+function va_dest(name,lat,lon){if(!_vaS.o||_vaS.dt)return;_vaS.dt=Date.now();_vaS.dn=(name||'').substring(0,25);_vaS.dc=_vaCluster(lat,lon)}
+function va_cards(modes){if(!_vaS.o)return;if(!_vaS.ct)_vaS.ct=Date.now();var modeMap={bus:'b',bike:'i',auto:'a'};_vaS.ms=(modes||[]).map(function(e){return modeMap[e]||'?'}).join(',')}
+function va_cta(mode){if(!_vaS.o)return;_vaS.cm=mode||'';_vaS.ct2=Date.now()}
+function va_close(){if(!_vaS.o)return;_vaS.x=Date.now();if(_vaS.x-_vaS.o<500)return;try{var raw=localStorage.getItem(_VA_KEY);var arr=raw?JSON.parse(raw):[];if(!Array.isArray(arr))arr=[];arr.push(_vaS);if(arr.length>_VA_MAX)arr=arr.slice(arr.length-_VA_MAX);localStorage.setItem(_VA_KEY,JSON.stringify(arr))}catch(e){}}
+
+// V5 event log (anonymous): search, provider_selected, destination_selected, deeplink_opened, favorite_added
+var _V5E_KEY='voy_v5_events',_V5E_MAX=200;
+function v5event(type,data){
+  try{
+    var raw=localStorage.getItem(_V5E_KEY);var arr=raw?JSON.parse(raw):[];if(!Array.isArray(arr))arr=[];
+    arr.push({t:type,d:data||{},ts:Date.now()});
+    if(arr.length>_V5E_MAX)arr=arr.slice(arr.length-_V5E_MAX);
+    localStorage.setItem(_V5E_KEY,JSON.stringify(arr));
+  }catch(e){}
+  // Event spec v1.4 — forward to the multi-transport eventBus (local + worker + posthog stub).
+  // Maps legacy v5 event names → spec v1.4 names where they differ.
+  if(window.VoyEventBus){
+    var map={search:'search_performed',destination_selected:'destination_selected',provider_selected:'provider_clicked',deeplink_opened:'deeplink_opened',favorite_added:'favorite_saved'};
+    // V7.7 VOY_ANALYTICS_V2: attach coarse origin geo so the cities report has data.
+    // ONLY enrichs the eventBus payload (server analytics) — the v5 local log above
+    // keeps the original data unchanged (no metric pollution). eventBus._coarseGeo
+    // converts lat/lon to a ~500m cluster string; the worker never sees raw coords.
+    try{
+      var _eData=data||{};
+      if(typeof MC!=='undefined'&&MC.getOrigin){var _o=MC.getOrigin();if(_o)_eData=Object.assign({},_eData,{lat:_o.lat,lon:_o.lon});}
+      VoyEventBus.emit(map[type]||type,_eData);
+    }catch(e){}
+  }
+}
+
+// Analytics dashboard (emoji-free, hidden, 5 taps on VOY wordmark)
+function va_load(){try{var r=localStorage.getItem(_VA_KEY);return r?JSON.parse(r):[]}catch(e){return[]}}
+function va_metrics(){
+  var s=va_load();var n=s.length;if(!n)return{total:0};
+  var m={total:n,ctaRate:0,abandonRate:0,avgToCTA:0,avgDecision:0,topDest:[],providerWins:{}};
+  var ctaCount=0,abandonCount=0,sumToCTA=0,sumDecision=0,destCounts={},provCounts={};
+  s.forEach(function(r){
+    if(!r.dt)abandonCount++;
+    if(r.ct2>0){ctaCount++;if(r.ct2>r.o)sumToCTA+=r.ct2-r.o;if(r.ct2>r.ct&&r.ct>0)sumDecision+=r.ct2-r.ct}
+    if(r.cm)provCounts[r.cm]=(provCounts[r.cm]||0)+1;
+    if(r.dc){var dk=r.dc+(r.dn?'|'+r.dn:'');destCounts[dk]=(destCounts[dk]||0)+1}
+  });
+  m.ctaRate=ctaCount/n;m.abandonRate=abandonCount/n;
+  if(ctaCount){m.avgToCTA=Math.round(sumToCTA/ctaCount);m.avgDecision=Math.round(sumDecision/ctaCount)}
+  var sorted=Object.keys(destCounts).sort(function(a,b){return destCounts[b]-destCounts[a]});
+  m.topDest=sorted.slice(0,5).map(function(k){return{name:k.split('|')[1]||k.split('|')[0],count:destCounts[k]}});
+  m.providerWins=provCounts;
+  return m;
+}
+function va_dashboard(){
+  var m=va_metrics();var el=document.getElementById('vaDash');if(!el)return;
+  var closeSvg=svg('close',22);
+  var closeBtn='<button onclick="document.getElementById(\'vaDash\').innerHTML=\'\'" aria-label="Cerrar metricas" style="border:none;background:transparent;cursor:pointer;color:#fff;padding:4px;display:flex;align-items:center">'+closeSvg+'</button>';
+  if(!m.total){
+    el.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;color:#fff;font-size:13px;padding:24px 20px;overflow-y:auto;font-family:monospace"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><b style="font-size:17px;letter-spacing:-0.02em">VOY Metricas</b>'+closeBtn+'</div><div style="color:#8E8E93;margin-top:32px;text-align:center;line-height:1.6">Sin datos de sesiones aun.<br>Usa la app para generar metricas.</div><div style="margin-top:28px;font-size:11px;color:#636366;text-align:center">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
+    return;
+  }
+  var h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99999;color:#fff;font-size:13px;padding:24px 20px;overflow-y:auto;font-family:monospace">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><b style="font-size:17px;letter-spacing:-0.02em">VOY Metricas</b>'+closeBtn+'</div>';
+  h+='<div style="margin-bottom:14px">Sesiones: <b>'+m.total+'</b></div>';
+  h+='<div style="margin-bottom:14px">';
+  h+='<div style="border-bottom:1px solid #444;padding:6px 0">Conversion CTA: <b style="float:right">'+(m.ctaRate*100).toFixed(1)+'%</b></div>';
+  h+='<div style="border-bottom:1px solid #444;padding:6px 0">Abandono sin destino: <b style="float:right">'+(m.abandonRate*100).toFixed(1)+'%</b></div>';
+  h+='<div style="border-bottom:1px solid #444;padding:6px 0">Tiempo medio a CTA: <b style="float:right">'+(m.avgToCTA?((m.avgToCTA/1000).toFixed(1)+'s'):'—')+'</b></div>';
+  h+='<div style="padding:6px 0">Tiempo medio de decision: <b style="float:right">'+(m.avgDecision?((m.avgDecision/1000).toFixed(1)+'s'):'—')+'</b></div>';
+  h+='</div>';
+  if(Object.keys(m.providerWins).length){
+    h+='<div style="margin-bottom:14px"><b>Proveedores elegidos</b>';
+    var so=Object.keys(m.providerWins).sort(function(a,b){return m.providerWins[b]-m.providerWins[a]});
+    so.forEach(function(k){var pct=(m.providerWins[k]/m.total*100).toFixed(0);h+='<div style="margin:3px 0">'+k+': '+m.providerWins[k]+' ('+pct+'%)</div>'});
+    h+='</div>';
+  }
+  if(m.topDest.length){
+    h+='<div style="margin-bottom:14px"><b>Top destinos</b>';
+    m.topDest.forEach(function(d){h+='<div style="margin:3px 0">'+d.name+': '+d.count+'</div>'});
+    h+='</div>';
+  }
+  h+='<div style="margin-top:24px;font-size:11px;color:#636366;text-align:center">Datos locales · Sin SDK externo · FIFO '+_VA_MAX+' sesiones</div></div>';
+  el.innerHTML=h;
+}
+var _vaTapCount=0,_vaTapTimer=null;
+window.addEventListener('beforeunload',function(){va_close()});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')va_close()});
+
+// ===================== MAXIM OS GATE =====================
+function isMaximSupported(){return /android/i.test(navigator.userAgent||'')}
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded',async function(){
+  // Inject SVG icons into buttons
+  document.getElementById('sbSearchIcon').innerHTML=svg('search',22);
+  document.getElementById('sbMapBtn').innerHTML=svg('mapPin',22);
+  document.getElementById('sbLocateBtn').innerHTML=svg('locate',22);
+  document.getElementById('sbMicBtn').innerHTML=svg('mic',22);
+  document.getElementById('dgIcon').innerHTML=svg('external',32);
+  // VOY_SHARE_SUPPORT_V1: footer disclosure menu icons (low visibility, hidden until tapped)
+  var fmShareIc=document.getElementById('fmShareIc');if(fmShareIc)fmShareIc.innerHTML=svg('share',18);
+  var fmSupportIc=document.getElementById('fmSupportIc');if(fmSupportIc)fmSupportIc.innerHTML=svg('coffee',18);
+  // VOY chevron brand mark in footer
+  var fm=document.querySelector('.footer-mark');
+  if(fm)fm.innerHTML='<svg width="12" height="12" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 24 32 L 60 92 L 96 32 L 60 56 Z"/></svg>';
+
+  // Resolve and load current city profile asynchronously
+  var cityId = detectCity();
+  await loadCityProfile(cityId);
+
+  // Initialize MobilityController with loaded city profile
+  if (!window._mcInitialized) {
+    MC.init({profile:CURRENT_CITY,busStops:BUS_STOPS,bikeStations:BIKE_STATIONS,landmarks:LANDMARKS,fareRegistry:FareRegistry,providers:PROVIDERS,recentKey:'voy_recent_searches',favsKey:'voy_favorites',favMetricsKey:'voy_fav_metrics'});
+    window._mcInitialized = true;
+  }
+  MC.loadMemory();
+  MC.v5NewSessionToken();
+  va_open();
+  initMap();
+  initGPS();
+  initDarkMode();
+  renderMemoryRow();
+  restoreRouteFromUrl(); // VOY_UI_FOCUS_V1 UI-003: load route from a shared deep-link (?from=&to=&dn=)
+  renderSheet();
+  bindSearchInput();
+  bindDialogButtons();
+  bindOriginPill();
+  bindFooterMenu();
+  startIdleDrift();
+  initCategoryManager(); // V7.4: replaces initModeSelector (3-group semantic tabs + swipe). Rollback: window.VOY_CATEGORY_MANAGER_ENABLED=false
+  showModeSelector(true); // V7: force transport selector visible on initial mount (not gated on search)
+  document.body.setAttribute('data-map-state','SEARCH_FOCUS'); // V7.4: initial map state
+  initFloatingChip(); // V7.4: wire floating chip click → SEARCH_FOCUS
+  initOfflineChip(); // V7.8: wire offline chip + online/offline listeners
+  updateCityUI(); // Update texts/meta-data with current city details
+  // app_ready → dismiss splash (exit_condition: app_ready_event)
+  _signalAppReady();
+
+  // 5-tap on title (the search placeholder area) opens analytics
+  document.querySelector('.search-bar').addEventListener('click',function(e){
+    if(e.target.id!=='sbSearchIcon')return;
+    _vaTapCount++;clearTimeout(_vaTapTimer);_vaTapTimer=setTimeout(function(){_vaTapCount=0},1500);
+    if(_vaTapCount>=5){_vaTapCount=0;va_dashboard()}
+  });
+  document.addEventListener('click',function(e){if(!e.target.closest('.search-bar'))closeAllDropdowns()});
+});
+
+// ===================== APP READY (splash exit) =====================
+function _signalAppReady(){
+  // Emit app_boot is handled by eventBus on load. Here we dismiss the splash
+  // once the UI shell is mounted + map requested. Resilient to slow tiles.
+  var done=false;
+  function dismiss(){if(done)return;done=true;var s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s)},700)}if(window.VoyEventBus)VoyEventBus.emit('app_boot',{ready:true})}
+  if(document.readyState==='complete'){setTimeout(dismiss,900)}
+  else{window.addEventListener('load',function(){setTimeout(dismiss,900)})}
+  // Safety: never let the splash block the app beyond 2.5s
+  setTimeout(dismiss,2500);
+}
+
+// ===================== TRANSPORT MODE SELECTOR (ui_system) =====================
+var _activeMode='bus'; // V7.9 UI_FIX: default → 'bus' (Ahorro tab is now the default group).
+var MODE_OPTIONS=[
+  {id:'car',label:'Auto',icon:'car'},
+  {id:'taxi',label:'Taxi',icon:'taxi'},
+  {id:'remis',label:'Remis',icon:'navigate'},
+  {id:'walk',label:'A pie',icon:'route'},
+  {id:'custom',label:'Ruta',icon:'mapPin'}
+];
+function initModeSelector(){
+  var el=document.getElementById('modeSelector');if(!el)return;
+  el.innerHTML=MODE_OPTIONS.map(function(m){
+    return '<button class="mode-pill'+(m.id===_activeMode?' active':'')+'" data-mode="'+m.id+'" role="tab" aria-selected="'+(m.id===_activeMode)+''+'"><span class="mp-ic">'+svg(m.icon,16)+'</span><span class="mp-lbl">'+m.label+'</span></button>';
+  }).join('');
+  el.addEventListener('click',function(e){
+    var btn=e.target.closest('.mode-pill');if(!btn)return;
+    _activeMode=btn.getAttribute('data-mode');
+    [].forEach.call(el.querySelectorAll('.mode-pill'),function(p){
+      var on=p.getAttribute('data-mode')===_activeMode;p.classList.toggle('active',on);p.setAttribute('aria-selected',on);
+    });
+    if(window.VoyEventBus)VoyEventBus.emit('vehicle_viewed',{mode:_activeMode});
+    renderSheet();
+  });
+}
+function showModeSelector(show){var el=document.getElementById('modeSelector');if(el)el.classList.toggle('show',show)}
+
+// ===================== DARK MODE =====================
+function initDarkMode(){
+  if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){document.body.setAttribute('data-theme','dark')}
+  if(window.matchMedia){window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){document.body.setAttribute('data-theme',e.matches?'dark':'light')})}
+}
+
+// ===================== MAP (ambient, interactive, native gestures) =====================
+var CARTO_STYLE='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+var FALLBACK_STYLE={version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap'}},layers:[{id:'osm-tiles',type:'raster',source:'osm',minzoom:0,maxzoom:19}]};
 var _mapLoadTimeout=null,_mapStyleLoaded=false;
 function initMap(){
   if(typeof maplibregl==='undefined'){console.error('[MAP] maplibregl missing');return}
