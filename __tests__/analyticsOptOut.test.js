@@ -44,11 +44,13 @@ function request(pathname, headers) {
   });
 }
 
-for (const [header, reason] of [
+const signals = [
   ['Sec-GPC', 'global_privacy_control'],
   ['DNT', 'do_not_track'],
   ['X-VOY-Test', 'test_traffic']
-]) {
+];
+
+for (const [header, reason] of signals) {
   test(`${header}: 1 excludes analytics before the base Worker`, async () => {
     const { createSecurityBoundary } = await loadBoundary();
     const base = createBaseWorker();
@@ -71,6 +73,31 @@ for (const [header, reason] of [
     assert.equal(base.calls.length, 0);
   });
 }
+
+test('privacy signals suppress the analytics session cookie on HTML', async () => {
+  const { createSecurityBoundary } = await loadBoundary();
+
+  for (const [header, reason] of signals) {
+    const base = {
+      async fetch() {
+        return new Response('<!doctype html><title>VOY</title>', {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Set-Cookie': 'voy_sid=12345678; Max-Age=86400; SameSite=Lax; Path=/; Secure; HttpOnly'
+          }
+        });
+      }
+    };
+    const worker = createSecurityBoundary(base);
+    const response = await worker.fetch(new Request('https://voy.test/', {
+      headers: { [header]: '1' }
+    }), {}, {});
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Set-Cookie'), null);
+    assert.equal(response.headers.get('X-VOY-Analytics'), `excluded; reason=${reason}`);
+  }
+});
 
 test('privacy-signal values other than 1 do not bypass schema processing', async () => {
   const { createSecurityBoundary } = await loadBoundary();
