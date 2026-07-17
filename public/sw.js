@@ -1,129 +1,71 @@
-// VOY Service Worker — V7.8 (Modular_Refactor_and_Offline_PWA)
+// VOY Service Worker — V7.8 stability foundation
 //
-// V7.8 (2026-06-25) — offline PWA upgrade:
-//   1. Cache bumped 'voy-v7-2' → 'voy-v7-8' (forces fresh start after modular refactor).
-//   2. Map tiles (basemaps.cartocdn.com, tile.openstreetmap.org): Cache-First with 7-day expiry.
-//      Previously passthrough (never cached) — now cached for offline map rendering.
-//   3. /api/estimate: Network-Only (never cached) with IndexedDB fallback when offline.
-//      Returns {error:'offline', data: localHistory} from VoyHistoryDB if network fails.
-//   4. Static core (/VOY-Lite.html, /core/*.js, css, svg): Stale-While-Revalidate (unchanged).
-//   5. /api/* (except /api/estimate): passthrough — NEVER intercepted (V7.2 incident fix preserved).
+// Security/PWA boundary changes (2026-07-17):
+//   1. Activation deletes only VOY-owned caches; unrelated origin caches survive.
+//   2. Residual /api/estimate interception was removed because the production
+//      Worker does not expose that route.
+//   3. All same-origin /api/* requests pass through without caching.
+//   4. Cache writes are best-effort so quota failures never break navigation.
 //
-// V7.2 (2026-06-25) — incident fix (preserved):
-//   - Activate handler purges ALL caches (not just non-matching) — evicts stale entries.
-//   - /api/* paths never cached (prevents VOY_JSON_PARSE_DATA_PREFIX_001 recurrence).
-//   - Respects req.cache === 'no-store' and response Cache-Control: no-store|no-cache.
-//
-// V7.1 (Gemini AC-7) — original conservative offline shell (preserved):
-//   1. NEVER serve stale HTML for navigations (network-first; cache only on offline fallback).
-//   2. Stale-while-revalidate for same-origin static assets (JS/CSS/icons) → instant shell on reload.
-//   3. Cache pinned immutable CDN libs (unpkg @4.7.1) cache-first → saves bandwidth/battery.
+// Preserved behavior:
+//   - navigation: network-first with cached shell fallback;
+//   - same-origin static assets: stale-while-revalidate;
+//   - pinned unpkg assets: cache-first;
+//   - CARTO/OSM tiles: cache-first with seven-day revalidation;
+//   - other cross-origin requests: passthrough.
 
-var CACHE = 'voy-v7-8';
+var CACHE_PREFIX = 'voy-';
+var CACHE = 'voy-v7-8-security-1';
 var IMMUTABLE = /^https:\/\/unpkg\.com\//;
 var API_PATH = /^\/api\//;
-var ESTIMATE_PATH = /^\/api\/estimate/;
 var TILE_DOMAINS = /basemaps\.cartocdn\.com|tile\.openstreetmap\.org/;
-var TILE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+var TILE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-self.addEventListener('install', function (e) {
-  self.skipWaiting();
+function _safePut(cache, request, response) {
+  try {
+    return cache.put(request, response).catch(function () {});
+  } catch (_) {
+    return Promise.resolve();
+  }
+}
+
+self.addEventListener('install', function (event) {
+  event.waitUntil(self.skipWaiting());
 });
 
-self.addEventListener('activate', function (e) {
-  // V7.2: NUKE ALL caches on activation (not just non-matching names).
-  // Guarantees stale entries from prior SW versions are evicted for good.
-  e.waitUntil(
+self.addEventListener('activate', function (event) {
+  event.waitUntil(
     caches.keys()
       .then(function (keys) {
-        return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        return Promise.all(keys.map(function (key) {
+          if (key.indexOf(CACHE_PREFIX) === 0 && key !== CACHE) {
+            return caches.delete(key);
+          }
+          return false;
+        }));
       })
       .then(function () { return self.clients.claim(); })
   );
 });
 
-// V7.8 — Read recent estimate history from IndexedDB (VoyHistoryDB schema).
-// Used as the offline fallback for /api/estimate. Returns [] on any error
-// (DB not yet created, store missing, etc.) — never throws.
-function _readLocalHistory(limit) {
-  return new Promise(function (resolve) {
-    try {
-      var req = indexedDB.open('voy-history', 1);
-      req.onupgradeneeded = function (e) {
-        var db = e.target.result;
-        if (!db.objectStoreNames.contains('estimates')) {
-          var store = db.createObjectStore('estimates', { keyPath: 'id', autoIncrement: true });
-          store.createIndex('routeKey', 'routeKey', { unique: false });
-          store.createIndex('mode', 'mode', { unique: false });
-          store.createIndex('timestamp', 'timestamp', { unique: false });
-        }
-      };
-      req.onsuccess = function (e) {
-        try {
-          var db = e.target.result;
-          if (!db.objectStoreNames.contains('estimates')) { resolve([]); return; }
-          var tx = db.transaction('estimates', 'readonly');
-          var store = tx.objectStore('estimates');
-          var idx = store.index('timestamp');
-          var results = [];
-          var cursorReq = idx.openCursor(null, 'prev');
-          cursorReq.onsuccess = function (ev) {
-            var cursor = ev.target.result;
-            if (cursor && results.length < (limit || 50)) {
-              results.push(cursor.value);
-              cursor.continue();
-            } else {
-              resolve(results);
-            }
-          };
-          cursorReq.onerror = function () { resolve([]); };
-        } catch (err) { resolve([]); }
-      };
-      req.onerror = function () { resolve([]); };
-    } catch (e) { resolve([]); }
-  });
-}
-
 self.addEventListener('fetch', function (event) {
-  var req = event.request;
+  var request = event.request;
   var url;
-  try { url = new URL(req.url); } catch (e) { return; }
+  try { url = new URL(request.url); } catch (_) { return; }
 
-  // V7.8: /api/estimate — Network-Only with IndexedDB fallback when offline.
-  // Intercept BEFORE the GET guard (estimate is a POST). Never caches the response.
-  if (url.origin === self.location.origin && ESTIMATE_PATH.test(url.pathname) && req.method === 'POST') {
-    event.respondWith(
-      fetch(req).catch(function () {
-        // Offline fallback — return local history from VoyHistoryDB (IndexedDB).
-        return _readLocalHistory(50).then(function (history) {
-          return new Response(JSON.stringify({ error: 'offline', data: history }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        });
-      })
-    );
-    return;
-  }
-
-  // V7.2: NEVER intercept same-origin /api/* requests (except /api/estimate above) — passthrough.
+  // API calls are always network-owned. No POST fallback or API response cache.
   if (url.origin === self.location.origin && API_PATH.test(url.pathname)) {
     return;
   }
 
-  // Only handle GET from here on (POST/PUT/DELETE passthrough).
-  if (req.method !== 'GET') return;
+  if (request.method !== 'GET') return;
+  if (request.cache === 'no-store') return;
 
-  // V7.2: Respect explicit no-store requests.
-  if (req.cache === 'no-store') {
-    return;
-  }
-
-  // 1. Navigation (HTML): network-first. Cache is a fallback ONLY when offline.
-  if (req.mode === 'navigate') {
+  // Navigation HTML: network-first. Cached HTML is used only when offline.
+  if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(req).catch(function () {
-        return caches.match(req).then(function (cached) {
+      fetch(request).catch(function () {
+        return caches.match(request).then(function (cached) {
           return cached || caches.match('/VOY-Lite.html');
         });
       })
@@ -131,72 +73,68 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // 2. Cross-origin requests.
+  // Cross-origin resources.
   if (url.origin !== self.location.origin) {
-    // 2a. Pinned immutable CDN libs (unpkg): cache-first.
-    if (IMMUTABLE.test(req.url)) {
+    // Pinned immutable CDN libraries.
+    if (IMMUTABLE.test(request.url)) {
       event.respondWith(
-        caches.match(req).then(function (cached) {
+        caches.match(request).then(function (cached) {
           if (cached) return cached;
-          return fetch(req).then(function (res) {
-            if (res && res.ok) {
-              var copy = res.clone();
-              caches.open(CACHE).then(function (o) { o.put(req, copy); });
+          return fetch(request).then(function (response) {
+            if (response && response.ok) {
+              var copy = response.clone();
+              caches.open(CACHE).then(function (cache) { return _safePut(cache, request, copy); });
             }
-            return res;
-          }).catch(function () { return cached; });
+            return response;
+          });
         })
       );
       return;
     }
-    // 2b. V7.8 Map tiles (CartoDB, OSM): Cache-First with 7-day expiry.
-    //     Enables offline map rendering. After 7 days, revalidate in background (SWR).
+
+    // Map tiles: cache-first; stale tiles are returned while revalidating.
     if (TILE_DOMAINS.test(url.hostname)) {
       event.respondWith(
         caches.open(CACHE).then(function (cache) {
-          return cache.match(req).then(function (cached) {
+          return cache.match(request).then(function (cached) {
             var fetchFromNetwork = function () {
-              return fetch(req).then(function (res) {
-                if (res && res.ok) {
-                  var copy = res.clone();
-                  cache.put(req, copy);
+              return fetch(request).then(function (response) {
+                if (response && response.ok) {
+                  _safePut(cache, request, response.clone());
                 }
-                return res;
+                return response;
               }).catch(function () { return cached; });
             };
+
             if (!cached) return fetchFromNetwork();
-            // Check age via the cached response's Date header.
             var dateHeader = cached.headers.get('date');
             var ageMs = dateHeader ? (Date.now() - new Date(dateHeader).getTime()) : 0;
             if (ageMs > TILE_MAX_AGE_MS) {
-              // Stale (>7d): return cache immediately, revalidate in background.
-              fetchFromNetwork();
-              return cached;
+              event.waitUntil(fetchFromNetwork());
             }
-            // Fresh (<7d): cache-first.
             return cached;
           });
         })
       );
       return;
     }
-    // 2c. Everything else cross-origin (Nominatim, OSRM): passthrough, do not cache.
+
+    // Nominatim, OSRM and every other external request: passthrough.
     return;
   }
 
-  // 3. Same-origin static assets: stale-while-revalidate.
-  //    V7.2: respect Cache-Control: no-store|no-cache from response — skip caching.
+  // Same-origin static assets: stale-while-revalidate.
   event.respondWith(
     caches.open(CACHE).then(function (cache) {
-      return cache.match(req).then(function (cached) {
-        var network = fetch(req).then(function (res) {
-          if (res && res.ok && res.type === 'basic') {
-            var cc = res.headers.get('Cache-Control') || '';
-            if (!/no-store|no-cache/i.test(cc)) {
-              cache.put(req, res.clone());
+      return cache.match(request).then(function (cached) {
+        var network = fetch(request).then(function (response) {
+          if (response && response.ok && response.type === 'basic') {
+            var cacheControl = response.headers.get('Cache-Control') || '';
+            if (!/no-store|no-cache/i.test(cacheControl)) {
+              _safePut(cache, request, response.clone());
             }
           }
-          return res;
+          return response;
         }).catch(function () { return cached; });
         return cached || network;
       });
