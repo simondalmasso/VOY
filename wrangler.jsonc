@@ -12,7 +12,7 @@
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-01-01",
-  "main": "./worker.js",
+  "main": "./worker-entry.js",
 
   // REQUIRED: keep true (is-a.dev CNAME resolves to the workers.dev URL).
   // Direct workers.dev access is redirected by worker.js → voy.is-a.dev.
@@ -45,8 +45,15 @@
     { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
   ],
 
-  // V7.8: Durable Object + /api/reports eliminados (analytics V2 dual-store removido).
-  // WAE es el único store. Simplificación: 3 eventos, 0 código muerto.
+  "durable_objects": {
+    "bindings": [
+      { "name": "NOMINATIM_COORDINATOR", "class_name": "NominatimCoordinator" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }
+  ],
 
   // V7.8.1 — ANALYTICS_SYSTEM_SETUP: filtros de exclusión de analytics.
   // Reglas activas (todas configurables via dashboard o wrangler.jsonc vars):
