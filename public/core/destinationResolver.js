@@ -68,7 +68,12 @@
   }
 
   function finiteNumber(value) {
-    var number = Number(value);
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string') return null;
+    var trimmed = value.trim();
+    if (!trimmed || (!/^[+-]?\d+(\.\d+)?$/.test(trimmed) && !/^[+-]?\.\d+$/.test(trimmed))) return null;
+    var number = Number(trimmed);
     return Number.isFinite(number) ? number : null;
   }
 
@@ -177,17 +182,19 @@
   }
 
   function rankCandidates(query, candidates, options) {
+    options = options || {};
     return (candidates || []).map(function (candidate) {
       var copy = Object.assign({}, candidate);
       copy.confidence = scoreCandidate(query, copy, options);
       return copy;
-    }).filter(function (candidate) { return matchKind(query, candidate) !== 'none'; })
-      .sort(function (a, b) {
-        if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-        if (a.source === 'curated' && b.source !== 'curated') return -1;
-        if (b.source === 'curated' && a.source !== 'curated') return 1;
-        return a.name.localeCompare(b.name);
-      });
+    }).filter(function (candidate) {
+      return String(candidate.name || '').trim().length > 0 && validateCandidate(candidate, options).valid && matchKind(query, candidate) !== 'none';
+    }).sort(function (a, b) {
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      if (a.source === 'curated' && b.source !== 'curated') return -1;
+      if (b.source === 'curated' && a.source !== 'curated') return 1;
+      return a.name.localeCompare(b.name);
+    });
   }
 
   function deduplicateCandidates(candidates, thresholdMeters) {
