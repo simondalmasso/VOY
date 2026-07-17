@@ -116,6 +116,35 @@ test.describe('Destination Resolution V2 browser smoke', () => {
       await expect(page.locator('#accRemisHead .ah-meta')).toContainText(visibleFares.remisText);
     }
 
+    const supportsAppFareFreshness = await page.evaluate(() =>
+      window.MobilityEngine && typeof window.MobilityEngine.isAppFareUsable === 'function'
+    );
+    if (!supportsAppFareFreshness) {
+      expect(new URL(page.url()).hostname).toBe('voy-app.simondalmasso44.workers.dev');
+    } else {
+      const appFareState = await page.evaluate(() => {
+        const auto = window.MC.getEstimations().find(item => item.mode === 'auto');
+        return {
+          uber: auto.uberPrice,
+          didi: auto.didiPrice,
+          maxim: auto.maximPrice,
+          cabify: auto.cabifyPrice,
+          rankedIds: (auto.rankedProviders || []).map(item => item.id)
+        };
+      });
+      expect(appFareState).toMatchObject({ uber: null, didi: null, maxim: null, cabify: null });
+      expect(appFareState.rankedIds).not.toContain('uber');
+      expect(appFareState.rankedIds).not.toContain('didi');
+      expect(appFareState.rankedIds).not.toContain('maxim');
+      await page.locator('.mode-pill[data-mode="car"]').click();
+      const livePriceOptions = page.locator('#appLivePriceOptions');
+      await expect(livePriceOptions).toBeVisible();
+      await expect(livePriceOptions).toContainText('VOY no compara montos desactualizados');
+      await expect(livePriceOptions.locator('[data-action="uber"]')).toContainText('Ver precio');
+      await expect(livePriceOptions.locator('[data-action="didi"]')).toContainText('Ver precio');
+      await expect(livePriceOptions.locator('[data-action="maxim"]')).toContainText('Ver precio');
+    }
+
     await page.evaluate(async () => {
       await window.MC.v5AddRecent({ name: 'Puente Colgante', lat: -31.623, lon: -60.685 });
       const db = await new Promise((resolve, reject) => {
