@@ -1,17 +1,48 @@
 {
   "_meta": {
-    "version": "2026-06-23",
-    "fuente": "Resolución N°217/2026 - Municipalidad Santa Fe",
-    "proxima_revision": "2026-07-01",
-    "notas": "Tarifas vigentes junio 2026. Julio 2026 ya definido (ver taxi.julio_2026). Actualizar fares.json + FareRegistry en VOY-Lite.html el 01/07."
+    "version": "2026-07-17",
+    "city_id": "santafe",
+    "verified_at": "2026-07-17",
+    "next_review": "2026-08-11",
+    "status": "verified",
+    "notes": "Valores regulados separados por servicio. Las estimaciones de apps privadas siguen siendo rangos informativos y no forman parte del cuadro municipal."
   },
   "colectivo": {
     "sube": 1900,
-    "efectivo": 2111,
-    "fuente": "SUBE Argentina 2026",
-    "updated_at": "2025-06-01"
+    "frequent": 1900,
+    "full": 2111.11,
+    "efectivo": null,
+    "currency": "ARS",
+    "effective_from": "2026-07-09",
+    "verified_at": "2026-07-17",
+    "source": "Decreto DMM 00048/2026 - Municipalidad de Santa Fe",
+    "source_url": "https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
+    "conditions": "La tarifa frecuente requiere SUBE registrada con domicilio en Santa Fe. La web municipal informa SUBE como único medio vigente de pago.",
+    "status": "verified"
   },
   "taxi": {
+    "diurno": {
+      "bajada": 1790,
+      "ficha_cada_130m": 179,
+      "horario": "06:00-22:00"
+    },
+    "nocturno": {
+      "bajada": 2058,
+      "ficha_cada_130m": 206,
+      "horario": "22:00-06:00"
+    },
+    "distFicha": 130,
+    "currency": "ARS",
+    "effective_from": "2026-07-11",
+    "verified_at": "2026-07-17",
+    "source": "Resolución Municipal 217/2026",
+    "source_urls": [
+      "https://santafe.mitelefe.com/informacion-general/taxis-en-santa-fe-a-partir-de-esta-noche-rige-un-nuevo-aumento-de-tarifas-pid2559090",
+      "https://www.ellitoral.com/area-metropolitana/taxis-santa-fe-nuevas-tarifas-aumento-bajada-bandera-ficha-servicio-transporte_0_8c5yYuhJMC.html"
+    ],
+    "status": "verified_from_municipal_announcement"
+  },
+  "remis": {
     "diurno": {
       "bajada": 1600,
       "ficha_cada_130m": 160,
@@ -23,38 +54,38 @@
       "horario": "22:00-06:00"
     },
     "distFicha": 130,
-    "fuente": "Resolución N°217/2026",
-    "updated_at": "2026-01-01",
-    "julio_2026": {
-      "diurno_bajada": 1790,
-      "diurno_ficha": 179,
-      "nocturno_bajada": 2059,
-      "nocturno_ficha": 205,
-      "vigencia": "2026-07-01"
-    }
+    "currency": "ARS",
+    "effective_from": "2026-06-06",
+    "verified_at": "2026-07-17",
+    "source": "Resolución Municipal 365/2026",
+    "source_url": "https://santafe.mitelefe.com/informacion-general/aumenta-la-tarifa-de-remises-en-la-ciudad-de-santa-fe-pid2547448",
+    "status": "verified_from_municipal_announcement"
   },
   "uber": {
     "base": 1000,
     "km": 500,
     "min": 65,
     "minFare": 3000,
-    "fuente": "Uber app estimate range",
-    "updated_at": "2025-12-01"
+    "source": "Uber app estimate range",
+    "updated_at": "2025-12-01",
+    "status": "stale_estimate"
   },
   "didi": {
     "base": 900,
     "km": 440,
     "min": 55,
     "minFare": 2500,
-    "fuente": "DiDi app estimate range",
-    "updated_at": "2025-12-01"
+    "source": "DiDi app estimate range",
+    "updated_at": "2025-12-01",
+    "status": "stale_estimate"
   },
   "maxim": {
     "base": 855,
     "km": 418,
     "min": 52,
     "minFare": 2375,
-    "fuente": "Maxim app estimate range",
-    "updated_at": "2025-12-01"
+    "source": "Maxim app estimate range",
+    "updated_at": "2025-12-01",
+    "status": "stale_estimate"
   }
 }
