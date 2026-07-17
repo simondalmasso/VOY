@@ -36,9 +36,28 @@ const WORKER_VERSION = "V7.8.0"; // V7.8 = analytics simplificado (3 eventos WAE
 const BUILD_HASH = "__BUILD_HASH__";
 
 const GEOCODE_CITIES = {
-  santafe: { viewbox: '-60.75,-31.67,-60.65,-31.57', bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } }
+  santafe: { viewbox: '-60.75,-31.67,-60.65,-31.57', bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } },
+  _default: { viewbox: null, bbox: null }
 };
 const GEOCODE_QUERY_MAX_LENGTH = 120;
+
+function _parseValidCoordinateValue(value) {
+  if (value === null || value === undefined) return null;
+  const type = typeof value;
+  if (type === 'number') {
+    if (Number.isNaN(value) || !Number.isFinite(value)) return null;
+    return value;
+  }
+  if (type === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    if (!/^[+-]?\d+(\.\d+)?$/.test(trimmed) && !/^[+-]?\.\d+$/.test(trimmed)) return null;
+    const num = Number(trimmed);
+    if (Number.isNaN(num) || !Number.isFinite(num)) return null;
+    return num;
+  }
+  return null;
+}
 const GEOCODE_RATE_LIMIT = 20;
 const GEOCODE_RATE_WINDOW_MS = 60000;
 const GEOCODE_CLIENTS_MAX = 1000;
@@ -306,6 +325,10 @@ function _remoteCandidate(item, cityId) {
   const countryCode = String(structured.country_code || '').toLowerCase();
   const structuredName = road && houseNumber ? `${road} ${houseNumber}` : '';
   const structuredAddress = [structuredName || road, city, state].filter(Boolean).join(', ');
+
+  const latVal = _parseValidCoordinateValue(item.lat);
+  const lonVal = _parseValidCoordinateValue(item.lon);
+
   return {
     canonicalId: osmType && osmId ? `osm:${osmType}:${osmId}` : '',
     source: 'remote',
@@ -313,8 +336,8 @@ function _remoteCandidate(item, cityId) {
     name: structuredName || item.name || (item.namedetails && (item.namedetails.name || item.namedetails['name:es'])) || parts[0] || '',
     displayName,
     address: structuredAddress || parts.slice(1, 4).join(', '),
-    lat: Number(item.lat),
-    lon: Number(item.lon),
+    lat: latVal,
+    lon: lonVal,
     cityId,
     precision: _geocodePrecision(item),
     confidence: Math.max(0, Math.min(1, Number(item.importance) || 0)),
@@ -331,6 +354,7 @@ function _remoteCandidate(item, cityId) {
 }
 
 function _insideGeocodeCity(candidate, city) {
+  if (!city || !city.bbox) return true;
   return Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon) && candidate.lat >= city.bbox.minLat && candidate.lat <= city.bbox.maxLat && candidate.lon >= city.bbox.minLon && candidate.lon <= city.bbox.maxLon;
 }
 
@@ -429,24 +453,74 @@ export class NominatimCoordinator {
     try { data = await response.json(); } catch (_) { return _geocodeJson({ error: 'malformed_provider_response', results: [] }, 502); }
     const results = (Array.isArray(data) ? data : []).map(item => _remoteCandidate(item, payload.cityId))
       .filter(candidate => Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon))
-      .filter(candidate => payload.wide || _insideGeocodeCity(candidate, city));
+      .filter(candidate => payload.wide || payload.cityId === '_default' || _insideGeocodeCity(candidate, city));
     const body = { query: payload.query, cityId: payload.cityId, provider: providerUsed, results };
     const storedAt = this.now();
-    await this.state.storage.put(cacheStorageKey, { body, storedAt, expiresAt: storedAt + GEOCODE_CACHE_TTL_MS });
+    const expiresAt = storedAt + GEOCODE_CACHE_TTL_MS;
+    await this.state.storage.put(cacheStorageKey, { body, storedAt, expiresAt });
     await this.state.storage.put('providerMetadata', { provider: providerUsed, updatedAt: storedAt, contractVersion: GEOCODE_CONTRACT_VERSION });
+
+    if (typeof this.state.storage.getAlarm === 'function' && typeof this.state.storage.setAlarm === 'function') {
+      const currentAlarm = await this.state.storage.getAlarm();
+      if (currentAlarm === null || expiresAt < currentAlarm) {
+        await this.state.storage.setAlarm(expiresAt);
+      }
+    }
+
     return _geocodeJson(body, 200, { 'X-VOY-Geocode-Cache': 'miss' });
+  }
+
+  async alarm() {
+    const now = this.now();
+    const limit = 50;
+    const cursor = await this.state.storage.get('sweepCursor') || undefined;
+
+    const options = { prefix: 'cache:', limit };
+    if (cursor) {
+      options.start = cursor;
+    }
+    const entries = await this.state.storage.list(options);
+
+    let lastKey = null;
+    let nextExpiration = null;
+
+    for (const [key, value] of entries.entries()) {
+      lastKey = key;
+      if (value && value.expiresAt) {
+        if (value.expiresAt <= now) {
+          await this.state.storage.delete(key);
+        } else {
+          if (nextExpiration === null || value.expiresAt < nextExpiration) {
+            nextExpiration = value.expiresAt;
+          }
+        }
+      }
+    }
+
+    if (typeof this.state.storage.setAlarm === 'function') {
+      if (entries.size === limit) {
+        await this.state.storage.put('sweepCursor', lastKey + '\0');
+        await this.state.storage.setAlarm(this.now() + 1000);
+      } else {
+        await this.state.storage.delete('sweepCursor');
+        if (nextExpiration !== null) {
+          const alarmTime = Math.max(nextExpiration, now + 1000);
+          await this.state.storage.setAlarm(alarmTime);
+        }
+      }
+    }
   }
 
   _providerUrl(base, payload, city) {
     const upstream = new URL(String(base));
-    upstream.searchParams.set('q', payload.query + ', Santa Fe, Argentina');
+    upstream.searchParams.set('q', payload.query + (payload.cityId === '_default' ? '' : ', Santa Fe, Argentina'));
     upstream.searchParams.set('format', 'jsonv2');
     upstream.searchParams.set('limit', '10');
     upstream.searchParams.set('countrycodes', 'ar');
     upstream.searchParams.set('addressdetails', '1');
     upstream.searchParams.set('namedetails', '1');
     upstream.searchParams.set('accept-language', 'es');
-    if (!payload.wide) {
+    if (!payload.wide && payload.cityId !== '_default' && city && city.viewbox) {
       upstream.searchParams.set('viewbox', city.viewbox);
       upstream.searchParams.set('bounded', '1');
     }

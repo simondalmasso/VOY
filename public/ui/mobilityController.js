@@ -460,10 +460,46 @@
   //  5. SEARCH COORDINATION
   // =====================================================================
 
+  function _getRawLocalCatalog() {
+    var rawCatalog = (_config.landmarks || []).slice();
+
+    (_config.busStops || []).forEach(function (s) {
+      if (s && s.lat !== undefined && s.lon !== undefined && s.lat !== null && s.lon !== null && s.nombre) {
+        rawCatalog.push({
+          lat: s.lat,
+          lon: s.lon,
+          name: 'Línea ' + (s.linea || '') + ' – ' + s.nombre,
+          address: s.calles || '',
+          type: 'bus',
+          aliases: s.linea ? [s.nombre, 'Línea ' + s.linea, String(s.linea)] : [s.nombre],
+          displayName: s.nombre + (s.calles ? ', ' + s.calles : '')
+        });
+      }
+    });
+
+    (_config.bikeStations || []).forEach(function (s) {
+      if (s && s.lat !== undefined && s.lon !== undefined && s.lat !== null && s.lon !== null && s.nombre) {
+        rawCatalog.push({
+          lat: s.lat,
+          lon: s.lon,
+          name: '🚲 ' + s.nombre,
+          address: s.calles || '',
+          type: 'bike',
+          aliases: [s.nombre],
+          displayName: s.nombre + (s.calles ? ', ' + s.calles : '')
+        });
+      }
+    });
+
+    return rawCatalog;
+  }
+
   function searchLocal(q) {
     if (typeof DestinationResolver === 'undefined') return MobilityEngine.searchLocal(q, _config.busStops, _config.bikeStations, _config.landmarks);
-    return DestinationResolver.rankCandidates(q, (_config.landmarks || []).map(function (item) {
-      return DestinationResolver.toCanonicalCandidate(item, 'curated', (_config.profile && _config.profile.city_id) || '_default');
+    var rawCatalog = _getRawLocalCatalog();
+    var cityId = (_config.profile && _config.profile.city_id) || '_default';
+    return DestinationResolver.rankCandidates(q, rawCatalog.map(function (item) {
+      return DestinationResolver.toCanonicalCandidate(item, 'curated', cityId);
     }), { bbox: _config.profile && _config.profile.map && _config.profile.map.bbox });
   }
 
@@ -1330,9 +1366,10 @@
     var favs = await v5GetFavorites();
     var recents = await v5GetRecents(12);
     if (typeof DestinationResolver === 'undefined') return searchLocal(query);
+    var rawCatalog = _getRawLocalCatalog();
     return DestinationResolver.searchLocalSources(query, {
       cityId: (_config.profile && _config.profile.city_id) || '_default',
-      landmarks: _config.landmarks || [], favorites: favs, recents: recents,
+      landmarks: rawCatalog, favorites: favs, recents: recents,
       bbox: _config.profile && _config.profile.map && _config.profile.map.bbox,
       gpsOrigin: gpsOrigin
     });
