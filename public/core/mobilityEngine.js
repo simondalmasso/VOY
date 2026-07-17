@@ -94,15 +94,36 @@
   //  2. FARE SYSTEM
   // =====================================================================
 
+  var APP_FARE_CURRENT_STATUSES = {
+    current: true,
+    verified: true,
+    active: true,
+    estimated_current: true
+  };
+
   /**
-   * Calculate ride-hailing app price from fare config.
+   * Decide whether an app fare model may influence price comparison.
+   * Explicit stale/unknown statuses fail closed. Missing status remains
+   * compatible with legacy injected fixtures until city schemas require it.
+   * @param {object} fareConfig
+   * @returns {boolean}
+   */
+  function isAppFareUsable(fareConfig) {
+    if (!fareConfig || fareConfig.base === null || fareConfig.base === undefined) return false;
+    var status = String(fareConfig.status || '').trim().toLowerCase();
+    if (!status) return true;
+    return APP_FARE_CURRENT_STATUSES[status] === true;
+  }
+
+  /**
+   * Calculate ride-hailing app price only from a current fare model.
    * @param {object} fareConfig - e.g. FareRegistry.apps.uber
    * @param {number} distKm - Distance in km
    * @param {number} timeMin - Estimated ride time in minutes
-   * @returns {number|null} Price in ARS, or null if unavailable
+   * @returns {number|null} Price in ARS, or null when unavailable/stale
    */
   function calcAppPrice(fareConfig, distKm, timeMin) {
-    if (!fareConfig || fareConfig.base === null) return null;
+    if (!isAppFareUsable(fareConfig)) return null;
     var price = fareConfig.base + fareConfig.km * distKm + fareConfig.min * timeMin;
     return Math.max(price, fareConfig.minFare);
   }
@@ -410,6 +431,7 @@
     fuzzyScore: fuzzyScore,
 
     // Fare calculations
+    isAppFareUsable: isAppFareUsable,
     calcAppPrice: calcAppPrice,
     estimateTaxi: estimateTaxi,
 

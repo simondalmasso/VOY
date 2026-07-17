@@ -53,7 +53,7 @@ Constraints honored:
 <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-120.png">
 <link rel="apple-touch-icon" sizes="1024x1024" href="/icons/apple-touch-1024.png">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
-<script src="core/mobilityEngine.js?v=11"></script>
+<script src="core/mobilityEngine.js?v=12"></script>
 <script src="core/pricingEngine.js?v=10"></script>
 <script src="core/eventBus.js?v=10"></script>
 <script src="core/destinationResolver.js?v=2"></script>
@@ -2894,11 +2894,10 @@ function renderSheet(){
     return;
   }
 
-  // V7: Build hero/alts respecting _activeMode (transport selector is functional, not decorative).
-  // all|car|custom → ride-hailing apps (uber/didi/maxim); taxi → taxi providers;
-  // remis → remis providers; walk → no ride-hailing hero (bike becomes primary).
+  // Build priced heroes only from current fare models. Available apps with
+  // stale/unavailable models remain actionable but cannot influence ranking.
   var ranked=autoEst.rankedProviders||[];
-  var hero=null,alts=[];
+  var hero=null,alts=[],unpricedApps=[];
   var _modeMatches=function(pid){
     if(!PROVIDERS[pid]||!PROVIDERS[pid].available)return false;
     var cat=PROVIDERS[pid].category||'app';
@@ -2921,8 +2920,20 @@ function renderSheet(){
       }
     }
   }
-  // If hero is unsupported Maxim-only (iOS), promote next
+  // If hero is unsupported Maxim-only (iOS), promote next.
   if(!hero&&alts.length)hero=alts.shift();
+
+  if(_activeMode==='car'||_activeMode==='all'||_activeMode==='custom'){
+    ['uber','didi','maxim','cabify'].forEach(function(pid){
+      var provider=PROVIDERS[pid];
+      if(!provider||provider.available!==true||provider.verified!==true)return;
+      if(pid==='maxim'&&!isMaximSupported())return;
+      var price=autoEst[pid+'Price'];
+      if(price===null||!Number.isFinite(price)||price<=0){
+        unpricedApps.push({id:pid,name:provider.name||pid,url:buildAppLink(pid)});
+      }
+    });
+  }
 
   var distKm=autoEst.distance||0;
   // V7.1 (Gemini AC-1): Walk mode — no ride-hailing hero applies. Build a walking hero
@@ -2936,17 +2947,20 @@ function renderSheet(){
   // SAKANA-FIX-02b (V7.18.2): default hero 'didi'→'uber'. DiDi has the worst deep-link
   // UX (no coord pre-fill), so it should NOT be the fallback hero when no clear winner.
   // Uber has the best deep-link (m.uber.com/ul/?action=setPickup with full coords).
-  var heroProvider=hero?hero.id:'uber';
+  var heroProvider=hero?hero.id:'';
   var surgeCtx={now:Date.now()};
   var confidence,surgeLabel,surgeMult,fareRange;
   if(_isWalkHero){
-    // V7.1: walking is deterministic — bypass Bayesian pricing variance entirely.
+    // Walking is deterministic — bypass Bayesian pricing variance entirely.
     confidence=1;surgeLabel='';surgeMult=1;fareRange={low:0,high:0};
+  }else if(!hero){
+    // No current app fare means no synthetic confidence, surge or range.
+    confidence=0;surgeLabel='';surgeMult=1;fareRange={low:0,high:0};
   }else{
-    confidence=(window.PricingEngineV2)?PricingEngineV2.fareConfidence(heroProvider,{distanceKm:distKm,timeMin:hero?hero.timeMin:0,fare:hero?hero.price:0}):MC.v6FareConfidence(heroProvider,distKm,hero?hero.timeMin:0);
+    confidence=(window.PricingEngineV2)?PricingEngineV2.fareConfidence(heroProvider,{distanceKm:distKm,timeMin:hero.timeMin,fare:hero.price}):MC.v6FareConfidence(heroProvider,distKm,hero.timeMin);
     surgeLabel=(window.PricingEngineV2)?PricingEngineV2.surgeLabel(heroProvider,surgeCtx):MC.v6SurgeLabel(heroProvider);
     surgeMult=(window.PricingEngineV2)?PricingEngineV2.surgeMultiplier(heroProvider,surgeCtx):MC.v6SurgeMultiplier(heroProvider);
-    fareRange=hero?((window.PricingEngineV2)?PricingEngineV2.fareRange(hero.price,confidence,surgeMult):MC.v6FareRange(hero.price,confidence,surgeMult)):{low:0,high:0};
+    fareRange=(window.PricingEngineV2)?PricingEngineV2.fareRange(hero.price,confidence,surgeMult):MC.v6FareRange(hero.price,confidence,surgeMult);
   }
   var confClass=confidence>=0.8?'high':confidence>=0.65?'mid':'';
 
@@ -3007,6 +3021,21 @@ function renderSheet(){
       });
       h+='</div>';
     }
+  }
+
+  if(!_isWalkHero&&unpricedApps.length){
+    h+='<div class="more-opts" id="appLivePriceOptions">';
+    h+='<div class="block-title"><span class="bt-ic">'+svg('car',15)+'</span> Precios actuales en cada app</div>';
+    h+='<div class="co-meta" id="appFareFreshnessNotice"><span>VOY no compara montos desactualizados. Abrí el proveedor para consultar el precio actual.</span></div>';
+    unpricedApps.forEach(function(p){
+      h+='<button class="acc-head" style="width:100%" data-action="'+p.id+'" data-url="'+p.url+'" data-name="'+escapeAttr(p.name)+'">';
+      h+='<span class="ah-ic" style="color:'+(PROVIDERS[p.id]?PROVIDERS[p.id].color:'#666')+'">'+svg('car',18)+'</span>';
+      h+='<span class="ah-title">'+escapeHtml(p.name)+'</span>';
+      h+='<span class="ah-meta">Ver precio</span>';
+      h+='<span class="ah-chev">'+svg('arrow',16)+'</span>';
+      h+='</button>';
+    });
+    h+='</div>';
   }
 
   // Taxi + Remis accordions — regulated fares use the canonical engine.

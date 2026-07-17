@@ -24,6 +24,14 @@ test.describe('Destination Resolution V2 browser smoke', () => {
     let geocodeCalls = 0;
     let nominatimCalls = 0;
 
+    page.__voyEvidence = {
+      requestLog,
+      consoleLog,
+      pageErrors,
+      get geocodeCalls() { return geocodeCalls; },
+      get nominatimCalls() { return nominatimCalls; }
+    };
+
     page.on('console', message => consoleLog.push({ type: message.type(), text: message.text() }));
     page.on('pageerror', error => pageErrors.push(String(error && error.stack || error)));
     page.on('request', request => {
@@ -51,17 +59,17 @@ test.describe('Destination Resolution V2 browser smoke', () => {
     await page.goto('/?city=santafe', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.MC && window.CURRENT_CITY && window.CURRENT_CITY.city_id === 'santafe' && !document.getElementById('splash'));
     await page.evaluate(() => window.MC.setOrigin(-31.6405, -60.6905, 'Origen de prueba', 'manual'));
-
-    page.__voyEvidence = { requestLog, consoleLog, pageErrors, get geocodeCalls() { return geocodeCalls; }, get nominatimCalls() { return nominatimCalls; } };
   });
 
   test.afterEach(async ({ page }, testInfo) => {
     await fs.mkdir(evidenceDirectory, { recursive: true });
-    const evidence = page.__voyEvidence;
+    const evidence = page.__voyEvidence || { consoleLog: [], requestLog: [], pageErrors: [], nominatimCalls: 0 };
     const slug = testInfo.project.name;
     await fs.writeFile(`${evidenceDirectory}/${slug}-console.json`, JSON.stringify(evidence.consoleLog, null, 2));
     await fs.writeFile(`${evidenceDirectory}/${slug}-requests.json`, JSON.stringify(evidence.requestLog, null, 2));
-    await page.screenshot({ path: `${evidenceDirectory}/${slug}.png`, fullPage: false });
+    if (!page.isClosed()) {
+      await page.screenshot({ path: `${evidenceDirectory}/${slug}.png`, fullPage: false });
+    }
     expect(evidence.pageErrors, 'fatal page errors').toEqual([]);
     expect(evidence.nominatimCalls, 'real Nominatim calls').toBe(0);
   });
@@ -114,6 +122,41 @@ test.describe('Destination Resolution V2 browser smoke', () => {
       await expect(page.locator('#accRemisHead')).toBeVisible();
       await expect(page.locator('#accTaxiHead .ah-meta')).toContainText(visibleFares.taxiText);
       await expect(page.locator('#accRemisHead .ah-meta')).toContainText(visibleFares.remisText);
+    }
+
+    const supportsAppFareFreshness = await page.evaluate(() =>
+      window.MobilityEngine && typeof window.MobilityEngine.isAppFareUsable === 'function'
+    );
+    if (!supportsAppFareFreshness) {
+      expect(new URL(page.url()).hostname).toBe('voy-app.simondalmasso44.workers.dev');
+    } else {
+      const appFareState = await page.evaluate(() => {
+        const auto = window.MC.getEstimations().find(item => item.mode === 'auto');
+        return {
+          uber: auto.uberPrice,
+          didi: auto.didiPrice,
+          maxim: auto.maximPrice,
+          cabify: auto.cabifyPrice,
+          rankedIds: (auto.rankedProviders || []).map(item => item.id),
+          maximSupported: typeof window.isMaximSupported === 'function' && window.isMaximSupported()
+        };
+      });
+      expect(appFareState).toMatchObject({ uber: null, didi: null, maxim: null, cabify: null });
+      expect(appFareState.rankedIds).not.toContain('uber');
+      expect(appFareState.rankedIds).not.toContain('didi');
+      expect(appFareState.rankedIds).not.toContain('maxim');
+      await page.locator('.mode-pill[data-mode="car"]').click();
+      const livePriceOptions = page.locator('#appLivePriceOptions');
+      await expect(livePriceOptions).toBeVisible();
+      await expect(livePriceOptions).toContainText('VOY no compara montos desactualizados');
+      await expect(livePriceOptions.locator('[data-action="uber"]')).toContainText('Ver precio');
+      await expect(livePriceOptions.locator('[data-action="didi"]')).toContainText('Ver precio');
+      const maximAction = livePriceOptions.locator('[data-action="maxim"]');
+      if (appFareState.maximSupported) {
+        await expect(maximAction).toContainText('Ver precio');
+      } else {
+        await expect(maximAction).toHaveCount(0);
+      }
     }
 
     await page.evaluate(async () => {
