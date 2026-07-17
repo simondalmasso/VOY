@@ -35,6 +35,48 @@ const WORKER_VERSION = "V7.8.0"; // V7.8 = analytics simplificado (3 eventos WAE
 // verify-production.sh checks /api/health.build_hash === git short SHA.
 const BUILD_HASH = "__BUILD_HASH__";
 
+const GEOCODE_CITIES = {
+  santafe: { viewbox: '-60.75,-31.67,-60.65,-31.57', bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 } },
+  _default: { viewbox: null, bbox: null }
+};
+const GEOCODE_QUERY_MAX_LENGTH = 120;
+
+function _parseValidCoordinateValue(value) {
+  if (value === null || value === undefined) return null;
+  const type = typeof value;
+  if (type === 'number') {
+    if (Number.isNaN(value) || !Number.isFinite(value)) return null;
+    return value;
+  }
+  if (type === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    if (!/^[+-]?\d+(\.\d+)?$/.test(trimmed) && !/^[+-]?\.\d+$/.test(trimmed)) return null;
+    const num = Number(trimmed);
+    if (Number.isNaN(num) || !Number.isFinite(num)) return null;
+    return num;
+  }
+  return null;
+}
+const GEOCODE_RATE_LIMIT = 20;
+const GEOCODE_RATE_WINDOW_MS = 60000;
+const GEOCODE_CLIENTS_MAX = 1000;
+const GEOCODE_CONTRACT_VERSION = 'v2';
+const GEOCODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const NOMINATIM_MIN_INTERVAL_MS = 1100;
+const NOMINATIM_MAX_QUEUE = 10;
+const NOMINATIM_MAX_WAIT_MS = 10000;
+const NOMINATIM_FETCH_TIMEOUT_MS = 8000;
+const _geocodeClients = new Map();
+let _geocodeClientSalt = null;
+
+function _getGeocodeClientSalt() {
+  if (!_geocodeClientSalt) {
+    _geocodeClientSalt = crypto.randomUUID();
+  }
+  return _geocodeClientSalt;
+}
+
 // V7.8 — 3 eventos canónicos. Nombres legacy se mapean a estos.
 const V2_EVENTS = ['estimation', 'provider_tap', 'search'];
 const EVENT_NORMALIZE = {
@@ -155,6 +197,9 @@ const worker = {
     // }
 
     // 3) Analytics ingestion endpoint — 3 eventos → WAE.
+    if (pathLower === "/api/geocode" && request.method === "GET") {
+      return _handleGeocode(request, env, ctx);
+    }
     if (pathLower === "/api/events" && request.method === "POST") {
       return _handleEvents(request, env, ctx);
     }
@@ -229,6 +274,271 @@ const worker = {
     console.log('[VOY CRON] Recordatorio: verificar tarifas municipales (Resolución N°217/2026). Próxima revisión: ver fares.json _meta.proxima_revision.');
   }
 };
+
+function _geocodeJson(body, status = 200, extraHeaders = {}) {
+  return _cors(new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8", ...extraHeaders }
+  }));
+}
+
+function _normalizedGeocodeQuery(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, GEOCODE_QUERY_MAX_LENGTH + 1);
+}
+
+async function _geocodeRateAllowed(request) {
+  const now = Date.now();
+  for (const [key, entry] of _geocodeClients) {
+    if (now - entry.startedAt >= GEOCODE_RATE_WINDOW_MS) _geocodeClients.delete(key);
+  }
+  const clientIp = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anonymous').split(',')[0].trim();
+  const client = await _sha256Hex(_getGeocodeClientSalt() + ':' + clientIp);
+  const current = _geocodeClients.get(client);
+  if (!current || now - current.startedAt >= GEOCODE_RATE_WINDOW_MS) {
+    if (_geocodeClients.size >= GEOCODE_CLIENTS_MAX) return false;
+    _geocodeClients.set(client, { startedAt: now, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  return current.count <= GEOCODE_RATE_LIMIT;
+}
+
+function _geocodePrecision(item) {
+  const type = String(item.type || '').toLowerCase();
+  if (item.address && item.address.house_number) return 'house';
+  if (type === 'intersection') return 'intersection';
+  if (['road', 'street', 'residential'].includes(type)) return 'street';
+  if (['suburb', 'neighbourhood', 'quarter'].includes(type)) return 'neighborhood';
+  return ['node', 'way', 'relation'].includes(String(item.osm_type || '')) ? 'poi' : 'approximate';
+}
+
+function _remoteCandidate(item, cityId) {
+  const displayName = String(item.display_name || '');
+  const osmType = String(item.osm_type || '');
+  const osmId = String(item.osm_id || '');
+  const parts = displayName.split(',').map(part => part.trim()).filter(Boolean);
+  const structured = item.address && typeof item.address === 'object' ? item.address : {};
+  const houseNumber = String(structured.house_number || '').trim();
+  const road = String(structured.road || structured.pedestrian || structured.residential || structured.footway || structured.path || structured.cycleway || '').trim();
+  const city = String(structured.city || structured.town || structured.municipality || structured.village || '').trim();
+  const state = String(structured.state || '').trim();
+  const countryCode = String(structured.country_code || '').toLowerCase();
+  const structuredName = road && houseNumber ? `${road} ${houseNumber}` : '';
+  const structuredAddress = [structuredName || road, city, state].filter(Boolean).join(', ');
+
+  const latVal = _parseValidCoordinateValue(item.lat);
+  const lonVal = _parseValidCoordinateValue(item.lon);
+
+  return {
+    canonicalId: osmType && osmId ? `osm:${osmType}:${osmId}` : '',
+    source: 'remote',
+    type: item.type || item.category || 'place',
+    name: structuredName || item.name || (item.namedetails && (item.namedetails.name || item.namedetails['name:es'])) || parts[0] || '',
+    displayName,
+    address: structuredAddress || parts.slice(1, 4).join(', '),
+    lat: latVal,
+    lon: lonVal,
+    cityId,
+    precision: _geocodePrecision(item),
+    confidence: Math.max(0, Math.min(1, Number(item.importance) || 0)),
+    verified: false,
+    aliases: [],
+    osmType,
+    osmId,
+    houseNumber,
+    road,
+    city,
+    state,
+    countryCode
+  };
+}
+
+function _insideGeocodeCity(candidate, city) {
+  if (!city || !city.bbox) return true;
+  return Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon) && candidate.lat >= city.bbox.minLat && candidate.lat <= city.bbox.maxLat && candidate.lon >= city.bbox.minLon && candidate.lon <= city.bbox.maxLon;
+}
+
+function _geocodeCacheKey(provider, cityId, query, wide) {
+  const normalized = String(query || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').replace(/\s+/g, ' ').trim();
+  return [GEOCODE_CONTRACT_VERSION, provider, cityId, wide ? 'unbounded' : 'bounded', normalized].join('|');
+}
+
+async function _handleGeocode(request, env, ctx) {
+  const url = new URL(request.url);
+  const query = _normalizedGeocodeQuery(url.searchParams.get('q'));
+  const cityId = String(url.searchParams.get('city') || '').toLowerCase();
+  const wide = url.searchParams.get('wide') === '1';
+  if (query.length < 2) return _geocodeJson({ error: 'query_too_short', results: [] }, 400);
+  if (query.length > GEOCODE_QUERY_MAX_LENGTH) return _geocodeJson({ error: 'query_too_long', results: [] }, 400);
+  const city = GEOCODE_CITIES[cityId];
+  if (!city) return _geocodeJson({ error: 'unsupported_city', results: [] }, 400);
+
+  const provider = String(env.VOY_GEOCODE_PROVIDER || 'nominatim').toLowerCase();
+  const providerBase = String(env.VOY_GEOCODE_PROVIDER_URL || 'https://nominatim.openstreetmap.org/search');
+  const cache = caches.default;
+  const cacheIdentity = _geocodeCacheKey(provider, cityId, query, wide);
+  const cacheUrl = new URL('/__voy_geocode_cache', url.origin);
+  cacheUrl.search = new URLSearchParams({ key: cacheIdentity }).toString();
+  const cacheKey = new Request(cacheUrl.toString(), { method: 'GET' });
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+  if (!(await _geocodeRateAllowed(request))) return _geocodeJson({ error: 'rate_limited', results: [] }, 429, { 'Retry-After': '60' });
+  if (provider !== 'nominatim' && !env.VOY_GEOCODE_PROVIDER_URL) return _geocodeJson({ error: 'provider_not_configured', results: [] }, 503);
+
+  if (!env.NOMINATIM_COORDINATOR) return _geocodeJson({ error: 'coordinator_unavailable', results: [] }, 503, { 'Retry-After': '5' });
+  const coordinatorId = env.NOMINATIM_COORDINATOR.idFromName('nominatim-global');
+  const coordinator = env.NOMINATIM_COORDINATOR.get(coordinatorId);
+  const coordinated = await coordinator.fetch('https://nominatim-coordinator.internal/geocode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cacheIdentity, query, cityId, wide, provider, providerBase, fallbackBase: env.VOY_GEOCODE_FALLBACK_URL || '' })
+  });
+  if (!coordinated.ok) return coordinated;
+  const body = await coordinated.text();
+  const result = _geocodeJson(JSON.parse(body), 200, { 'Cache-Control': 'public, max-age=86400' });
+  const stored = result.clone();
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(cache.put(cacheKey, stored));
+  else await cache.put(cacheKey, stored);
+  return result;
+}
+
+export class NominatimCoordinator {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env || {};
+    this.pending = 0;
+    this.tail = Promise.resolve();
+    this.now = this.env.__clock || (() => Date.now());
+    this.sleep = this.env.__sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+    this.upstreamFetch = this.env.__fetch || fetch;
+  }
+
+  async fetch(request) {
+    if (request.method !== 'POST') return _geocodeJson({ error: 'method_not_allowed', results: [] }, 405);
+    let payload;
+    try { payload = await request.json(); } catch (_) { return _geocodeJson({ error: 'bad_request', results: [] }, 400); }
+    if (!payload || !payload.cacheIdentity || !payload.query || !GEOCODE_CITIES[payload.cityId]) return _geocodeJson({ error: 'bad_request', results: [] }, 400);
+    if (this.pending >= NOMINATIM_MAX_QUEUE) return _geocodeJson({ error: 'coordinator_busy', results: [] }, 503, { 'Retry-After': '2' });
+    this.pending += 1;
+    const run = this.tail.then(() => this._resolve(payload), () => this._resolve(payload));
+    this.tail = run.catch(() => {});
+    try { return await run; } finally { this.pending -= 1; }
+  }
+
+  async _resolve(payload) {
+    const cacheStorageKey = 'cache:' + payload.cacheIdentity;
+    const cached = await this.state.storage.get(cacheStorageKey);
+    const now = this.now();
+    if (cached && cached.expiresAt > now) return _geocodeJson(cached.body, 200, { 'X-VOY-Geocode-Cache': 'hit' });
+    if (cached) await this.state.storage.delete(cacheStorageKey);
+
+    const nextAllowedAt = Number(await this.state.storage.get('nextAllowedAt')) || 0;
+    const waitMs = Math.max(0, nextAllowedAt - now);
+    if (waitMs > NOMINATIM_MAX_WAIT_MS) return _geocodeJson({ error: 'coordinator_busy', results: [] }, 503, { 'Retry-After': String(Math.ceil(waitMs / 1000)) });
+    if (waitMs) await this.sleep(waitMs);
+    const startedAt = this.now();
+    await this.state.storage.put('nextAllowedAt', startedAt + NOMINATIM_MIN_INTERVAL_MS);
+
+    const city = GEOCODE_CITIES[payload.cityId];
+    const upstream = this._providerUrl(payload.providerBase, payload, city);
+    let response = await this._fetchWithTimeout(upstream);
+    let providerUsed = payload.provider;
+    if ((!response || !response.ok) && payload.fallbackBase) {
+      response = await this._fetchWithTimeout(this._providerUrl(payload.fallbackBase, payload, city));
+      providerUsed = 'fallback';
+    }
+    if (!response) return _geocodeJson({ error: 'provider_unavailable', results: [] }, 502);
+    if (!response.ok) return _geocodeJson({ error: 'provider_error', results: [] }, response.status === 429 ? 429 : 502, response.status === 429 ? { 'Retry-After': response.headers.get('Retry-After') || '2' } : {});
+    let data;
+    try { data = await response.json(); } catch (_) { return _geocodeJson({ error: 'malformed_provider_response', results: [] }, 502); }
+    const results = (Array.isArray(data) ? data : []).map(item => _remoteCandidate(item, payload.cityId))
+      .filter(candidate => Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon))
+      .filter(candidate => payload.wide || payload.cityId === '_default' || _insideGeocodeCity(candidate, city));
+    const body = { query: payload.query, cityId: payload.cityId, provider: providerUsed, results };
+    const storedAt = this.now();
+    const expiresAt = storedAt + GEOCODE_CACHE_TTL_MS;
+    await this.state.storage.put(cacheStorageKey, { body, storedAt, expiresAt });
+    await this.state.storage.put('providerMetadata', { provider: providerUsed, updatedAt: storedAt, contractVersion: GEOCODE_CONTRACT_VERSION });
+
+    if (typeof this.state.storage.getAlarm === 'function' && typeof this.state.storage.setAlarm === 'function') {
+      const currentAlarm = await this.state.storage.getAlarm();
+      if (currentAlarm === null || expiresAt < currentAlarm) {
+        await this.state.storage.setAlarm(expiresAt);
+      }
+    }
+
+    return _geocodeJson(body, 200, { 'X-VOY-Geocode-Cache': 'miss' });
+  }
+
+  async alarm() {
+    const now = this.now();
+    const limit = 50;
+    const cursor = await this.state.storage.get('sweepCursor') || undefined;
+
+    const options = { prefix: 'cache:', limit };
+    if (cursor) {
+      options.start = cursor;
+    }
+    const entries = await this.state.storage.list(options);
+
+    let lastKey = null;
+    let nextExpiration = null;
+
+    for (const [key, value] of entries.entries()) {
+      lastKey = key;
+      if (value && value.expiresAt) {
+        if (value.expiresAt <= now) {
+          await this.state.storage.delete(key);
+        } else {
+          if (nextExpiration === null || value.expiresAt < nextExpiration) {
+            nextExpiration = value.expiresAt;
+          }
+        }
+      }
+    }
+
+    if (typeof this.state.storage.setAlarm === 'function') {
+      if (entries.size === limit) {
+        await this.state.storage.put('sweepCursor', lastKey + '\0');
+        await this.state.storage.setAlarm(this.now() + 1000);
+      } else {
+        await this.state.storage.delete('sweepCursor');
+        if (nextExpiration !== null) {
+          const alarmTime = Math.max(nextExpiration, now + 1000);
+          await this.state.storage.setAlarm(alarmTime);
+        }
+      }
+    }
+  }
+
+  _providerUrl(base, payload, city) {
+    const upstream = new URL(String(base));
+    upstream.searchParams.set('q', payload.query + (payload.cityId === '_default' ? '' : ', Santa Fe, Argentina'));
+    upstream.searchParams.set('format', 'jsonv2');
+    upstream.searchParams.set('limit', '10');
+    upstream.searchParams.set('countrycodes', 'ar');
+    upstream.searchParams.set('addressdetails', '1');
+    upstream.searchParams.set('namedetails', '1');
+    upstream.searchParams.set('accept-language', 'es');
+    if (!payload.wide && payload.cityId !== '_default' && city && city.viewbox) {
+      upstream.searchParams.set('viewbox', city.viewbox);
+      upstream.searchParams.set('bounded', '1');
+    }
+    return upstream.toString();
+  }
+
+  async _fetchWithTimeout(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), NOMINATIM_FETCH_TIMEOUT_MS);
+    try {
+      return await this.upstreamFetch(url, { signal: controller.signal, headers: { Accept: 'application/json', 'Accept-Language': 'es-AR,es;q=0.9', 'User-Agent': 'VOY/7.8 (https://voy-app.simondalmasso44.workers.dev/)' } });
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
 
 export default worker;
 
