@@ -2,43 +2,41 @@
 #  VOY V7 — Atomic deploy pipeline (single source of truth)
 #
 #  Trigger: push to main
-#  Pipeline: lint → inject build hash → deploy → purge → health → version guardrail
+#  Pipeline: lint → tests → browser gate → inject hash → deploy →
+#            bounded convergence check → production browser smoke
 #
-#  GUARDRAIL (hard fail): the deploy is rejected if the live /api/health.build_hash
-#  does not match the git short SHA just deployed. This is the V7 fix for the
-#  "local ≠ edge" desync — no more silent stale-asset serving.
+#  GUARDRAIL (hard fail): the deploy is rejected if the live /api/health
+#  does not converge to the deployed git short SHA and expected version
+#  within the bounded propagation window.
 #
 #  Required secrets (Settings → Secrets and variables → Actions):
 #    CLOUDFLARE_API_TOKEN   — API token with Workers Deploy + Cache Purge perms
 #    CLOUDFLARE_ACCOUNT_ID  — numeric account ID (dashboard → right sidebar)
 #    CLOUDFLARE_ZONE_ID     — optional; only if you own the zone for cache purge.
-#                             voy.is-a.dev is NOT owned by this account (is-a.dev
-#                             owns it), so cache purge is skipped; the worker.js
-#                             Cache-Control: no-store header handles staleness.
 # ============================================================
 name: Deploy VOY V7
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: # manual trigger from Actions tab
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: deploy-voy-prod
-  cancel-in-progress: false # never cancel a mid-deploy; wait it out
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # shallow is fine; we only need HEAD SHA
+          fetch-depth: 1
 
       - name: Install Bun 1.3.14
         run: |
@@ -66,7 +64,7 @@ jobs:
       - name: Browser smoke (predeploy gate)
         run: bash scripts/run-browser-smoke.sh
 
-      - name: Upload browser evidence
+      - name: Upload predeploy browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -74,10 +72,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           path: |
-            test-results/
+            test-results/evidence/
             playwright-report/
 
-      - name: Inject build hash (V7 guardrail — git SHA = single source of truth)
+      - name: Inject build hash (git SHA = single source of truth)
         run: node scripts/inject-build-hash.mjs
 
       - name: Deploy to Cloudflare Workers
@@ -85,7 +83,6 @@ jobs:
         run: |
           set -o pipefail
           npx wrangler deploy --minify 2>&1 | tee deploy.log
-          # Extract the worker URL from the output
           WORKER_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1 || true)
           echo "worker_url=${WORKER_URL}" >> "$GITHUB_OUTPUT"
         env:
@@ -93,9 +90,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Purge Cloudflare cache (if zone owned)
-        # NOTE: the `secrets` context is NOT available in `if:` conditions
-        # (GitHub Actions parser rejects it → "No jobs were run" workflow failure).
-        # Standard pattern: bind the secret to an env var, then test the env var.
         if: env.ZONE_ID != ''
         env:
           ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -104,82 +98,80 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             --data '{"purge_everything":true}' | jq .
-        continue-on-error: true # purge failure must not fail the deploy
+        continue-on-error: true
 
-      - name: Health check (worker live + version match)
+      - name: Health check (bounded edge convergence + version match)
+        id: production
         env:
           EXPECTED_HASH: ${{ github.sha }}
+          EXPECTED_VERSION: V7.8.0
+          MAX_ATTEMPTS: 30
+          POLL_SECONDS: 2
         run: |
-          set -e
-          # Give the edge 3s to propagate
-          sleep 3
           WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
           if [ -z "$WORKER_URL" ]; then
-            echo "⚠️ could not extract worker URL from deploy log; using canonical"
+            echo "Could not extract worker URL; using canonical endpoint."
             WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
           fi
-          echo "Checking: $WORKER_URL/api/health"
-          HEALTH=$(curl -fsS "$WORKER_URL/api/health" || curl -fsS "https://voy-app.simondalmasso44.workers.dev/api/health")
-          echo "$HEALTH" | jq .
-          LIVE_HASH=$(echo "$HEALTH" | jq -r '.build_hash')
-          LIVE_VER=$(echo "$HEALTH" | jq -r '.version')
-          SHORT_SHA=$(echo "$EXPECTED_HASH" | cut -c1-7)
-          echo "Expected hash (git short): $SHORT_SHA"
-          echo "Live hash (worker):        $LIVE_HASH"
-          echo "Live version:              $LIVE_VER"
-          if [ "$LIVE_HASH" != "$SHORT_SHA" ]; then
-            echo "::error::VERSION MISMATCH — live build_hash ($LIVE_HASH) ≠ git SHA ($SHORT_SHA). Deploy FAILED the V7 guardrail."
-            exit 1
-          fi
-          if [ "$LIVE_VER" != "V7.8.0" ]; then
-            echo "::error::VERSION MISMATCH — live version ($LIVE_VER) ≠ V7.8.0. Stale worker deployed."
-            exit 1
-          fi
-          echo "✅ V7 guardrail passed: live build_hash matches git SHA."
+          echo "worker_url=${WORKER_URL}" >> "$GITHUB_OUTPUT"
+          VOY_BASE_URL="$WORKER_URL" bash scripts/verify-production-release.sh
 
       - name: Verify UI serves V7 (HTML contains version pin)
+        env:
+          WORKER_URL: ${{ steps.production.outputs.worker_url }}
         run: |
           set -e
-          WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
-          [ -z "$WORKER_URL" ] && WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
           HTML=$(curl -fsS "$WORKER_URL/")
           if echo "$HTML" | grep -q 'voy-version" content="V7.8.0"'; then
-            echo "✅ UI HTML contains V7.8.0 version pin."
+            echo "UI HTML contains V7.8.0 version pin."
           else
-            echo "::error::UI HTML does NOT contain V7.8.0 version pin — stale HTML served."
+            echo "::error::UI HTML does not contain V7.8.0 version pin."
             exit 1
           fi
-          # Verify cache-bust header
           CC=$(curl -sI "$WORKER_URL/" | grep -i '^cache-control:' || true)
           echo "Cache-Control: $CC"
           if echo "$CC" | grep -qi 'no-store'; then
-            echo "✅ HTML Cache-Control: no-store confirmed (edge will not serve stale UI)."
+            echo "HTML Cache-Control: no-store confirmed."
           else
-            echo "⚠️ WARNING: HTML Cache-Control header does not contain no-store. Edge may cache stale UI."
+            echo "::warning::HTML Cache-Control header does not contain no-store."
           fi
 
       - name: Verify entrypoint (/VOY-Lite.html)
-        # CF Workers Assets may serve /VOY-Lite.html directly (200) before the
-        # worker's redirect runs. Accept 301/308 (redirect) OR 200 with V7.8.0
-        # content. This matches verify-production.sh's logic.
+        env:
+          WORKER_URL: ${{ steps.production.outputs.worker_url }}
         run: |
           set -e
-          WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
-          [ -z "$WORKER_URL" ] && WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -I "$WORKER_URL/VOY-Lite.html")
           echo "GET /VOY-Lite.html → HTTP $CODE"
           if [ "$CODE" = "301" ] || [ "$CODE" = "308" ]; then
-            echo "✅ /VOY-Lite.html → $CODE (redirects to /, internal path hidden)"
+            echo "/VOY-Lite.html redirects to the canonical entrypoint."
           elif [ "$CODE" = "200" ]; then
             BODY=$(curl -fsS "$WORKER_URL/VOY-Lite.html")
             if echo "$BODY" | grep -q 'voy-version" content="V7.8.0"'; then
-              echo "✅ /VOY-Lite.html → 200 (CF Assets direct serve, V7.8.0 content verified)"
+              echo "/VOY-Lite.html serves verified V7.8.0 content."
             else
-              echo "::error::/VOY-Lite.html → 200 but content is NOT V7.8.0 (stale)"
+              echo "::error::/VOY-Lite.html returned stale content."
               exit 1
             fi
           else
-            echo "::error::/VOY-Lite.html → $CODE (expected 301 or 200). Worker not deployed."
+            echo "::error::/VOY-Lite.html → $CODE; expected 200, 301 or 308."
             exit 1
           fi
-          echo "✅ Entrypoint verified."
+
+      - name: Browser smoke (production desktop/mobile)
+        env:
+          VOY_BASE_URL: ${{ steps.production.outputs.worker_url }}
+          VOY_EVIDENCE_DIR: test-results/production-browser
+          VOY_REPORT_DIR: playwright-report-production
+        run: bash scripts/run-production-browser-smoke.sh
+
+      - name: Upload production browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-browser-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            test-results/production-browser/
+            playwright-report-production/

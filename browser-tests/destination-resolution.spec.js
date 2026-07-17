@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 
 const BRIDGE = { lat: -31.639764, lon: -60.682736 };
-const evidenceDirectory = 'test-results/evidence';
+const evidenceDirectory = process.env.VOY_EVIDENCE_DIR || 'test-results/evidence';
 
 function remoteCandidate(overrides) {
   return {
