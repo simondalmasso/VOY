@@ -14,6 +14,7 @@ module.exports = {
   use: {
     baseURL,
     browserName: 'chromium',
+    extraHTTPHeaders: { 'X-VOY-Test': '1' },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'
