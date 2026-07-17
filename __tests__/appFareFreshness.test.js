@@ -14,7 +14,7 @@ const model = { base: 1000, km: 500, min: 65, minFare: 3000 };
 test('explicit current statuses are usable and other statuses are excluded', () => {
   for (const status of ['current', 'verified', 'active', 'estimated_current']) {
     assert.equal(MobilityEngine.isAppFareUsable({ ...model, status }), true, status);
-    assert.equal(MobilityEngine.calcAppPrice({ ...model, status }, 2, 10), 3650);
+    assert.equal(MobilityEngine.calcAppPrice({ ...model, status }, 2, 10), 3000);
   }
   for (const status of ['stale_estimate', 'stale_reference', 'expired', 'disabled', 'unknown']) {
     assert.equal(MobilityEngine.isAppFareUsable({ ...model, status }), false, status);
@@ -24,7 +24,7 @@ test('explicit current statuses are usable and other statuses are excluded', () 
 
 test('legacy fixtures without status remain compatible', () => {
   assert.equal(MobilityEngine.isAppFareUsable(model), true);
-  assert.equal(MobilityEngine.calcAppPrice(model, 2, 10), 3650);
+  assert.equal(MobilityEngine.calcAppPrice(model, 2, 10), 3000);
 });
 
 test('missing or null fare models are unavailable', () => {
