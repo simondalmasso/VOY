@@ -33,7 +33,8 @@ When a model produces `null`:
 - the provider is excluded from price ranking;
 - it cannot drive the Ahorro recommendation;
 - no price confidence, surge range or trend datapoint is presented for that provider;
-- the provider remains visible when its city availability is verified;
+- the provider remains visible when city availability is verified and its action is supported on the current platform;
+- platform-specific gates remain authoritative, such as Maxim being offered only on Android;
 - the UI shows `Ver precio` and opens the provider through the existing confirmed deeplink flow;
 - regulated taxi, remis and bus prices are unaffected.
 
