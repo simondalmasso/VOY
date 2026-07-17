@@ -105,11 +105,17 @@ function applySecurityHeaders(response, request) {
     headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY);
     const cookie = headers.get('Set-Cookie');
     if (cookie && /\bvoy_sid=/.test(cookie)) {
-      const hardened = cookie
-        .replace(/Max-Age=\d+/i, `Max-Age=${SESSION_MAX_AGE_SECONDS}`)
-        .replace(/;\s*Secure/ig, '')
-        .replace(/;\s*HttpOnly/ig, '') + '; Secure; HttpOnly';
-      headers.set('Set-Cookie', hardened);
+      const exclusionReason = analyticsExclusionReason(request);
+      if (exclusionReason) {
+        headers.delete('Set-Cookie');
+        headers.set('X-VOY-Analytics', `excluded; reason=${exclusionReason}`);
+      } else {
+        const hardened = cookie
+          .replace(/Max-Age=\d+/i, `Max-Age=${SESSION_MAX_AGE_SECONDS}`)
+          .replace(/;\s*Secure/ig, '')
+          .replace(/;\s*HttpOnly/ig, '') + '; Secure; HttpOnly';
+        headers.set('Set-Cookie', hardened);
+      }
     }
   }
 
