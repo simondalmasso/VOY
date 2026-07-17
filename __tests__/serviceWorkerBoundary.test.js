@@ -18,7 +18,14 @@ function loadServiceWorker(overrides = {}) {
     }
   };
   const caches = {
-    async keys() { return overrides.keys || ['voy-v7-8', 'voy-v7-8-security-1', 'shared-map-cache']; },
+    async keys() {
+      return overrides.keys || [
+        'voy-v7-8',
+        'voy-v7-8-security-1',
+        'voy-v7-8-fares-1',
+        'shared-map-cache'
+      ];
+    },
     async delete(key) { deleted.push(key); return true; },
     async open() { return currentCache; },
     async match(request) { return currentCache.match(request); }
@@ -59,7 +66,7 @@ test('activation deletes only obsolete VOY caches and preserves unrelated/curren
   const runtime = loadServiceWorker();
   await dispatchLifecycle(runtime.listeners.activate);
 
-  assert.deepEqual(runtime.deleted, ['voy-v7-8']);
+  assert.deepEqual(runtime.deleted, ['voy-v7-8', 'voy-v7-8-security-1']);
   assert.equal(runtime.claimed, 1);
 });
 
