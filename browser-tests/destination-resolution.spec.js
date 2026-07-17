@@ -115,7 +115,16 @@ test.describe('Destination Resolution V2 browser smoke', () => {
     await expect.poll(() => page.evaluate(() => window.MC.getDest())).toBeNull();
     await input.fill('San Martín');
     await input.press('Enter');
-    expect(await dropdown.locator('[data-candidate-index]').count()).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => dropdown.locator('[data-candidate-index]').count()).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => page.__voyEvidence.geocodeCalls).toBe(2);
+    expect(await page.evaluate(() => window.MC.getDest())).toBeNull();
+    expect(await page.evaluate(() => window.MC.getEstimations())).toBeNull();
+
+    await dropdown.locator('#searchMoreResults').click();
+    await expect.poll(() => page.__voyEvidence.geocodeCalls).toBe(3);
+    await expect.poll(async () => dropdown.locator('[data-candidate-index]').count()).toBeGreaterThanOrEqual(2);
+    const geocodeRequests = page.__voyEvidence.requestLog.filter(entry => entry.url.includes('/api/geocode'));
+    expect(geocodeRequests.at(-1).url).toContain('wide=1');
     expect(await page.evaluate(() => window.MC.getDest())).toBeNull();
     expect(await page.evaluate(() => window.MC.getEstimations())).toBeNull();
 
