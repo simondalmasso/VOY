@@ -6,8 +6,9 @@ PLAYWRIGHT_VERSION="1.61.1"
 
 export VOY_EVIDENCE_DIR="${VOY_EVIDENCE_DIR:-test-results/production-browser}"
 export VOY_REPORT_DIR="${VOY_REPORT_DIR:-playwright-report-production}"
+export VOY_OUTPUT_DIR="${VOY_OUTPUT_DIR:-test-results/playwright-production}"
 
-mkdir -p "$VOY_EVIDENCE_DIR"
+mkdir -p "$VOY_EVIDENCE_DIR" "$VOY_OUTPUT_DIR"
 
 npm exec --yes --package="@playwright/test@${PLAYWRIGHT_VERSION}" -- sh -c '
   PLAYWRIGHT_BIN=$(command -v playwright)
