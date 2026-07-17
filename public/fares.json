@@ -13,7 +13,7 @@
     "full": 2111.11,
     "efectivo": null,
     "currency": "ARS",
-    "effective_from": "2026-07-09",
+    "effective_from": "2026-05-30",
     "verified_at": "2026-07-17",
     "source": "Decreto DMM 00048/2026 - Municipalidad de Santa Fe",
     "source_url": "https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
@@ -38,7 +38,7 @@
     "source": "Resolución Municipal 217/2026",
     "source_urls": [
       "https://santafe.mitelefe.com/informacion-general/taxis-en-santa-fe-a-partir-de-esta-noche-rige-un-nuevo-aumento-de-tarifas-pid2559090",
-      "https://www.ellitoral.com/area-metropolitana/taxis-santa-fe-nuevas-tarifas-aumento-bajada-bandera-ficha-servicio-transporte_0_8c5yYuhJMC.html"
+      "https://www.ellitoral.com/area-metropolitana/santa-fe-taxis-tarifas-resolucion-municipal-transporte-publico_0_1dQulGpvOj.amp.html"
     ],
     "status": "verified_from_municipal_announcement"
   },
@@ -58,7 +58,7 @@
     "effective_from": "2026-06-06",
     "verified_at": "2026-07-17",
     "source": "Resolución Municipal 365/2026",
-    "source_url": "https://santafe.mitelefe.com/informacion-general/aumenta-la-tarifa-de-remises-en-la-ciudad-de-santa-fe-pid2547448",
+    "source_url": "https://santafe.mitelefe.com/informacion-general/desde-este-sabado-se-actualizan-las-tarifas-del-servicio-de-remises-pid2555192",
     "status": "verified_from_municipal_announcement"
   },
   "uber": {
