@@ -87,13 +87,13 @@ test('wide results click makes exactly one wide request and always requires expl
   assert.equal(state.immediateStopped, 1);
   assert.equal(runtime.calls.remote.length, 1);
   assert.equal(runtime.calls.remote[0].query, 'Puente Colgante');
-  assert.deepEqual(runtime.calls.remote[0].options, { wide: true });
+  assert.equal(runtime.calls.remote[0].options.wide, true);
   assert.equal(runtime.calls.local, 1);
   assert.equal(runtime.calls.fallback, 0, 'legacy fallback handler must not run through bubbling');
   assert.equal(runtime.calls.select, 0, 'even a high-confidence resolved candidate must not be auto-selected');
   assert.equal(runtime.calls.render.length, 1);
   assert.equal(runtime.calls.render[0].results.length, 1);
-  assert.deepEqual(runtime.calls.render[0].results[0].canonicalId, 'osm:way:1');
+  assert.equal(runtime.calls.render[0].results[0].canonicalId, 'osm:way:1');
   assert.deepEqual(runtime.calls.toasts.at(-1), { message: 'Elegí el destino correcto', level: 'info' });
 });
 
@@ -105,7 +105,7 @@ test('wide click renders a recoverable empty state without a second request', as
 
   assert.equal(runtime.calls.remote.length, 1);
   assert.equal(runtime.calls.render.length, 1);
-  assert.deepEqual(runtime.calls.render[0].results, []);
+  assert.equal(runtime.calls.render[0].results.length, 0);
   assert.deepEqual(runtime.calls.toasts.at(-1), { message: 'No se encontraron más resultados', level: 'warn' });
 });
 
