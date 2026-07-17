@@ -14,33 +14,16 @@
   "compatibility_date": "2026-01-01",
   "main": "./worker-entry.js",
 
-  // REQUIRED: keep true (is-a.dev CNAME resolves to the workers.dev URL).
-  // Direct workers.dev access is redirected by worker.js → voy.is-a.dev.
   "workers_dev": true,
-
-  // No routes: voy.is-a.dev and voy.app zones are not in this CF account.
-  // voy.is-a.dev reaches the worker via the is-a.dev CNAME (DNS-level), not
-  // via a CF route. Adding a route for a non-owned zone would fail deploy
-  // ("Could not find zone for voy.is-a.dev").
   "routes": [],
 
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "html_handling": "none",
-    // "none" → unknown paths return a plain 404. No SPA fallback, no
-    // directory listing (Workers Assets never enumerates directories).
     "not_found_handling": "none"
   },
 
-  // Cloudflare Analytics Engine — 3 eventos (estimation / provider_tap / search).
-  // WAE Free tier = 100k data points/día gratis. VOY no lo supera.
-  // El worker escribe data points via ctx.waitUntil(env.VOY_METRICS.writeDataPoint()).
-  // Si el binding está ausente (dry-run), /api/events devuelve 202 gracefully.
-  //
-  // ✅ Dataset creado en el dashboard CF (account b21fa81d12acb663798f9f7c51801955):
-  //   binding = VOY_METRICS, dataset = voy_metrics.
-  // Habilitado el 2026-06-23. /api/health ahora reporta analytics:true.
   "analytics_engine_datasets": [
     { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
   ],
@@ -55,24 +38,18 @@
     { "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }
   ],
 
-  // V7.8.1 — ANALYTICS_SYSTEM_SETUP: filtros de exclusión de analytics.
-  // Reglas activas (todas configurables via dashboard o wrangler.jsonc vars):
-  //   - localhost / headless / bot      (VOY_EXCLUDE_LOCALHOST/HEADLESS/BOT)
-  //   - glm_agent (GLM_* UA filter)     (VOY_EXCLUDE_GLM) — excludes z-ai/GLM automated agents
-  //   - owner_ip / owner_ip_hash        (VOY_OWNER_IPS / VOY_OWNER_IP_HASHES) — SIMON_DEVICE rule
-  //   - dev_ip                          (VOY_DEV_IPS)
-  //   - custom UA patterns              (VOY_EXCLUDE_UA_PATTERNS — comma-separated regex, case-insensitive)
-  //
-  // HOW TO EXCLUDE YOUR DEVICE (SIMON_DEVICE):
-  //   1. Visit https://voy-app.simondalmasso44.workers.dev/api/whoami from your device.
-  //   2. Copy the `ip` (→ VOY_OWNER_IPS) OR the `ip_sha256` (→ VOY_OWNER_IP_HASHES, more private).
-  //   3. Paste below (comma-separated if multiple devices). Redeploy.
-  //   4. Verify on /api/whoami → "excluded": "owner_ip" (or "owner_ip_hash").
-  //   5. Verify on /api/health → filters.owner_ips / owner_ip_hashes counts updated.
+  // Analytics/operator boundaries:
+  // - owner/developer exclusions remain configurable by IP or SHA-256 IP hash.
+  // - /api/whoami is closed by default. It is exposed only when
+  //   VOY_OPERATOR_DIAGNOSTICS=true AND the caller matches an owner/dev allowlist.
+  // - cross-origin writes to /api/events and /api/telemetry are denied unless the
+  //   exact origin appears in VOY_ALLOWED_ORIGINS. Same-origin writes need no entry.
   "vars": {
     "VOY_OWNER_IPS": "",
     "VOY_OWNER_IP_HASHES": "",
     "VOY_DEV_IPS": "",
+    "VOY_OPERATOR_DIAGNOSTICS": "false",
+    "VOY_ALLOWED_ORIGINS": "",
     "VOY_EXCLUDE_LOCALHOST": "true",
     "VOY_EXCLUDE_HEADLESS": "true",
     "VOY_EXCLUDE_BOT": "true",
