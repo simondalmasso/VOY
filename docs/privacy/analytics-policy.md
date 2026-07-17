@@ -56,13 +56,16 @@ The session identifier is not returned in analytics API responses.
 
 ## Opt-out and test exclusion
 
-VOY excludes analytics and does not emit `voy_sid` when any of these request headers equals `1`:
+VOY excludes analytics and does not emit `voy_sid` when any of these request signals is active:
 
-- `Sec-GPC` — Global Privacy Control;
-- `DNT` — Do Not Track;
-- `X-VOY-Test` — deterministic CI/browser validation marker.
+- `Sec-GPC: 1` — Global Privacy Control;
+- `DNT: 1` — Do Not Track;
+- `X-VOY-Test: 1` — deterministic direct API validation marker;
+- `voy_analytics=off` — same-origin opt-out cookie used by browser validation and available to a future privacy control in the UI.
 
-The first two are user privacy signals. The third is safe to expose publicly because spoofing it can only suppress analytics; it cannot grant access or broaden permissions.
+The first two are user privacy signals. The header and cookie test mechanisms are safe to expose publicly because spoofing either can only suppress analytics; neither grants access or broadens permissions.
+
+Browser smoke uses the same-origin cookie rather than a global custom header. This prevents CORS preflights or failures on third-party map, tile and routing resources.
 
 Excluded writes return HTTP 202 with `written: 0` and an exclusion reason. They are not forwarded to Analytics Engine.
 
