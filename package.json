@@ -7,7 +7,7 @@
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
-    "test": "mkdir -p test-results && bash -o pipefail -c 'node --test \"__tests__/**/*.test.js\" 2>&1 | tee test-results/node-tests.log'",
+    "test": "mkdir -p test-results/evidence && bash -o pipefail -c 'node --test \"__tests__/**/*.test.js\" 2>&1 | tee test-results/evidence/node-tests.log'",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
