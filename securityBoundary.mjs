@@ -21,12 +21,11 @@ const CSP_REPORT_ONLY = [
   "form-action 'self'",
   "script-src 'self' 'unsafe-inline' https://unpkg.com",
   "style-src 'self' 'unsafe-inline' https://unpkg.com",
-  "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
-  "connect-src 'self' https://router.project-osrm.org https://nominatim.openstreetmap.org https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
+  "img-src 'self' data: blob: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
+  "connect-src 'self' https://router.project-osrm.org https://nominatim.openstreetmap.org https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
-  "manifest-src 'self'",
-  'upgrade-insecure-requests'
+  "manifest-src 'self'"
 ].join('; ');
 
 function list(value) {
