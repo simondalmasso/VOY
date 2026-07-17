@@ -1,6 +1,7 @@
 import worker, { NominatimCoordinator as BaseNominatimCoordinator } from './worker.js';
 import { recordSweepExpiration, runCoordinatorAlarmSweep } from './coordinatorAlarm.js';
 import { createSecurityBoundary } from './securityBoundary.mjs';
+import { createAnalyticsOptOutBoundary } from './analyticsOptOutBoundary.mjs';
 
 export class NominatimCoordinator extends BaseNominatimCoordinator {
   async _resolve(payload) {
@@ -17,4 +18,5 @@ export class NominatimCoordinator extends BaseNominatimCoordinator {
   }
 }
 
-export default createSecurityBoundary(worker);
+const securedWorker = createSecurityBoundary(worker);
+export default createAnalyticsOptOutBoundary(securedWorker);

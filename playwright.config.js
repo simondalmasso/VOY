@@ -1,6 +1,21 @@
 const baseURL = process.env.VOY_BASE_URL || 'http://127.0.0.1:8787';
 const reportDirectory = process.env.VOY_REPORT_DIR || 'playwright-report';
 const outputDirectory = process.env.VOY_OUTPUT_DIR || 'test-results/playwright-local';
+const base = new URL(baseURL);
+
+const analyticsOptOutState = {
+  cookies: [{
+    name: 'voy_analytics',
+    value: 'off',
+    domain: base.hostname,
+    path: '/',
+    expires: -1,
+    httpOnly: true,
+    secure: base.protocol === 'https:',
+    sameSite: 'Lax'
+  }],
+  origins: []
+};
 
 module.exports = {
   testDir: './browser-tests',
@@ -14,6 +29,7 @@ module.exports = {
   use: {
     baseURL,
     browserName: 'chromium',
+    storageState: analyticsOptOutState,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'
