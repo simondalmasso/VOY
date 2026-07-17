@@ -12,7 +12,7 @@
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-01-01",
-  "main": "./worker.js",
+  "main": "./worker-entry.js",
 
   // REQUIRED: keep true (is-a.dev CNAME resolves to the workers.dev URL).
   // Direct workers.dev access is redirected by worker.js → voy.is-a.dev.
