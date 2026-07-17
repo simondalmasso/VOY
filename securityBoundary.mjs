@@ -63,6 +63,13 @@ function isAllowedWriteOrigin(request, env) {
   return allowedOrigins(request, env).has(origin);
 }
 
+function analyticsExclusionReason(request) {
+  if (request.headers.get('Sec-GPC') === '1') return 'global_privacy_control';
+  if (request.headers.get('DNT') === '1') return 'do_not_track';
+  if (request.headers.get('X-VOY-Test') === '1') return 'test_traffic';
+  return '';
+}
+
 function jsonResponse(body, status, headers = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -80,7 +87,7 @@ function applyWriteCors(response, request, env) {
     headers.append('Vary', 'Origin');
   }
   headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, DNT, Sec-GPC, X-VOY-Test');
   headers.set('Cache-Control', 'no-store');
   headers.set('X-Content-Type-Options', 'nosniff');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -205,6 +212,17 @@ async function handleWriteBoundary(baseWorker, request, env, ctx, path) {
     return applyWriteCors(jsonResponse({ ok: false, error: 'method_not_allowed' }, 405), request, env);
   }
 
+  const exclusionReason = analyticsExclusionReason(request);
+  if (exclusionReason) {
+    return applyWriteCors(jsonResponse({
+      ok: true,
+      received: 0,
+      written: 0,
+      excluded: true,
+      reason: exclusionReason
+    }, 202), request, env);
+  }
+
   const parsed = await readJsonWithinLimit(
     request,
     path === '/api/events' ? EVENT_BODY_MAX_BYTES : TELEMETRY_BODY_MAX_BYTES
@@ -275,5 +293,6 @@ export const securityBoundaryContract = Object.freeze({
   telemetryBodyMaxBytes: TELEMETRY_BODY_MAX_BYTES,
   maxEventsPerRequest: MAX_EVENTS_PER_REQUEST,
   sessionMaxAgeSeconds: SESSION_MAX_AGE_SECONDS,
-  cspReportOnly: CSP_REPORT_ONLY
+  cspReportOnly: CSP_REPORT_ONLY,
+  optOutHeaders: ['Sec-GPC', 'DNT', 'X-VOY-Test']
 });
