@@ -6,6 +6,8 @@
 //      Worker does not expose that route.
 //   3. All same-origin /api/* requests pass through without caching.
 //   4. Cache writes are best-effort so quota failures never break navigation.
+//   5. Fare registry/engine update rotates the VOY cache so regulated prices
+//      cannot remain pinned behind an older same-origin static asset response.
 //
 // Preserved behavior:
 //   - navigation: network-first with cached shell fallback;
@@ -15,7 +17,7 @@
 //   - other cross-origin requests: passthrough.
 
 var CACHE_PREFIX = 'voy-';
-var CACHE = 'voy-v7-8-security-1';
+var CACHE = 'voy-v7-8-fares-1';
 var IMMUTABLE = /^https:\/\/unpkg\.com\//;
 var API_PATH = /^\/api\//;
 var TILE_DOMAINS = /basemaps\.cartocdn\.com|tile\.openstreetmap\.org/;
