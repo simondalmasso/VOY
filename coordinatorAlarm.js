@@ -62,20 +62,20 @@ export async function runCoordinatorAlarmSweep(coordinator) {
   }
 
   if (entries.size === SWEEP_LIMIT && lastKey) {
-    await storage.put(SWEEP_CURSOR_KEY, lastKey);
-    await persistNextExpiration(storage, nextExpiration);
     if (typeof storage.setAlarm === 'function') {
       await storage.setAlarm(Math.max(coordinator.now() + CONTINUATION_DELAY_MS, now + CONTINUATION_DELAY_MS));
     }
+    await persistNextExpiration(storage, nextExpiration);
+    await storage.put(SWEEP_CURSOR_KEY, lastKey);
     return { processed: entries.size, deleted, continued: true, nextExpiration };
   }
-
-  await storage.delete(SWEEP_CURSOR_KEY);
-  await storage.delete(SWEEP_NEXT_EXPIRATION_KEY);
 
   if (nextExpiration !== null && typeof storage.setAlarm === 'function') {
     await storage.setAlarm(Math.max(nextExpiration, coordinator.now() + CONTINUATION_DELAY_MS, now + CONTINUATION_DELAY_MS));
   }
+
+  await storage.delete(SWEEP_CURSOR_KEY);
+  await storage.delete(SWEEP_NEXT_EXPIRATION_KEY);
 
   return { processed: entries.size, deleted, continued: false, nextExpiration };
 }
