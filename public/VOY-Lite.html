@@ -2531,14 +2531,25 @@ function onSearchKeydown(e){
     fallbackGeocode(val);
   }
 }
-async function fallbackGeocode(q){
+async function fallbackGeocode(q, options){
   try{
+    var opt = options || {};
+    var isWide = opt.wide === true;
     var local=await MC.v5SearchLocalRanked(q,MC.getOrigin());
-    var localResolution=DestinationResolver.resolve(q,local,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox});
-    if(localResolution.status==='resolved'){selectDestinationCandidate(localResolution.candidate);return}
-    var remote=await MC.searchRemote(q);
+    var localResolution = null;
+    if (!isWide) {
+      localResolution=DestinationResolver.resolve(q,local,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox});
+      if(localResolution.status==='resolved'){selectDestinationCandidate(localResolution.candidate);return}
+    }
+    var remote=await MC.searchRemote(q, { wide: isWide });
     var all=MC.dedupResults(local.concat(remote||[]));
-    var resolution=DestinationResolver.resolve(q,all,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox});
+    var resolverOpts = {};
+    if (CURRENT_CITY && CURRENT_CITY.map && CURRENT_CITY.map.bbox && !isWide) {
+      resolverOpts.bbox = CURRENT_CITY.map.bbox;
+    } else {
+      resolverOpts.allowOutside = true;
+    }
+    var resolution=DestinationResolver.resolve(q,all,resolverOpts);
     if(resolution.status==='resolved'){selectDestinationCandidate(resolution.candidate);return}
     if(resolution.status==='choose'){renderSearchDropdown(resolution.candidates,false,false,false);showToast('Elegí el destino correcto','info');return}
     showToast('No se encontró “'+q+'”','warn');renderSearchDropdown([],false,false,false)
@@ -2632,7 +2643,7 @@ function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
       var hint=document.getElementById('geoHint');if(hint)hint.remove();
     });
   }
-  var more=document.getElementById('searchMoreResults');if(more){more.addEventListener('click',function(){var inp=document.getElementById('destInput');if(inp&&inp.value.trim().length>=2)fallbackGeocode(inp.value.trim())})}
+  var more=document.getElementById('searchMoreResults');if(more){more.addEventListener('click',function(){var inp=document.getElementById('destInput');if(inp&&inp.value.trim().length>=2)fallbackGeocode(inp.value.trim(), { wide: true })})}
 }
 function bindSearchItems(){
   var dd=document.getElementById('destDropdown');
