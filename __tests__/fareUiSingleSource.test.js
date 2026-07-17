@@ -34,6 +34,6 @@ test('regulated municipal prices do not receive app-style surge twice', () => {
 });
 
 test('mobility engine asset URL is rotated for immediate client convergence', () => {
-  assert.match(html, /core\/mobilityEngine\.js\?v=11/);
-  assert.doesNotMatch(html, /core\/mobilityEngine\.js\?v=10/);
+  assert.match(html, /core\/mobilityEngine\.js\?v=12/);
+  assert.doesNotMatch(html, /core\/mobilityEngine\.js\?v=11/);
 });
