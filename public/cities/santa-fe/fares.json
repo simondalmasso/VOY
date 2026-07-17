@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "city_id": "santafe",
+  "fare_registry": {
+    "taxi": {
+      "diurno": {
+        "bajada": 1790,
+        "ficha": 179,
+        "distFicha": 130
+      },
+      "nocturno": {
+        "bajada": 2058,
+        "ficha": 206,
+        "distFicha": 130
+      },
+      "source": "Resolución Municipal 217/2026",
+      "source_urls": [
+        "https://santafe.mitelefe.com/informacion-general/taxis-en-santa-fe-a-partir-de-esta-noche-rige-un-nuevo-aumento-de-tarifas-pid2559090",
+        "https://www.ellitoral.com/area-metropolitana/santa-fe-taxis-tarifas-resolucion-municipal-transporte-publico_0_1dQulGpvOj.amp.html"
+      ],
+      "effective_from": "2026-07-11",
+      "verified_at": "2026-07-17",
+      "status": "verified_from_municipal_announcement"
+    },
+    "remis": {
+      "diurno": {
+        "bajada": 1600,
+        "ficha": 160,
+        "distFicha": 130
+      },
+      "nocturno": {
+        "bajada": 1840,
+        "ficha": 184,
+        "distFicha": 130
+      },
+      "source": "Resolución Municipal 365/2026",
+      "source_url": "https://santafe.mitelefe.com/informacion-general/desde-este-sabado-se-actualizan-las-tarifas-del-servicio-de-remises-pid2555192",
+      "effective_from": "2026-06-06",
+      "verified_at": "2026-07-17",
+      "status": "verified_from_municipal_announcement"
+    },
+    "bus": {
+      "sube": 1900,
+      "frequent": 1900,
+      "full": 2111.11,
+      "cash": null,
+      "source": "Decreto DMM 00048/2026 - Municipalidad de Santa Fe",
+      "source_url": "https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
+      "effective_from": "2026-05-30",
+      "verified_at": "2026-07-17",
+      "status": "verified"
+    },
+    "apps": {
+      "uber": {
+        "base": 1000,
+        "km": 500,
+        "min": 65,
+        "minFare": 3000,
+        "source": "Uber app estimate range",
+        "updated_at": "2025-12-01",
+        "status": "stale_estimate"
+      },
+      "didi": {
+        "base": 900,
+        "km": 440,
+        "min": 55,
+        "minFare": 2500,
+        "source": "DiDi app estimate range",
+        "updated_at": "2025-12-01",
+        "status": "stale_estimate"
+      },
+      "maxim": {
+        "base": 855,
+        "km": 418,
+        "min": 52,
+        "minFare": 2375,
+        "source": "Maxim app estimate range",
+        "updated_at": "2025-12-01",
+        "status": "stale_estimate"
+      },
+      "cabify": {
+        "base": 1100,
+        "km": 520,
+        "min": 70,
+        "minFare": 3300,
+        "source": "Cabify app estimate range (reference)",
+        "updated_at": "2025-12-01",
+        "status": "stale_reference"
+      }
+    }
+  },
+  "source": "Municipal resolutions and versioned VOY fare registry",
+  "verified_at": "2026-07-17",
+  "status": "verified_regulated_fares"
+}

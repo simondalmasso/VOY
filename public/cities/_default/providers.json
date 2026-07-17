@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "city_id": "_default",
+  "providers": {
+    "uber": {
+      "name": "Uber",
+      "available": false,
+      "color": "#111111",
+      "category": "app",
+      "verified": false
+    },
+    "didi": {
+      "name": "DiDi",
+      "available": false,
+      "color": "#FF6B00",
+      "category": "app",
+      "verified": false
+    },
+    "maxim": {
+      "name": "Maxim",
+      "available": false,
+      "color": "#7C3AED",
+      "category": "app",
+      "verified": false
+    },
+    "cabify": {
+      "name": "Cabify",
+      "available": false,
+      "color": "#00A99D",
+      "category": "app",
+      "verified": false
+    }
+  },
+  "taxi_companies": [],
+  "remis_companies": [],
+  "source": "No national provider availability asserted",
+  "verified_at": "2026-07-17",
+  "status": "national_basic"
+}
