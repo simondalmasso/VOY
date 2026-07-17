@@ -103,6 +103,9 @@ test.describe('Destination Resolution V2 browser smoke', () => {
       oneKmRemisNight: 3128
     });
     expect(visibleFares.remis).not.toBe(visibleFares.taxi);
+    await page.locator('.mode-pill[data-mode="car"]').click();
+    await expect(page.locator('#accTaxiHead')).toBeVisible();
+    await expect(page.locator('#accRemisHead')).toBeVisible();
     await expect(page.locator('#accTaxiHead .ah-meta')).toContainText(visibleFares.taxiText);
     await expect(page.locator('#accRemisHead .ah-meta')).toContainText(visibleFares.remisText);
 
