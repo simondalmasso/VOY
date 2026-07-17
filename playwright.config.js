@@ -1,3 +1,6 @@
+const baseURL = process.env.VOY_BASE_URL || 'http://127.0.0.1:8787';
+const reportDirectory = process.env.VOY_REPORT_DIR || 'playwright-report';
+
 module.exports = {
   testDir: './browser-tests',
   timeout: 45_000,
@@ -5,9 +8,9 @@ module.exports = {
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [['line'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  reporter: [['line'], ['html', { outputFolder: reportDirectory, open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:8787',
+    baseURL,
     browserName: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
