@@ -98,6 +98,10 @@
       "diurno": {"bajada":1790,"ficha":179,"distFicha":130},
       "nocturno": {"bajada":2058,"ficha":206,"distFicha":130},
       "source":"Resolución Municipal 217/2026",
+      "source_urls":[
+        "https://santafe.mitelefe.com/informacion-general/taxis-en-santa-fe-a-partir-de-esta-noche-rige-un-nuevo-aumento-de-tarifas-pid2559090",
+        "https://www.ellitoral.com/area-metropolitana/santa-fe-taxis-tarifas-resolucion-municipal-transporte-publico_0_1dQulGpvOj.amp.html"
+      ],
       "effective_from":"2026-07-11",
       "verified_at":"2026-07-17",
       "status":"verified_from_municipal_announcement"
@@ -106,6 +110,7 @@
       "diurno": {"bajada":1600,"ficha":160,"distFicha":130},
       "nocturno": {"bajada":1840,"ficha":184,"distFicha":130},
       "source":"Resolución Municipal 365/2026",
+      "source_url":"https://santafe.mitelefe.com/informacion-general/desde-este-sabado-se-actualizan-las-tarifas-del-servicio-de-remises-pid2555192",
       "effective_from":"2026-06-06",
       "verified_at":"2026-07-17",
       "status":"verified_from_municipal_announcement"
@@ -117,7 +122,7 @@
       "cash":null,
       "source":"Decreto DMM 00048/2026 - Municipalidad de Santa Fe",
       "source_url":"https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
-      "effective_from":"2026-07-09",
+      "effective_from":"2026-05-30",
       "verified_at":"2026-07-17",
       "status":"verified"
     },
