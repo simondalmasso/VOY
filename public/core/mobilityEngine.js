@@ -142,7 +142,8 @@
     var maximPrice = calcAppPrice(apps.maxim, distKm, durCar);
     var cabifyPrice = calcAppPrice(apps.cabify, distKm, durCar);
     var taxiPrice = estimateTaxi(distKm, fareRegistry.taxi, hour);
-    var remisPrice = taxiPrice;
+    var remisFare = fareRegistry.remis || fareRegistry.taxi;
+    var remisPrice = estimateTaxi(distKm, remisFare, hour);
     var taxiappPrice = taxiPrice;
     return {
       timeMin: Math.round(durCar),
