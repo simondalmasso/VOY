@@ -42,7 +42,6 @@ Constraints honored:
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link rel="preconnect" href="https://basemaps.cartocdn.com">
 <link rel="preconnect" href="https://tile.openstreetmap.org">
-<link rel="preconnect" href="https://nominatim.openstreetmap.org">
 <link rel="preconnect" href="https://router.project-osrm.org">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <!-- V7.17 SURGICAL_FIX: Google Fonts Inter <link> REMOVED (was causing triple render path: fallback→Inter→system-ui). V7.16 already forces system-ui!important. -->
@@ -57,7 +56,8 @@ Constraints honored:
 <script src="core/mobilityEngine.js?v=10"></script>
 <script src="core/pricingEngine.js?v=10"></script>
 <script src="core/eventBus.js?v=10"></script>
-<script src="ui/mobilityController.js?v=10"></script>
+<script src="core/destinationResolver.js?v=2"></script>
+<script src="ui/mobilityController.js?v=11"></script>
 <style>
 /* ============================================================
    VOY V7.8.0 — CORPORATE MINIMAL (Uber Design Systems 2026)
@@ -1925,7 +1925,7 @@ var _map=null,_originMarker=null,_destMarker=null;
 var _gpsWatch=null,_gpsLastUpdate=0,_gpsLastLat=null,_gpsLastLon=null,_gpsRetryCount=0,_gpsMaxRetries=3,_gpsRetryTimer=null;
 var GPS_DEBOUNCE_MS=3000,GPS_MIN_MOVE_M=30,GPS_REVERSE_DEBOUNCE_MS=800;
 var _gpsFirstFixDone=false,_gpsMapCenteredOnce=false,_gpsReverseDebounceTimer=null;
-var _searchVersion=0,_searchRemoteTimer=null,_searchEnterPending=false;
+var _searchVersion=0,_searchEnterPending=false,_renderedDestinationCandidates=[];
 var _sheetAccordions={taxi:false,remis:false};
 var _busDetailExpanded=false,_busAltsExpanded=false,_bikeDetailExpanded=false;
 var _activeBusLine=null;
@@ -2410,12 +2410,9 @@ function onMapClick(e){
   _pickDestMode=false;
   document.getElementById('map').classList.remove('crosshair');
   var lat=e.lngLat.lat,lon=e.lngLat.lng;
-  MC.setDest(lat,lon,'','map');va_dest('',lat,lon);
-  reverseGeocodeDest(lat,lon);updateMapMarkers();
-  v5event('destination_selected',{source:'map'});
-  if(MC.getOrigin())runEstimations();
+  selectDestinationCandidate({canonicalId:'',source:'manual_map',type:'point',name:'Punto elegido en el mapa',displayName:'Punto elegido en el mapa',address:'',lat:lat,lon:lon,cityId:CURRENT_CITY&&CURRENT_CITY.city_id,precision:'manual',confidence:1,verified:true,aliases:[],osmType:'',osmId:''});
 }
-function reverseGeocodeDest(lat,lon){fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=es').then(function(r){return r.json()}).then(function(d){if(d&&d.display_name){MC.setDestName(d.display_name.split(',').slice(0,2).join(', '));renderSheetHeadOnly()}}).catch(function(){})}
+function reverseGeocodeDest(){MC.setDestName('Punto elegido en el mapa');renderSheetHeadOnly()}
 
 // ===================== SEARCH (V5 pipeline) =====================
 function bindSearchInput(){
@@ -2425,6 +2422,7 @@ function bindSearchInput(){
   inp.addEventListener('focus',function(){onSearchFocus()});
   document.getElementById('sbMapBtn').addEventListener('click',activatePickDest);
   document.getElementById('sbLocateBtn').addEventListener('click',locateMe);
+  document.getElementById('sbSearchIcon').addEventListener('click',function(){var q=inp.value.trim();if(q.length>=2)fallbackGeocode(q)});
   // UX_CORE_REDESIGN — mic = continuous push-to-talk (pointerdown=start, pointerup=stop).
   bindMicPushToTalk(document.getElementById('sbMicBtn'));
 }
@@ -2507,7 +2505,6 @@ function bindMicPushToTalk(btn){
 async function onSearchInput(val){
   // Stop idle drift permanently on first real character
   if(val&&val.trim().length>0)stopIdleDrift();
-  if(_searchRemoteTimer){clearTimeout(_searchRemoteTimer);_searchRemoteTimer=null}
   val=(val||'').trim();
   var dd=document.getElementById('destDropdown');
   if(!val||val.length===0){
@@ -2517,68 +2514,45 @@ async function onSearchInput(val){
     dd.classList.add('hidden');
     return;
   }
-  // UI-4 DestinationInstantFeedback: a SINGLE character already fires a visible
-  // response. Previously the threshold was 2 chars → on mobile the field felt dead
-  // after typing the first letter. Now we immediately show a "Buscando…" state,
-  // then local results, then remote (debounced 150ms for snappier mobile feel).
   v5event('search',{q:val.substring(0,40),mode:typeof _activeMode!=='undefined'?_activeMode:''});
   var version=++_searchVersion;
   var gpsOrigin=MC.getOrigin();
-  // Instant feedback: show the dropdown with a searching state right away
   renderSearchDropdown([],false,true,false);
   dd.classList.remove('hidden');
-  // Local-first: favorites → home/work → recents → local DB, ranked with GPS bias
   var localRanked=await MC.v5SearchLocalRanked(val,gpsOrigin);
   if(version!==_searchVersion)return;
   if(localRanked.length){renderSearchDropdown(localRanked,false,false,false)}
-  else{renderSearchDropdown([],false,true,false)}
-  // Remote (debounced 150ms — snappier on mobile) — cancel stale
-  _searchRemoteTimer=setTimeout(async function(){
-    _searchRemoteTimer=null;
-    if(version!==_searchVersion)return;
-    var remote=await MC.searchNominatim(val);
-    if(version!==_searchVersion)return;
-    var merged=MC.dedupResults(localRanked.concat(remote||[]));
-    if(version!==_searchVersion)return;
-    // V7.11 GEO_BIAS: detectar low confidence = primer resultado remoto fuera del bbox.
-    //   Nominatim con bounded=1 aún puede retornar resultados edge-case fuera del bbox.
-    //   Si el top resultado está fuera, mostramos el label "¿Buscando en la ciudad?".
-    var lowConf=false;
-    if(remote&&remote.length>0){
-      var topR=remote[0];
-      if(topR&&typeof topR.lat==='number'&&typeof topR.lon==='number'&&CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox){
-        var bbox=CURRENT_CITY.map.bbox;
-        if(topR.lat<bbox.minLat||topR.lat>bbox.maxLat||topR.lon<bbox.minLon||topR.lon>bbox.maxLon){lowConf=true}
-      }
-    }
-    if(merged.length){renderSearchDropdown(merged.slice(0,8),false,false,lowConf)}
-    else{renderSearchDropdown([],false,true,false)}
-  },150);
+  else{renderSearchDropdown([],false,false,false)}
 }
 function onSearchKeydown(e){
   if(e.key==='Enter'||e.keyCode===13){
     var inp=e.target;var val=(inp.value||'').trim();if(val.length<2)return;
     e.preventDefault();_searchEnterPending=true;
-    var dd=document.getElementById('destDropdown');
-    if(dd&&!dd.classList.contains('hidden')){var first=dd.querySelector('.search-item:not(.search-item--empty)');if(first){first.click();return}}
     fallbackGeocode(val);
   }
 }
-async function fallbackGeocode(q){
+async function fallbackGeocode(q, options){
   try{
-    var isDefault = !CURRENT_CITY || CURRENT_CITY.city_id === '_default';
-    var queryText = q;
-    if (!isDefault && CURRENT_CITY.displayName) {
-      queryText = q + ', ' + CURRENT_CITY.displayName;
+    var opt = options || {};
+    var isWide = opt.wide === true;
+    var local=await MC.v5SearchLocalRanked(q,MC.getOrigin());
+    var localResolution = null;
+    if (!isWide) {
+      localResolution=DestinationResolver.resolve(q,local,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox});
+      if(localResolution.status==='resolved'){selectDestinationCandidate(localResolution.candidate);return}
     }
-    var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(queryText) + '&format=json&limit=1&accept-language=es';
-    if (!isDefault && CURRENT_CITY.map && CURRENT_CITY.map.viewbox) {
-      url += '&viewbox=' + CURRENT_CITY.map.viewbox + '&bounded=1';
+    var remote=await MC.searchRemote(q, { wide: isWide });
+    var all=MC.dedupResults(local.concat(remote||[]));
+    var resolverOpts = {};
+    if (CURRENT_CITY && CURRENT_CITY.map && CURRENT_CITY.map.bbox && !isWide) {
+      resolverOpts.bbox = CURRENT_CITY.map.bbox;
+    } else {
+      resolverOpts.allowOutside = true;
     }
-    var r=await fetch(url,{headers:{'User-Agent':'MovilidadAsistente/1.0'}});
-    var data=await r.json();
-    if(data&&data[0]){var lat=parseFloat(data[0].lat),lon=parseFloat(data[0].lon);var name=data[0].display_name.split(',').slice(0,2).join(', ');selectDest(lat,lon,data[0].display_name)}
-    else{showToast('No se encontró “'+q+'”','warn')}
+    var resolution=DestinationResolver.resolve(q,all,resolverOpts);
+    if(resolution.status==='resolved'){selectDestinationCandidate(resolution.candidate);return}
+    if(resolution.status==='choose'){renderSearchDropdown(resolution.candidates,false,false,false);showToast('Elegí el destino correcto','info');return}
+    showToast('No se encontró “'+q+'”','warn');renderSearchDropdown([],false,false,false)
   }catch(e){showToast('Error de red al buscar','error')}
 }
 function onSearchFocus(){
@@ -2622,7 +2596,7 @@ async function renderEmptyDropdown(){
 function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
   var dd=document.getElementById('destDropdown');if(!dd)return;
   if(!results.length){
-    dd.innerHTML='<div class="search-item search-item--empty">'+(isSearching?'Buscando…':'Sin resultados · presioná Enter para buscar igual')+'</div>';
+    dd.innerHTML='<div class="search-item search-item--empty">'+(isSearching?'Buscando en catálogo y memoria…':'Sin coincidencias locales · presioná Enter para buscar')+'</div>';
     dd.classList.remove('hidden');return;
   }
   var html='';
@@ -2632,10 +2606,11 @@ function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
     var cityName = CURRENT_CITY ? CURRENT_CITY.name : 'Santa Fe';
     html+='<div class="sd-geo-hint" id="geoHint"><span class="sd-geo-hint-ic">'+svg('pin',14)+'</span><span class="sd-geo-hint-txt">¿Buscando en '+escapeHtml(cityName)+'?</span><button class="sd-geo-hint-btn" id="geoHintBtn" aria-label="Re-centrar mapa en '+escapeHtml(cityName)+'">Re-centrar</button></div>';
   }
-  results.forEach(function(r){
+  _renderedDestinationCandidates=results.slice();
+  results.slice(0,8).forEach(function(r,index){
     var lat=parseFloat(r.lat||r.latitude),lon=parseFloat(r.lon||r.longitude);
-    var displayName=r.display_name||r.display||r.name||'';
-    var name=displayName.split(',')[0],sub=displayName.split(',').slice(1,3).join(',').trim();
+    var displayName=r.displayName||r.display_name||r.display||r.name||'';
+    var name=r.name||displayName.split(',')[0],sub=r.address||displayName.split(',').slice(1,3).join(',').trim();
     var ic='pin',icClass='';
     if(r.type==='favorite'){ic='star';icClass='ic-fav'}
     else if(r.type==='home'){ic='home';icClass='ic-home'}
@@ -2650,8 +2625,10 @@ function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
     var tag='';
     if(r.type==='home')tag='<span class="search-item-tag">Casa</span>';
     else if(r.type==='work')tag='<span class="search-item-tag">Trabajo</span>';
-    html+='<button class="search-item" data-lat="'+lat+'" data-lon="'+lon+'" data-name="'+escapeAttr(displayName)+'"><span class="search-item-icon '+icClass+'">'+svg(ic,18)+'</span><div class="search-item-text"><strong>'+escapeHtml(name)+'</strong>'+(sub?'<small>'+escapeHtml(sub)+'</small>':'')+'</div>'+tag+starHTML+'</button>';
+    var meta=(r.verified?'Verificado · ':'')+(r.type||r.precision||'lugar')+' · '+Math.round((r.confidence||0)*100)+'%';
+    html+='<button class="search-item" data-candidate-index="'+index+'" data-lat="'+lat+'" data-lon="'+lon+'" data-name="'+escapeAttr(displayName)+'"><span class="search-item-icon '+icClass+'">'+svg(ic,18)+'</span><div class="search-item-text"><strong>'+escapeHtml(name)+'</strong>'+(sub?'<small>'+escapeHtml(sub)+'</small>':'')+'<small>'+escapeHtml(meta)+'</small></div>'+tag+starHTML+'</button>';
   });
+  html+='<button class="search-item" id="searchMoreResults"><span class="search-item-icon">'+svg('search',18)+'</span><div class="search-item-text"><strong>Buscar más resultados</strong><small>Consulta remota explícita</small></div></button>';
   dd.innerHTML=html;
   dd.classList.remove('hidden');
   bindSearchItems();
@@ -2666,6 +2643,7 @@ function renderSearchDropdown(results,isRecent,isSearching,lowConfidence){
       var hint=document.getElementById('geoHint');if(hint)hint.remove();
     });
   }
+  var more=document.getElementById('searchMoreResults');if(more){more.addEventListener('click',function(){var inp=document.getElementById('destInput');if(inp&&inp.value.trim().length>=2)fallbackGeocode(inp.value.trim(), { wide: true })})}
 }
 function bindSearchItems(){
   var dd=document.getElementById('destDropdown');
@@ -2691,6 +2669,14 @@ function bindSearchItems(){
       });
     }
     item.addEventListener('click',function(){
+      if(item.id==='searchMoreResults')return;
+      var candidateIndex=item.getAttribute('data-candidate-index');
+      if(candidateIndex!==null&&_renderedDestinationCandidates[Number(candidateIndex)]){
+        var candidate=_renderedDestinationCandidates[Number(candidateIndex)];
+        if(!DestinationResolver.validateCandidate(candidate,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox}).valid){showToast('Destino fuera de la ciudad o sin coordenadas válidas','warn');return}
+        selectDestinationCandidate(candidate);
+        renderMemoryRow();return;
+      }
       var lat=parseFloat(item.getAttribute('data-lat')),lon=parseFloat(item.getAttribute('data-lon')),name=item.getAttribute('data-name');
       selectDest(lat,lon,name);
       MC.v5AddRecent({lat:lat,lon:lon,name:name.split(',')[0]});
@@ -2700,18 +2686,28 @@ function bindSearchItems(){
     });
   });
 }
-function selectDest(lat,lon,name){
-  MC.setDest(lat,lon,name,'search');va_dest(name,lat,lon);
+function selectDestinationCandidate(candidate){
+  var validation=DestinationResolver.validateCandidate(candidate,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox});
+  if(!validation.valid){showToast('No se puede resolver ese destino','warn');return false}
+  selectDest(candidate.lat,candidate.lon,candidate.displayName||candidate.name,candidate.source);
+  MC.v5AddRecent(candidate);return true;
+}
+function selectDest(lat,lon,name,source){
+  var candidate={lat:Number(lat),lon:Number(lon)};
+  if(!DestinationResolver.validateCandidate(candidate,{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox}).valid){showToast('Destino inválido o fuera de Santa Fe','warn');return false}
+  source=source||'search';
+  MC.setDest(lat,lon,name,source);va_dest(name,lat,lon);
   document.getElementById('destInput').value=name.split(',')[0];
   document.getElementById('destInput').blur();
   closeAllDropdowns();
   updateMapMarkers();
-  v5event('destination_selected',{source:'search'});
+  v5event('destination_selected',{source:source});
   checkFavActive();
   updateFloatingChip(); // V7.4: update floating chip text with new dest
   VoyMapContext.setState('ROUTE_PREVIEW'); // V7.4: on_route_select → ROUTE_PREVIEW
   if(MC.getOrigin())runEstimations();
   else showToast('Te falta el origen — activá la ubicación','warn');
+  return true;
 }
 function checkFavActive(){
   var dest=MC.getDest();_favActive=false;
@@ -3596,6 +3592,7 @@ function restoreRouteFromUrl(){
         if(isFinite(oLat)&&isFinite(oLon)){MC.setOrigin(oLat,oLon,'Origen compartido','share');MC.setOriginManual(true);va_origin('share');updateOriginUI();updateMapMarkers()}
       }
     }
+    if(!DestinationResolver.validateCandidate({lat:dLat,lon:dLon},{bbox:CURRENT_CITY&&CURRENT_CITY.map&&CURRENT_CITY.map.bbox}).valid)return;
     MC.setDest(dLat,dLon,name,'share');va_dest(name,dLat,dLon);
     var di=document.getElementById('destInput');if(di){di.value=name.split(',')[0]}
     updateMapMarkers();checkFavActive();v5event('destination_selected',{source:'share_link'});
