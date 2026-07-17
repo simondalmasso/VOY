@@ -1,7 +1,57 @@
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
-  if (root) root.DestinationResolver = api;
+  if (root) {
+    root.DestinationResolver = api;
+    installWideSearchGuard(root, api);
+  }
+
+  function installWideSearchGuard(globalRoot, resolver) {
+    var documentRef = globalRoot.document;
+    if (!documentRef || typeof documentRef.addEventListener !== 'function' || globalRoot.__voyWideSearchGuardInstalled) return;
+    globalRoot.__voyWideSearchGuardInstalled = true;
+
+    documentRef.addEventListener('click', async function (event) {
+      var target = event && event.target;
+      var button = target && typeof target.closest === 'function' ? target.closest('#searchMoreResults') : null;
+      if (!button) return;
+
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      else if (typeof event.stopPropagation === 'function') event.stopPropagation();
+
+      var input = typeof documentRef.getElementById === 'function' ? documentRef.getElementById('destInput') : null;
+      var query = input && typeof input.value === 'string' ? input.value.trim() : '';
+      if (query.length < 2) return;
+
+      var controller = globalRoot.MC;
+      if (!controller || typeof controller.searchRemote !== 'function') {
+        if (typeof globalRoot.showToast === 'function') globalRoot.showToast('La búsqueda ampliada no está disponible', 'error');
+        return;
+      }
+
+      try {
+        var local = typeof controller.v5SearchLocalRanked === 'function'
+          ? await controller.v5SearchLocalRanked(query, typeof controller.getOrigin === 'function' ? controller.getOrigin() : null)
+          : [];
+        var remote = await controller.searchRemote(query, { wide: true });
+        var combined = typeof controller.dedupResults === 'function'
+          ? controller.dedupResults((local || []).concat(remote || []))
+          : (local || []).concat(remote || []);
+        var resolution = resolver.resolve(query, combined, { allowOutside: true });
+        var candidates = resolution.status === 'none' ? [] : (resolution.candidates || []);
+
+        if (typeof globalRoot.renderSearchDropdown === 'function') {
+          globalRoot.renderSearchDropdown(candidates, false, false, false);
+        }
+        if (typeof globalRoot.showToast === 'function') {
+          globalRoot.showToast(candidates.length ? 'Elegí el destino correcto' : 'No se encontraron más resultados', candidates.length ? 'info' : 'warn');
+        }
+      } catch (_) {
+        if (typeof globalRoot.showToast === 'function') globalRoot.showToast('Error de red al buscar', 'error');
+      }
+    }, true);
+  }
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
