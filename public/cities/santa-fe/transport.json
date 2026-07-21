@@ -1,0 +1,475 @@
+{
+  "schema_version": 1,
+  "city_id": "santafe",
+  "bus_stops": [
+    {
+      "linea": "1",
+      "nombre": "Terminal",
+      "lat": -31.6435,
+      "lon": -60.7011,
+      "calles": "Belgrano y Freyre"
+    },
+    {
+      "linea": "1",
+      "nombre": "Belgrano y Tucumán",
+      "lat": -31.641,
+      "lon": -60.7015,
+      "calles": "Belgrano y Tucumán"
+    },
+    {
+      "linea": "1",
+      "nombre": "Belgrano y Salta",
+      "lat": -31.6386,
+      "lon": -60.7019,
+      "calles": "Belgrano y Salta"
+    },
+    {
+      "linea": "1",
+      "nombre": "San Martín y 25 de Mayo",
+      "lat": -31.6354,
+      "lon": -60.7002,
+      "calles": "San Martín y 25 de Mayo"
+    },
+    {
+      "linea": "1",
+      "nombre": "San Martín y San Jerónimo",
+      "lat": -31.6328,
+      "lon": -60.7,
+      "calles": "San Martín y San Jerónimo"
+    },
+    {
+      "linea": "1",
+      "nombre": "Plaza Mayor",
+      "lat": -31.6313,
+      "lon": -60.7008,
+      "calles": "San Martín y Rivadavia"
+    },
+    {
+      "linea": "4",
+      "nombre": "Hospital Cullen",
+      "lat": -31.6198,
+      "lon": -60.6978,
+      "calles": "Gral. López y Marcial Candioti"
+    },
+    {
+      "linea": "4",
+      "nombre": "Gral. López y Javier de la Rosa",
+      "lat": -31.6225,
+      "lon": -60.6975,
+      "calles": "Gral. López y Javier de la Rosa"
+    },
+    {
+      "linea": "4",
+      "nombre": "Gral. López y Mendoza",
+      "lat": -31.626,
+      "lon": -60.6981,
+      "calles": "Gral. López y Mendoza"
+    },
+    {
+      "linea": "4",
+      "nombre": "Gral. López y 25 de Mayo",
+      "lat": -31.6295,
+      "lon": -60.6989,
+      "calles": "Gral. López y 25 de Mayo"
+    },
+    {
+      "linea": "4",
+      "nombre": "Bvd. Gálvez y Tucumán",
+      "lat": -31.6368,
+      "lon": -60.7012,
+      "calles": "Bvd. Gálvez y Tucumán"
+    },
+    {
+      "linea": "4",
+      "nombre": "Plaza España",
+      "lat": -31.6402,
+      "lon": -60.7134,
+      "calles": "Bvd. Gálvez y San Jerónimo"
+    },
+    {
+      "linea": "8",
+      "nombre": "Estación Belgrano",
+      "lat": -31.6289,
+      "lon": -60.6891,
+      "calles": "Gral. López y Javier de la Rosa"
+    },
+    {
+      "linea": "8",
+      "nombre": "Gral. López y Amenábar",
+      "lat": -31.6255,
+      "lon": -60.6935,
+      "calles": "Gral. López y Amenábar"
+    },
+    {
+      "linea": "8",
+      "nombre": "Av. Freyre y Salvia",
+      "lat": -31.621,
+      "lon": -60.705,
+      "calles": "Av. Freyre y Salvia"
+    },
+    {
+      "linea": "8",
+      "nombre": "Av. Freyre y Aristóbulo del Valle",
+      "lat": -31.6178,
+      "lon": -60.7065,
+      "calles": "Av. Freyre y Aristóbulo del Valle"
+    },
+    {
+      "linea": "8",
+      "nombre": "Av. Freyre y Gorriti",
+      "lat": -31.615,
+      "lon": -60.7082,
+      "calles": "Av. Freyre y Gorriti"
+    },
+    {
+      "linea": "8",
+      "nombre": "Av. Freyre y Salvador del Carril",
+      "lat": -31.6122,
+      "lon": -60.7102,
+      "calles": "Av. Freyre y Salvador del Carril"
+    },
+    {
+      "linea": "11",
+      "nombre": "Centro Cívico",
+      "lat": -31.6354,
+      "lon": -60.6999,
+      "calles": "25 de Mayo y San Martín"
+    },
+    {
+      "linea": "11",
+      "nombre": "25 de Mayo y Tucumán",
+      "lat": -31.6372,
+      "lon": -60.6993,
+      "calles": "25 de Mayo y Tucumán"
+    },
+    {
+      "linea": "11",
+      "nombre": "25 de Mayo y Balcarce",
+      "lat": -31.632,
+      "lon": -60.692,
+      "calles": "25 de Mayo y Balcarce"
+    },
+    {
+      "linea": "11",
+      "nombre": "Av. Costanera y España",
+      "lat": -31.6255,
+      "lon": -60.6852,
+      "calles": "Av. Costanera y España"
+    },
+    {
+      "linea": "11",
+      "nombre": "Costanera",
+      "lat": -31.6201,
+      "lon": -60.6734,
+      "calles": "Av. Costanera y Av. del Valle"
+    },
+    {
+      "linea": "16",
+      "nombre": "Plaza Pueyrredón",
+      "lat": -31.6445,
+      "lon": -60.7087,
+      "calles": "Cándido Pujato y Aristóbulo"
+    },
+    {
+      "linea": "16",
+      "nombre": "Cándido Pujato y Rivadavia",
+      "lat": -31.6428,
+      "lon": -60.7062,
+      "calles": "Cándido Pujato y Rivadavia"
+    },
+    {
+      "linea": "16",
+      "nombre": "Belgrano y Salta",
+      "lat": -31.6386,
+      "lon": -60.7019,
+      "calles": "Belgrano y Salta"
+    },
+    {
+      "linea": "16",
+      "nombre": "Belgrano y Tucumán",
+      "lat": -31.6362,
+      "lon": -60.6978,
+      "calles": "Belgrano y Tucumán"
+    },
+    {
+      "linea": "16",
+      "nombre": "Belgrano y San Martín",
+      "lat": -31.6338,
+      "lon": -60.6955,
+      "calles": "Belgrano y San Martín"
+    },
+    {
+      "linea": "16",
+      "nombre": "Belgrano",
+      "lat": -31.6312,
+      "lon": -60.6945,
+      "calles": "Belgrano y Rivadavia"
+    }
+  ],
+  "bike_stations": [
+    {
+      "nombre": "Municipalidad",
+      "lat": -31.6349,
+      "lon": -60.7007,
+      "calles": "25 de Mayo y San Martín"
+    },
+    {
+      "nombre": "Plaza 25 de Mayo",
+      "lat": -31.6311,
+      "lon": -60.699,
+      "calles": "San Martín y Rivadavia"
+    },
+    {
+      "nombre": "Teatro Municipal",
+      "lat": -31.6325,
+      "lon": -60.7012,
+      "calles": "San Martín y Córdoba"
+    },
+    {
+      "nombre": "Estación Belgrano",
+      "lat": -31.6289,
+      "lon": -60.6891,
+      "calles": "Gral. López y Javier de la Rosa"
+    },
+    {
+      "nombre": "Estación Mitre",
+      "lat": -31.6356,
+      "lon": -60.7089,
+      "calles": "Bvd. Pellegrini y Rivadavia"
+    },
+    {
+      "nombre": "Hospital Cullen",
+      "lat": -31.6198,
+      "lon": -60.6978,
+      "calles": "Gral. López y Marcial Candioti"
+    },
+    {
+      "nombre": "Av. Freyre",
+      "lat": -31.6178,
+      "lon": -60.7065,
+      "calles": "Av. Freyre y Aristóbulo del Valle"
+    },
+    {
+      "nombre": "Plaza Constituyentes",
+      "lat": -31.6401,
+      "lon": -60.7001,
+      "calles": "Rivadavia y Tucumán"
+    },
+    {
+      "nombre": "Legislatura",
+      "lat": -31.6298,
+      "lon": -60.6955,
+      "calles": "Amenábar y 25 de Mayo"
+    },
+    {
+      "nombre": "Plaza del Soldado",
+      "lat": -31.6337,
+      "lon": -60.6978,
+      "calles": "San Jerónimo y Tucumán"
+    },
+    {
+      "nombre": "Hospital Iturraspe",
+      "lat": -31.6445,
+      "lon": -60.6934,
+      "calles": "Bvd. Gálvez y Francia"
+    },
+    {
+      "nombre": "Terminal de Ómnibus",
+      "lat": -31.6435,
+      "lon": -60.7011,
+      "calles": "Belgrano y Freyre"
+    }
+  ],
+  "landmarks": [
+    {
+      "canonicalId": "santafe:landmark:puente-colgante",
+      "nombre": "Puente Colgante",
+      "aliases": [
+        "Puente Colgante de Santa Fe",
+        "Puente Colgante Ingeniero Marcial Candioti"
+      ],
+      "verified": true,
+      "source": "curated",
+      "precision": "poi",
+      "lat": -31.639764,
+      "lon": -60.682736,
+      "address": "Bv. Gálvez 1150"
+    },
+    {
+      "canonicalId": "santafe:landmark:catedral-metropolitana",
+      "nombre": "Catedral Metropolitana",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.6315,
+      "lon": -60.701,
+      "address": "San Martín y San Jerónimo"
+    },
+    {
+      "canonicalId": "santafe:landmark:universidad-nacional-del-litoral",
+      "nombre": "Universidad Nacional del Litoral",
+      "aliases": [
+        "UNL"
+      ],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.634,
+      "lon": -60.699,
+      "address": "9 de Julio y San Jerónimo"
+    },
+    {
+      "canonicalId": "santafe:landmark:parque-del-encuentro",
+      "nombre": "Parque del Encuentro",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.627,
+      "lon": -60.68,
+      "address": "Av. Costanera Oeste"
+    },
+    {
+      "canonicalId": "santafe:landmark:museo-historico",
+      "nombre": "Museo Histórico",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.633,
+      "lon": -60.7015,
+      "address": "San Martín y 25 de Mayo"
+    },
+    {
+      "canonicalId": "santafe:landmark:puente-orono",
+      "nombre": "Puente Oroño",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.619,
+      "lon": -60.682,
+      "address": "Av. Costanera y Bv. Pellegrini"
+    },
+    {
+      "canonicalId": "santafe:landmark:mercado-norte",
+      "nombre": "Mercado Norte",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.636,
+      "lon": -60.698,
+      "address": "San Martín y Tucumán"
+    },
+    {
+      "canonicalId": "santafe:landmark:iglesia-san-francisco",
+      "nombre": "Iglesia San Francisco",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.632,
+      "lon": -60.703,
+      "address": "San Martín y Ameghino"
+    },
+    {
+      "canonicalId": "santafe:landmark:shopping-la-estacion",
+      "nombre": "Shopping La Estación",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.629,
+      "lon": -60.6895,
+      "address": "Gral. López y Javier de la Rosa"
+    },
+    {
+      "canonicalId": "santafe:landmark:barrio-candioti",
+      "nombre": "Barrio Candioti",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.608,
+      "lon": -60.69,
+      "address": "Norte de la ciudad"
+    },
+    {
+      "canonicalId": "santafe:landmark:barrio-guadalupe",
+      "nombre": "Barrio Guadalupe",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.638,
+      "lon": -60.68,
+      "address": "Noreste de la ciudad"
+    },
+    {
+      "canonicalId": "santafe:landmark:barrio-centenario",
+      "nombre": "Barrio Centenario",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.614,
+      "lon": -60.71,
+      "address": "Oeste de la ciudad"
+    },
+    {
+      "canonicalId": "santafe:landmark:terminal-omnibus",
+      "nombre": "Terminal de Ómnibus",
+      "aliases": [
+        "Terminal de Omnibus"
+      ],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.6435,
+      "lon": -60.7011,
+      "address": "Belgrano y Freyre"
+    },
+    {
+      "canonicalId": "santafe:landmark:estacion-belgrano",
+      "nombre": "Estación Belgrano",
+      "aliases": [
+        "Estacion Belgrano"
+      ],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.6289,
+      "lon": -60.6891,
+      "address": "Gral. López y Javier de la Rosa"
+    },
+    {
+      "canonicalId": "santafe:landmark:hospital-cullen",
+      "nombre": "Hospital Cullen",
+      "aliases": [],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.6198,
+      "lon": -60.6978,
+      "address": "Gral. López y Marcial Candioti"
+    },
+    {
+      "canonicalId": "santafe:landmark:plaza-espana",
+      "nombre": "Plaza España",
+      "aliases": [
+        "Plaza Espana"
+      ],
+      "verified": false,
+      "source": "curated",
+      "precision": "approximate",
+      "lat": -31.6402,
+      "lon": -60.7134,
+      "address": "Bv. Gálvez y San Jerónimo"
+    }
+  ],
+  "source": "VOY curated Santa Fe transport dataset",
+  "verified_at": null,
+  "status": "partial"
+}
