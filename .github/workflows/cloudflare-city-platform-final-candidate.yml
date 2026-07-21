@@ -1,0 +1,360 @@
+name: VOY City Platform Exact Final Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - .github/workflows/cloudflare-city-platform-final-candidate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-city-platform-exact-final-candidate
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      EXPECTED_PRODUCTION_VERSION: V7.8.0
+      EXPECTED_PRODUCTION_HASH: 4a8b91e
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EVIDENCE_DIR: test-results/exact-final-candidate
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 0
+
+      - name: Verify exact source identity
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_REF_NAME" = "feat/voy-city-platform-v1"
+          mkdir -p "$EVIDENCE_DIR/probes"
+          git rev-parse HEAD | tee "$EVIDENCE_DIR/exact-source-sha.txt"
+          git diff --check
+          echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+
+      - name: Install exact toolchain and dependencies
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = "1.3.14"
+          test "$(wrangler --version | awk '{print $1}')" = "4.112.0"
+          bun install --frozen-lockfile
+
+      - name: Lint exact final head
+        run: |
+          set -o pipefail
+          bun run lint 2>&1 | tee "$EVIDENCE_DIR/eslint.log"
+
+      - name: Test exact final head
+        run: |
+          set -o pipefail
+          bun run test 2>&1 | tee "$EVIDENCE_DIR/node-tests.log"
+
+      - name: Wrangler dry-run exact final head
+        run: |
+          set -o pipefail
+          wrangler deploy --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
+
+      - name: Inject exact build hash
+        run: |
+          set -euo pipefail
+          BUILD_HASH="$SHORT_SHA" node scripts/inject-build-hash.mjs 2>&1 | tee "$EVIDENCE_DIR/inject-build-hash.log"
+          grep -F "const BUILD_HASH = \"$SHORT_SHA\";" worker.js
+          grep -F "window.VOY_BUILD_HASH='$SHORT_SHA'" public/VOY-Lite.html
+
+      - name: Install Chromium 1.61.1
+        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+
+      - name: Snapshot stable production and current zero-traffic candidate
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          wrangler deployments list --json > "$EVIDENCE_DIR/wrangler-deployments-before.json"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments-before.json"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/versions?per_page=100" > /tmp/versions-before.json
+          curl --fail --silent --show-error --max-time 20 \
+            "$WORKER_URL/api/health?exact_final_baseline=$(date +%s%N)" \
+            > "$EVIDENCE_DIR/production-health-before.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/api-deployments-before.json', 'utf8'));
+          if (!payload.success) throw new Error('deployments_query_failed');
+          const deployments = payload.result?.deployments || payload.result || [];
+          const active = deployments[0];
+          if (!active || !Array.isArray(active.versions)) throw new Error('active_deployment_missing');
+          const stable = active.versions.filter(version => Number(version.percentage) === 100);
+          const zero = active.versions.filter(version => Number(version.percentage) === 0);
+          if (stable.length !== 1) throw new Error(`stable_version_count:${stable.length}`);
+          const health = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/production-health-before.json', 'utf8'));
+          if (health.ok !== true || health.version !== process.env.EXPECTED_PRODUCTION_VERSION || health.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) throw new Error('production_baseline_mismatch');
+          fs.appendFileSync(process.env.GITHUB_ENV, `PREVIOUS_DEPLOYMENT_ID=${active.id}\nSTABLE_VERSION_ID=${stable[0].version_id}\n`);
+          fs.writeFileSync('/tmp/stable-version-id.txt', stable[0].version_id);
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-before.json', JSON.stringify({
+            deployment_id: active.id,
+            stable_version_id: stable[0].version_id,
+            stable_traffic: 100,
+            previous_zero_traffic_versions: zero.map(version => version.version_id),
+            production_health: { version: health.version, build_hash: health.build_hash },
+            checked_at: new Date().toISOString()
+          }, null, 2));
+          NODE
+          STABLE_VERSION_ID_CURRENT="$(cat /tmp/stable-version-id.txt)"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/versions/$STABLE_VERSION_ID_CURRENT" > /tmp/stable-version-detail.json
+
+      - name: Upload exactly one candidate version from final head
+        run: |
+          set -euo pipefail
+          TAG="city-platform-v1-exact-final-${GITHUB_SHA:0:12}"
+          echo "CANDIDATE_TAG=$TAG" >> "$GITHUB_ENV"
+          wrangler versions upload --minify \
+            --tag "$TAG" \
+            --message "PR #21 exact final candidate $GITHUB_SHA" \
+            2>&1 | tee "$EVIDENCE_DIR/version-upload.log"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/versions?per_page=100" > /tmp/versions-after.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          function list(path) {
+            const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (!payload.success) throw new Error('versions_query_failed');
+            if (Array.isArray(payload.result)) return payload.result;
+            if (Array.isArray(payload.result?.items)) return payload.result.items;
+            if (Array.isArray(payload.result?.versions)) return payload.result.versions;
+            throw new Error('versions_shape_unknown');
+          }
+          const before = new Set(list('/tmp/versions-before.json').map(version => version.id).filter(Boolean));
+          const added = list('/tmp/versions-after.json').filter(version => version.id && !before.has(version.id));
+          if (added.length !== 1) throw new Error(`candidate_version_not_unique:${added.length}`);
+          const candidate = added[0];
+          fs.appendFileSync(process.env.GITHUB_ENV, `CANDIDATE_VERSION_ID=${candidate.id}\n`);
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/candidate-version.json', JSON.stringify({
+            version_id: candidate.id,
+            version_number: candidate.number || null,
+            source_sha: process.env.GITHUB_SHA,
+            source_short_sha: process.env.SHORT_SHA,
+            tag: process.env.CANDIDATE_TAG,
+            created_on: candidate.metadata?.created_on || null
+          }, null, 2));
+          NODE
+
+      - name: Verify candidate binding parity
+        run: |
+          set -euo pipefail
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > /tmp/candidate-version-detail.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          function contract(path) {
+            const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (!payload.success) throw new Error('version_detail_failed');
+            const bindings = payload.result?.resources?.bindings;
+            if (!Array.isArray(bindings)) throw new Error('version_bindings_missing');
+            return bindings.map(binding => `${binding.name}:${binding.type}`).sort();
+          }
+          const stable = contract('/tmp/stable-version-detail.json');
+          const candidate = contract('/tmp/candidate-version-detail.json');
+          if (stable.length !== candidate.length || stable.some((value, index) => value !== candidate[index])) throw new Error('binding_contract_mismatch');
+          for (const required of ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']) {
+            if (!candidate.some(value => value.startsWith(`${required}:`))) throw new Error(`required_binding_missing:${required}`);
+          }
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/binding-contract.json', JSON.stringify({
+            contracts_equal: true,
+            stable_binding_count: stable.length,
+            candidate_binding_count: candidate.length,
+            bindings: candidate,
+            required_bindings_present: ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']
+          }, null, 2));
+          NODE
+
+      - name: Replace only the zero-traffic candidate
+        run: |
+          set -euo pipefail
+          wrangler versions deploy \
+            "$STABLE_VERSION_ID@100%" \
+            "$CANDIDATE_VERSION_ID@0%" \
+            --message "PR #21 exact final candidate 0% $GITHUB_SHA" \
+            --yes 2>&1 | tee "$EVIDENCE_DIR/candidate-deployment.log"
+
+      - name: Wait for deterministic candidate convergence
+        run: node scripts/candidate-runtime-gate.mjs converge
+
+      - name: Start exact candidate version log tail
+        run: |
+          set -euo pipefail
+          timeout 360s wrangler tail "$WORKER_NAME" \
+            --format json \
+            --version-id "$CANDIDATE_VERSION_ID" \
+            > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
+          echo "TAIL_PID=$!" >> "$GITHUB_ENV"
+          sleep 5
+          kill -0 "$!"
+
+      - name: Probe candidate and normal routing without redirects
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const { spawnSync } = require('node:child_process');
+          const base = process.env.WORKER_URL;
+          const output = process.env.EVIDENCE_DIR + '/probes';
+          const override = `${process.env.WORKER_NAME}="${process.env.CANDIDATE_VERSION_ID}"`;
+          const paths = ['/api/health', '/', '/VOY-Lite.html', '/core/cityPlatform.js?v=1', '/cities/_default/profile.json', '/cities/_default/providers.json', '/cities/_default/transport.json', '/cities/_default/fares.json', '/cities/_default/feature_flags.json', '/cities/santa-fe/profile.json'];
+          const records = [];
+          const slug = value => value.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_') || 'root';
+          const parseHeaders = raw => {
+            const blocks = raw.trim().split(/\r?\n\r?\n/).filter(Boolean);
+            const lines = (blocks.at(-1) || '').split(/\r?\n/);
+            const statusLine = lines.shift() || '';
+            const headers = {};
+            for (const line of lines) {
+              const index = line.indexOf(':');
+              if (index > 0) headers[line.slice(0, index).trim().toLowerCase()] = line.slice(index + 1).trim();
+            }
+            return { statusLine, headers };
+          };
+          for (const mode of ['normal', 'override']) {
+            for (const pathname of paths) {
+              const stamp = `${Date.now()}-${mode}`;
+              const separator = pathname.includes('?') ? '&' : '?';
+              const requested = `${base}${pathname}${separator}exact_final_probe=${stamp}`;
+              const name = `${mode}-${slug(pathname)}`;
+              const headersPath = path.join(output, `${name}.headers`);
+              const bodyPath = path.join(output, `${name}.body`);
+              const tracePath = path.join(output, `${name}.trace`);
+              const sentHeaders = { 'Cache-Control': 'no-cache, no-store, max-age=0', Pragma: 'no-cache', 'X-VOY-Candidate-Probe': stamp };
+              if (mode === 'override') sentHeaders['Cloudflare-Workers-Version-Overrides'] = override;
+              fs.writeFileSync(path.join(output, `${name}.request.json`), JSON.stringify({ requested_url: requested, sent_headers: sentHeaders }, null, 2));
+              const args = ['--http2', '--silent', '--show-error', '--max-time', '30', '--max-redirs', '0', '--path-as-is', '--dump-header', headersPath, '--output', bodyPath, '--trace-ascii', tracePath, '--write-out', '%{json}'];
+              for (const [key, value] of Object.entries(sentHeaders)) args.push('-H', `${key}: ${value}`);
+              args.push(requested);
+              const result = spawnSync('curl', args, { encoding: 'utf8' });
+              const metadata = result.stdout ? JSON.parse(result.stdout) : {};
+              const body = fs.existsSync(bodyPath) ? fs.readFileSync(bodyPath) : Buffer.alloc(0);
+              const received = fs.existsSync(headersPath) ? parseHeaders(fs.readFileSync(headersPath, 'utf8')) : { statusLine: '', headers: {} };
+              let health = null;
+              if (pathname === '/api/health') {
+                try {
+                  const parsed = JSON.parse(body.toString('utf8'));
+                  health = { ok: parsed.ok, version: parsed.version, build_hash: parsed.build_hash };
+                } catch {}
+              }
+              records.push({
+                mode,
+                path: pathname,
+                requested_url: requested,
+                effective_url: metadata.url_effective || null,
+                status: metadata.http_code || 0,
+                redirect_url: metadata.redirect_url || null,
+                curl_exit: result.status,
+                sent_headers: sentHeaders,
+                received_headers: received.headers,
+                status_line: received.statusLine,
+                body_sha256: crypto.createHash('sha256').update(body).digest('hex'),
+                body_bytes: body.length,
+                health,
+                timestamp: new Date().toISOString()
+              });
+            }
+          }
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/probe-records.json', JSON.stringify(records, null, 2));
+          const candidateHealth = records.find(record => record.mode === 'override' && record.path === '/api/health');
+          const stableHealth = records.find(record => record.mode === 'normal' && record.path === '/api/health');
+          if (candidateHealth?.health?.build_hash !== process.env.SHORT_SHA) throw new Error('candidate_health_probe_mismatch');
+          if (stableHealth?.health?.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) throw new Error('stable_health_probe_mismatch');
+          const requiredCandidate200 = ['/', '/core/cityPlatform.js?v=1', '/cities/_default/profile.json', '/cities/_default/providers.json', '/cities/_default/transport.json', '/cities/_default/fares.json', '/cities/_default/feature_flags.json', '/cities/santa-fe/profile.json'];
+          if (records.filter(record => record.mode === 'override' && requiredCandidate200.includes(record.path)).some(record => record.status !== 200)) throw new Error('candidate_asset_probe_failed');
+          const entrypoint = records.find(record => record.mode === 'override' && record.path === '/VOY-Lite.html');
+          if (![200, 301, 308].includes(entrypoint?.status)) throw new Error('candidate_entrypoint_probe_failed');
+          NODE
+
+      - name: Browser smoke exact candidate desktop and mobile
+        env:
+          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
+          VOY_WORKER_NAME: voy-app
+          VOY_EVIDENCE_DIR: test-results/exact-final-candidate
+          VOY_OUTPUT_DIR: test-results/exact-final-candidate-playwright
+          VOY_REPORT_DIR: playwright-report-exact-final-candidate
+        run: |
+          set -o pipefail
+          export VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID"
+          export VOY_EXPECTED_BUILD_HASH="$SHORT_SHA"
+          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
+            PLAYWRIGHT_BIN=$(command -v playwright)
+            NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
+            export NODE_PATH
+            playwright test --config=candidate-tests/playwright.config.js
+          ' 2>&1 | tee "$EVIDENCE_DIR/playwright.log"
+
+      - name: Stop tail and verify final state
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
+            kill "$TAIL_PID" 2>/dev/null || true
+            wait "$TAIL_PID" 2>/dev/null || true
+          fi
+          if [ -n "${CANDIDATE_VERSION_ID:-}" ] && [ -n "${STABLE_VERSION_ID:-}" ]; then
+            node scripts/candidate-runtime-gate.mjs final
+          fi
+
+      - name: Build evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          find "$EVIDENCE_DIR" -type f -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          if [ -d playwright-report-exact-final-candidate ]; then
+            find playwright-report-exact-final-candidate -type f -print0 | sort -z | xargs -0 sha256sum >> "$EVIDENCE_DIR/manifest.sha256"
+          fi
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload exact final candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-city-platform-exact-final-candidate-${{ github.run_id }}
+          path: |
+            test-results/exact-final-candidate
+            test-results/exact-final-candidate-playwright
+            playwright-report-exact-final-candidate
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Candidate summary
+        if: always()
+        run: |
+          {
+            echo '## VOY City Platform exact final candidate'
+            echo
+            echo "- Exact source SHA: $GITHUB_SHA"
+            echo "- Stable version: ${STABLE_VERSION_ID:-unresolved} at 100%"
+            echo "- Candidate version: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
+            echo "- Deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Production promoted: no'
+            echo '- Rollback executed: no'
+          } >> "$GITHUB_STEP_SUMMARY"
