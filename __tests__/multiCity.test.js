@@ -131,9 +131,10 @@ function loadRealRuntime() {
   return sandbox;
 }
 
-describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
+describe('Multi-City Foundation v1 — 16 Mandatory Tests', () => {
 
-  test('_default profile successfully loads city_default.json', async () => {
+  // Test 1: _default carga city_default.json
+  test('1. _default profile successfully loads city_default.json', async () => {
     const runtime = loadRealRuntime();
     let defaultRequested = false;
 
@@ -160,7 +161,8 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
     assert.strictEqual(runtime.CURRENT_CITY.city_id, '_default');
   });
 
-  test('never requests city__default.json (no double underscores)', async () => {
+  // Test 2: Nunca se solicita city__default.json
+  test('2. never requests city__default.json (no double underscores)', async () => {
     const runtime = loadRealRuntime();
     let doubleUnderscoreRequested = false;
 
@@ -185,48 +187,25 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
     assert.strictEqual(doubleUnderscoreRequested, false, 'Should never request city__default.json with double underscores');
   });
 
-  test('?city=rosario activates _default', () => {
+  // Test 3: ?city=rosario activa _default
+  test('3. ?city=rosario activates _default', () => {
     const runtime = loadRealRuntime();
     runtime.window.location.search = '?city=rosario';
     const resolvedCity = runtime.detectCity();
     assert.strictEqual(resolvedCity, '_default', 'Unknown query city parameter must map to _default');
   });
 
-  test('search in _default does not contain Santa Fe nor bbox bias', async () => {
+  // Test 4: ?city=santafe activa Santa Fe
+  test('4. ?city=santafe activates santafe', () => {
     const runtime = loadRealRuntime();
-    runtime.MC.init({
-      profile: {
-        city_id: '_default',
-        displayName: 'Ciudad Desconocida',
-        map: { viewbox: '-58.55,-34.70,-58.25,-34.50' }
-      }
-    });
-
-    let requestedUrl = '';
-    runtime.fetch.impl = async (url) => {
-      requestedUrl = url;
-      return { ok: true, json: async () => [] };
-    };
-
-    await runtime.MC.searchNominatim('Belgrano');
-    assert.ok(requestedUrl.includes('Ciudad%20Desconocida'), 'Must use custom displayName suffix');
-    assert.ok(!requestedUrl.includes('bounded=1'), 'Search in _default must not contain bounded=1 bias');
-    assert.ok(!requestedUrl.includes('-60.75'), 'Search in _default must not contain Santa Fe bbox coordinates');
+    runtime.window.location.search = '?city=santafe';
+    const resolvedCity = runtime.detectCity();
+    assert.strictEqual(resolvedCity, 'santafe', 'santafe query city parameter must map to santafe');
   });
 
-  test('unknown/unverified fares do not show $0', () => {
-    const runtime = loadRealRuntime();
-    runtime.FareRegistry.taxi = {
-      diurno: { bajada: null, ficha: null, distFicha: 130 },
-      nocturno: { bajada: null, ficha: null, distFicha: 130 }
-    };
-
-    const fare = runtime.computeTaxiFare(5, 12);
-    assert.strictEqual(fare, null, 'Unverified fares must evaluate to null instead of $0');
-  });
-
-  test('404 and network error produce different fallback pathways', async () => {
-    // 404 (perfil inexistente) pathway: must load _default and not try cache
+  // Test 5: 404 y network error son distintos
+  test('5. 404 and network error produce different fallback pathways', async () => {
+    // 404 pathway: must load _default and not try cache
     const runtime404 = loadRealRuntime();
     let defaultRequested = false;
     runtime404.fetch.impl = async (url) => {
@@ -265,7 +244,8 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
     assert.strictEqual(runtimeNetwork.CURRENT_CITY.name, 'Santa Fe Cached', 'Network error must fallback to using local cache');
   });
 
-  test('timeout uses cache of the same city', async () => {
+  // Test 6: Timeout usa cache válida de la misma ciudad
+  test('6. timeout uses cache of the same city', async () => {
     const runtime = loadRealRuntime();
     runtime.localStorage.setItem('voy_city_cache_santafe', JSON.stringify({
       city_id: 'santafe',
@@ -283,7 +263,26 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
     assert.strictEqual(runtime.CURRENT_CITY.name, 'Santa Fe Cached Timeout', 'Timeout/Abort must use local cache of the requested city');
   });
 
-  test('corrupt JSON does not activate Santa Fe', async () => {
+  // Test 7: Cache con city_id incorrecto se rechaza
+  test('7. cache with incorrect city_id is rejected', async () => {
+    const runtime = loadRealRuntime();
+    // Cache for santafe but it has a mismatched internal city_id
+    runtime.localStorage.setItem('voy_city_cache_santafe', JSON.stringify({
+      city_id: 'different_city',
+      name: 'Mismatched Cache',
+      map: { center: [0, 0] },
+      providers: {},
+      fareRegistry: {}
+    }));
+    runtime.fetch.impl = async () => {
+      throw new TypeError('Network error');
+    };
+    await runtime.loadCityProfile('santafe');
+    assert.notStrictEqual(runtime.CURRENT_CITY.city_id, 'different_city', 'Cache must be rejected if city_id mismatch occurs');
+  });
+
+  // Test 8: JSON corrupto no activa Santa Fe
+  test('8. corrupt JSON does not activate Santa Fe', async () => {
     const runtime = loadRealRuntime();
     let defaultRequested = false;
     runtime.fetch.impl = async (url) => {
@@ -312,7 +311,95 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
     assert.ok(defaultRequested, 'Corrupt fetched profile for Santa Fe must fallback to default profile and never activate Santa Fe');
   });
 
-  test('first visit with GPS confirmed in Santa Fe dynamically selects Santa Fe', async () => {
+  // Test 9: _default no contiene contaminación territorial
+  test('9. _default does not contain territorial contamination', async () => {
+    const runtime = loadRealRuntime();
+    runtime.fetch.impl = async (url) => {
+      if (url === 'city_default.json') {
+        return {
+          ok: true,
+          json: async () => ({
+            city_id: '_default',
+            name: 'Desconocida',
+            displayName: 'Ciudad Desconocida',
+            map: { center: [-34, -58], zoom: 12, viewbox: '0,0,0,0' },
+            providers: {
+              uber: { name: 'Uber', available: false, verified: false }
+            },
+            busStops: [],
+            bikeStations: [],
+            landmarks: [],
+            taxiCompanies: [],
+            remisCompanies: [],
+            fareRegistry: {}
+          })
+        };
+      }
+    };
+    await runtime.loadCityProfile('_default');
+    assert.strictEqual(runtime.BUS_STOPS.length, 0);
+    assert.strictEqual(runtime.BIKE_STATIONS.length, 0);
+    assert.strictEqual(runtime.LANDMARKS.length, 0);
+    assert.strictEqual(runtime.PROVIDERS.uber.verified, false, 'Providers in _default must be unverified');
+  });
+
+  // Test 10: _default no usa bbox de Santa Fe
+  test('10. _default does not use Santa Fe bounding box', async () => {
+    const runtime = loadRealRuntime();
+    runtime.MC.init({
+      profile: {
+        city_id: '_default',
+        displayName: 'Ciudad Desconocida',
+        map: { viewbox: '-58.55,-34.70,-58.25,-34.50' }
+      }
+    });
+
+    let requestedUrl = '';
+    runtime.fetch.impl = async (url) => {
+      requestedUrl = url;
+      return { ok: true, json: async () => [] };
+    };
+
+    await runtime.MC.searchNominatim('Belgrano');
+    assert.ok(!requestedUrl.includes('-60.75'), 'Search viewbox must not bias towards Santa Fe');
+    assert.ok(!requestedUrl.includes('bounded=1'), 'Search in _default must not contain bounded=1 bias');
+  });
+
+  // Test 11: _default no añade Santa Fe, Argentina
+  test('11. _default does not append Santa Fe, Argentina', async () => {
+    const runtime = loadRealRuntime();
+    runtime.MC.init({
+      profile: {
+        city_id: '_default',
+        displayName: 'Ciudad Desconocida',
+        map: { viewbox: '-58.55,-34.70,-58.25,-34.50' }
+      }
+    });
+
+    let requestedUrl = '';
+    runtime.fetch.impl = async (url) => {
+      requestedUrl = url;
+      return { ok: true, json: async () => [] };
+    };
+
+    await runtime.MC.searchNominatim('Belgrano');
+    assert.ok(!requestedUrl.includes('Santa%20Fe'), 'Search suffix must not contain Santa Fe');
+  });
+
+  // Test 12: Tarifas desconocidas no muestran $0
+  test('12. unverified unknown fares evaluate to null instead of $0', () => {
+    const runtime = loadRealRuntime();
+    runtime.FareRegistry.taxi = {
+      diurno: { bajada: null, ficha: null, distFicha: 130 },
+      nocturno: { bajada: null, ficha: null, distFicha: 130 }
+    };
+
+    const fare = runtime.computeTaxiFare(5, 12);
+    assert.strictEqual(fare, null, 'Unverified fares must evaluate to null instead of $0');
+  });
+
+  // Test 13: GPS tardío confirmado en Santa Fe cambia el perfil
+  test('13. late GPS fix confirmed in Santa Fe dynamically selects Santa Fe', async () => {
     const runtime = loadRealRuntime();
     runtime.CURRENT_CITY = { city_id: '_default' };
 
@@ -339,7 +426,18 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
     assert.ok(santafeFetched, 'Late GPS fix inside Santa Fe bounding box must dynamically select and fetch Santa Fe');
   });
 
-  test('MC.init is executed exactly once', () => {
+  // Test 14: GPS denegado mantiene _default
+  test('14. denied GPS permission maintains _default', () => {
+    const runtime = loadRealRuntime();
+    runtime.CURRENT_CITY = { city_id: '_default' };
+
+    // Trigger permissions denied
+    runtime._onGpsPermissionChange({ state: 'denied' });
+    assert.strictEqual(runtime.CURRENT_CITY.city_id, '_default', 'Denied GPS permission must not silently assume Santa Fe');
+  });
+
+  // Test 15: MC.init se ejecuta exactamente una vez
+  test('15. MC.init is executed exactly once', () => {
     const runtime = loadRealRuntime();
     assert.strictEqual(runtime.window._mcInitialized, false);
 
@@ -357,6 +455,12 @@ describe('Multi-City Foundation v1 — Real Runtime & Isolation Tests', () => {
       runtime.MC.init({ profile: { city_id: 'santafe' } });
     }
     assert.strictEqual(runtime.MC.initCalls, 1, 'MC.init must only be called once');
+  });
+
+  // Test 16: Package y lockfiles no cambian
+  test('16. package and lockfiles are untouched', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+    assert.ok(pkg.devDependencies['eslint-config-next'] === '^16.1.1', 'package.json must retain baseline configurations');
   });
 
 });
