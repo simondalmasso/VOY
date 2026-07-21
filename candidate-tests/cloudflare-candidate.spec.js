@@ -127,10 +127,10 @@ test.describe('Cloudflare exact-version candidate', () => {
     await saveEvidence(page, testInfo, evidence, 'national', { health, national, candidateVersionId, overrideValue });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' && window.VOY_BUILD_HASH === window.__expectedCandidateHash, { timeout: 10_000 }).catch(async () => {
-      const state = await page.evaluate(() => ({ city: window.CURRENT_CITY?.city_id, build: window.VOY_BUILD_HASH }));
-      expect(state).toMatchObject({ city: '_default', build: expectedHash });
-    });
+    await page.waitForFunction(expected => (
+      window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' &&
+      window.VOY_BUILD_HASH === expected
+    ), expectedHash, { timeout: 10_000 });
     expect(await page.evaluate(() => window.VOY_BUILD_HASH)).toBe(expectedHash);
 
     expect(await page.evaluate(() => window.loadCityProfile('santafe'))).toBe(true);
