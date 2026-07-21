@@ -1,0 +1,62 @@
+name: Fix Final Candidate Snapshot Scope
+
+on:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - .github/workflows/fix-final-candidate-snapshot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 0
+
+      - name: Patch candidate workflow deterministically
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/cloudflare-city-platform-candidate.yml')
+          text = path.read_text()
+
+          old_trigger = """on:\n  push:\n    branches:\n      - feat/voy-city-platform-v1\n    paths:\n      - .github/workflows/cloudflare-city-platform-candidate.yml\n"""
+          new_trigger = """on:\n  workflow_dispatch:\n  push:\n    branches:\n      - feat/voy-city-platform-v1\n    paths:\n      - .github/workflows/cloudflare-city-platform-candidate.yml\n"""
+          if text.count(old_trigger) != 1:
+              raise SystemExit(f'trigger replacement count={text.count(old_trigger)}')
+          text = text.replace(old_trigger, new_trigger)
+
+          old_node = """          fs.appendFileSync(process.env.GITHUB_ENV, `PREVIOUS_DEPLOYMENT_ID=${active.id}\\nSTABLE_VERSION_ID=${stable[0].version_id}\\n`);\n          fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-before.json', JSON.stringify({\n"""
+          new_node = """          fs.appendFileSync(process.env.GITHUB_ENV, `PREVIOUS_DEPLOYMENT_ID=${active.id}\\nSTABLE_VERSION_ID=${stable[0].version_id}\\n`);\n          fs.writeFileSync('/tmp/stable-version-id.txt', stable[0].version_id);\n          fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-before.json', JSON.stringify({\n"""
+          if text.count(old_node) != 1:
+              raise SystemExit(f'node replacement count={text.count(old_node)}')
+          text = text.replace(old_node, new_node)
+
+          old_curl = """          curl --fail --silent --show-error --retry 3 \\\n            -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\" \\\n            \"$API_ROOT/versions/$STABLE_VERSION_ID\" > /tmp/stable-version-detail.json\n"""
+          new_curl = """          STABLE_VERSION_ID_CURRENT=\"$(cat /tmp/stable-version-id.txt)\"\n          test -n \"$STABLE_VERSION_ID_CURRENT\"\n          curl --fail --silent --show-error --retry 3 \\\n            -H \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\" \\\n            \"$API_ROOT/versions/$STABLE_VERSION_ID_CURRENT\" > /tmp/stable-version-detail.json\n"""
+          if text.count(old_curl) != 1:
+              raise SystemExit(f'curl replacement count={text.count(old_curl)}')
+          text = text.replace(old_curl, new_curl)
+
+          path.write_text(text)
+          PY
+          git diff --check
+          grep -F 'workflow_dispatch:' .github/workflows/cloudflare-city-platform-candidate.yml
+          grep -F "fs.writeFileSync('/tmp/stable-version-id.txt'" .github/workflows/cloudflare-city-platform-candidate.yml
+          grep -F 'STABLE_VERSION_ID_CURRENT="$(cat /tmp/stable-version-id.txt)"' .github/workflows/cloudflare-city-platform-candidate.yml
+
+      - name: Commit candidate workflow correction
+        run: |
+          set -euo pipefail
+          git config user.name "voy-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/cloudflare-city-platform-candidate.yml
+          git commit -m "ci(candidate): fix snapshot variable scope"
+          git push origin HEAD:feat/voy-city-platform-v1
