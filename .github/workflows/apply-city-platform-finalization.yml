@@ -6,6 +6,12 @@ on:
       - feat/voy-city-platform-v1
     paths:
       - scripts/apply-city-platform-v1.mjs
+      - public/core/cityPlatform.js
+      - __tests__/cityPlatform.test.js
+      - __tests__/cityPlatformData.test.js
+      - __tests__/cityPlatformHtml.test.js
+      - __tests__/multiCity.test.js
+      - .github/workflows/apply-city-platform-finalization.yml
 
 permissions:
   contents: write
@@ -63,12 +69,14 @@ jobs:
           bunx wrangler deploy --dry-run 2>&1 | tee test-results/evidence/wrangler-dry-run.log
 
       - name: Build evidence manifest
+        if: success()
         run: |
           find public/cities -type f -print0 | sort -z | xargs -0 sha256sum > test-results/evidence/city-files.sha256
           sha256sum public/VOY-Lite.html public/core/cityPlatform.js >> test-results/evidence/city-files.sha256
           git rev-parse HEAD > test-results/evidence/source-head.txt
 
       - name: Upload validation evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: city-platform-finalization-${{ github.run_id }}
@@ -76,6 +84,7 @@ jobs:
           if-no-files-found: error
 
       - name: Commit generated source changes
+        if: success()
         run: |
           git config user.name "voy-release-bot"
           git config user.email "actions@users.noreply.github.com"
