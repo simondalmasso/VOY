@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-21
 
-This file is the canonical operational worklog for VOY. Production, Cloudflare runtime state and remote Git state take precedence when they are verified more recently.
+This file is the canonical operational worklog for VOY. Verified production, Cloudflare runtime state and remote Git state take precedence over older entries.
 
 ## Last completed productive milestone
 
@@ -16,15 +16,11 @@ PR #20, `fix(fares): exclude stale app prices from recommendations`, was merged 
 - Application version: `V7.8.0`
 - Productive Git SHA: `4a8b91e605597989b3db19860a745c21472a3a14`
 - Productive build hash: `4a8b91e`
-- Last direct health verification: 2026-07-21 07:56:51 UTC
-- Last known successful deploy run: `29611590151`
+- Stable Cloudflare version ID: `9508254e-6bbe-48ee-a126-d57d405b70a6`
+- Stable traffic: `100%`
 - Last known rollback state: not executed
-- Cloudflare deployment ID: unverified in the current session
-- Cloudflare version ID: unverified in the current session
-- Active traffic percentage: unverified in the current session
-- `CLOUDFLARE_CONTROL_PLANE_SNAPSHOT=UNVERIFIED`
 
-The health endpoint returned `ok: true`, `version: V7.8.0` and `build_hash: 4a8b91e`. Production still serves the legacy city files and does not serve `core/cityPlatform.js?v=1`.
+Production remained on `V7.8.0` / `4a8b91e` throughout City Platform candidate validation. No production promotion, rollback, binding mutation, secret change, KV migration, Durable Object migration, cron change or DNS change was performed.
 
 ## Active development
 
@@ -33,28 +29,26 @@ The health endpoint returned `ok: true`, `version: V7.8.0` and `build_hash: 4a8b
 - Base: `main@4a8b91e605597989b3db19860a745c21472a3a14`
 - Draft PR: `#21` — `feat(city): load versioned territorial profiles`
 - PR URL: `https://github.com/simonkey888/VOY/pull/21`
-- Validated code head before this worklog update: `ea3a3d062c7124e74b6d36739c6262c592e0fd79`
+- Branch head before this worklog update: `5741221f7366cca03ec44f06db6e13b1de5868c5`
 - Generated runtime commit: `9feaed9a70534de1cfc1be63827f0ffe8db724ec`
 - Merge state: not merged
-- Candidate deployment: not created
 - Production deployment: not authorized
 
-This worklog update changes documentation only. The resulting branch head must complete PR CI before an exact-SHA Cloudflare candidate is created.
+The branch contains the final City Platform runtime, territorial files, unit/integration/browser tests, candidate browser harness and one guarded candidate workflow. One-time diagnostic and repair workflows have been removed.
 
 ## Productive architecture
 
 - Cloudflare Worker with static assets under `public/`
 - Worker entrypoint: `worker-entry.js`
 - Worker name: `voy-app`
-- Analytics Engine binding declared as `VOY_METRICS`
-- Durable Object binding declared as `NOMINATIM_COORDINATOR`
-- Weekly fare-review cron declared as `0 6 * * 1`
+- Static Assets binding: `ASSETS`
+- Analytics Engine binding: `VOY_METRICS`
+- Durable Object binding: `NOMINATIM_COORDINATOR`
+- Weekly fare-review cron: `0 6 * * 1`
 - Direct browser calls to Nominatim are prohibited
 - PWA remains a lightweight single-page application
 
-No bindings, secrets, KV, Durable Objects, cron, DNS or production traffic were changed during City Platform V1 development.
-
-## City Platform V1 architecture
+## City Platform V1
 
 Each supported territory is split into five versioned JSON files:
 
@@ -64,12 +58,23 @@ Each supported territory is split into five versioned JSON files:
 - `fares.json`
 - `feature_flags.json`
 
-The runtime module is `public/core/cityPlatform.js`. It normalizes city aliases, resolves safe fixed directories, fetches exactly five files with `cache: no-store`, validates them and composes the legacy structure consumed by the current PWA.
+Runtime module: `public/core/cityPlatform.js`.
+
+The module:
+
+- normalizes controlled city aliases;
+- maps city IDs to fixed directories;
+- issues exactly five concurrent `cache: no-store` requests;
+- propagates one AbortSignal;
+- validates profiles, providers, transport, fares and flags;
+- composes the legacy runtime contract consumed by the PWA;
+- actively aborts superseded loaders;
+- keeps caches and memory namespaced by city.
 
 Supported city IDs:
 
-- `_default` → national fallback profile
-- `santafe` → `public/cities/santa-fe/`
+- `_default` → national fallback profile;
+- `santafe` → `public/cities/santa-fe/`.
 
 Canonical fallback policy:
 
@@ -80,7 +85,7 @@ remote versioned profile
 → fail-closed emergency profile for the same city
 ```
 
-Superseded territorial loaders are actively aborted. Unknown IDs normalize to `_default` before loading.
+Unknown IDs normalize to `_default`. A Santa Fe failure never silently imports national data or stale data from another territory.
 
 ## Territorial coverage
 
@@ -88,157 +93,169 @@ Superseded territorial loaders are actively aborted. Unknown IDs normalize to `_
 
 - Coverage level: `national_basic`
 - Geographic scope: Argentina
-- Local providers asserted available: none
-- Taxi/remis companies: none
-- Local fares: null and `not_available`
-- Stops, bike stations and local landmarks: none
 - Search bbox: none
-- UI communication: national and coverage-neutral
+- Available local providers: none
+- Taxi/remis companies: none
+- Stops, bike stations and landmarks: none
+- Taxi, remis, bus and private-app amounts: `null`
+- Fare status: `not_available`
+- UI copy: national and coverage-neutral
 
 ### Santa Fe
 
 - Coverage level: `partial`
-- Regulated taxi, remis and bus fares: preserved and verified
-- Private app availability: preserved from the existing provider registry
-- Private app price models: stale and excluded from recommendations
+- Taxi, remis and bus regulated values: preserved
+- Private-provider availability and deeplinks: preserved
+- Stale private-app price models: excluded from ranking and recommendations
 - Stops, bike stations and landmarks: preserved
 - Complete official transport-data traceability: pending
-- Emergency fallback: map context only, providers disabled and all fares null
+- Emergency fallback: Santa Fe map context only; providers disabled, lists empty and fares unavailable
 
-## Finalization evidence
+## Local and PR validation
 
-One-time finalization workflow:
+Finalization run `29816118823`:
 
 ```text
-Run ID: 29816118823
 Validated source SHA: ed388faa778d80a5b7aaea3bcfcd1fc02606e265
-Generated source commit: 9feaed9a70534de1cfc1be63827f0ffe8db724ec
+Generated runtime commit: 9feaed9a70534de1cfc1be63827f0ffe8db724ec
 Artifact ID: 8489408144
 Artifact digest: sha256:d780edc83b61a26412f2a2ddd13dff75ffdada7bae5b0b1752dd5bdd57a56320
 ```
 
 Executed gates:
 
-- Bun 1.3.14 frozen dependency installation: PASS
-- Generated diff validation: PASS
+- Bun 1.3.14 frozen install: PASS
 - ESLint: PASS
 - Node tests: 190 pass, 0 fail, 0 skipped
 - Wrangler 4.112.0 dry-run: PASS
-- Dry-run bindings: `ASSETS`, `VOY_METRICS`, `NOMINATIM_COORDINATOR`
-- Evidence manifest and file hashes: generated and inspected
+- Declared bindings: `ASSETS`, `VOY_METRICS`, `NOMINATIM_COORDINATOR`
 - One-time migration script: removed
 - One-time finalization workflow: removed
 
-None of the finalization workflows deployed or promoted a Worker.
-
-## PR and browser evidence
-
-Latest fully inspected PR validation for the runtime code:
+Fully inspected local/PR browser run `29818843692`:
 
 ```text
-Run ID: 29817666470
-Head SHA: ea3a3d062c7124e74b6d36739c6262c592e0fd79
-Conclusion: success
-Artifact ID: 8490072336
-Artifact digest: sha256:454eed312509aeacb49b2b46bbe304c6c63fa84b4afb241faeac8a3b245efed4
-Artifact size: 3041376 bytes
+Head SHA: bfd09baaea85fc231ad968bc21a3b46aed9ba763
+Artifact ID: 8490526891
+Artifact digest: sha256:bcad0a2ed3f1e0a9a70ceb386ea7d7850e380f38686dc89c170393490c49ca7f
 ```
 
-PR gates:
+- Local Worker desktop/mobile: PASS
+- Production baseline desktop/mobile without deploy: PASS
+- `_default`, Santa Fe, transitions and same-city emergency fallback: PASS
+- Page errors: 0
+- Relevant console errors: 0
+- Direct browser Nominatim requests: 0
+- Horizontal overflow: 0
 
-- Frozen dependency installation: PASS
+## Cloudflare candidate validation completed before final-head replacement
+
+Validated candidate source SHA:
+
+```text
+fa4833100b681d86aa151e3c69da93bf7554b929
+```
+
+Cloudflare state:
+
+```text
+Deployment ID: d7406cfe-8e70-4087-ac59-1480f26b2e84
+Stable version ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
+Stable traffic: 100%
+Candidate version ID: 63c18a47-fb7b-4034-bf5c-326d94a7d10a
+Candidate traffic: 0%
+```
+
+The candidate and stable versions exposed the same 13-resource binding contract. Required bindings `ASSETS`, `VOY_METRICS` and `NOMINATIM_COORDINATOR` were present.
+
+### Override isolation
+
+Diagnostic run `29823944114`:
+
+```text
+Artifact ID: 8492507825
+Artifact digest: sha256:bf77df49e14dcf8e146134eb7807822300fc71f58454c94e7421824a489a936e
+```
+
+Three independent rounds compared normal and overridden requests for health, HTML, City Platform and territorial assets.
+
+- Exact header: `Cloudflare-Workers-Version-Overrides: voy-app="63c18a47-fb7b-4034-bf5c-326d94a7d10a"`
+- Normal health: `4a8b91e` in all rounds
+- Override health: `fa48331` in all rounds
+- Normal City Platform assets: not present in productive version
+- Override City Platform assets: candidate responses
+- Candidate tail version proof: exact candidate version ID only
+- Tail outcomes: all `ok`
+- Classification: `OVERRIDE_WORKER_PASS`
+
+Root cause of the first failed candidate smoke: validation began before the new split deployment had converged globally. It was not a City Platform defect and not an invalid override header.
+
+Cloudflare did not generate a Versioned Preview URL because VOY implements a Durable Object. Candidate identity was proven independently through exact build hash, request comparison and `wrangler tail --version-id`.
+
+### Candidate desktop/mobile browser
+
+Successful run `29825187499`:
+
+```text
+Validated existing candidate version: 63c18a47-fb7b-4034-bf5c-326d94a7d10a
+Artifact ID: 8493017815
+Artifact digest: sha256:e9e8bed3022c2c746a7774e1c01079ccc1c20e1c6c84942fbc1791da6f92bc14
+```
+
+- Frozen install: PASS
 - ESLint: PASS
 - Node tests: 190 pass, 0 fail, 0 skipped
-- Wrangler dry-run with minification: PASS
-- Chromium 1.61.1 installation: PASS
-- Local Worker browser smoke: PASS
-- Current production health/version baseline: PASS
-- Current production browser smoke without deploy: PASS
-- Browser evidence upload: PASS
+- Wrangler dry-run: PASS
+- Candidate preflight health: `fa48331` in three rounds
+- Playwright desktop: PASS
+- Playwright mobile: PASS
+- Full reload against candidate: PASS
+- `_default`: PASS
+- Santa Fe: PASS
+- `_default → santafe → _default → emergency santafe`: PASS
+- Same-origin relevant requests carrying exact override: PASS
+- Candidate tail events: 11
+- Observed candidate version IDs: exact candidate only
+- Tail non-`ok` outcomes: 0
+- Page errors: 0
+- Console errors: 0
+- Direct browser Nominatim requests: 0
+- Horizontal overflow: 0
+- Production health after browser: `4a8b91e`
 
-Santa Fe local browser coverage, desktop and mobile:
+Custom candidate headers are stripped from cross-origin map resources to avoid introducing CORS preflights. All same-origin Worker, HTML, City Platform and territorial requests retain the exact override header.
 
-- local, exact, recent, remote, ambiguous and invalid-result flows: PASS
-- regulated taxi and remis fare behavior: PASS
-- stale private-app prices remain null and outside ranking: PASS
-- verified provider actions remain available where supported: PASS
-- exactly one `wide=1` request per wide-search flow: PASS
-- direct browser Nominatim requests: 0
+## Candidate replacement policy
 
-`_default` local browser coverage, desktop and mobile:
+The validated `fa48331` candidate proved the runtime and candidate test path. It must be replaced before review completion because PR #21 accumulated documentation, test-harness and workflow cleanup commits afterward.
 
-- exactly five `_default` component requests: PASS
-- Santa Fe component requests during national load: 0
-- national center and no territorial bbox: PASS
-- local providers available: 0
-- taxi/remis companies: 0
-- stops, bike stations and landmarks: 0
-- taxi, remis, bus and app prices: null and `not_available`
-- `$0` rendered: 0
-- national title, description and footer: PASS
-- exactly one `_default` `wide=1` request per viewport: PASS
-- horizontal overflow: 0
-- direct browser Nominatim requests: 0
+The final candidate workflow must:
 
-Territorial transition coverage, desktop and mobile:
-
-```text
-_default → santafe → _default → emergency santafe
-```
-
-- context replacement and territorial isolation: PASS
-- Santa Fe regulated fares restored on normal Santa Fe load: PASS
-- national data restored with no Santa Fe contamination: PASS
-- controlled one-part HTTP 500 produces same-city emergency Santa Fe: PASS
-- emergency providers, companies and transport lists: empty/disabled
-- emergency fares: null and `not_available`
-- horizontal overflow: 0
-
-Browser diagnostics:
-
-- City Platform pageerrors: 0 across all local and production scenarios
-- City Platform console errors: 0
-- controlled fallback warnings: two, one per local viewport
-- headless WebGL performance warnings: non-blocking
-- all request logs and screenshots: inspected
-- production remained the legacy `V7.8.0` / `4a8b91e` baseline throughout
-
-## Diagnostic history
-
-- Run `29815107967` failed because the old test harness still required legacy `city_*.json` loading and the superseded `_default` fallback policy.
-- Run `29815747976` retained artifacts but did not preserve the raw Node output.
-- Run `29815995016` proved 190 product tests passed; the only error was Bun discovering a Playwright spec outside the scoped Node suite.
-- Run `29816118823` used the repository's scoped Node command and passed all finalization gates.
-- Run `29816908172` exposed a browser-test harness issue: Service Worker/cache bypassed a Playwright route intended to force a controlled HTTP failure.
-- Run `29817308938` passed after deterministic in-page fetch injection, but two City Platform cases overwrote each other's evidence filenames.
-- Run `29817666470` passed with unique evidence per scenario and is the final inspected runtime-code validation.
-
-## Pending gates
-
-- Run PR CI against the documentation-only head created by this worklog update.
-- Inspect the final-head CI status and artifact.
-- Create an exact-SHA Cloudflare candidate only after that run passes.
-- Validate the candidate Worker, assets, bindings, APIs, PWA, desktop/mobile UI, `_default`, Santa Fe, fallbacks, logs, security and privacy.
-- Promote only after all candidate gates pass.
-- Close PR #1 and PR #2 only after PR #21 is validated as their replacement.
+1. validate the exact final PR head;
+2. preserve stable version `9508254e-6bbe-48ee-a126-d57d405b70a6` at `100%`;
+3. upload exactly one new version from that SHA;
+4. verify binding parity;
+5. replace the previous 0% candidate with the new candidate at `0%`;
+6. wait for deterministic override convergence;
+7. validate curl, desktop, mobile, reload, territorial transitions and fallback;
+8. verify normal production remains `4a8b91e`;
+9. preserve manifests, screenshots, logs, hashes, version ID and deployment ID.
 
 ## Known risks and open debt
 
-- Cloudflare control-plane snapshot remains unverified in this session.
-- City Platform V1 is not deployed.
-- The legacy files `public/city_default.json` and `public/city_santafe.json` remain required for compatibility and rollback.
-- Santa Fe transport data is curated and not yet fully traceable to an official complete dataset.
-- The inline application version discrepancy inherited from `main` requires a separate controlled review.
-- PR #1 and PR #2 remain open until the replacement implementation is validated.
+- City Platform V1 is not in normal production traffic.
+- Legacy files `public/city_default.json` and `public/city_santafe.json` remain for compatibility and rollback.
+- Santa Fe transport data remains curated and is not yet fully traceable to a complete official dataset.
+- The inline `window.VOY_VERSION` discrepancy inherited from `main` remains separate debt; canonical meta/health version is `V7.8.0`.
+- PR #1 and PR #2 remain open until PR #21 is explicitly merged or selected as their replacement.
 
 ## Decisions in force
 
-- GitHub remains the source of traceable code.
-- Cloudflare must build and validate the exact candidate SHA before production completion.
-- Missing interactive Cloudflare access is an observability limitation, not a code-development blocker.
-- Unknown cities normalize to `_default`.
-- A known-city failure uses same-city cache and then a same-city fail-closed emergency profile.
-- `_default` must never assert local availability, prices, stops or Santa Fe territorial data.
+- GitHub is the source of traceable code.
+- Cloudflare validates the exact candidate SHA before production completion.
+- Candidate validation may create a version and deployment at 0%; it may not promote normal traffic.
+- `_default` must not assert local availability, prices, stops or Santa Fe data.
+- Known-city failure remains same-city and fail-closed.
 - Experimental features remain disabled.
 - Legacy city files remain during this first migration.
 
@@ -248,20 +265,23 @@ Browser diagnostics:
 GITHUB_PREFLIGHT=PASS
 PRODUCTION_HEALTH=PASS
 CITY_PLATFORM_IN_PRODUCTION=NO
-CLOUDFLARE_CONTROL_PLANE_SNAPSHOT=UNVERIFIED
+CLOUDFLARE_CONTROL_PLANE_SNAPSHOT=PASS
 BRANCH_MODIFIED=YES
 DRAFT_PR=21
 FINALIZATION_TESTS=PASS
-RUNTIME_BROWSER_DESKTOP=PASS
-RUNTIME_BROWSER_MOBILE=PASS
-DEFAULT_ISOLATION=PASS
-SANTAFE_REGRESSION=PASS
+LOCAL_BROWSER_DESKTOP=PASS
+LOCAL_BROWSER_MOBILE=PASS
+OVERRIDE_CURL=PASS
+VERSION_ID_PROOF=PASS
+VALIDATED_CANDIDATE_BROWSER_DESKTOP=PASS
+VALIDATED_CANDIDATE_BROWSER_MOBILE=PASS
 READY_TO_EDIT=YES
-READY_FOR_REVIEW=PENDING_FINAL_HEAD_CI
-READY_FOR_CANDIDATE_DEPLOY=PENDING_FINAL_HEAD_CI
-READY_FOR_PRODUCTION=NO
+READY_FOR_REVIEW=PENDING_EXACT_FINAL_HEAD_CANDIDATE
+READY_FOR_PRODUCTION=PENDING_EXACT_FINAL_HEAD_CANDIDATE
+ROLLBACK_EXECUTED=NO
+PRODUCTION_PROMOTED=NO
 ```
 
 ## Exact next step
 
-Run and inspect PR #21 CI on the documentation-only final head. If it passes without changing runtime files, create an exact-SHA Cloudflare candidate without promoting production traffic.
+Execute the guarded final candidate workflow from the final PR head. Replace only the previous 0% candidate, keep production stable at 100%, inspect the complete artifact, and then mark PR #21 ready for review without merging or promoting traffic.
