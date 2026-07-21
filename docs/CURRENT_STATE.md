@@ -33,13 +33,13 @@ The health endpoint returned `ok: true`, `version: V7.8.0` and `build_hash: 4a8b
 - Base: `main@4a8b91e605597989b3db19860a745c21472a3a14`
 - Draft PR: `#21` — `feat(city): load versioned territorial profiles`
 - PR URL: `https://github.com/simonkey888/VOY/pull/21`
-- PR head before this worklog update: `235a6839b150d153ecd573b8d1b9e2168e513ffe`
+- Validated code head before this worklog update: `ea3a3d062c7124e74b6d36739c6262c592e0fd79`
 - Generated runtime commit: `9feaed9a70534de1cfc1be63827f0ffe8db724ec`
 - Merge state: not merged
 - Candidate deployment: not created
 - Production deployment: not authorized
 
-The branch may receive code, tests and documentation. It is not ready for a Cloudflare candidate until final-head PR CI and desktop/mobile browser validation pass.
+This worklog update changes documentation only. The resulting branch head must complete PR CI before an exact-SHA Cloudflare candidate is created.
 
 ## Productive architecture
 
@@ -105,9 +105,9 @@ Superseded territorial loaders are actively aborted. Unknown IDs normalize to `_
 - Complete official transport-data traceability: pending
 - Emergency fallback: map context only, providers disabled and all fares null
 
-## Validation evidence
+## Finalization evidence
 
-Finalization workflow run:
+One-time finalization workflow:
 
 ```text
 Run ID: 29816118823
@@ -129,25 +129,97 @@ Executed gates:
 - One-time migration script: removed
 - One-time finalization workflow: removed
 
-Diagnostic history:
+None of the finalization workflows deployed or promoted a Worker.
+
+## PR and browser evidence
+
+Latest fully inspected PR validation for the runtime code:
+
+```text
+Run ID: 29817666470
+Head SHA: ea3a3d062c7124e74b6d36739c6262c592e0fd79
+Conclusion: success
+Artifact ID: 8490072336
+Artifact digest: sha256:454eed312509aeacb49b2b46bbe304c6c63fa84b4afb241faeac8a3b245efed4
+Artifact size: 3041376 bytes
+```
+
+PR gates:
+
+- Frozen dependency installation: PASS
+- ESLint: PASS
+- Node tests: 190 pass, 0 fail, 0 skipped
+- Wrangler dry-run with minification: PASS
+- Chromium 1.61.1 installation: PASS
+- Local Worker browser smoke: PASS
+- Current production health/version baseline: PASS
+- Current production browser smoke without deploy: PASS
+- Browser evidence upload: PASS
+
+Santa Fe local browser coverage, desktop and mobile:
+
+- local, exact, recent, remote, ambiguous and invalid-result flows: PASS
+- regulated taxi and remis fare behavior: PASS
+- stale private-app prices remain null and outside ranking: PASS
+- verified provider actions remain available where supported: PASS
+- exactly one `wide=1` request per wide-search flow: PASS
+- direct browser Nominatim requests: 0
+
+`_default` local browser coverage, desktop and mobile:
+
+- exactly five `_default` component requests: PASS
+- Santa Fe component requests during national load: 0
+- national center and no territorial bbox: PASS
+- local providers available: 0
+- taxi/remis companies: 0
+- stops, bike stations and landmarks: 0
+- taxi, remis, bus and app prices: null and `not_available`
+- `$0` rendered: 0
+- national title, description and footer: PASS
+- exactly one `_default` `wide=1` request per viewport: PASS
+- horizontal overflow: 0
+- direct browser Nominatim requests: 0
+
+Territorial transition coverage, desktop and mobile:
+
+```text
+_default → santafe → _default → emergency santafe
+```
+
+- context replacement and territorial isolation: PASS
+- Santa Fe regulated fares restored on normal Santa Fe load: PASS
+- national data restored with no Santa Fe contamination: PASS
+- controlled one-part HTTP 500 produces same-city emergency Santa Fe: PASS
+- emergency providers, companies and transport lists: empty/disabled
+- emergency fares: null and `not_available`
+- horizontal overflow: 0
+
+Browser diagnostics:
+
+- City Platform pageerrors: 0 across all local and production scenarios
+- City Platform console errors: 0
+- controlled fallback warnings: two, one per local viewport
+- headless WebGL performance warnings: non-blocking
+- all request logs and screenshots: inspected
+- production remained the legacy `V7.8.0` / `4a8b91e` baseline throughout
+
+## Diagnostic history
 
 - Run `29815107967` failed because the old test harness still required legacy `city_*.json` loading and the superseded `_default` fallback policy.
 - Run `29815747976` retained artifacts but did not preserve the raw Node output.
 - Run `29815995016` proved 190 product tests passed; the only error was Bun discovering a Playwright spec outside the scoped Node suite.
 - Run `29816118823` used the repository's scoped Node command and passed all finalization gates.
-
-None of these workflows deployed or promoted a Worker.
+- Run `29816908172` exposed a browser-test harness issue: Service Worker/cache bypassed a Playwright route intended to force a controlled HTTP failure.
+- Run `29817308938` passed after deterministic in-page fetch injection, but two City Platform cases overwrote each other's evidence filenames.
+- Run `29817666470` passed with unique evidence per scenario and is the final inspected runtime-code validation.
 
 ## Pending gates
 
-- Run PR CI against the current final head after documentation and cleanup commits.
-- Inspect all PR CI jobs and artifacts.
-- Run desktop and mobile browser validation for Santa Fe and `_default`.
-- Verify zero pageerror, zero relevant console error, zero horizontal overflow and zero direct Nominatim browser requests.
-- Verify exactly one `wide=1` request per wide-search flow.
-- Create an exact-SHA Cloudflare candidate only after those gates pass.
-- Validate the candidate in the Cloudflare runtime.
-- Promote only after all promotion gates pass.
+- Run PR CI against the documentation-only head created by this worklog update.
+- Inspect the final-head CI status and artifact.
+- Create an exact-SHA Cloudflare candidate only after that run passes.
+- Validate the candidate Worker, assets, bindings, APIs, PWA, desktop/mobile UI, `_default`, Santa Fe, fallbacks, logs, security and privacy.
+- Promote only after all candidate gates pass.
 - Close PR #1 and PR #2 only after PR #21 is validated as their replacement.
 
 ## Known risks and open debt
@@ -180,12 +252,16 @@ CLOUDFLARE_CONTROL_PLANE_SNAPSHOT=UNVERIFIED
 BRANCH_MODIFIED=YES
 DRAFT_PR=21
 FINALIZATION_TESTS=PASS
+RUNTIME_BROWSER_DESKTOP=PASS
+RUNTIME_BROWSER_MOBILE=PASS
+DEFAULT_ISOLATION=PASS
+SANTAFE_REGRESSION=PASS
 READY_TO_EDIT=YES
-READY_FOR_REVIEW=NO
-READY_FOR_CANDIDATE_DEPLOY=NO
+READY_FOR_REVIEW=PENDING_FINAL_HEAD_CI
+READY_FOR_CANDIDATE_DEPLOY=PENDING_FINAL_HEAD_CI
 READY_FOR_PRODUCTION=NO
 ```
 
 ## Exact next step
 
-Run and inspect PR #21 CI on the current final head, then execute desktop and mobile browser validation for Santa Fe and `_default` without creating or promoting a production deployment.
+Run and inspect PR #21 CI on the documentation-only final head. If it passes without changing runtime files, create an exact-SHA Cloudflare candidate without promoting production traffic.
