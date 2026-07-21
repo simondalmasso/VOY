@@ -1,0 +1,121 @@
+name: VOY Voice Copilot V1 Validation
+
+on:
+  push:
+    branches:
+      - feat/voy-voice-copilot-v1
+    paths:
+      - .github/workflows/voice-copilot-validation.yml
+      - voiceCopilot*.mjs
+      - worker-entry.js
+      - wrangler.jsonc
+      - public/core/voiceCopilot.js
+      - public/ui/voiceCopilot.css
+      - public/cities/**/feature_flags.json
+      - __tests__/voiceCopilot*.test.js
+      - voice-tests/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-voice-copilot-v1-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      EVIDENCE_DIR: test-results/voice-validation
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-voice-copilot-v1
+          fetch-depth: 0
+
+      - name: Verify exact source and frozen install
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --check
+          mkdir -p "$EVIDENCE_DIR"
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+
+      - name: Lint with retained log
+        id: lint
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bun run lint 2>&1 | tee "$EVIDENCE_DIR/eslint.log"
+
+      - name: Node tests with retained log
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bun run test 2>&1 | tee "$EVIDENCE_DIR/node-tests.log"
+
+      - name: Wrangler dry-run with retained log
+        id: dryrun
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          wrangler deploy --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
+
+      - name: Install Chromium 1.61.1
+        if: steps.lint.outcome == 'success' && steps.tests.outcome == 'success' && steps.dryrun.outcome == 'success'
+        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+
+      - name: Existing local browser regression
+        if: steps.lint.outcome == 'success' && steps.tests.outcome == 'success' && steps.dryrun.outcome == 'success'
+        run: bash scripts/run-browser-smoke.sh
+
+      - name: Voice browser desktop Android and iPhone
+        if: steps.lint.outcome == 'success' && steps.tests.outcome == 'success' && steps.dryrun.outcome == 'success'
+        run: |
+          set -euo pipefail
+          npx wrangler dev --local --port 8787 > "$EVIDENCE_DIR/voice-wrangler-local.log" 2>&1 &
+          WRANGLER_PID=$!
+          cleanup() { kill "$WRANGLER_PID" 2>/dev/null || true; wait "$WRANGLER_PID" 2>/dev/null || true; }
+          trap cleanup EXIT INT TERM
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then break; fi
+            kill -0 "$WRANGLER_PID"
+            test "$attempt" -lt 60
+            sleep 1
+          done
+          export VOY_BASE_URL=http://127.0.0.1:8787
+          export VOY_OUTPUT_DIR=test-results/voice-playwright
+          export VOY_REPORT_DIR=playwright-report-voice
+          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
+            PLAYWRIGHT_BIN=$(command -v playwright)
+            NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
+            export NODE_PATH
+            playwright test --config=voice-tests/playwright.config.js
+          ' 2>&1 | tee "$EVIDENCE_DIR/voice-browser.log"
+
+      - name: Enforce all static gates
+        if: always()
+        run: |
+          test "${{ steps.lint.outcome }}" = success
+          test "${{ steps.tests.outcome }}" = success
+          test "${{ steps.dryrun.outcome }}" = success
+
+      - name: Upload Voice validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-voice-validation-${{ github.run_id }}
+          path: |
+            test-results/voice-validation
+            test-results/evidence
+            test-results/voice-playwright
+            playwright-report
+            playwright-report-voice
+          if-no-files-found: warn
+          retention-days: 30
