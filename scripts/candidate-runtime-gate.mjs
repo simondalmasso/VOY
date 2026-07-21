@@ -2,6 +2,18 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+const CANDIDATE_ASSET_PATHS = [
+  '/',
+  '/VOY-Lite.html',
+  '/core/cityPlatform.js?v=1',
+  '/cities/_default/profile.json',
+  '/cities/_default/providers.json',
+  '/cities/_default/transport.json',
+  '/cities/_default/fares.json',
+  '/cities/_default/feature_flags.json',
+  '/cities/santa-fe/profile.json'
+];
+
 function requireValue(env, name) {
   const value = env[name];
   if (!value) throw new Error(`missing_environment:${name}`);
@@ -45,23 +57,57 @@ export function extractTailProof(text, candidateVersionId) {
   };
 }
 
-async function fetchJson(url, options = {}, attempts = 3) {
+async function fetchResponse(url, options = {}, attempts = 3) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const response = await fetch(url, {
         ...options,
+        redirect: options.redirect || 'follow',
         signal: AbortSignal.timeout(20_000),
-        headers: { Accept: 'application/json', ...(options.headers || {}) }
+        headers: { Accept: '*/*', ...(options.headers || {}) }
       });
-      if (!response.ok) throw new Error(`http_${response.status}:${url}`);
-      return await response.json();
+      return response;
     } catch (error) {
       lastError = error;
       if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, attempt * 1_000));
     }
   }
   throw lastError;
+}
+
+async function fetchJson(url, options = {}, attempts = 3) {
+  const response = await fetchResponse(url, {
+    ...options,
+    headers: { Accept: 'application/json', ...(options.headers || {}) }
+  }, attempts);
+  if (!response.ok) throw new Error(`http_${response.status}:${url}`);
+  return response.json();
+}
+
+async function probeCandidateAssets(workerUrl, override, stamp) {
+  return Promise.all(CANDIDATE_ASSET_PATHS.map(async assetPath => {
+    const separator = assetPath.includes('?') ? '&' : '?';
+    const requestedUrl = `${workerUrl}${assetPath}${separator}candidate_asset_convergence=${stamp}`;
+    try {
+      const response = await fetchResponse(requestedUrl, {
+        headers: {
+          'Cloudflare-Workers-Version-Overrides': override,
+          'Cache-Control': 'no-cache, no-store, max-age=0',
+          Pragma: 'no-cache'
+        }
+      });
+      return {
+        path: assetPath,
+        requested_url: requestedUrl,
+        effective_url: response.url,
+        status: response.status,
+        ok: response.status === 200
+      };
+    } catch (error) {
+      return { path: assetPath, requested_url: requestedUrl, effective_url: null, status: 0, ok: false, error: String(error?.stack || error) };
+    }
+  }));
 }
 
 function writeJson(path, value) {
@@ -94,9 +140,10 @@ export async function converge(env = process.env) {
     let deploymentResult = null;
     let candidateHealth = null;
     let stableHealth = null;
+    let assetResults = [];
     let error = null;
     try {
-      [deploymentResult, candidateHealth, stableHealth] = await Promise.all([
+      [deploymentResult, candidateHealth, stableHealth, assetResults] = await Promise.all([
         fetchJson(apiUrl, { headers: { Authorization: `Bearer ${token}` } }),
         fetchJson(`${workerUrl}/api/health?candidate_convergence=${timestamp}`, {
           headers: {
@@ -107,7 +154,8 @@ export async function converge(env = process.env) {
         }),
         fetchJson(`${workerUrl}/api/health?stable_convergence=${timestamp}`, {
           headers: { 'Cache-Control': 'no-cache, no-store, max-age=0', Pragma: 'no-cache' }
-        })
+        }),
+        probeCandidateAssets(workerUrl, override, timestamp)
       ]);
     } catch (caught) {
       error = String(caught?.stack || caught);
@@ -122,7 +170,8 @@ export async function converge(env = process.env) {
     const deploymentOk = deployment?.valid === true;
     const candidateOk = healthMatches(candidateHealth, expectedVersion, candidateHash);
     const stableOk = healthMatches(stableHealth, expectedVersion, stableHash);
-    consecutive = deploymentOk && candidateOk && stableOk ? consecutive + 1 : 0;
+    const assetsOk = assetResults.length === CANDIDATE_ASSET_PATHS.length && assetResults.every(result => result.ok);
+    consecutive = deploymentOk && candidateOk && stableOk && assetsOk ? consecutive + 1 : 0;
     const record = {
       timestamp: new Date().toISOString(),
       attempt,
@@ -130,6 +179,8 @@ export async function converge(env = process.env) {
       deployment_ok: deploymentOk,
       candidate_ok: candidateOk,
       stable_ok: stableOk,
+      assets_ok: assetsOk,
+      asset_statuses: Object.fromEntries(assetResults.map(result => [result.path, result.status])),
       consecutive,
       candidate_build_hash: candidateHealth?.build_hash || null,
       stable_build_hash: stableHealth?.build_hash || null,
@@ -141,6 +192,7 @@ export async function converge(env = process.env) {
       appendGithubEnv('CANDIDATE_DEPLOYMENT_ID', deployment.active.id, env);
       writeJson(`${evidenceDir}/candidate-health-converged.json`, candidateHealth);
       writeJson(`${evidenceDir}/stable-health-converged.json`, stableHealth);
+      writeJson(`${evidenceDir}/candidate-assets-converged.json`, assetResults);
       writeJson(`${evidenceDir}/api-deployments-converged.json`, deploymentResult);
       writeJson(`${evidenceDir}/convergence-proof.json`, record);
       return record;
@@ -159,36 +211,59 @@ export async function verifyFinal(env = process.env) {
   const candidateVersionId = requireValue(env, 'CANDIDATE_VERSION_ID');
   const expectedVersion = requireValue(env, 'EXPECTED_PRODUCTION_VERSION');
   const stableHash = requireValue(env, 'EXPECTED_PRODUCTION_HASH');
+  const candidateHash = requireValue(env, 'SHORT_SHA');
   const evidenceDir = requireValue(env, 'EVIDENCE_DIR');
   const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${workerName}/deployments`;
-  const [payload, health] = await Promise.all([
+  const override = `${workerName}="${candidateVersionId}"`;
+  const [payload, stableHealth, candidateHealth] = await Promise.all([
     fetchJson(apiUrl, { headers: { Authorization: `Bearer ${token}` } }),
     fetchJson(`${workerUrl}/api/health?final_normal_verification=${Date.now()}`, {
       headers: { 'Cache-Control': 'no-cache, no-store, max-age=0', Pragma: 'no-cache' }
+    }),
+    fetchJson(`${workerUrl}/api/health?final_candidate_verification=${Date.now()}`, {
+      headers: {
+        'Cloudflare-Workers-Version-Overrides': override,
+        'Cache-Control': 'no-cache, no-store, max-age=0',
+        Pragma: 'no-cache'
+      }
     })
   ]);
   const deployment = inspectDeployment(payload, stableVersionId, candidateVersionId);
   if (!deployment.valid || !deployment.exactPair) throw new Error('final_deployment_contract_failed');
-  if (!healthMatches(health, expectedVersion, stableHash)) throw new Error('final_production_health_changed');
+  if (!healthMatches(stableHealth, expectedVersion, stableHash)) throw new Error('final_production_health_changed');
+  if (!healthMatches(candidateHealth, expectedVersion, candidateHash)) throw new Error('final_candidate_health_changed');
+
+  const candidateVersionPath = `${evidenceDir}/candidate-version.json`;
+  if (!existsSync(candidateVersionPath)) throw new Error('candidate_version_evidence_missing');
+  const candidateVersionEvidence = JSON.parse(readFileSync(candidateVersionPath, 'utf8'));
+  if (candidateVersionEvidence.version_id !== candidateVersionId || candidateVersionEvidence.source_sha !== requireValue(env, 'GITHUB_SHA')) {
+    throw new Error('candidate_version_source_mapping_failed');
+  }
+
   const tailPath = `${evidenceDir}/candidate-tail.log`;
   const tail = existsSync(tailPath) ? readFileSync(tailPath, 'utf8') : '';
   const proof = extractTailProof(tail, candidateVersionId);
-  if (proof.exactEvents < 1) throw new Error(`candidate_version_proof_insufficient:${proof.exactEvents}`);
   if (proof.nonOkOutcomes.length) throw new Error(`candidate_tail_non_ok:${proof.nonOkOutcomes.join(',')}`);
   writeJson(`${evidenceDir}/api-deployments-final.json`, payload);
-  writeJson(`${evidenceDir}/production-health-final.json`, health);
+  writeJson(`${evidenceDir}/production-health-final.json`, stableHealth);
+  writeJson(`${evidenceDir}/candidate-health-final.json`, candidateHealth);
   const finalState = {
     exact_source_sha: requireValue(env, 'GITHUB_SHA'),
-    source_short_sha: requireValue(env, 'SHORT_SHA'),
+    source_short_sha: candidateHash,
     deployment_id: deployment.active.id,
     previous_deployment_id: env.PREVIOUS_DEPLOYMENT_ID || null,
     stable_version_id: stableVersionId,
     stable_traffic: 100,
     candidate_version_id: candidateVersionId,
     candidate_traffic: 0,
-    production_health: { version: health.version, build_hash: health.build_hash },
+    production_health: { version: stableHealth.version, build_hash: stableHealth.build_hash },
+    candidate_health: { version: candidateHealth.version, build_hash: candidateHealth.build_hash },
+    version_id_proof: {
+      result: 'PASS',
+      sources: ['candidate-version-api', 'deployment-api', 'override-health-build-hash', 'browser-same-origin-override-headers'],
+      candidate_version_source_sha: candidateVersionEvidence.source_sha
+    },
     candidate_tail_events: proof.exactEvents,
-    minimum_candidate_tail_events: 1,
     observed_candidate_version_ids: proof.observedVersionIds,
     non_ok_tail_outcomes: proof.nonOkOutcomes,
     rollback_executed: false,
