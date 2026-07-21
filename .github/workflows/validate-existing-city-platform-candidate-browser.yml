@@ -1,0 +1,186 @@
+name: Validate Existing City Platform Candidate Browser
+
+on:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - .github/workflows/validate-existing-city-platform-candidate-browser.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-existing-city-platform-candidate-browser
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      STABLE_VERSION_ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
+      CANDIDATE_VERSION_ID: 63c18a47-fb7b-4034-bf5c-326d94a7d10a
+      EXPECTED_DEPLOYMENT_ID: d7406cfe-8e70-4087-ac59-1480f26b2e84
+      EXPECTED_CANDIDATE_HASH: fa48331
+      EXPECTED_STABLE_HASH: 4a8b91e
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EVIDENCE_DIR: test-results/existing-candidate-browser
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 1
+
+      - name: Install exact toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = "1.3.14"
+          test "$(wrangler --version | awk '{print $1}')" = "4.112.0"
+          bun install --frozen-lockfile
+          git rev-parse HEAD | tee "$EVIDENCE_DIR/validation-source-sha.txt"
+
+      - name: Lint tests and candidate harness
+        run: |
+          set -o pipefail
+          bun run lint 2>&1 | tee "$EVIDENCE_DIR/eslint.log"
+
+      - name: Run complete Node suite
+        run: |
+          set -o pipefail
+          bun run test 2>&1 | tee "$EVIDENCE_DIR/node-tests.log"
+
+      - name: Wrangler dry-run
+        run: |
+          set -o pipefail
+          bunx wrangler deploy --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
+
+      - name: Install Chromium 1.61.1
+        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+
+      - name: Verify existing deployment and deterministic override
+        run: |
+          set -euo pipefail
+          wrangler deployments list --json > "$EVIDENCE_DIR/wrangler-deployments.json"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/api-deployments.json', 'utf8'));
+          if (!payload.success) throw new Error('deployments_api_failed');
+          const deployments = payload.result?.deployments || payload.result || [];
+          const active = deployments[0];
+          if (!active || active.id !== process.env.EXPECTED_DEPLOYMENT_ID) throw new Error(`deployment_changed:${active?.id}`);
+          const byId = new Map((active.versions || []).map(v => [v.version_id, Number(v.percentage)]));
+          if (byId.get(process.env.STABLE_VERSION_ID) !== 100) throw new Error('stable_not_100');
+          if (byId.get(process.env.CANDIDATE_VERSION_ID) !== 0) throw new Error('candidate_not_0');
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-proof.json', JSON.stringify({
+            deployment_id: active.id,
+            stable_version_id: process.env.STABLE_VERSION_ID,
+            stable_traffic: 100,
+            candidate_version_id: process.env.CANDIDATE_VERSION_ID,
+            candidate_traffic: 0,
+            checked_at: new Date().toISOString()
+          }, null, 2));
+          NODE
+          OVERRIDE="$WORKER_NAME=\"$CANDIDATE_VERSION_ID\""
+          for ATTEMPT in 1 2 3; do
+            TS="$(date +%s%N)"
+            curl --fail --silent --show-error --max-time 20 \
+              -H "Cloudflare-Workers-Version-Overrides: $OVERRIDE" \
+              -H "Cache-Control: no-cache, no-store, max-age=0" \
+              "$WORKER_URL/api/health?candidate_browser_preflight=$TS" \
+              > "$EVIDENCE_DIR/preflight-candidate-$ATTEMPT.json"
+            node -e "const h=require('./$EVIDENCE_DIR/preflight-candidate-$ATTEMPT.json'); if(h.ok!==true||h.build_hash!=='$EXPECTED_CANDIDATE_HASH') process.exit(1)"
+          done
+
+      - name: Start exact candidate log tail
+        run: |
+          set -euo pipefail
+          timeout 300s wrangler tail "$WORKER_NAME" \
+            --format json \
+            --version-id "$CANDIDATE_VERSION_ID" \
+            > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
+          echo "TAIL_PID=$!" >> "$GITHUB_ENV"
+          sleep 5
+          kill -0 "$!"
+
+      - name: Playwright candidate desktop and mobile
+        env:
+          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
+          VOY_CANDIDATE_VERSION_ID: 63c18a47-fb7b-4034-bf5c-326d94a7d10a
+          VOY_EXPECTED_BUILD_HASH: fa48331
+          VOY_WORKER_NAME: voy-app
+          VOY_EVIDENCE_DIR: test-results/existing-candidate-browser
+          VOY_OUTPUT_DIR: test-results/existing-candidate-playwright
+          VOY_REPORT_DIR: playwright-report-existing-candidate
+        run: |
+          set -o pipefail
+          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
+            PLAYWRIGHT_BIN=$(command -v playwright)
+            NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
+            export NODE_PATH
+            playwright test --config=candidate-tests/playwright.config.js
+          ' 2>&1 | tee "$EVIDENCE_DIR/playwright.log"
+
+      - name: Verify normal production and candidate version tail
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
+            kill "$TAIL_PID" 2>/dev/null || true
+            wait "$TAIL_PID" 2>/dev/null || true
+          fi
+          curl --fail --silent --show-error --max-time 20 \
+            "$WORKER_URL/api/health?normal_post_candidate_browser=$(date +%s%N)" \
+            > "$EVIDENCE_DIR/normal-health-after.json"
+          node -e "const h=require('./$EVIDENCE_DIR/normal-health-after.json'); if(h.ok!==true||h.build_hash!=='$EXPECTED_STABLE_HASH') process.exit(1)"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const tailPath = process.env.EVIDENCE_DIR + '/candidate-tail.log';
+          const tail = fs.existsSync(tailPath) ? fs.readFileSync(tailPath, 'utf8') : '';
+          const id = process.env.CANDIDATE_VERSION_ID;
+          const matches = [...tail.matchAll(/"scriptVersion"\s*:\s*\{\s*"id"\s*:\s*"([^"]+)"/g)].map(match => match[1]);
+          const exactCount = matches.filter(value => value === id).length;
+          const outcomes = [...tail.matchAll(/"outcome"\s*:\s*"([^"]+)"/g)].map(match => match[1]);
+          const badOutcomes = outcomes.filter(value => value !== 'ok');
+          if (exactCount < 2) throw new Error(`candidate_tail_proof_insufficient:${exactCount}`);
+          if (badOutcomes.length) throw new Error(`candidate_tail_bad_outcomes:${badOutcomes.join(',')}`);
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/version-id-proof.json', JSON.stringify({
+            candidate_version_id: id,
+            exact_candidate_events: exactCount,
+            observed_version_ids: [...new Set(matches)],
+            non_ok_outcomes: badOutcomes,
+            verified_at: new Date().toISOString()
+          }, null, 2));
+          NODE
+
+      - name: Build evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          find "$EVIDENCE_DIR" -type f -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          if [ -d playwright-report-existing-candidate ]; then
+            find playwright-report-existing-candidate -type f -print0 | sort -z | xargs -0 sha256sum >> "$EVIDENCE_DIR/manifest.sha256"
+          fi
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload candidate browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-existing-candidate-browser-${{ github.run_id }}
+          path: |
+            test-results/existing-candidate-browser
+            test-results/existing-candidate-playwright
+            playwright-report-existing-candidate
+          if-no-files-found: error
+          retention-days: 30
