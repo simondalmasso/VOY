@@ -61,7 +61,9 @@ jobs:
           bun run lint 2>&1 | tee test-results/evidence/eslint.log
 
       - name: Node tests
-        run: bun test
+        run: |
+          set -o pipefail
+          bun test 2>&1 | tee test-results/evidence/node-tests.log
 
       - name: Wrangler dry-run
         run: |
