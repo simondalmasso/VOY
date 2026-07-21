@@ -187,12 +187,27 @@ test.describe('City Platform V1 browser smoke', () => {
     expect(nationalAgain.fares.remis.diurno.bajada).toBeNull();
     expect(nationalAgain.fares.bus.sube).toBeNull();
 
-    await page.evaluate(() => {
+    const loadedEmergency = await page.evaluate(async () => {
       localStorage.removeItem('voy_city_cache_v2_santafe');
       localStorage.removeItem('voy_city_cache_santafe');
+      const originalFetch = window.fetch;
+      window.fetch = function (input, init) {
+        const url = typeof input === 'string' ? input : input.url;
+        if (url.includes('cities/santa-fe/providers.json')) {
+          return Promise.resolve(new Response('controlled failure', {
+            status: 500,
+            headers: { 'Content-Type': 'text/plain' }
+          }));
+        }
+        return originalFetch.call(window, input, init);
+      };
+      try {
+        return await window.loadCityProfile('santafe');
+      } finally {
+        window.fetch = originalFetch;
+      }
     });
-    await page.route('**/cities/santa-fe/providers.json', route => route.fulfill({ status: 500, body: 'controlled failure' }));
-    expect(await page.evaluate(() => window.loadCityProfile('santafe'))).toBe(true);
+    expect(loadedEmergency).toBe(true);
 
     const emergency = await page.evaluate(() => ({
       cityId: window.CURRENT_CITY.city_id,
