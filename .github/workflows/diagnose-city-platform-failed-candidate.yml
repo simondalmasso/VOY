@@ -31,6 +31,7 @@ jobs:
       FAILED_CANDIDATE_VERSION_ID: aec70bcf-d02c-416a-b9f5-be4d83b34b32
       INCIDENT_SOURCE_SHA: e5533edaf2c5982c837896adb00d144d5f4f84b7
       INCIDENT_SHORT_SHA: e5533ed
+      INCIDENT_DEPLOY_TS: 2026-07-21T11:57:12.879Z
       EXPECTED_PRODUCTION_VERSION: V7.8.0
       EXPECTED_PRODUCTION_HASH: 4a8b91e
       DIRECT_ASSET_ROUNDS: 30
@@ -90,8 +91,17 @@ jobs:
         working-directory: incident-source
         run: |
           set -euo pipefail
-          BUILD_HASH="$INCIDENT_SHORT_SHA" node scripts/inject-build-hash.mjs
+          node - <<'NODE'
+          const fs = require('node:fs');
+          for (const file of ['worker.js', 'public/VOY-Lite.html']) {
+            let source = fs.readFileSync(file, 'utf8');
+            source = source.replaceAll('__BUILD_HASH__', process.env.INCIDENT_SHORT_SHA);
+            source = source.replaceAll('__DEPLOY_TS__', process.env.INCIDENT_DEPLOY_TS);
+            fs.writeFileSync(file, source, 'utf8');
+          }
+          NODE
           grep -F "window.VOY_BUILD_HASH='$INCIDENT_SHORT_SHA'" public/VOY-Lite.html
+          grep -F "$INCIDENT_DEPLOY_TS" public/VOY-Lite.html
 
       - name: Probe failed candidate for thirty rounds without mutations
         env:
