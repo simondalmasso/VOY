@@ -10,41 +10,71 @@ const evidenceDirectory = process.env.VOY_EVIDENCE_DIR || 'test-results/cloudfla
 const baseOrigin = new URL(baseURL).origin;
 const overrideValue = `${workerName}="${candidateVersionId}"`;
 
-function emptyCounts() {
-  return { console: [], pageerrors: [], requests: [], directNominatim: 0 };
+function emptyEvidence() {
+  return { console: [], pageerrors: [], requests: [], responses: [], directNominatim: 0 };
 }
 
-async function saveEvidence(page, testInfo, evidence, phase) {
+function isRelevantSameOrigin(url) {
+  if (!url.startsWith(baseOrigin)) return false;
+  const pathname = new URL(url).pathname;
+  return pathname === '/' || pathname === '/VOY-Lite.html' || pathname === '/api/health' ||
+    pathname === '/core/cityPlatform.js' || pathname.startsWith('/cities/');
+}
+
+async function saveEvidence(page, testInfo, evidence, phase, state) {
   await fs.mkdir(evidenceDirectory, { recursive: true });
   const slug = `${testInfo.project.name}-${phase}`;
   await fs.writeFile(`${evidenceDirectory}/${slug}-console.json`, JSON.stringify(evidence.console, null, 2));
   await fs.writeFile(`${evidenceDirectory}/${slug}-pageerrors.json`, JSON.stringify(evidence.pageerrors, null, 2));
   await fs.writeFile(`${evidenceDirectory}/${slug}-requests.json`, JSON.stringify(evidence.requests, null, 2));
+  await fs.writeFile(`${evidenceDirectory}/${slug}-responses.json`, JSON.stringify(evidence.responses, null, 2));
+  if (state) await fs.writeFile(`${evidenceDirectory}/${slug}-state.json`, JSON.stringify(state, null, 2));
   await page.screenshot({ path: `${evidenceDirectory}/${slug}.png`, fullPage: false, timeout: 8_000 });
 }
 
-test.describe('Cloudflare exact-version candidate', () => {
-  test('validates national, Santa Fe and fail-closed fallback', async ({ page }, testInfo) => {
-    const evidence = emptyCounts();
+function assertRelevantHeaders(evidence) {
+  const relevant = evidence.requests.filter(entry => entry.relevant);
+  expect(relevant.length).toBeGreaterThan(0);
+  for (const request of relevant) {
+    expect(request.overrideHeader, `override header for ${request.url}`).toBe(overrideValue);
+    expect(request.candidateMarker, `candidate marker for ${request.url}`).toBe(candidateVersionId);
+  }
+}
 
-    await page.route(`${baseOrigin}/**`, async route => {
-      const headers = {
-        ...route.request().headers(),
-        'Cloudflare-Workers-Version-Overrides': overrideValue,
-        'X-VOY-Candidate-Smoke': candidateVersionId
-      };
-      await route.continue({ headers });
-    });
+test.describe('Cloudflare exact-version candidate', () => {
+  test('validates exact candidate, reload, territorial transitions and fail-closed fallback', async ({ page }, testInfo) => {
+    const evidence = emptyEvidence();
 
     page.on('console', message => evidence.console.push({ type: message.type(), text: message.text() }));
     page.on('pageerror', error => evidence.pageerrors.push(String(error && error.stack || error)));
     page.on('request', request => {
-      evidence.requests.push({ method: request.method(), url: request.url() });
-      if (request.url().includes('nominatim.openstreetmap.org')) evidence.directNominatim += 1;
+      const headers = request.headers();
+      const url = request.url();
+      evidence.requests.push({
+        method: request.method(),
+        url,
+        resourceType: request.resourceType(),
+        relevant: isRelevantSameOrigin(url),
+        overrideHeader: headers['cloudflare-workers-version-overrides'] || null,
+        candidateMarker: headers['x-voy-candidate-smoke'] || null
+      });
+      if (url.includes('nominatim.openstreetmap.org')) evidence.directNominatim += 1;
+    });
+    page.on('response', response => {
+      const url = response.url();
+      if (isRelevantSameOrigin(url)) evidence.responses.push({ url, status: response.status(), headers: response.headers() });
     });
 
-    await page.goto('/?city=_default', { waitUntil: 'domcontentloaded' });
+    const probe = Date.now();
+    await page.goto(`/?city=_default&candidate_browser_probe=${probe}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' && !document.getElementById('splash'));
+
+    const health = await page.evaluate(async probeValue => {
+      const response = await fetch(`/api/health?candidate_browser_probe=${probeValue}`, { cache: 'no-store' });
+      return { status: response.status, body: await response.json() };
+    }, probe);
+    expect(health.status).toBe(200);
+    expect(health.body).toMatchObject({ ok: true, version: 'V7.8.0', build_hash: expectedHash });
 
     const national = await page.evaluate(() => ({
       inlineVersion: window.VOY_VERSION,
@@ -71,16 +101,8 @@ test.describe('Cloudflare exact-version candidate', () => {
     expect(national.metaVersion).toBe('V7.8.0');
     expect(national.buildHash).toBe(expectedHash);
     expect(national).toMatchObject({
-      cityId: '_default',
-      name: 'Argentina',
-      coverage: 'national_basic',
-      center: [-64, -34],
-      bbox: null,
-      stops: 0,
-      bikes: 0,
-      landmarks: 0,
-      companies: 0,
-      activeProviders: 0
+      cityId: '_default', name: 'Argentina', coverage: 'national_basic', center: [-64, -34], bbox: null,
+      stops: 0, bikes: 0, landmarks: 0, companies: 0, activeProviders: 0
     });
     expect(national.title).toBe('VOY — Movilidad en Argentina');
     expect(national.description).toContain('cobertura territorial verificada');
@@ -95,11 +117,21 @@ test.describe('Cloudflare exact-version candidate', () => {
       expect(fare).toMatchObject({ base: null, km: null, min: null, minFare: null, status: 'not_available' });
     }
 
-    const defaultParts = evidence.requests.filter(entry => entry.url.includes('/cities/_default/'));
-    expect(defaultParts).toHaveLength(5);
-    expect(new Set(defaultParts.map(entry => new URL(entry.url).pathname)).size).toBe(5);
+    const initialDefaultParts = evidence.requests.filter(entry => entry.url.includes('/cities/_default/'));
+    expect(initialDefaultParts).toHaveLength(5);
+    expect(new Set(initialDefaultParts.map(entry => new URL(entry.url).pathname)).size).toBe(5);
     expect(evidence.requests.some(entry => entry.url.includes('/cities/santa-fe/'))).toBe(false);
-    await saveEvidence(page, testInfo, evidence, 'national');
+    const cityPlatformRequest = evidence.requests.find(entry => new URL(entry.url).pathname === '/core/cityPlatform.js');
+    expect(cityPlatformRequest).toBeTruthy();
+    assertRelevantHeaders(evidence);
+    await saveEvidence(page, testInfo, evidence, 'national', { health, national, candidateVersionId, overrideValue });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' && window.VOY_BUILD_HASH === window.__expectedCandidateHash, { timeout: 10_000 }).catch(async () => {
+      const state = await page.evaluate(() => ({ city: window.CURRENT_CITY?.city_id, build: window.VOY_BUILD_HASH }));
+      expect(state).toMatchObject({ city: '_default', build: expectedHash });
+    });
+    expect(await page.evaluate(() => window.VOY_BUILD_HASH)).toBe(expectedHash);
 
     expect(await page.evaluate(() => window.loadCityProfile('santafe'))).toBe(true);
     const santaFe = await page.evaluate(() => ({
@@ -111,7 +143,8 @@ test.describe('Cloudflare exact-version candidate', () => {
       activeProviders: Object.values(window.PROVIDERS).filter(provider => provider.available).length,
       taxi: window.FareRegistry.taxi.diurno.bajada,
       remis: window.FareRegistry.remis.diurno.bajada,
-      bus: window.FareRegistry.bus.sube
+      bus: window.FareRegistry.bus.sube,
+      overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
     }));
     expect(santaFe.cityId).toBe('santafe');
     expect(santaFe.coverage).toBe('partial');
@@ -120,6 +153,7 @@ test.describe('Cloudflare exact-version candidate', () => {
     expect(santaFe.landmarks).toBeGreaterThan(0);
     expect(santaFe.activeProviders).toBeGreaterThan(0);
     expect(santaFe).toMatchObject({ taxi: 1790, remis: 1600, bus: 1900 });
+    expect(santaFe.overflow).toBeLessThanOrEqual(1);
 
     expect(await page.evaluate(() => window.loadCityProfile('_default'))).toBe(true);
     const nationalAgain = await page.evaluate(() => ({
@@ -145,10 +179,7 @@ test.describe('Cloudflare exact-version candidate', () => {
       window.fetch = function (input, init) {
         const url = typeof input === 'string' ? input : input.url;
         if (url.includes('cities/santa-fe/providers.json')) {
-          return Promise.resolve(new Response('candidate controlled failure', {
-            status: 500,
-            headers: { 'Content-Type': 'text/plain' }
-          }));
+          return Promise.resolve(new Response('candidate controlled failure', { status: 500, headers: { 'Content-Type': 'text/plain' } }));
         }
         return originalFetch.call(window, input, init);
       };
@@ -183,15 +214,13 @@ test.describe('Cloudflare exact-version candidate', () => {
     for (const fare of Object.values(emergency.fares.apps)) expect(fare.status).toBe('not_available');
     expect(emergency.overflow).toBeLessThanOrEqual(1);
 
+    assertRelevantHeaders(evidence);
     expect(evidence.pageerrors).toEqual([]);
     expect(evidence.directNominatim).toBe(0);
     expect(evidence.console.filter(entry => entry.type === 'error')).toEqual([]);
-    await fs.writeFile(`${evidenceDirectory}/${testInfo.project.name}-version-diagnostic.json`, JSON.stringify({
-      metaVersion: national.metaVersion,
-      inlineVersion: national.inlineVersion,
-      buildHash: national.buildHash,
-      candidateVersionId
-    }, null, 2));
-    await saveEvidence(page, testInfo, evidence, 'final');
+    await saveEvidence(page, testInfo, evidence, 'final', {
+      health, national, santaFe, nationalAgain, emergency,
+      candidateVersionId, overrideValue, expectedHash
+    });
   });
 });
