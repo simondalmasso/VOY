@@ -4,11 +4,13 @@
   "flags": {
     "ai_copilot": false,
     "voice_input": false,
+    "voice_output": false,
+    "voicebox_local": false,
     "qr_stops": false,
     "web_push": false,
     "live_transit": false,
     "weather_context": false,
     "price_history": false
   },
-  "verified_at": "2026-07-17"
+  "verified_at": "2026-07-21"
 }
