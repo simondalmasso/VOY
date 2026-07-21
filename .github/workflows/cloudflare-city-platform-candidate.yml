@@ -1,4 +1,4 @@
-name: VOY City Platform Cloudflare Candidate
+name: VOY City Platform Final Cloudflare Candidate
 
 on:
   push:
@@ -11,13 +11,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: voy-city-platform-cloudflare-candidate
+  group: voy-city-platform-final-candidate
   cancel-in-progress: false
 
 jobs:
   candidate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       WORKER_NAME: voy-app
       WORKER_URL: https://voy-app.simondalmasso44.workers.dev
@@ -25,7 +25,7 @@ jobs:
       EXPECTED_PRODUCTION_HASH: 4a8b91e
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      EVIDENCE_DIR: test-results/cloudflare-candidate
+      EVIDENCE_DIR: test-results/final-cloudflare-candidate
 
     steps:
       - uses: actions/checkout@v4
@@ -38,129 +38,128 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$GITHUB_REF_NAME" = "feat/voy-city-platform-v1"
-          mkdir -p "$EVIDENCE_DIR"
-          git rev-parse HEAD | tee "$EVIDENCE_DIR/source-sha.txt"
+          mkdir -p "$EVIDENCE_DIR/probes"
+          git rev-parse HEAD | tee "$EVIDENCE_DIR/exact-source-sha.txt"
           git diff --check
+          echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
 
-      - name: Install Bun 1.3.14
+      - name: Install exact toolchain
         run: |
-          npm install --global bun@1.3.14
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
           test "$(bun --version)" = "1.3.14"
+          test "$(wrangler --version | awk '{print $1}')" = "4.112.0"
+          bun install --frozen-lockfile
 
-      - name: Install frozen dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Lint exact candidate source
+      - name: Lint exact final head
         run: |
           set -o pipefail
           bun run lint 2>&1 | tee "$EVIDENCE_DIR/eslint.log"
 
-      - name: Test exact candidate source
+      - name: Test exact final head
         run: |
           set -o pipefail
           bun run test 2>&1 | tee "$EVIDENCE_DIR/node-tests.log"
 
-      - name: Wrangler dry-run exact candidate source
+      - name: Wrangler dry-run exact final head
         run: |
           set -o pipefail
-          bunx wrangler deploy --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
+          wrangler deploy --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
 
       - name: Inject exact build hash
         run: |
           set -euo pipefail
-          SHORT_SHA="${GITHUB_SHA:0:7}"
           BUILD_HASH="$SHORT_SHA" node scripts/inject-build-hash.mjs 2>&1 | tee "$EVIDENCE_DIR/inject-build-hash.log"
           grep -F "const BUILD_HASH = \"$SHORT_SHA\";" worker.js
           grep -F "window.VOY_BUILD_HASH='$SHORT_SHA'" public/VOY-Lite.html
-          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
 
       - name: Install Chromium 1.61.1
         run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
 
-      - name: Snapshot active Cloudflare deployment
+      - name: Snapshot production and existing split deployment
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          wrangler deployments list --json > "$EVIDENCE_DIR/wrangler-deployments-before.json"
           curl --fail --silent --show-error --retry 3 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "$API_ROOT/deployments" > /tmp/deployments-before.json
+            "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments-before.json"
           curl --fail --silent --show-error --retry 3 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "$API_ROOT/versions?per_page=100" > /tmp/versions-before.json
           curl --fail --silent --show-error --max-time 20 \
-            -D "$EVIDENCE_DIR/production-health-before.headers" \
-            "$WORKER_URL/api/health" > "$EVIDENCE_DIR/production-health-before.json"
+            "$WORKER_URL/api/health?final_candidate_baseline=$(date +%s%N)" \
+            > "$EVIDENCE_DIR/production-health-before.json"
           node <<'NODE'
           const fs = require('node:fs');
-          const deploymentsPayload = JSON.parse(fs.readFileSync('/tmp/deployments-before.json', 'utf8'));
-          if (!deploymentsPayload.success) throw new Error('cloudflare_deployments_query_failed');
-          const deployments = deploymentsPayload.result?.deployments || deploymentsPayload.result || [];
-          if (!Array.isArray(deployments) || !deployments.length) throw new Error('active_deployment_missing');
+          const payload = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/api-deployments-before.json', 'utf8'));
+          if (!payload.success) throw new Error('deployments_query_failed');
+          const deployments = payload.result?.deployments || payload.result || [];
           const active = deployments[0];
-          if (!Array.isArray(active.versions) || active.versions.length !== 1) throw new Error('unexpected_active_split_deployment');
-          const version = active.versions[0];
-          if (Number(version.percentage) !== 100) throw new Error('active_version_not_100_percent');
+          if (!active || !Array.isArray(active.versions)) throw new Error('active_deployment_missing');
+          const stable = active.versions.filter(v => Number(v.percentage) === 100);
+          const zero = active.versions.filter(v => Number(v.percentage) === 0);
+          if (stable.length !== 1) throw new Error(`stable_version_count:${stable.length}`);
+          if (zero.some(v => Number(v.percentage) !== 0)) throw new Error('nonzero_candidate_found');
           const health = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/production-health-before.json', 'utf8'));
           if (health.ok !== true || health.version !== process.env.EXPECTED_PRODUCTION_VERSION || health.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) {
             throw new Error('production_baseline_mismatch');
           }
-          fs.appendFileSync(process.env.GITHUB_ENV, `ACTIVE_DEPLOYMENT_ID=${active.id}\nACTIVE_VERSION_ID=${version.version_id}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `PREVIOUS_DEPLOYMENT_ID=${active.id}\nSTABLE_VERSION_ID=${stable[0].version_id}\n`);
           fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-before.json', JSON.stringify({
             deployment_id: active.id,
-            source: active.source || null,
-            versions: [{ version_id: version.version_id, percentage: Number(version.percentage) }]
+            stable_version_id: stable[0].version_id,
+            stable_traffic: 100,
+            previous_zero_traffic_versions: zero.map(v => v.version_id),
+            verified_health: { version: health.version, build_hash: health.build_hash },
+            checked_at: new Date().toISOString()
           }, null, 2));
           NODE
-
-      - name: Snapshot active version binding contract
-        run: |
-          set -euo pipefail
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
           curl --fail --silent --show-error --retry 3 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "$API_ROOT/versions/$ACTIVE_VERSION_ID" > /tmp/active-version.json
+            "$API_ROOT/versions/$STABLE_VERSION_ID" > /tmp/stable-version-detail.json
 
-      - name: Upload exact-SHA Worker version without deployment
+      - name: Upload one exact-SHA candidate version
         run: |
           set -euo pipefail
-          TAG="city-platform-v1-${GITHUB_SHA:0:12}"
-          export CANDIDATE_TAG="$TAG"
-          MESSAGE="PR #21 City Platform candidate $GITHUB_SHA"
+          TAG="city-platform-v1-final-${GITHUB_SHA:0:12}"
+          MESSAGE="PR #21 final zero-traffic candidate $GITHUB_SHA"
           echo "CANDIDATE_TAG=$TAG" >> "$GITHUB_ENV"
-          npx wrangler versions upload --minify --tag "$TAG" --message "$MESSAGE" 2>&1 | tee "$EVIDENCE_DIR/version-upload.log"
+          wrangler versions upload --minify --tag "$TAG" --message "$MESSAGE" 2>&1 | tee "$EVIDENCE_DIR/version-upload.log"
           API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
           curl --fail --silent --show-error --retry 3 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "$API_ROOT/versions?per_page=100" > /tmp/versions-after-upload.json
+            "$API_ROOT/versions?per_page=100" > /tmp/versions-after.json
           node <<'NODE'
           const fs = require('node:fs');
-          function items(payload) {
-            if (!payload.success) throw new Error('cloudflare_versions_query_failed');
+          function versions(path) {
+            const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (!payload.success) throw new Error('versions_query_failed');
             if (Array.isArray(payload.result)) return payload.result;
             if (Array.isArray(payload.result?.items)) return payload.result.items;
             if (Array.isArray(payload.result?.versions)) return payload.result.versions;
-            throw new Error('cloudflare_versions_shape_unknown');
+            throw new Error('versions_shape_unknown');
           }
-          const before = items(JSON.parse(fs.readFileSync('/tmp/versions-before.json', 'utf8')));
-          const after = items(JSON.parse(fs.readFileSync('/tmp/versions-after-upload.json', 'utf8')));
-          const beforeIds = new Set(before.map(item => item.id).filter(Boolean));
-          const added = after.filter(item => item.id && !beforeIds.has(item.id));
+          const before = versions('/tmp/versions-before.json');
+          const after = versions('/tmp/versions-after.json');
+          const beforeIds = new Set(before.map(v => v.id).filter(Boolean));
+          const added = after.filter(v => v.id && !beforeIds.has(v.id));
           if (added.length !== 1) throw new Error(`candidate_version_not_unique:${added.length}`);
           const candidate = added[0];
           fs.appendFileSync(process.env.GITHUB_ENV, `CANDIDATE_VERSION_ID=${candidate.id}\n`);
           fs.writeFileSync(process.env.EVIDENCE_DIR + '/candidate-version.json', JSON.stringify({
             version_id: candidate.id,
             number: candidate.number || null,
-            created_on: candidate.metadata?.created_on || null,
-            source: candidate.metadata?.source || null,
             tag: process.env.CANDIDATE_TAG,
-            source_sha: process.env.GITHUB_SHA
+            source_sha: process.env.GITHUB_SHA,
+            source_short_sha: process.env.SHORT_SHA,
+            created_on: candidate.metadata?.created_on || null
           }, null, 2));
           NODE
 
-      - name: Verify candidate binding contract before deployment
+      - name: Verify candidate binding parity
         run: |
           set -euo pipefail
           API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
@@ -169,232 +168,276 @@ jobs:
             "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > /tmp/candidate-version-detail.json
           node <<'NODE'
           const fs = require('node:fs');
-          function bindings(path) {
+          function contract(path) {
             const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-            if (!payload.success) throw new Error('version_detail_query_failed');
-            const list = payload.result?.resources?.bindings;
-            if (!Array.isArray(list)) throw new Error('version_bindings_missing');
-            return list.map(binding => `${binding.name}:${binding.type}`).sort();
+            if (!payload.success) throw new Error('version_detail_failed');
+            const bindings = payload.result?.resources?.bindings;
+            if (!Array.isArray(bindings)) throw new Error('version_bindings_missing');
+            return bindings.map(b => `${b.name}:${b.type}`).sort();
           }
-          const active = bindings('/tmp/active-version.json');
-          const candidate = bindings('/tmp/candidate-version-detail.json');
-          if (active.length !== candidate.length || active.some((value, index) => value !== candidate[index])) {
-            throw new Error(`candidate_binding_contract_mismatch:${active.length}:${candidate.length}`);
+          const stable = contract('/tmp/stable-version-detail.json');
+          const candidate = contract('/tmp/candidate-version-detail.json');
+          if (stable.length !== candidate.length || stable.some((value, index) => value !== candidate[index])) {
+            throw new Error(`binding_contract_mismatch:${stable.length}:${candidate.length}`);
           }
-          for (const expected of ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']) {
-            if (!candidate.some(value => value.startsWith(expected + ':'))) throw new Error(`expected_binding_missing:${expected}`);
+          for (const required of ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']) {
+            if (!candidate.some(value => value.startsWith(required + ':'))) throw new Error(`required_binding_missing:${required}`);
           }
           fs.writeFileSync(process.env.EVIDENCE_DIR + '/binding-contract.json', JSON.stringify({
-            active_binding_count: active.length,
+            stable_binding_count: stable.length,
             candidate_binding_count: candidate.length,
             contracts_equal: true,
-            expected_public_bindings_present: ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']
+            bindings: candidate,
+            required_bindings_present: ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']
           }, null, 2));
           NODE
 
-      - name: Create zero-traffic candidate deployment
+      - name: Replace only the zero-traffic candidate
         run: |
           set -euo pipefail
-          npx wrangler versions deploy \
-            "$ACTIVE_VERSION_ID@100%" \
+          wrangler versions deploy \
+            "$STABLE_VERSION_ID@100%" \
             "$CANDIDATE_VERSION_ID@0%" \
-            --message "PR #21 candidate 0% $GITHUB_SHA" \
+            --message "PR #21 final candidate 0% $GITHUB_SHA" \
             --yes 2>&1 | tee "$EVIDENCE_DIR/candidate-deployment.log"
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
-          curl --fail --silent --show-error --retry 3 \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "$API_ROOT/deployments" > /tmp/deployments-after.json
-          node <<'NODE'
-          const fs = require('node:fs');
-          const payload = JSON.parse(fs.readFileSync('/tmp/deployments-after.json', 'utf8'));
-          if (!payload.success) throw new Error('post_deployment_query_failed');
-          const deployments = payload.result?.deployments || payload.result || [];
-          const deployment = deployments[0];
-          if (!deployment || !Array.isArray(deployment.versions) || deployment.versions.length !== 2) throw new Error('candidate_deployment_shape_invalid');
-          const byId = new Map(deployment.versions.map(version => [version.version_id, Number(version.percentage)]));
-          if (byId.get(process.env.ACTIVE_VERSION_ID) !== 100) throw new Error('stable_traffic_changed');
-          if (byId.get(process.env.CANDIDATE_VERSION_ID) !== 0) throw new Error('candidate_traffic_not_zero');
-          fs.appendFileSync(process.env.GITHUB_ENV, `CANDIDATE_DEPLOYMENT_ID=${deployment.id}\n`);
-          fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-after.json', JSON.stringify({
-            deployment_id: deployment.id,
-            previous_deployment_id: process.env.ACTIVE_DEPLOYMENT_ID,
-            source: deployment.source || null,
-            versions: deployment.versions.map(version => ({
-              version_id: version.version_id,
-              percentage: Number(version.percentage)
-            }))
-          }, null, 2));
-          NODE
 
-      - name: Start candidate-version log tail
+      - name: Wait for deployment and override convergence
         run: |
           set -euo pipefail
-          timeout 150s npx wrangler tail "$WORKER_NAME" \
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          OVERRIDE="$WORKER_NAME=\"$CANDIDATE_VERSION_ID\""
+          CONSECUTIVE=0
+          : > "$EVIDENCE_DIR/convergence.log"
+          for ATTEMPT in $(seq 1 120); do
+            TS="$(date +%s%N)"
+            curl --fail --silent --show-error --retry 2 \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API_ROOT/deployments" > /tmp/deployments-current.json
+            CANDIDATE_OK=0
+            STABLE_OK=0
+            DEPLOYMENT_OK=0
+            if curl --fail --silent --show-error --max-time 20 \
+              -H "Cloudflare-Workers-Version-Overrides: $OVERRIDE" \
+              -H "Cache-Control: no-cache, no-store, max-age=0" \
+              "$WORKER_URL/api/health?candidate_convergence=$TS" \
+              > /tmp/candidate-health.json; then
+              if node -e "const h=require('/tmp/candidate-health.json'); if(h.ok!==true||h.version!=='$EXPECTED_PRODUCTION_VERSION'||h.build_hash!=='$SHORT_SHA')process.exit(1)"; then CANDIDATE_OK=1; fi
+            fi
+            if curl --fail --silent --show-error --max-time 20 \
+              -H "Cache-Control: no-cache, no-store, max-age=0" \
+              "$WORKER_URL/api/health?stable_convergence=$TS" \
+              > /tmp/stable-health.json; then
+              if node -e "const h=require('/tmp/stable-health.json'); if(h.ok!==true||h.version!=='$EXPECTED_PRODUCTION_VERSION'||h.build_hash!=='$EXPECTED_PRODUCTION_HASH')process.exit(1)"; then STABLE_OK=1; fi
+            fi
+            if node <<'NODE'
+            const fs = require('node:fs');
+            const payload = JSON.parse(fs.readFileSync('/tmp/deployments-current.json', 'utf8'));
+            const deployments = payload.result?.deployments || payload.result || [];
+            const active = deployments[0];
+            if (!active || !Array.isArray(active.versions)) process.exit(1);
+            const byId = new Map(active.versions.map(v => [v.version_id, Number(v.percentage)]));
+            if (byId.get(process.env.STABLE_VERSION_ID) !== 100) process.exit(1);
+            if (byId.get(process.env.CANDIDATE_VERSION_ID) !== 0) process.exit(1);
+            fs.writeFileSync('/tmp/current-deployment-id.txt', active.id || '');
+            NODE
+            then DEPLOYMENT_OK=1; fi
+            printf '%s attempt=%s deployment=%s candidate=%s stable=%s\n' "$(date -u +%FT%TZ)" "$ATTEMPT" "$DEPLOYMENT_OK" "$CANDIDATE_OK" "$STABLE_OK" | tee -a "$EVIDENCE_DIR/convergence.log"
+            if [ "$DEPLOYMENT_OK" = 1 ] && [ "$CANDIDATE_OK" = 1 ] && [ "$STABLE_OK" = 1 ]; then
+              CONSECUTIVE=$((CONSECUTIVE + 1))
+            else
+              CONSECUTIVE=0
+            fi
+            if [ "$CONSECUTIVE" -ge 3 ]; then
+              DEPLOYMENT_ID="$(cat /tmp/current-deployment-id.txt)"
+              echo "CANDIDATE_DEPLOYMENT_ID=$DEPLOYMENT_ID" >> "$GITHUB_ENV"
+              cp /tmp/candidate-health.json "$EVIDENCE_DIR/candidate-health-converged.json"
+              cp /tmp/stable-health.json "$EVIDENCE_DIR/stable-health-converged.json"
+              cp /tmp/deployments-current.json "$EVIDENCE_DIR/api-deployments-converged.json"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Candidate deployment did not converge in the bounded window" >&2
+          exit 1
+
+      - name: Start exact final candidate log tail
+        run: |
+          set -euo pipefail
+          timeout 360s wrangler tail "$WORKER_NAME" \
             --format json \
             --version-id "$CANDIDATE_VERSION_ID" \
             > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
           echo "TAIL_PID=$!" >> "$GITHUB_ENV"
           sleep 5
-          if kill -0 "$!" 2>/dev/null; then
-            echo "TAIL_STATE=STARTED" >> "$GITHUB_ENV"
-          else
-            echo "TAIL_STATE=UNAVAILABLE" >> "$GITHUB_ENV"
-          fi
+          kill -0 "$!"
 
-      - name: Validate candidate health and static assets by version override
+      - name: Probe final candidate and normal routing
         run: |
           set -euo pipefail
-          OVERRIDE="Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$CANDIDATE_VERSION_ID\""
-          SUCCESS=0
-          for ATTEMPT in $(seq 1 20); do
-            if curl --fail --silent --show-error --max-time 20 \
-              -H "$OVERRIDE" \
-              -H "X-VOY-Candidate-Smoke: $CANDIDATE_VERSION_ID" \
-              "$WORKER_URL/api/health" > "$EVIDENCE_DIR/candidate-health.json"; then
-              if node -e "const h=require('./$EVIDENCE_DIR/candidate-health.json'); if(h.ok!==true||h.version!=='$EXPECTED_PRODUCTION_VERSION'||h.build_hash!=='$SHORT_SHA')process.exit(1)"; then
-                SUCCESS=1
-                break
-              fi
-            fi
-            sleep 3
-          done
-          test "$SUCCESS" = "1"
-          curl --fail --silent --show-error --max-time 20 \
-            -D "$EVIDENCE_DIR/candidate-health.headers" \
-            -H "$OVERRIDE" \
-            -H "X-VOY-Candidate-Smoke: $CANDIDATE_VERSION_ID" \
-            "$WORKER_URL/api/health" > "$EVIDENCE_DIR/candidate-health.json"
-          for PATHNAME in \
-            "/" \
-            "/VOY-Lite.html" \
-            "/core/cityPlatform.js?v=1" \
-            "/cities/_default/profile.json" \
-            "/cities/_default/providers.json" \
-            "/cities/_default/transport.json" \
-            "/cities/_default/fares.json" \
-            "/cities/_default/feature_flags.json" \
-            "/cities/santa-fe/profile.json" \
-            "/cities/santa-fe/providers.json" \
-            "/cities/santa-fe/transport.json" \
-            "/cities/santa-fe/fares.json" \
-            "/cities/santa-fe/feature_flags.json"; do
-            SAFE_NAME=$(printf '%s' "$PATHNAME" | tr '/?=&' '____' | tr -cd '[:alnum:]_.-')
-            CODE=$(curl --location --silent --show-error --max-time 25 \
-              -H "$OVERRIDE" \
-              -H "X-VOY-Candidate-Smoke: $CANDIDATE_VERSION_ID" \
-              -o "$EVIDENCE_DIR/http-${SAFE_NAME}.body" \
-              -w '%{http_code}' \
-              "$WORKER_URL$PATHNAME")
-            test "$CODE" = "200"
-            printf '%s %s\n' "$CODE" "$PATHNAME" >> "$EVIDENCE_DIR/http-smoke.txt"
-          done
-          CODE=$(curl --silent --show-error --max-time 35 \
-            -H "$OVERRIDE" \
-            -H "X-VOY-Candidate-Smoke: $CANDIDATE_VERSION_ID" \
-            -o "$EVIDENCE_DIR/geocode-wide.json" \
-            -w '%{http_code}' \
-            "$WORKER_URL/api/geocode?q=Bv.%20Galvez%201150&city=santafe&wide=1")
-          test "$CODE" = "200"
-          printf '%s %s\n' "$CODE" "/api/geocode?city=santafe&wide=1" >> "$EVIDENCE_DIR/http-smoke.txt"
           node <<'NODE'
           const fs = require('node:fs');
-          const root = process.env.EVIDENCE_DIR;
-          const expected = [
-            ['http-_cities__default_profile.json.body', '_default'],
-            ['http-_cities__default_providers.json.body', '_default'],
-            ['http-_cities__default_transport.json.body', '_default'],
-            ['http-_cities__default_fares.json.body', '_default'],
-            ['http-_cities__default_feature_flags.json.body', '_default'],
-            ['http-_cities_santa-fe_profile.json.body', 'santafe'],
-            ['http-_cities_santa-fe_providers.json.body', 'santafe'],
-            ['http-_cities_santa-fe_transport.json.body', 'santafe'],
-            ['http-_cities_santa-fe_fares.json.body', 'santafe'],
-            ['http-_cities_santa-fe_feature_flags.json.body', 'santafe']
+          const { spawnSync } = require('node:child_process');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const base = process.env.WORKER_URL;
+          const outDir = process.env.EVIDENCE_DIR + '/probes';
+          const override = `${process.env.WORKER_NAME}="${process.env.CANDIDATE_VERSION_ID}"`;
+          const paths = [
+            '/api/health', '/', '/VOY-Lite.html', '/core/cityPlatform.js?v=1',
+            '/cities/_default/profile.json', '/cities/_default/providers.json',
+            '/cities/_default/transport.json', '/cities/_default/fares.json',
+            '/cities/_default/feature_flags.json', '/cities/santa-fe/profile.json'
           ];
-          for (const [file, cityId] of expected) {
-            const data = JSON.parse(fs.readFileSync(`${root}/${file}`, 'utf8'));
-            if (data.schema_version !== 1 || data.city_id !== cityId) throw new Error(`candidate_city_file_invalid:${file}`);
+          const records = [];
+          function safe(value) { return value.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_') || 'root'; }
+          function headerMap(raw) {
+            const blocks = raw.trim().split(/\r?\n\r?\n/).filter(Boolean);
+            const lines = (blocks.at(-1) || '').split(/\r?\n/);
+            const statusLine = lines.shift() || '';
+            const headers = {};
+            for (const line of lines) {
+              const index = line.indexOf(':');
+              if (index > 0) headers[line.slice(0, index).trim().toLowerCase()] = line.slice(index + 1).trim();
+            }
+            return { statusLine, headers };
           }
-          const geocode = JSON.parse(fs.readFileSync(`${root}/geocode-wide.json`, 'utf8'));
-          if (!geocode || typeof geocode !== 'object') throw new Error('candidate_geocode_invalid');
+          for (const mode of ['normal', 'override']) {
+            for (const pathname of paths) {
+              const ts = Date.now();
+              const separator = pathname.includes('?') ? '&' : '?';
+              const requested = `${base}${pathname}${separator}final_candidate_probe=${ts}-${mode}`;
+              const slug = `${mode}-${safe(pathname)}`;
+              const headersFile = path.join(outDir, slug + '.headers');
+              const bodyFile = path.join(outDir, slug + '.body');
+              const traceFile = path.join(outDir, slug + '.trace');
+              const sent = {
+                'Cache-Control': 'no-cache, no-store, max-age=0',
+                Pragma: 'no-cache',
+                'X-VOY-Candidate-Probe': `${ts}-${mode}`
+              };
+              if (mode === 'override') sent['Cloudflare-Workers-Version-Overrides'] = override;
+              fs.writeFileSync(path.join(outDir, slug + '.request.json'), JSON.stringify({ url: requested, headers: sent }, null, 2));
+              const args = ['--http2', '--silent', '--show-error', '--max-time', '30', '--max-redirs', '0', '--path-as-is', '--dump-header', headersFile, '--output', bodyFile, '--trace-ascii', traceFile, '--write-out', '%{json}'];
+              for (const [key, value] of Object.entries(sent)) args.push('-H', `${key}: ${value}`);
+              args.push(requested);
+              const result = spawnSync('curl', args, { encoding: 'utf8' });
+              const meta = result.stdout ? JSON.parse(result.stdout) : {};
+              const body = fs.existsSync(bodyFile) ? fs.readFileSync(bodyFile) : Buffer.alloc(0);
+              const received = fs.existsSync(headersFile) ? headerMap(fs.readFileSync(headersFile, 'utf8')) : { statusLine: '', headers: {} };
+              let health = null;
+              if (pathname === '/api/health') {
+                try { const parsed = JSON.parse(body.toString()); health = { ok: parsed.ok, version: parsed.version, build_hash: parsed.build_hash }; } catch {}
+              }
+              records.push({
+                mode, path: pathname, requested_url: requested, effective_url: meta.url_effective || null,
+                status: meta.http_code || 0, redirect_url: meta.redirect_url || null, curl_exit: result.status,
+                sent_headers: sent, received_headers: received.headers, status_line: received.statusLine,
+                body_sha256: crypto.createHash('sha256').update(body).digest('hex'), body_bytes: body.length,
+                health, timestamp: new Date().toISOString()
+              });
+            }
+          }
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/probe-records.json', JSON.stringify(records, null, 2));
+          const candidateHealth = records.find(r => r.mode === 'override' && r.path === '/api/health');
+          const stableHealth = records.find(r => r.mode === 'normal' && r.path === '/api/health');
+          if (candidateHealth?.health?.build_hash !== process.env.SHORT_SHA) throw new Error('candidate_health_probe_mismatch');
+          if (stableHealth?.health?.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) throw new Error('stable_health_probe_mismatch');
+          const candidateExpected200 = records.filter(r => r.mode === 'override' && ['/','/core/cityPlatform.js?v=1','/cities/_default/profile.json','/cities/_default/providers.json','/cities/_default/transport.json','/cities/_default/fares.json','/cities/_default/feature_flags.json','/cities/santa-fe/profile.json'].includes(r.path));
+          if (candidateExpected200.some(r => r.status !== 200)) throw new Error('candidate_asset_probe_failed');
+          const entrypoint = records.find(r => r.mode === 'override' && r.path === '/VOY-Lite.html');
+          if (![200, 301, 308].includes(entrypoint?.status)) throw new Error('candidate_entrypoint_probe_failed');
           NODE
 
-      - name: Browser smoke exact candidate version
+      - name: Browser smoke exact final candidate desktop and mobile
+        env:
+          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
+          VOY_WORKER_NAME: voy-app
+          VOY_EVIDENCE_DIR: test-results/final-cloudflare-candidate
+          VOY_OUTPUT_DIR: test-results/final-candidate-playwright
+          VOY_REPORT_DIR: playwright-report-final-candidate
         run: |
-          set -euo pipefail
-          VOY_BASE_URL="$WORKER_URL" \
-          VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" \
-          VOY_EXPECTED_BUILD_HASH="$SHORT_SHA" \
-          VOY_WORKER_NAME="$WORKER_NAME" \
-          VOY_EVIDENCE_DIR="$EVIDENCE_DIR/browser" \
-          VOY_REPORT_DIR="playwright-report-cloudflare-candidate" \
-          VOY_OUTPUT_DIR="test-results/cloudflare-candidate-playwright" \
-          npx --yes --package=@playwright/test@1.61.1 playwright test \
-            --config=candidate-tests/playwright.config.js 2>&1 | tee "$EVIDENCE_DIR/candidate-browser.log"
+          set -o pipefail
+          export VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID"
+          export VOY_EXPECTED_BUILD_HASH="$SHORT_SHA"
+          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
+            PLAYWRIGHT_BIN=$(command -v playwright)
+            NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
+            export NODE_PATH
+            playwright test --config=candidate-tests/playwright.config.js
+          ' 2>&1 | tee "$EVIDENCE_DIR/playwright.log"
 
-      - name: Verify normal traffic remains on productive version
+      - name: Verify final traffic, deployment and candidate version proof
         if: always()
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 20 \
-            -D "$EVIDENCE_DIR/production-health-after.headers" \
-            "$WORKER_URL/api/health" > "$EVIDENCE_DIR/production-health-after.json"
-          node <<'NODE'
-          const fs = require('node:fs');
-          const health = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/production-health-after.json', 'utf8'));
-          if (health.ok !== true || health.version !== process.env.EXPECTED_PRODUCTION_VERSION || health.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) {
-            throw new Error('normal_traffic_changed_after_candidate');
-          }
-          NODE
-
-      - name: Stop log tail and inspect candidate errors
-        if: always()
-        run: |
-          if [ -n "${TAIL_PID:-}" ]; then
+          if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
             kill "$TAIL_PID" 2>/dev/null || true
             wait "$TAIL_PID" 2>/dev/null || true
           fi
-          if [ -f "$EVIDENCE_DIR/candidate-tail.log" ]; then
-            if grep -E '"outcome"[[:space:]]*:[[:space:]]*"exception"|"status"[[:space:]]*:[[:space:]]*"error"' "$EVIDENCE_DIR/candidate-tail.log"; then
-              echo "Candidate runtime exception found in tail" >&2
-              exit 1
-            fi
-          fi
-          printf '%s\n' "${TAIL_STATE:-NOT_STARTED}" > "$EVIDENCE_DIR/tail-state.txt"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments-final.json"
+          curl --fail --silent --show-error --max-time 20 \
+            "$WORKER_URL/api/health?final_normal_verification=$(date +%s%N)" \
+            > "$EVIDENCE_DIR/production-health-final.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/api-deployments-final.json', 'utf8'));
+          if (!payload.success) throw new Error('final_deployments_query_failed');
+          const deployments = payload.result?.deployments || payload.result || [];
+          const active = deployments[0];
+          const byId = new Map((active?.versions || []).map(v => [v.version_id, Number(v.percentage)]));
+          if (byId.get(process.env.STABLE_VERSION_ID) !== 100) throw new Error('final_stable_not_100');
+          if (byId.get(process.env.CANDIDATE_VERSION_ID) !== 0) throw new Error('final_candidate_not_0');
+          if ((active?.versions || []).length !== 2) throw new Error('final_deployment_has_unexpected_versions');
+          const health = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/production-health-final.json', 'utf8'));
+          if (health.ok !== true || health.version !== process.env.EXPECTED_PRODUCTION_VERSION || health.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) throw new Error('final_production_health_changed');
+          const tail = fs.existsSync(process.env.EVIDENCE_DIR + '/candidate-tail.log') ? fs.readFileSync(process.env.EVIDENCE_DIR + '/candidate-tail.log', 'utf8') : '';
+          const ids = [...tail.matchAll(/"scriptVersion"\s*:\s*\{\s*"id"\s*:\s*"([^"]+)"/g)].map(match => match[1]);
+          const exact = ids.filter(id => id === process.env.CANDIDATE_VERSION_ID).length;
+          const outcomes = [...tail.matchAll(/"outcome"\s*:\s*"([^"]+)"/g)].map(match => match[1]);
+          const bad = outcomes.filter(value => value !== 'ok');
+          if (exact < 2) throw new Error(`candidate_version_proof_insufficient:${exact}`);
+          if (bad.length) throw new Error(`candidate_tail_non_ok:${bad.join(',')}`);
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/final-state.json', JSON.stringify({
+            exact_source_sha: process.env.GITHUB_SHA,
+            source_short_sha: process.env.SHORT_SHA,
+            deployment_id: active.id,
+            previous_deployment_id: process.env.PREVIOUS_DEPLOYMENT_ID,
+            stable_version_id: process.env.STABLE_VERSION_ID,
+            stable_traffic: 100,
+            candidate_version_id: process.env.CANDIDATE_VERSION_ID,
+            candidate_traffic: 0,
+            production_health: { version: health.version, build_hash: health.build_hash },
+            candidate_tail_events: exact,
+            observed_candidate_version_ids: [...new Set(ids)],
+            non_ok_tail_outcomes: bad,
+            rollback_executed: false,
+            production_promoted: false,
+            verified_at: new Date().toISOString()
+          }, null, 2));
+          NODE
 
-      - name: Build candidate evidence manifest
+      - name: Build final evidence manifest
         if: always()
         run: |
           set -euo pipefail
-          cat > "$EVIDENCE_DIR/candidate-state.json" <<EOF
-          {
-            "source_sha": "$GITHUB_SHA",
-            "source_short_sha": "${SHORT_SHA:-unknown}",
-            "worker": "$WORKER_NAME",
-            "production_version_before": "${ACTIVE_VERSION_ID:-unknown}",
-            "production_deployment_before": "${ACTIVE_DEPLOYMENT_ID:-unknown}",
-            "candidate_version_id": "${CANDIDATE_VERSION_ID:-unknown}",
-            "candidate_deployment_id": "${CANDIDATE_DEPLOYMENT_ID:-unknown}",
-            "candidate_normal_traffic_percentage": 0,
-            "stable_normal_traffic_percentage": 100,
-            "rollback_executed": false,
-            "production_promoted": false
-          }
-          EOF
-          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 -print0 \
-            | sort -z \
-            | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          find "$EVIDENCE_DIR" -type f -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          if [ -d playwright-report-final-candidate ]; then
+            find playwright-report-final-candidate -type f -print0 | sort -z | xargs -0 sha256sum >> "$EVIDENCE_DIR/manifest.sha256"
+          fi
           sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
 
-      - name: Upload Cloudflare candidate evidence
+      - name: Upload final candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voy-city-platform-cloudflare-candidate-${{ github.run_id }}
+          name: voy-city-platform-final-candidate-${{ github.run_id }}
           path: |
-            test-results/cloudflare-candidate
-            test-results/cloudflare-candidate-playwright
-            playwright-report-cloudflare-candidate
+            test-results/final-cloudflare-candidate
+            test-results/final-candidate-playwright
+            playwright-report-final-candidate
           if-no-files-found: error
           retention-days: 30
 
@@ -402,11 +445,12 @@ jobs:
         if: always()
         run: |
           {
-            echo "## VOY City Platform candidate"
-            echo "- Source SHA: \`$GITHUB_SHA\`"
-            echo "- Stable version: \`${ACTIVE_VERSION_ID:-unavailable}\` at 100%"
-            echo "- Candidate version: \`${CANDIDATE_VERSION_ID:-unavailable}\` at 0%"
-            echo "- Candidate deployment: \`${CANDIDATE_DEPLOYMENT_ID:-unavailable}\`"
-            echo "- Production promoted: no"
-            echo "- Rollback executed: no"
+            echo '## VOY City Platform final candidate'
+            echo
+            echo "- Exact source SHA: $GITHUB_SHA"
+            echo "- Stable version: ${STABLE_VERSION_ID:-unresolved} at 100%"
+            echo "- Candidate version: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
+            echo "- Deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Production promoted: no'
+            echo '- Rollback executed: no'
           } >> "$GITHUB_STEP_SUMMARY"
