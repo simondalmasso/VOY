@@ -53,7 +53,8 @@ test.describe('City Platform V1 browser smoke', () => {
   test.afterEach(async ({ page }, testInfo) => {
     await fs.mkdir(evidenceDirectory, { recursive: true });
     const evidence = page.__cityEvidence || { consoleLog: [], requestLog: [], pageErrors: [], nominatimCalls: 0 };
-    const slug = `city-platform-${testInfo.project.name}`;
+    const caseSlug = testInfo.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    const slug = `city-platform-${testInfo.project.name}-${caseSlug}`;
     await fs.writeFile(`${evidenceDirectory}/${slug}-console.json`, JSON.stringify(evidence.consoleLog, null, 2));
     await fs.writeFile(`${evidenceDirectory}/${slug}-requests.json`, JSON.stringify(evidence.requestLog, null, 2));
     await fs.writeFile(`${evidenceDirectory}/${slug}-pageerrors.json`, JSON.stringify(evidence.pageErrors, null, 2));
