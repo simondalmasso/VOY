@@ -1,4 +1,5 @@
 name: Validate Existing City Platform Candidate Browser
+# Validates an already deployed 0% candidate; never creates or promotes a version.
 
 on:
   push:
