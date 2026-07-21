@@ -47,7 +47,8 @@ test.describe('Cloudflare exact-version candidate', () => {
     await page.waitForFunction(() => window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' && !document.getElementById('splash'));
 
     const national = await page.evaluate(() => ({
-      version: window.VOY_VERSION,
+      inlineVersion: window.VOY_VERSION,
+      metaVersion: document.querySelector('meta[name="voy-version"]')?.content || '',
       buildHash: window.VOY_BUILD_HASH,
       cityId: window.CURRENT_CITY.city_id,
       name: window.CURRENT_CITY.name,
@@ -67,7 +68,7 @@ test.describe('Cloudflare exact-version candidate', () => {
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
     }));
 
-    expect(national.version).toBe('V7.8.0');
+    expect(national.metaVersion).toBe('V7.8.0');
     expect(national.buildHash).toBe(expectedHash);
     expect(national).toMatchObject({
       cityId: '_default',
@@ -185,6 +186,12 @@ test.describe('Cloudflare exact-version candidate', () => {
     expect(evidence.pageerrors).toEqual([]);
     expect(evidence.directNominatim).toBe(0);
     expect(evidence.console.filter(entry => entry.type === 'error')).toEqual([]);
+    await fs.writeFile(`${evidenceDirectory}/${testInfo.project.name}-version-diagnostic.json`, JSON.stringify({
+      metaVersion: national.metaVersion,
+      inlineVersion: national.inlineVersion,
+      buildHash: national.buildHash,
+      candidateVersionId
+    }, null, 2));
     await saveEvidence(page, testInfo, evidence, 'final');
   });
 });
