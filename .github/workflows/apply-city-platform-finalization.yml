@@ -1,0 +1,88 @@
+name: Apply City Platform V1 Finalization
+
+on:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - scripts/apply-city-platform-v1.mjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voy-city-platform-finalization
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 0
+
+      - name: Install Bun 1.3.14
+        run: |
+          npm install --global bun@1.3.14
+          test "$(bun --version)" = "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply exact City Platform finalization
+        run: node scripts/apply-city-platform-v1.mjs
+
+      - name: Validate generated diff
+        run: |
+          set -o pipefail
+          mkdir -p test-results/evidence
+          git diff --check
+          test -f public/cities/_default/profile.json
+          test -f public/cities/santa-fe/profile.json
+          grep -F 'core/cityPlatform.js?v=1' public/VOY-Lite.html
+          grep -F 'VoyCityPlatform.loadCity' public/VOY-Lite.html
+          grep -F 'activeCityLoadController.abort()' public/VOY-Lite.html
+          grep -F 'createEmergencyDefault(cityId)' public/VOY-Lite.html
+          grep -F 'voy_city_cache_v2_' public/VOY-Lite.html
+          ! grep -F "fetch('city_'" public/VOY-Lite.html
+          git diff -- public/VOY-Lite.html public/cities > test-results/evidence/city-platform-generated.patch
+
+      - name: ESLint
+        run: |
+          set -o pipefail
+          bun run lint 2>&1 | tee test-results/evidence/eslint.log
+
+      - name: Node tests
+        run: bun test
+
+      - name: Wrangler dry-run
+        run: |
+          set -o pipefail
+          bunx wrangler deploy --dry-run 2>&1 | tee test-results/evidence/wrangler-dry-run.log
+
+      - name: Build evidence manifest
+        run: |
+          find public/cities -type f -print0 | sort -z | xargs -0 sha256sum > test-results/evidence/city-files.sha256
+          sha256sum public/VOY-Lite.html public/core/cityPlatform.js >> test-results/evidence/city-files.sha256
+          git rev-parse HEAD > test-results/evidence/source-head.txt
+
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: city-platform-finalization-${{ github.run_id }}
+          path: test-results/evidence
+          if-no-files-found: error
+
+      - name: Commit generated source changes
+        run: |
+          git config user.name "voy-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/VOY-Lite.html public/cities
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "fix(city): finalize fail-closed territorial loading"
+          git push origin HEAD:feat/voy-city-platform-v1
