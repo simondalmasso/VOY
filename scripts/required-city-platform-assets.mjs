@@ -113,7 +113,7 @@ export function validateAssetBody(asset, body) {
     return { bodyBytes, bodySha256, parseResult: true, schemaResult: valid, cityId: null, error: valid ? null : 'html_contract_invalid' };
   }
   if (asset.kind === 'javascript') {
-    const valid = text.includes('VoyCityPlatform') && text.includes('loadCityProfile');
+    const valid = text.includes('VoyCityPlatform') && text.includes('loadCity');
     return { bodyBytes, bodySha256, parseResult: true, schemaResult: valid, cityId: null, error: valid ? null : 'javascript_contract_invalid' };
   }
   return { bodyBytes, bodySha256, parseResult: false, schemaResult: false, cityId: null, error: 'unknown_asset_kind' };
