@@ -6,6 +6,8 @@ on:
       - feat/voy-city-platform-v1
     paths:
       - .github/workflows/validate-existing-city-platform-candidate-browser.yml
+      - candidate-tests/cloudflare-candidate.spec.js
+      - candidate-tests/playwright.config.js
 
 permissions:
   contents: read
