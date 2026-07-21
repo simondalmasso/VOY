@@ -1,77 +1,67 @@
-name: Validate Destination Resolution V2
-
+name: VOY Voice Docs Exact Head Validation
 on:
-  pull_request:
-    branches: [main]
-
+  push:
+    branches: [ops/voice-docs-validation-v1]
+    paths: [.github/workflows/pr-validation.yml]
 permissions:
   contents: read
-
-concurrency:
-  group: validate-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 24
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EXACT_DOCS_HEAD: dea0aee2ce28857d761f9928d148c8505b860f7c
+      VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
+      EXPECTED_VERSION: V7.8.0
+      EXPECTED_HASH: 85659454cf6983c39338e0cecbed8e1a6b3f3cb4
+      VOY_EVIDENCE_DIR: test-results/voice-docs-production-browser
+      VOY_OUTPUT_DIR: test-results/voice-docs-production-output
+      VOY_REPORT_DIR: playwright-report-voice-docs-production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
+          ref: dea0aee2ce28857d761f9928d148c8505b860f7c
           fetch-depth: 0
-
-      - name: Install Bun 1.3.14
+      - name: Verify exact docs-only source
         run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_DOCS_HEAD"
+          git fetch origin main --depth=1
+          git diff --name-only FETCH_HEAD...HEAD | tee /tmp/changed-files.txt
+          test "$(wc -l < /tmp/changed-files.txt)" -eq 10
+          test -z "$(grep -Ev '^docs/.*\.md$' /tmp/changed-files.txt || true)"
+      - name: Frozen install, lint, tests and dry-run
+        run: |
+          set -euo pipefail
           npm install --global bun@1.3.14
-          test "$(bun --version)" = "1.3.14"
-
-      - name: Install deps
-        run: bun install --frozen-lockfile
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Tests
-        run: bun run test
-
-      - name: Wrangler dry-run
-        run: npx wrangler deploy --dry-run --minify
-
-      - name: Install Chromium 1.61.1
-        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
-
-      - name: Browser smoke (local Worker)
-        run: bash scripts/run-browser-smoke.sh
-
-      - name: Verify current production baseline
+          test "$(bun --version)" = '1.3.14'
+          bun install --frozen-lockfile
+          mkdir -p test-results/voice-docs-validation
+          bun run lint 2>&1 | tee test-results/voice-docs-validation/eslint.log
+          bun run test 2>&1 | tee test-results/voice-docs-validation/node-tests.log
+          npx wrangler deploy --dry-run --minify 2>&1 | tee test-results/voice-docs-validation/wrangler-dry-run.log
+      - name: Chromium and local browser
+        run: |
+          npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+          bash scripts/run-browser-smoke.sh
+      - name: Verify deployed City Platform and production browser
         env:
-          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
-          EXPECTED_VERSION: V7.8.0
           MAX_ATTEMPTS: 3
           POLL_SECONDS: 1
         run: |
-          git fetch origin main --depth=1
-          EXPECTED_HASH=$(git rev-parse origin/main)
-          export EXPECTED_HASH
           bash scripts/verify-production-release.sh
-
-      - name: Browser smoke (current production, no deploy)
-        env:
-          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
-          VOY_EVIDENCE_DIR: test-results/production-browser
-          VOY_REPORT_DIR: playwright-report-production
-        run: bash scripts/run-production-browser-smoke.sh
-
-      - name: Upload browser evidence
+          bash scripts/run-production-browser-smoke.sh
+      - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: destination-resolution-browser-${{ github.run_id }}
+          name: voice-docs-exact-head-${{ github.run_id }}
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
           path: |
+            /tmp/changed-files.txt
+            test-results/voice-docs-validation/
             test-results/evidence/
-            test-results/production-browser/
+            test-results/voice-docs-production-browser/
             playwright-report/
-            playwright-report-production/
+            playwright-report-voice-docs-production/
