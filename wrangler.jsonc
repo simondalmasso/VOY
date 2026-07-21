@@ -1,14 +1,12 @@
 {
   // ============================================================
-  //  VOY — Cloudflare Workers config (V7.8: WAE analytics + cron tarifas)
+  //  VOY — Cloudflare Workers config (V7.8 + candidate-only Voice Copilot V1)
   //
-  //  Canonical domain:  https://voy.is-a.dev  (is-a.dev PR #41619 open, pending merge)
-  //  Worker name:       voy-app  (the EXISTING production worker at
-  //                    voy-app.simondalmasso44.workers.dev — deploying updates it)
-  //
-  //  workers_dev MUST stay true (is-a.dev CNAME resolves to the workers.dev URL).
-  //  V7.1: the workers.dev → voy.is-a.dev redirect in worker.js is DISABLED
-  //  until voy.is-a.dev is registered. Re-enable after is-a.dev PR merges.
+  //  Worker name: voy-app
+  //  workers_dev remains enabled for the existing workers.dev origin.
+  //  Voice Copilot is available only when VOY_VOICE_TEST_MODE=true and the
+  //  typed test/candidate request header is present. Productive territorial
+  //  feature flags remain false.
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-01-01",
@@ -22,6 +20,10 @@
     "binding": "ASSETS",
     "html_handling": "none",
     "not_found_handling": "none"
+  },
+
+  "ai": {
+    "binding": "AI"
   },
 
   "analytics_engine_datasets": [
@@ -38,12 +40,6 @@
     { "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }
   ],
 
-  // Analytics/operator boundaries:
-  // - owner/developer exclusions remain configurable by IP or SHA-256 IP hash.
-  // - /api/whoami is closed by default. It is exposed only when
-  //   VOY_OPERATOR_DIAGNOSTICS=true AND the caller matches an owner/dev allowlist.
-  // - cross-origin writes to /api/events and /api/telemetry are denied unless the
-  //   exact origin appears in VOY_ALLOWED_ORIGINS. Same-origin writes need no entry.
   "vars": {
     "VOY_OWNER_IPS": "",
     "VOY_OWNER_IP_HASHES": "",
@@ -54,7 +50,8 @@
     "VOY_EXCLUDE_HEADLESS": "true",
     "VOY_EXCLUDE_BOT": "true",
     "VOY_EXCLUDE_GLM": "true",
-    "VOY_EXCLUDE_UA_PATTERNS": ""
+    "VOY_EXCLUDE_UA_PATTERNS": "",
+    "VOY_VOICE_TEST_MODE": "true"
   },
 
   "observability": {
@@ -62,9 +59,6 @@
     "logs": { "enabled": true, "head_sampling_rate": 1 }
   },
 
-  // Cron trigger — recordatorio semanal de revisión de tarifas municipales.
-  // Lunes 06:00 UTC (03:00 ART). Solo loguea; el hook queda listo para cuando
-  // exista una fuente oficial automática de tarifas.
   "triggers": {
     "crons": ["0 6 * * 1"]
   }
