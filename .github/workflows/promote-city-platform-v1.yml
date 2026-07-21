@@ -1,21 +1,15 @@
-name: VOY Promote City Platform V1 Once
-
+name: VOY City Platform Second Production Promotion
 on:
   push:
-    branches:
-      - ops/voy-city-platform-promote-v1
-    paths:
-      - .github/workflows/promote-city-platform-v1.yml
-
+    branches: [ops/voy-city-platform-second-promotion-v1]
+    paths: [.github/workflows/promote-city-platform-v1.yml]
 permissions:
   contents: read
   pull-requests: read
   actions: read
-
 concurrency:
   group: voy-city-platform-production-promotion
   cancel-in-progress: false
-
 jobs:
   promote:
     runs-on: ubuntu-24.04
@@ -23,453 +17,90 @@ jobs:
     env:
       WORKER_NAME: voy-app
       WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      SOURCE_ROOT: source
+      EVIDENCE_DIR: evidence/city-platform-second-promotion
       EXPECTED_MAIN_SHA: 4a8b91e605597989b3db19860a745c21472a3a14
-      EXPECTED_PR_HEAD: e5533edaf2c5982c837896adb00d144d5f4f84b7
-      EXPECTED_PR_NUMBER: "21"
-      EXPECTED_CI_RUN: "29828080807"
-      EXPECTED_CANDIDATE_RUN: "29828082415"
-      EXPECTED_DEPLOYMENT_ID: 2b77e063-512d-4fa8-9a25-1e46858807a2
-      STABLE_VERSION_ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
-      CANDIDATE_VERSION_ID: aec70bcf-d02c-416a-b9f5-be4d83b34b32
+      EXPECTED_PR_HEAD: 85659454cf6983c39338e0cecbed8e1a6b3f3cb4
+      EXPECTED_BUILD_HASH: 8565945
+      EXPECTED_PRODUCTION_VERSION: V7.8.0
       EXPECTED_STABLE_BUILD: 4a8b91e
-      EXPECTED_CANDIDATE_BUILD: e5533ed
-      EXPECTED_APP_VERSION: V7.8.0
+      EXPECTED_CI_RUN: '29842423000'
+      EXPECTED_CANDIDATE_RUN: '29842417223'
+      EXPECTED_DEPLOYMENT_ID: 69b6c38e-2cd7-4e8e-925a-dd853931e773
+      STABLE_VERSION_ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
+      CANDIDATE_VERSION_ID: 89f7d347-4fb4-400e-8a75-ddb18ae8ca13
+      CANDIDATE_ARTIFACT_ID: '8500075981'
+      CANDIDATE_ARTIFACT_DIGEST: sha256:1b3794cf748e401b6537912c7e3eab54bd08905bd80224f8fe2d2250dac221d1
+      CONVERGENCE_INTERVAL_MS: '7000'
+      GITHUB_TOKEN: ${{ github.token }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      GH_TOKEN: ${{ github.token }}
-      EVIDENCE_DIR: evidence/city-platform-promotion
-
     steps:
-      - name: Checkout operational harness
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/checkout@v4
         with:
-          ref: ops/voy-city-platform-promote-v1
-          fetch-depth: 0
-          path: ops
-
-      - name: Checkout exact PR head
-        uses: actions/checkout@v4
-        with:
-          ref: e5533edaf2c5982c837896adb00d144d5f4f84b7
-          fetch-depth: 0
+          ref: 85659454cf6983c39338e0cecbed8e1a6b3f3cb4
           path: source
-
-      - name: Verify GitHub preflight without mutation
+          fetch-depth: 0
+      - name: Preflight, promote, converge, validate
         run: |
-          set -euo pipefail
-          mkdir -p "$EVIDENCE_DIR" "$EVIDENCE_DIR/http" "$EVIDENCE_DIR/browser"
+          set -Eeuo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          gunzip -c ops/second-promotion-runner.mjs.gz > ops/second-promotion-runner.mjs
+          node --check ops/second-promotion-runner.mjs
           test "$(git -C source rev-parse HEAD)" = "$EXPECTED_PR_HEAD"
-          git -C source diff --check
-
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
-          curl --fail --silent --show-error "${AUTH[@]}" "$API/git/ref/heads/main" > "$EVIDENCE_DIR/github-main.json"
-
-          for attempt in $(seq 1 12); do
-            curl --fail --silent --show-error "${AUTH[@]}" "$API/pulls/$EXPECTED_PR_NUMBER" > "$EVIDENCE_DIR/github-pr.json"
-            if node -e "const p=require('./$EVIDENCE_DIR/github-pr.json'); process.exit(p.mergeable===null?1:0)"; then break; fi
-            sleep 2
-          done
-
-          curl --fail --silent --show-error "${AUTH[@]}" "$API/actions/runs/$EXPECTED_CI_RUN" > "$EVIDENCE_DIR/github-ci-run.json"
-          curl --fail --silent --show-error "${AUTH[@]}" "$API/actions/runs/$EXPECTED_CANDIDATE_RUN" > "$EVIDENCE_DIR/github-candidate-run.json"
-
-          node <<'NODE'
-          const fs = require('node:fs');
-          const dir = process.env.EVIDENCE_DIR;
-          const main = JSON.parse(fs.readFileSync(`${dir}/github-main.json`, 'utf8'));
-          const pr = JSON.parse(fs.readFileSync(`${dir}/github-pr.json`, 'utf8'));
-          const ci = JSON.parse(fs.readFileSync(`${dir}/github-ci-run.json`, 'utf8'));
-          const candidate = JSON.parse(fs.readFileSync(`${dir}/github-candidate-run.json`, 'utf8'));
-          const fail = message => { throw new Error(message); };
-          if (main.object?.sha !== process.env.EXPECTED_MAIN_SHA) fail(`main_sha_changed:${main.object?.sha}`);
-          if (pr.state !== 'open' || pr.draft !== false || pr.mergeable !== true) fail(`pr_state_changed:${pr.state}:${pr.draft}:${pr.mergeable}`);
-          if (pr.head?.sha !== process.env.EXPECTED_PR_HEAD) fail(`pr_head_changed:${pr.head?.sha}`);
-          for (const [name, run] of [['ci', ci], ['candidate', candidate]]) {
-            if (run.status !== 'completed' || run.conclusion !== 'success') fail(`${name}_run_not_success:${run.status}:${run.conclusion}`);
-            if (run.head_sha !== process.env.EXPECTED_PR_HEAD) fail(`${name}_run_head_mismatch:${run.head_sha}`);
-          }
-          fs.writeFileSync(`${dir}/github-preflight-summary.json`, JSON.stringify({
-            main_sha: main.object.sha,
-            pr: { number: pr.number, state: pr.state, draft: pr.draft, mergeable: pr.mergeable, head_sha: pr.head.sha },
-            runs: {
-              ci: { id: ci.id, status: ci.status, conclusion: ci.conclusion, head_sha: ci.head_sha },
-              candidate: { id: candidate.id, status: candidate.status, conclusion: candidate.conclusion, head_sha: candidate.head_sha }
-            },
-            checked_at: new Date().toISOString()
-          }, null, 2));
-          NODE
-
-      - name: Install exact toolchain and validate source
-        working-directory: source
-        run: |
-          set -euo pipefail
+          git -C source fetch origin main --depth=1
+          test "$(git -C source rev-parse FETCH_HEAD)" = "$EXPECTED_MAIN_SHA"
           npm install --global bun@1.3.14 wrangler@4.112.0
-          test "$(bun --version)" = "1.3.14"
-          test "$(wrangler --version | awk '{print $1}')" = "4.112.0"
+          cd source
           bun install --frozen-lockfile
-          bun run lint 2>&1 | tee "../$EVIDENCE_DIR/eslint.log"
-          bun run test 2>&1 | tee "../$EVIDENCE_DIR/node-tests.log"
-          wrangler deploy --dry-run --minify 2>&1 | tee "../$EVIDENCE_DIR/wrangler-dry-run.log"
-
-      - name: Snapshot exact Cloudflare state and rollback target
-        working-directory: source
-        run: |
-          set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
-          wrangler deployments list --json > "../$EVIDENCE_DIR/wrangler-deployments-before.json"
-          curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "../$EVIDENCE_DIR/api-deployments-before.json"
-          curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$STABLE_VERSION_ID" > "../$EVIDENCE_DIR/stable-version-before.json"
-          curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > "../$EVIDENCE_DIR/candidate-version-before.json"
-          curl --fail --silent --show-error --max-time 20 "$WORKER_URL/api/health?promotion_preflight=$(date +%s%N)" > "../$EVIDENCE_DIR/health-before.json"
-
+          bun run lint | tee "../$EVIDENCE_DIR/eslint.log"
+          bun run test | tee "../$EVIDENCE_DIR/node-tests.log"
+          wrangler deploy --dry-run --minify | tee "../$EVIDENCE_DIR/wrangler-dry-run.log"
           cd ..
-          node <<'NODE'
-          const fs = require('node:fs');
-          const dir = process.env.EVIDENCE_DIR;
-          const payload = JSON.parse(fs.readFileSync(`${dir}/api-deployments-before.json`, 'utf8'));
-          const deployments = payload.result?.deployments || payload.result || [];
-          const active = deployments[0];
-          if (!payload.success || !active || !Array.isArray(active.versions)) throw new Error('active_deployment_missing');
-          if (active.id !== process.env.EXPECTED_DEPLOYMENT_ID) throw new Error(`deployment_changed:${active.id}`);
-          const percentages = new Map(active.versions.map(v => [v.version_id, Number(v.percentage)]));
-          if (percentages.get(process.env.STABLE_VERSION_ID) !== 100) throw new Error('stable_not_100');
-          if (percentages.get(process.env.CANDIDATE_VERSION_ID) !== 0) throw new Error('candidate_not_0');
-
-          const detail = path => {
-            const value = JSON.parse(fs.readFileSync(path, 'utf8'));
-            if (!value.success) throw new Error(`version_detail_failed:${path}`);
-            const bindings = value.result?.resources?.bindings;
-            if (!Array.isArray(bindings)) throw new Error(`bindings_missing:${path}`);
-            return bindings.map(b => `${b.name}:${b.type}`).sort();
-          };
-          const stableBindings = detail(`${dir}/stable-version-before.json`);
-          const candidateBindings = detail(`${dir}/candidate-version-before.json`);
-          if (stableBindings.length !== candidateBindings.length || stableBindings.some((v, i) => v !== candidateBindings[i])) throw new Error('binding_contract_changed');
-          for (const required of ['ASSETS', 'VOY_METRICS', 'NOMINATIM_COORDINATOR']) {
-            if (!candidateBindings.some(v => v.startsWith(`${required}:`))) throw new Error(`required_binding_missing:${required}`);
-          }
-          const health = JSON.parse(fs.readFileSync(`${dir}/health-before.json`, 'utf8'));
-          if (health.ok !== true || health.version !== process.env.EXPECTED_APP_VERSION || health.build_hash !== process.env.EXPECTED_STABLE_BUILD) throw new Error('stable_health_mismatch');
-          fs.writeFileSync(`${dir}/promotion-preflight.json`, JSON.stringify({
-            deployment_id: active.id,
-            stable_version_id: process.env.STABLE_VERSION_ID,
-            stable_traffic: 100,
-            candidate_version_id: process.env.CANDIDATE_VERSION_ID,
-            candidate_traffic: 0,
-            health: { version: health.version, build_hash: health.build_hash },
-            binding_count: candidateBindings.length,
-            bindings: candidateBindings,
-            rollback_target: { version_id: process.env.STABLE_VERSION_ID, traffic: 100 },
-            checked_at: new Date().toISOString()
-          }, null, 2));
-          NODE
-
-      - name: Install Chromium 1.61.1
-        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
-
-      - name: Start exact candidate version tail
-        working-directory: source
-        run: |
-          set -euo pipefail
-          timeout 900s wrangler tail "$WORKER_NAME" --format json --version-id "$CANDIDATE_VERSION_ID" > "../$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
-          echo "TAIL_PID=$!" >> "$GITHUB_ENV"
-          sleep 5
-          kill -0 "$!"
-
-      - name: Promote only the validated City Platform candidate
-        working-directory: source
-        run: |
-          set -euo pipefail
-          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "../$EVIDENCE_DIR/promotion-attempted.txt"
-          wrangler versions deploy \
-            "$CANDIDATE_VERSION_ID@100%" \
-            "$STABLE_VERSION_ID@0%" \
-            --message "Authorized PR #21 City Platform production promotion $EXPECTED_PR_HEAD" \
-            --yes 2>&1 | tee "../$EVIDENCE_DIR/promotion.log"
-          echo "YES" > "../$EVIDENCE_DIR/promotion-command-succeeded.txt"
-
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
-          curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "../$EVIDENCE_DIR/api-deployments-after-promotion.json"
-          cd ..
-          node <<'NODE'
-          const fs = require('node:fs');
-          const p = JSON.parse(fs.readFileSync(`${process.env.EVIDENCE_DIR}/api-deployments-after-promotion.json`, 'utf8'));
-          const deployments = p.result?.deployments || p.result || [];
-          if (!p.success || !deployments[0]) throw new Error('post_promotion_deployment_missing');
-          fs.appendFileSync(process.env.GITHUB_ENV, `PROMOTED_DEPLOYMENT_ID=${deployments[0].id}\n`);
-          fs.writeFileSync(`${process.env.EVIDENCE_DIR}/promoted-deployment-id.txt`, deployments[0].id);
-          NODE
-
-      - name: Require three consecutive production convergence rounds
-        run: |
-          set -euo pipefail
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
-          : > "$EVIDENCE_DIR/convergence.jsonl"
-          consecutive=0
-          for attempt in $(seq 1 60); do
-            stamp="$(date +%s%N)"
-            curl --fail --silent --show-error --retry 2 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > /tmp/deployments-current.json
-            curl --fail --silent --show-error --max-time 20 "$WORKER_URL/api/health?city_platform_promotion=$stamp" > /tmp/health-current.json
-            if node <<'NODE'
-          const fs = require('node:fs');
-          const d = JSON.parse(fs.readFileSync('/tmp/deployments-current.json', 'utf8'));
-          const h = JSON.parse(fs.readFileSync('/tmp/health-current.json', 'utf8'));
-          const list = d.result?.deployments || d.result || [];
-          const active = list[0];
-          if (!d.success || !active || !Array.isArray(active.versions)) process.exit(1);
-          const p = new Map(active.versions.map(v => [v.version_id, Number(v.percentage)]));
-          if (p.get(process.env.CANDIDATE_VERSION_ID) !== 100 || p.get(process.env.STABLE_VERSION_ID) !== 0) process.exit(1);
-          if (h.ok !== true || h.version !== process.env.EXPECTED_APP_VERSION || h.build_hash !== process.env.EXPECTED_CANDIDATE_BUILD) process.exit(1);
-          fs.writeFileSync('/tmp/convergence-record.json', JSON.stringify({
-            deployment_id: active.id,
-            candidate_version_id: process.env.CANDIDATE_VERSION_ID,
-            candidate_traffic: 100,
-            previous_version_id: process.env.STABLE_VERSION_ID,
-            previous_traffic: 0,
-            health: { ok: h.ok, version: h.version, build_hash: h.build_hash, time: h.time || null },
-            timestamp: new Date().toISOString()
-          }));
-          NODE
-            then
-              consecutive=$((consecutive + 1))
-              node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('/tmp/convergence-record.json'));r.attempt=$attempt;r.consecutive=$consecutive;fs.appendFileSync('$EVIDENCE_DIR/convergence.jsonl',JSON.stringify(r)+'\\n')"
-            else
-              consecutive=0
-              node -e "const fs=require('fs');fs.appendFileSync('$EVIDENCE_DIR/convergence.jsonl',JSON.stringify({attempt:$attempt,consecutive:0,ok:false,timestamp:new Date().toISOString()})+'\\n')"
+          npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+          node ops/second-promotion-runner.mjs preflight
+          PROMOTED=0; ROLLED_BACK=0; TAIL_PID=''
+          stop_tail() { if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then kill "$TAIL_PID" 2>/dev/null || true; wait "$TAIL_PID" 2>/dev/null || true; fi; }
+          rollback() {
+            status=$?; trap - ERR; stop_tail
+            if [ "$PROMOTED" = 1 ] && [ "$ROLLED_BACK" = 0 ]; then
+              ROLLED_BACK=1; cd source
+              wrangler versions deploy "$STABLE_VERSION_ID@100%" "$CANDIDATE_VERSION_ID@0%" --message 'Rollback PR #21 second production attempt' --yes 2>&1 | tee "../$EVIDENCE_DIR/rollback.log"
+              cd ..; node ops/second-promotion-runner.mjs verify-rollback
+              cd source
+              VOY_BASE_URL="$WORKER_URL" VOY_EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/rollback-browser" VOY_OUTPUT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/rollback-output" VOY_REPORT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/rollback-report" bash scripts/run-production-browser-smoke.sh 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/rollback-browser.log"
+              cd ..
             fi
-            if [ "$consecutive" -ge 3 ]; then break; fi
-            sleep 5
-          done
-          test "$consecutive" -ge 3
-          echo "$consecutive" > "$EVIDENCE_DIR/consecutive-rounds.txt"
-
-      - name: Validate production health and all City Platform assets
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const crypto = require('node:crypto');
-          const { spawnSync } = require('node:child_process');
-          const base = process.env.WORKER_URL;
-          const out = `${process.env.EVIDENCE_DIR}/http`;
-          fs.mkdirSync(out, { recursive: true });
-          const paths = [
-            '/api/health', '/', '/VOY-Lite.html', '/core/cityPlatform.js?v=1',
-            '/cities/_default/profile.json', '/cities/_default/providers.json', '/cities/_default/transport.json', '/cities/_default/fares.json', '/cities/_default/feature_flags.json',
-            '/cities/santa-fe/profile.json', '/cities/santa-fe/providers.json', '/cities/santa-fe/transport.json', '/cities/santa-fe/fares.json', '/cities/santa-fe/feature_flags.json'
-          ];
-          const records = [];
-          const slug = value => value.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_') || 'root';
-          for (const pathname of paths) {
-            const separator = pathname.includes('?') ? '&' : '?';
-            const requested = `${base}${pathname}${separator}production_probe=${Date.now()}-${crypto.randomUUID()}`;
-            const name = slug(pathname);
-            const headersFile = path.join(out, `${name}.headers`);
-            const bodyFile = path.join(out, `${name}.body`);
-            const args = ['--http2', '--silent', '--show-error', '--max-time', '30', '--max-redirs', '0', '--path-as-is', '--dump-header', headersFile, '--output', bodyFile, '--write-out', '%{json}', '-H', 'Cache-Control: no-cache, no-store, max-age=0', '-H', 'Pragma: no-cache', requested];
-            const result = spawnSync('curl', args, { encoding: 'utf8' });
-            const meta = result.stdout ? JSON.parse(result.stdout) : {};
-            const body = fs.existsSync(bodyFile) ? fs.readFileSync(bodyFile) : Buffer.alloc(0);
-            let health = null;
-            if (pathname === '/api/health') {
-              try { const h = JSON.parse(body.toString('utf8')); health = { ok: h.ok, version: h.version, build_hash: h.build_hash, time: h.time || null }; } catch {}
-            }
-            records.push({
-              requested_url: requested,
-              effective_url: meta.url_effective || null,
-              path: pathname,
-              status: meta.http_code || 0,
-              redirect_url: meta.redirect_url || null,
-              curl_exit: result.status,
-              body_sha256: crypto.createHash('sha256').update(body).digest('hex'),
-              body_bytes: body.length,
-              health,
-              timestamp: new Date().toISOString()
-            });
+            exit "$status"
           }
-          fs.writeFileSync(`${process.env.EVIDENCE_DIR}/http-records.json`, JSON.stringify(records, null, 2));
-          const health = records.find(r => r.path === '/api/health');
-          if (health?.status !== 200 || health.health?.ok !== true || health.health?.version !== process.env.EXPECTED_APP_VERSION || health.health?.build_hash !== process.env.EXPECTED_CANDIDATE_BUILD) throw new Error('production_health_failed');
-          const entry = records.find(r => r.path === '/VOY-Lite.html');
-          if (![200, 301, 308].includes(entry?.status)) throw new Error(`entrypoint_status:${entry?.status}`);
-          const required = records.filter(r => r.path !== '/VOY-Lite.html');
-          if (required.some(r => r.status !== 200 || r.body_bytes === 0)) throw new Error(`asset_failure:${JSON.stringify(required.filter(r => r.status !== 200 || r.body_bytes === 0))}`);
-          NODE
-
-      - name: Browser validate production desktop and mobile
-        working-directory: source
-        env:
-          VOY_EVIDENCE_DIR: ../evidence/city-platform-promotion/browser
-          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
-        run: |
-          set -euo pipefail
-          cat > /tmp/city-platform-production.config.js <<'EOF'
-          module.exports = {
-            testDir: process.cwd() + '/browser-tests',
-            testMatch: 'city-platform.spec.js',
-            timeout: 90000,
-            workers: 1,
-            retries: 0,
-            use: {
-              baseURL: process.env.VOY_BASE_URL,
-              headless: true,
-              ignoreHTTPSErrors: false,
-              trace: 'retain-on-failure'
-            },
-            projects: [
-              { name: 'desktop', use: { viewport: { width: 1440, height: 1000 } } },
-              { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
-            ],
-            reporter: [['list'], ['html', { outputFolder: '../evidence/city-platform-promotion/playwright-report', open: 'never' }]],
-            outputDir: '../evidence/city-platform-promotion/playwright-output'
-          };
-          EOF
-          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
-            PLAYWRIGHT_BIN=$(command -v playwright)
-            NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
-            export NODE_PATH
-            playwright test --config=/tmp/city-platform-production.config.js
-          ' 2>&1 | tee "../$EVIDENCE_DIR/playwright-production.log"
-
-      - name: Verify exact-version tail and final production state
-        if: success()
-        run: |
-          set -euo pipefail
-          if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
-            kill "$TAIL_PID" 2>/dev/null || true
-            wait "$TAIL_PID" 2>/dev/null || true
-          fi
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
-          curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments-final.json"
-          curl --fail --silent --show-error --max-time 20 "$WORKER_URL/api/health?promotion_final=$(date +%s%N)" > "$EVIDENCE_DIR/health-final.json"
-          node <<'NODE'
-          const fs = require('node:fs');
-          const dir = process.env.EVIDENCE_DIR;
-          const payload = JSON.parse(fs.readFileSync(`${dir}/api-deployments-final.json`, 'utf8'));
-          const list = payload.result?.deployments || payload.result || [];
-          const active = list[0];
-          if (!payload.success || !active || !Array.isArray(active.versions)) throw new Error('final_deployment_missing');
-          const percentages = new Map(active.versions.map(v => [v.version_id, Number(v.percentage)]));
-          if (percentages.get(process.env.CANDIDATE_VERSION_ID) !== 100 || percentages.get(process.env.STABLE_VERSION_ID) !== 0) throw new Error('final_traffic_mismatch');
-          const health = JSON.parse(fs.readFileSync(`${dir}/health-final.json`, 'utf8'));
-          if (health.ok !== true || health.build_hash !== process.env.EXPECTED_CANDIDATE_BUILD || health.version !== process.env.EXPECTED_APP_VERSION) throw new Error('final_health_mismatch');
-
-          const tailPath = `${dir}/candidate-tail.log`;
-          const lines = fs.existsSync(tailPath) ? fs.readFileSync(tailPath, 'utf8').split(/\r?\n/).filter(Boolean) : [];
-          const events = [];
-          for (const line of lines) {
-            try {
-              const value = JSON.parse(line);
-              if (value.event || value.outcome || value.logs || value.exceptions) events.push(value);
-            } catch {}
-          }
-          if (events.length === 0) throw new Error('candidate_tail_no_events');
-          const bad = events.filter(event => event.outcome && event.outcome !== 'ok');
-          if (bad.length) throw new Error(`candidate_tail_non_ok:${bad.length}`);
-          fs.writeFileSync(`${dir}/tail-summary.json`, JSON.stringify({ event_count: events.length, non_ok: bad.length, filtered_version_id: process.env.CANDIDATE_VERSION_ID }, null, 2));
-          fs.writeFileSync(`${dir}/final-state.json`, JSON.stringify({
-            deployment_id: active.id,
-            productive_version_id: process.env.CANDIDATE_VERSION_ID,
-            productive_traffic: 100,
-            previous_version_id: process.env.STABLE_VERSION_ID,
-            previous_traffic: 0,
-            source_sha: process.env.EXPECTED_PR_HEAD,
-            build_hash: health.build_hash,
-            version: health.version,
-            production_promoted: true,
-            rollback_executed: false,
-            validated_at: new Date().toISOString()
-          }, null, 2));
-          NODE
-
-      - name: Roll back once after any material post-promotion failure
-        if: failure()
-        working-directory: source
-        run: |
-          set -euo pipefail
-          if [ ! -f "../$EVIDENCE_DIR/promotion-attempted.txt" ]; then
-            echo "Promotion was never attempted; rollback not applicable." | tee "../$EVIDENCE_DIR/rollback-not-applicable.txt"
-            exit 0
-          fi
-          if [ -f "../$EVIDENCE_DIR/rollback-executed.txt" ]; then
-            echo "Rollback already executed; refusing a second rollback." >&2
-            exit 1
-          fi
-          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "../$EVIDENCE_DIR/rollback-executed.txt"
-          wrangler versions deploy \
-            "$STABLE_VERSION_ID@100%" \
-            "$CANDIDATE_VERSION_ID@0%" \
-            --message "Automatic single rollback after failed City Platform production validation" \
-            --yes 2>&1 | tee "../$EVIDENCE_DIR/rollback.log"
-
-          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
-          consecutive=0
-          : > "../$EVIDENCE_DIR/rollback-convergence.jsonl"
-          for attempt in $(seq 1 60); do
-            curl --fail --silent --show-error --retry 2 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > /tmp/rollback-deployment.json
-            curl --fail --silent --show-error --max-time 20 "$WORKER_URL/api/health?rollback_probe=$(date +%s%N)" > /tmp/rollback-health.json
-            if node <<'NODE'
-          const fs = require('node:fs');
-          const d = JSON.parse(fs.readFileSync('/tmp/rollback-deployment.json', 'utf8'));
-          const h = JSON.parse(fs.readFileSync('/tmp/rollback-health.json', 'utf8'));
-          const list = d.result?.deployments || d.result || [];
-          const active = list[0];
-          if (!d.success || !active || !Array.isArray(active.versions)) process.exit(1);
-          const p = new Map(active.versions.map(v => [v.version_id, Number(v.percentage)]));
-          if (p.get(process.env.STABLE_VERSION_ID) !== 100 || p.get(process.env.CANDIDATE_VERSION_ID) !== 0) process.exit(1);
-          if (h.ok !== true || h.version !== process.env.EXPECTED_APP_VERSION || h.build_hash !== process.env.EXPECTED_STABLE_BUILD) process.exit(1);
-          NODE
-            then consecutive=$((consecutive + 1)); else consecutive=0; fi
-            node -e "const fs=require('fs');fs.appendFileSync('../$EVIDENCE_DIR/rollback-convergence.jsonl',JSON.stringify({attempt:$attempt,consecutive:$consecutive,timestamp:new Date().toISOString()})+'\\n')"
-            if [ "$consecutive" -ge 3 ]; then break; fi
-            sleep 5
-          done
-          test "$consecutive" -ge 3
-          cp /tmp/rollback-deployment.json "../$EVIDENCE_DIR/api-deployments-after-rollback.json"
-          cp /tmp/rollback-health.json "../$EVIDENCE_DIR/health-after-rollback.json"
-
-      - name: Stop tail after failure
-        if: failure()
-        run: |
-          if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
-            kill "$TAIL_PID" 2>/dev/null || true
-            wait "$TAIL_PID" 2>/dev/null || true
-          fi
-
-      - name: Build evidence manifest
+          trap rollback ERR; trap stop_tail EXIT
+          cd source
+          wrangler versions deploy "$CANDIDATE_VERSION_ID@100%" "$STABLE_VERSION_ID@0%" --message "PR #21 second authorized production promotion $EXPECTED_PR_HEAD" --yes 2>&1 | tee "../$EVIDENCE_DIR/promotion.log"
+          cd ..; PROMOTED=1
+          cd source
+          timeout 900s wrangler tail "$WORKER_NAME" --format json --version-id "$CANDIDATE_VERSION_ID" > "../$EVIDENCE_DIR/production-tail.log" 2>&1 & TAIL_PID=$!
+          cd ..; sleep 5; kill -0 "$TAIL_PID"
+          node ops/second-promotion-runner.mjs converge
+          VOY_BASE_URL="$WORKER_URL" SOURCE_ROOT="$SOURCE_ROOT" node ops/prepare-production-browser.mjs
+          cd source
+          export VOY_BASE_URL="$WORKER_URL" VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" VOY_EXPECTED_BUILD_HASH="$EXPECTED_BUILD_HASH" VOY_EXPECTED_SOURCE_ROOT="$GITHUB_WORKSPACE/source"
+          export VOY_EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-city-browser" VOY_OUTPUT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-city-output" VOY_REPORT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-city-report"
+          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c 'PLAYWRIGHT_BIN=$(command -v playwright); NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd); export NODE_PATH; playwright test --config=production-second-promotion-tests/playwright.config.cjs' 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-city-browser.log"
+          export VOY_EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-standard-browser" VOY_OUTPUT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-standard-output" VOY_REPORT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-standard-report"
+          bash scripts/run-production-browser-smoke.sh 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-standard-browser.log"
+          cd ..; stop_tail; TAIL_PID=''; node ops/second-promotion-runner.mjs final
+      - name: Manifest
         if: always()
         run: |
-          set -euo pipefail
-          find "$EVIDENCE_DIR" -type f -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
           sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
-
-      - name: Upload production promotion evidence
+      - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voy-city-platform-production-promotion-${{ github.run_id }}
-          path: evidence/city-platform-promotion
+          name: voy-city-platform-second-production-promotion-${{ github.run_id }}
+          path: evidence/city-platform-second-promotion
           if-no-files-found: error
           retention-days: 30
-
-      - name: Promotion summary
-        if: always()
-        run: |
-          {
-            echo '## VOY City Platform V1 production promotion'
-            echo
-            echo "- Exact PR head: $EXPECTED_PR_HEAD"
-            echo "- Previous deployment: $EXPECTED_DEPLOYMENT_ID"
-            echo "- Promoted deployment: ${PROMOTED_DEPLOYMENT_ID:-unresolved}"
-            echo "- Candidate version: $CANDIDATE_VERSION_ID"
-            echo "- Previous stable version: $STABLE_VERSION_ID"
-            if [ -f "$EVIDENCE_DIR/rollback-executed.txt" ]; then
-              echo '- Rollback executed: yes (single rollback)'
-            else
-              echo '- Rollback executed: no'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
