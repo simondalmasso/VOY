@@ -45,6 +45,20 @@ test.describe('Cloudflare exact-version candidate', () => {
   test('validates exact candidate, reload, territorial transitions and fail-closed fallback', async ({ page }, testInfo) => {
     const evidence = emptyEvidence();
 
+    await page.route('**/*', async route => {
+      const request = route.request();
+      if (new URL(request.url()).origin === baseOrigin) {
+        await route.continue();
+        return;
+      }
+      const headers = { ...request.headers() };
+      delete headers['cloudflare-workers-version-overrides'];
+      delete headers['x-voy-candidate-smoke'];
+      delete headers['cache-control'];
+      delete headers.pragma;
+      await route.continue({ headers });
+    });
+
     page.on('console', message => evidence.console.push({ type: message.type(), text: message.text() }));
     page.on('pageerror', error => evidence.pageerrors.push(String(error && error.stack || error)));
     page.on('request', request => {
