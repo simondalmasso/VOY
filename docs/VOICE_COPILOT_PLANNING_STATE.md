@@ -5,218 +5,157 @@ Last updated: 2026-07-21
 ## Current phase
 
 ```text
-VOICE_PHASE_STATUS=PLANNING_ONLY
-CODE_CHANGES=NO
-RUNTIME_CHANGES=NO
-PROVIDER_ACTIVATED=NO
-PAID_API_ENABLED=NO
+VOICE_PHASE=DOCUMENTATION_COMPLETE
+VOICE_RUNTIME_STARTED=NO
+VOICE_IMPLEMENTATION_BRANCH=NOT_CREATED
+VOICE_PRODUCTION_PROMOTED=NO
 ```
 
-Reason:
+Voice Copilot V1 remains planning-only in PR #22. The implementation must use a new branch created from the exact final productive `main` after documentation merge and Cloudflare reconciliation.
 
-- PR #21 is open, no longer Draft and mergeable;
-- the City Platform candidate passed runtime, desktop and mobile validation;
-- PR #21 is ready for production but is not merged;
-- the candidate remains at 0% and production remains `V7.8.0` with build hash `4a8b91e`;
-- City Platform V1 is therefore not yet the productive `main` baseline.
+## City Platform prerequisite
 
-Verified state:
+City Platform V1 passed the reinforced second production promotion and PR #21 was merged.
 
 ```text
-PR_21_STATE=OPEN
-PR_21_DRAFT=NO
-PR_21_MERGEABLE=YES
-CITY_PLATFORM_CANDIDATE=PASS
-READY_FOR_PRODUCTION=YES
-PRODUCTION_PROMOTED=NO
-
-PR_22_STATE=OPEN
-PR_22_DRAFT=YES
-RUNTIME_CHANGES=0
-```
-
-## Planning branch
-
-```text
-branch: docs/voy-voice-copilot-v1-planning
-base: main@4a8b91e605597989b3db19860a745c21472a3a14
-scope: documentation only
-```
-
-This branch must not be used for runtime implementation or deployment.
-
-## Completed planning artifacts
-
-```text
-docs/architecture/voice-copilot-v1.md
-docs/architecture/voice-copilot-geolibre-lessons.md
-docs/privacy/voice-copilot-policy.md
-docs/data/voice-provider-matrix.md
-docs/security/voice-copilot-threat-model.md
-docs/contracts/voice-copilot-v1-contracts.md
-docs/testing/voice-copilot-v1-test-plan.md
-docs/testing/voice-copilot-geolibre-regressions.md
-```
-
-The GeoLibre documents are normative planning addenda. They record transferable architectural lessons only. They do not introduce a GeoLibre package, integration or runtime dependency.
-
-## Decisions in force
-
-- Voice Copilot is a bounded mobility interface, not a general assistant.
-- AI cannot calculate fares, routes, distances, times, availability, coordinates or rankings.
-- Operational facts come only from deterministic VOY tools.
-- Every state change is mediated by a typed allowlisted tool and `MobilityStateAdapter`.
-- `NO_TOOL_SUCCESS → NO_ACTION_CLAIM` is mandatory.
-- The DOM and map render central state; they are not independent authorities.
-- A visible bounded tool transcript explains successful, failed, pending and cancelled operations without exposing sensitive payloads.
-- Text, tool, confirmation, speech, cancellation and error output use a typed event protocol.
-- Every turn is cancelable and superseding a request aborts prior STT, resolution, tools and TTS and invalidates pending confirmation.
-- Model context is minimized, canonicalized and hash-tracked; unchanged territorial context is not resent.
-- Runtime schemas reject unknown keys and non-allowlisted tool names.
-- General networking uses an SSRF guard and bounded response reader.
-- The only loopback exception is the explicit opt-in `VoiceboxLocalAdapter` for `http://127.0.0.1:17493` with fixed endpoints and no redirects.
-- External actions use expiring, context-bound, one-time confirmation tokens.
-- Model-generated JavaScript, Python, SQL, shell code and dynamic tools are prohibited.
-- VOY supports bounded restoration of its own origin, destination, mode and results, but never claims to undo an action inside another application.
-- External actions always require explicit confirmation.
-- Audio is request-scoped and never persisted by VOY.
-- Transcript and conversational memory are ephemeral: maximum ten turns and 15 minutes.
-- No WebSocket or new Durable Object is planned for V1 without measured need and separate authorization.
-- Provider adapters remain interchangeable and provider keys never reach browser assets.
-- Initial provider recommendation is Workers AI Whisper STT, deterministic intents and browser `speechSynthesis`.
-- Cloud LLM and cloud TTS remain later controlled pilots.
-- Voicebox remains optional, explicit opt-in and desktop-first.
-- All territorial flags remain false until implementation and device gates pass.
-- Manual VOY must remain functional through every failure.
-
-## GeoLibre architectural lessons
-
-Accepted patterns:
-
-```text
-tool-mediated execution
-central state adapter
-auditable tool transcript
-stream event protocol
-context minimization
-strict schema validation
-SSRF guard
-bounded response reader
-single-use confirmations
-provider abstraction
-explicit no-code-execution rule
-VOY-specific reversibility
-```
-
-Explicitly not adopted:
-
-```text
-DuckDB
-DuckDB-WASM
-Pyodide
-deck.gl
-Strands Agents as mandatory dependency
-model-generated SQL
-model-generated JavaScript
-model-generated Python
-GIS editor
-layer system
-browser provider keys
-model-directed free fetch
-GeoLibre package installation
-complete-file copying
-```
-
-```text
-GEOLIBRE_PATTERNS_REVIEWED=YES
-GEOLIBRE_RUNTIME_DEPENDENCY=NO
-TOOL_MEDIATED_ARCHITECTURE=DEFINED
-AUDIT_TRANSCRIPT=DEFINED
-CONTEXT_MINIMIZATION=DEFINED
-SSRF_GUARD=DEFINED
-CODE_EXECUTION_FALLBACK=PROHIBITED
-```
-
-## Implementation gate
-
-Create the implementation branch only when all conditions are verified:
-
-```text
-PR_21_MERGED=YES
-CITY_PLATFORM_PRODUCTION=PASS
-MAIN_SHA_EQUALS_PRODUCTION_SHA=YES
-PRODUCTION_HEALTH=PASS
+CITY_PLATFORM_PR=21
+CITY_PLATFORM_PR_HEAD=85659454cf6983c39338e0cecbed8e1a6b3f3cb4
+CITY_PLATFORM_MERGE_SHA=8080735278e92f32e7f5928ac01f4c80c3b9e0e2
+SECOND_PROMOTION_RUN=29851472261
+PRODUCTION_VERSION_ID=89f7d347-4fb4-400e-8a75-ddb18ae8ca13
+PRODUCTION_DEPLOYMENT_ID=b0c1c5a4-deb5-4715-8f2e-d8da297e3ad9
+PRODUCTION_BUILD=8565945
+PRODUCTION_TRAFFIC=100%
+CONVERGENCE_ROUNDS=20
+CONVERGENCE_DURATION_MS=139604
+REQUIRED_ASSETS=13/13
 PRODUCTION_DESKTOP=PASS
 PRODUCTION_MOBILE=PASS
-ROLLBACK_STATE=RECORDED
+PAGEERROR=0
+CONSOLE_ERROR=0
+DIRECT_NOMINATIM=0
 ```
 
-Then create:
+The first production attempt failed on a transient required-asset `404` and was rolled back once. The second attempt required no rollback.
 
 ```text
-branch: feat/voy-voice-copilot-v1
-base: exact productive main SHA
-Draft PR: feat(voice): add bounded mobility voice copilot
+FIRST_ATTEMPT_ROLLBACK_EXECUTED=YES
+SECOND_ATTEMPT_ROLLBACK_EXECUTED=NO
+ROOT_CAUSE_CLASS=TRANSIENT_EDGE_OR_PROPAGATION_EVENT
 ```
 
-Do not branch from this planning branch.
+## Remaining implementation gate
 
-## First implementation milestone
-
-Phase 2 only:
+The merge commit differs from the currently deployed City Platform source SHA. Voice runtime remains blocked until PR #22 is merged and a version built from the exact final `main` is validated and promoted.
 
 ```text
-external voice modules
-explicit state machine
-central VoiceCopilotSession
-MobilityStateAdapter mock
-closed tool registry
-mock ToolExecutionRecord and event protocol
-microphone permission UI
-MediaRecorder with feature-detected MIME
-cancel and supersession cleanup
-editable transcript mock
-mock deterministic response
-browser speechSynthesis
-stop/pause/repeat controls
-feature flags false by default
-unit and browser tests with synthetic audio
+CURRENT_MAIN_SHA=8080735278e92f32e7f5928ac01f4c80c3b9e0e2
+CURRENT_PRODUCTION_SOURCE_SHA=85659454cf6983c39338e0cecbed8e1a6b3f3cb4
+MAIN_SHA_EQUALS_PRODUCTION_SHA=NO
+VOICE_RUNTIME_READY_TO_START=NO
 ```
 
-No cloud STT, LLM, TTS, Voicebox call, new secret or production deployment belongs in the first implementation milestone.
+After PR #22 merge:
 
-## Required future regression cases
+1. obtain the exact final `main` SHA;
+2. frozen install, lint, all tests and Wrangler dry-run;
+3. upload one Cloudflare version from that exact SHA;
+4. keep current production at 100% and the exact-main candidate at 0%;
+5. validate health, bindings, thirteen required assets, exact hashes and desktop/mobile browsers;
+6. promote only after every gate passes;
+7. prove `MAIN_SHA_EQUALS_PRODUCTION_SHA=YES`;
+8. create `feat/voy-voice-copilot-v1` from that exact productive SHA.
+
+## Selected V1 provider posture
 
 ```text
-model claims action without tool success → rejected
-unknown tool → rejected
-unknown argument → rejected
-stale tool result → ignored
-superseded request → aborted
-tool failure → no state mutation
-confirmation replay → rejected
-confirmation after destination change → rejected
-private URL → rejected
-oversized streaming response → aborted
-context unchanged → not resent
-tool transcript contains no exact coordinates
-model-generated code request → rejected
-provider key exposed to browser → CI failure
+STT_PROVIDER=Workers AI @cf/openai/whisper-large-v3-turbo
+LLM_PROVIDER=Workers AI @cf/qwen/qwen3-30b-a3b-fp8
+TTS_PROVIDER=browser speechSynthesis
+VOICEBOX_LOCAL=optional_disabled
+PAID_EXTERNAL_PROVIDER_KEYS=NONE
 ```
 
-## Exact next step
+Provider implementations remain behind `STTProvider`, `LLMProvider` and `TTSProvider` interfaces. The LLM interprets conversation and selects typed tools; it never calculates canonical mobility values.
 
-Two valid operational options remain:
+## Mandatory architecture
 
 ```text
-OPTION_A:
-promote PR #21 candidate under explicit authorization
-verify production
-merge/reconcile City Platform
-then create feat/voy-voice-copilot-v1 from the exact productive main SHA
+user audio or text
+→ transient STT when applicable
+→ bounded multi-turn conversation
+→ model selects one allowlisted typed tool
+→ strict schema validation
+→ MobilityStateAdapter
+→ deterministic VOY calculation or lookup
+→ central state commit
+→ ToolExecutionRecord
+→ typed events
+→ bounded explanation
+→ browser TTS when enabled
+```
 
-OPTION_B:
-keep City Platform candidate at 0%
-leave PR #21 unmerged
-keep Voice Copilot blocked in planning only
+Invariant:
+
+```text
+NO_TOOL_SUCCESS → NO_ACTION_CLAIM
+```
+
+The model cannot invent or calculate fares, routes, distances, times, coordinates, availability, coverage or ranking. Those values must come from deterministic VOY tools and validated territorial data.
+
+## Closed tool and security posture
+
+The implementation must preserve the allowlist, state, event, confirmation, cancellation, SSRF, bounded-reader, context-minimization, privacy and regression contracts in:
+
+- `docs/architecture/voice-copilot-v1.md`
+- `docs/architecture/voice-copilot-geolibre-lessons.md`
+- `docs/contracts/voice-copilot-v1-contracts.md`
+- `docs/data/voice-provider-matrix.md`
+- `docs/privacy/voice-copilot-policy.md`
+- `docs/security/voice-copilot-threat-model.md`
+- `docs/testing/voice-copilot-v1-test-plan.md`
+- `docs/testing/voice-copilot-geolibre-regressions.md`
+
+Explicitly prohibited:
+
+```text
+arbitrary_fetch
+run_javascript
+run_python
+shell
+raw_sql
+dynamic_tools
+repository_access
+Cloudflare_modification
+secret_access
+KV_write
+Durable_Object_write
+model_generated_code
+```
+
+## Feature flags
+
+Initial productive defaults remain disabled:
+
+```text
+ai_copilot=false
+voice_input=false
+voice_output=false
+voicebox_local=false
+```
+
+Voice functionality may be enabled only in tests and the zero-traffic candidate through a controlled mechanism. No productive flag activation is authorized by the planning PR.
+
+## Planning completion
+
+```text
+PLANNING_COMPLETE=YES
+DOCUMENTS_ONLY=YES
+RUNTIME_CHANGES=0
+WORKFLOW_CHANGES=0
+BINDING_CHANGES=0
+SECRET_CHANGES=0
+CLOUDFLARE_CHANGES=0
+READY_FOR_DOCUMENT_REVIEW=YES
+VOICE_RUNTIME_READY_TO_START=NO
 ```
