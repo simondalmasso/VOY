@@ -1,6 +1,7 @@
 name: VOY City Platform Final Cloudflare Candidate
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feat/voy-city-platform-v1
@@ -102,12 +103,12 @@ jobs:
           const stable = active.versions.filter(v => Number(v.percentage) === 100);
           const zero = active.versions.filter(v => Number(v.percentage) === 0);
           if (stable.length !== 1) throw new Error(`stable_version_count:${stable.length}`);
-          if (zero.some(v => Number(v.percentage) !== 0)) throw new Error('nonzero_candidate_found');
           const health = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/production-health-before.json', 'utf8'));
           if (health.ok !== true || health.version !== process.env.EXPECTED_PRODUCTION_VERSION || health.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) {
             throw new Error('production_baseline_mismatch');
           }
           fs.appendFileSync(process.env.GITHUB_ENV, `PREVIOUS_DEPLOYMENT_ID=${active.id}\nSTABLE_VERSION_ID=${stable[0].version_id}\n`);
+          fs.writeFileSync('/tmp/stable-version-id.txt', stable[0].version_id);
           fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-before.json', JSON.stringify({
             deployment_id: active.id,
             stable_version_id: stable[0].version_id,
@@ -117,9 +118,11 @@ jobs:
             checked_at: new Date().toISOString()
           }, null, 2));
           NODE
+          STABLE_VERSION_ID_CURRENT="$(cat /tmp/stable-version-id.txt)"
+          test -n "$STABLE_VERSION_ID_CURRENT"
           curl --fail --silent --show-error --retry 3 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "$API_ROOT/versions/$STABLE_VERSION_ID" > /tmp/stable-version-detail.json
+            "$API_ROOT/versions/$STABLE_VERSION_ID_CURRENT" > /tmp/stable-version-detail.json
 
       - name: Upload one exact-SHA candidate version
         run: |
@@ -373,6 +376,10 @@ jobs:
           if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
             kill "$TAIL_PID" 2>/dev/null || true
             wait "$TAIL_PID" 2>/dev/null || true
+          fi
+          if [ -z "${CANDIDATE_VERSION_ID:-}" ] || [ -z "${STABLE_VERSION_ID:-}" ]; then
+            echo "Candidate or stable version was not established; skipping final proof." >&2
+            exit 0
           fi
           API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
           curl --fail --silent --show-error --retry 3 \
