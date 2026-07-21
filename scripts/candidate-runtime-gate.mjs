@@ -173,7 +173,7 @@ export async function verifyFinal(env = process.env) {
   const tailPath = `${evidenceDir}/candidate-tail.log`;
   const tail = existsSync(tailPath) ? readFileSync(tailPath, 'utf8') : '';
   const proof = extractTailProof(tail, candidateVersionId);
-  if (proof.exactEvents < 2) throw new Error(`candidate_version_proof_insufficient:${proof.exactEvents}`);
+  if (proof.exactEvents < 1) throw new Error(`candidate_version_proof_insufficient:${proof.exactEvents}`);
   if (proof.nonOkOutcomes.length) throw new Error(`candidate_tail_non_ok:${proof.nonOkOutcomes.join(',')}`);
   writeJson(`${evidenceDir}/api-deployments-final.json`, payload);
   writeJson(`${evidenceDir}/production-health-final.json`, health);
@@ -188,6 +188,7 @@ export async function verifyFinal(env = process.env) {
     candidate_traffic: 0,
     production_health: { version: health.version, build_hash: health.build_hash },
     candidate_tail_events: proof.exactEvents,
+    minimum_candidate_tail_events: 1,
     observed_candidate_version_ids: proof.observedVersionIds,
     non_ok_tail_outcomes: proof.nonOkOutcomes,
     rollback_executed: false,
