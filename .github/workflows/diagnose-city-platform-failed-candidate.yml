@@ -7,6 +7,11 @@ on:
       - feat/voy-city-platform-v1
     paths:
       - .github/workflows/diagnose-city-platform-failed-candidate.yml
+      - scripts/required-city-platform-assets.mjs
+      - scripts/diagnose-city-platform-candidate.mjs
+      - __tests__/requiredCityPlatformAssets.test.js
+      - candidate-tests/cache-isolation.spec.js
+      - candidate-tests/playwright.cache-isolation.config.js
 
 permissions:
   contents: read
