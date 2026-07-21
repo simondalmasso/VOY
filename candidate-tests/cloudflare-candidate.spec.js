@@ -41,6 +41,26 @@ function assertRelevantHeaders(evidence) {
   }
 }
 
+async function waitForCandidateHealth(page, probeBase) {
+  const attempts = [];
+  let consecutive = 0;
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    const result = await page.evaluate(async ({ url, probe }) => {
+      const response = await fetch(`${url}/api/health?candidate_browser_probe=${probe}`, { cache: 'no-store' });
+      let body = null;
+      try { body = await response.json(); } catch {}
+      return { status: response.status, body };
+    }, { url: baseURL, probe: `${probeBase}-${attempt}-${Date.now()}` });
+    const candidate = result.status === 200 && result.body?.ok === true &&
+      result.body?.version === 'V7.8.0' && result.body?.build_hash === expectedHash;
+    consecutive = candidate ? consecutive + 1 : 0;
+    attempts.push({ attempt, consecutive, candidate, status: result.status, body: result.body, timestamp: new Date().toISOString() });
+    if (consecutive >= 3) return { status: result.status, body: result.body, attempts };
+    await page.waitForTimeout(1_000);
+  }
+  throw new Error(`candidate_health_context_did_not_converge:${JSON.stringify(attempts.slice(-5))}`);
+}
+
 test.describe('Cloudflare exact-version candidate', () => {
   test('validates exact candidate, reload, territorial transitions and fail-closed fallback', async ({ page }, testInfo) => {
     const evidence = emptyEvidence();
@@ -83,12 +103,10 @@ test.describe('Cloudflare exact-version candidate', () => {
     await page.goto(`/?city=_default&candidate_browser_probe=${probe}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' && !document.getElementById('splash'));
 
-    const health = await page.evaluate(async probeValue => {
-      const response = await fetch(`/api/health?candidate_browser_probe=${probeValue}`, { cache: 'no-store' });
-      return { status: response.status, body: await response.json() };
-    }, probe);
+    const health = await waitForCandidateHealth(page, probe);
     expect(health.status).toBe(200);
     expect(health.body).toMatchObject({ ok: true, version: 'V7.8.0', build_hash: expectedHash });
+    expect(health.attempts.slice(-3).every(entry => entry.candidate && entry.consecutive >= 1)).toBe(true);
 
     const national = await page.evaluate(() => ({
       inlineVersion: window.VOY_VERSION,
