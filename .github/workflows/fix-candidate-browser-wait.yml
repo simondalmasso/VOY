@@ -1,0 +1,46 @@
+name: Fix Candidate Browser Reload Assertion
+
+on:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - .github/workflows/fix-candidate-browser-wait.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 0
+
+      - name: Apply exact reload assertion fix
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('candidate-tests/cloudflare-candidate.spec.js')
+          text = path.read_text()
+          old = """    await page.waitForFunction(() => window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' && window.VOY_BUILD_HASH === window.__expectedCandidateHash, { timeout: 10_000 }).catch(async () => {\n      const state = await page.evaluate(() => ({ city: window.CURRENT_CITY?.city_id, build: window.VOY_BUILD_HASH }));\n      expect(state).toMatchObject({ city: '_default', build: expectedHash });\n    });\n"""
+          new = """    await page.waitForFunction(expected => (\n      window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' &&\n      window.VOY_BUILD_HASH === expected\n    ), expectedHash, { timeout: 10_000 });\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'expected replacement count 1, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+          grep -F "), expectedHash, { timeout: 10_000 });" candidate-tests/cloudflare-candidate.spec.js
+          ! grep -F '__expectedCandidateHash' candidate-tests/cloudflare-candidate.spec.js
+
+      - name: Commit exact fix
+        run: |
+          set -euo pipefail
+          git config user.name "voy-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add candidate-tests/cloudflare-candidate.spec.js
+          git commit -m "test(candidate): fix reload wait signature"
+          git push origin HEAD:feat/voy-city-platform-v1
