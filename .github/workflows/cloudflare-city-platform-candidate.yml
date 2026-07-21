@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA:0:7}"
           BUILD_HASH="$SHORT_SHA" node scripts/inject-build-hash.mjs 2>&1 | tee "$EVIDENCE_DIR/inject-build-hash.log"
-          grep -F "build_hash:'$SHORT_SHA'" worker.js
+          grep -F "const BUILD_HASH = \"$SHORT_SHA\";" worker.js
           grep -F "window.VOY_BUILD_HASH='$SHORT_SHA'" public/VOY-Lite.html
           echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
 
@@ -126,6 +126,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="city-platform-v1-${GITHUB_SHA:0:12}"
+          export CANDIDATE_TAG="$TAG"
           MESSAGE="PR #21 City Platform candidate $GITHUB_SHA"
           echo "CANDIDATE_TAG=$TAG" >> "$GITHUB_ENV"
           npx wrangler versions upload --minify --tag "$TAG" --message "$MESSAGE" 2>&1 | tee "$EVIDENCE_DIR/version-upload.log"
