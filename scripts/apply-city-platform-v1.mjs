@@ -17,8 +17,48 @@ const flags = {
 async function writeJson(relativePath, value) {
   const url = new URL(relativePath, root);
   await mkdir(new URL('./', url), { recursive: true });
-  await writeFile(url, JSON.stringify(value, null, 2) + '\n', 'utf8');
+  await writeFile(url, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
+
+function unavailableMeterFare() {
+  return {
+    diurno: { bajada: null, ficha: null, distFicha: 130 },
+    nocturno: { bajada: null, ficha: null, distFicha: 130 },
+    source: 'Sin verificar',
+    updated_at: '',
+    status: 'not_available'
+  };
+}
+
+function unavailableAppFare() {
+  return {
+    base: null,
+    km: null,
+    min: null,
+    minFare: null,
+    source: 'Sin verificar',
+    updated_at: '',
+    status: 'not_available'
+  };
+}
+
+const defaultFareRegistry = {
+  taxi: unavailableMeterFare(),
+  remis: unavailableMeterFare(),
+  bus: {
+    sube: null,
+    cash: null,
+    source: 'Sin verificar',
+    updated_at: '',
+    status: 'not_available'
+  },
+  apps: {
+    uber: unavailableAppFare(),
+    didi: unavailableAppFare(),
+    maxim: unavailableAppFare(),
+    cabify: unavailableAppFare()
+  }
+};
 
 await writeJson('cities/_default/profile.json', {
   schema_version: 1,
@@ -27,7 +67,7 @@ await writeJson('cities/_default/profile.json', {
   name: 'Argentina',
   display_name: 'Argentina',
   country: 'AR',
-  center: [-64.0, -34.0],
+  center: [-64, -34],
   zoom: 4,
   bbox: null,
   timezone: 'America/Argentina/Buenos_Aires',
@@ -39,6 +79,7 @@ await writeJson('cities/_default/profile.json', {
   source: 'VOY national fallback profile',
   verified_at: verifiedAt
 });
+
 await writeJson('cities/_default/providers.json', {
   schema_version: 1,
   city_id: '_default',
@@ -49,6 +90,7 @@ await writeJson('cities/_default/providers.json', {
   verified_at: verifiedAt,
   status: 'national_basic'
 });
+
 await writeJson('cities/_default/transport.json', {
   schema_version: 1,
   city_id: '_default',
@@ -59,14 +101,16 @@ await writeJson('cities/_default/transport.json', {
   verified_at: verifiedAt,
   status: 'not_available'
 });
+
 await writeJson('cities/_default/fares.json', {
   schema_version: 1,
   city_id: '_default',
-  fare_registry: legacyDefault.fareRegistry,
+  fare_registry: defaultFareRegistry,
   source: 'No national local fare asserted',
   verified_at: verifiedAt,
   status: 'not_available'
 });
+
 await writeJson('cities/_default/feature_flags.json', {
   schema_version: 1,
   city_id: '_default',
@@ -96,6 +140,7 @@ await writeJson('cities/santa-fe/profile.json', {
   source: 'VOY curated Santa Fe profile',
   verified_at: verifiedAt
 });
+
 await writeJson('cities/santa-fe/providers.json', {
   schema_version: 1,
   city_id: 'santafe',
@@ -106,6 +151,7 @@ await writeJson('cities/santa-fe/providers.json', {
   verified_at: null,
   status: 'partial'
 });
+
 await writeJson('cities/santa-fe/transport.json', {
   schema_version: 1,
   city_id: 'santafe',
@@ -116,6 +162,7 @@ await writeJson('cities/santa-fe/transport.json', {
   verified_at: null,
   status: 'partial'
 });
+
 await writeJson('cities/santa-fe/fares.json', {
   schema_version: 1,
   city_id: 'santafe',
@@ -124,6 +171,7 @@ await writeJson('cities/santa-fe/fares.json', {
   verified_at: verifiedAt,
   status: 'verified_regulated_fares'
 });
+
 await writeJson('cities/santa-fe/feature_flags.json', {
   schema_version: 1,
   city_id: 'santafe',
@@ -148,100 +196,90 @@ function replaceBetween(source, startMarker, endMarker, replacement, label) {
 
 const htmlUrl = new URL('VOY-Lite.html', root);
 let html = await readFile(htmlUrl, 'utf8');
-html = replaceExactlyOnce(
-  html,
-  '<script src="core/mobilityEngine.js?v=12"></script>',
-  '<script src="core/cityPlatform.js?v=1"></script>\n<script src="core/mobilityEngine.js?v=12"></script>',
-  'city platform asset'
-);
-
-html = replaceBetween(
-  html,
-  'function isValidCitySchema(data, expectedCityId) {',
-  'function detectCity() {',
-  `function isValidCitySchema(data, expectedCityId) {
-  return Boolean(window.VoyCityPlatform) && VoyCityPlatform.isValidComposedCity(data, expectedCityId);
-}
-
-`,
-  'schema validator'
-);
 
 html = replaceExactlyOnce(
   html,
-  `  if (cityId) {
-    cityId = cityId.toLowerCase();
-    if (cityId === 'santafe' || cityId === 'santa_fe') {
-      return 'santafe';
-    }
-    return '_default';
-  }`,
-  `  if (cityId) {
-    return window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
-  }`,
-  'query city normalization'
+  '<meta name="description" content="VOY — Asistente de movilidad urbana para Santa Fe. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.">',
+  '<meta name="description" content="VOY — Comparador de movilidad urbana. La disponibilidad, las tarifas y el transporte se muestran según la cobertura territorial verificada.">',
+  'neutral initial description'
+);
+html = replaceExactlyOnce(
+  html,
+  '<title>VOY — Movilidad Santa Fe</title>',
+  '<title>VOY — Movilidad urbana</title>',
+  'neutral initial title'
+);
+html = replaceExactlyOnce(
+  html,
+  '<span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos<button',
+  '<span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad urbana · Cobertura según ciudad · Datos informativos<button',
+  'neutral initial footer'
 );
 
-const emergency = `function createEmergencyDefault(cityId) {
-  var normalized = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
-  var isSF = normalized === 'santafe';
-  return {
-    schemaVersion: 1,
-    city_id: normalized,
-    slug: isSF ? 'santa-fe' : '_default',
-    name: isSF ? 'Santa Fe' : 'Argentina',
-    displayName: isSF ? 'Santa Fe, Argentina' : 'Argentina',
-    country: 'AR',
-    timezone: isSF ? 'America/Argentina/Cordoba' : 'America/Argentina/Buenos_Aires',
-    coverageLevel: isSF ? 'partial' : 'national_basic',
-    coverageNotes: ['emergency_offline_profile'],
-    map: isSF ? {
-      center: [-60.7087, -31.6256],
-      zoom: 13,
-      bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 },
-      viewbox: '-60.75,-31.67,-60.65,-31.57',
-      recentCenter: [-60.70, -31.61]
-    } : {
-      center: [-64, -34],
-      zoom: 4,
-      bbox: null
-    },
-    busStops: [],
-    bikeStations: [],
-    landmarks: [],
-    providers: {
-      uber: {name:'Uber',available:false,color:'#111111',category:'app',verified:false},
-      didi: {name:'DiDi',available:false,color:'#FF6B00',category:'app',verified:false},
-      maxim: {name:'Maxim',available:false,color:'#7C3AED',category:'app',verified:false},
-      cabify: {name:'Cabify',available:false,color:'#00A99D',category:'app',verified:false}
-    },
-    taxiCompanies: [],
-    remisCompanies: [],
-    fareRegistry: {
-      taxi: { diurno: {bajada:null,ficha:null,distFicha:130}, nocturno: {bajada:null,ficha:null,distFicha:130}, source:'Sin verificar', status:'not_available' },
-      remis: { diurno: {bajada:null,ficha:null,distFicha:130}, nocturno: {bajada:null,ficha:null,distFicha:130}, source:'Sin verificar', status:'not_available' },
-      bus: { sube:null, cash:null, source:'Sin verificar', status:'not_available' },
-      apps: {
-        uber: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'},
-        didi: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'},
-        maxim: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'},
-        cabify: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'}
+const updateCityUI = `function updateCityUI() {
+  if (!CURRENT_CITY) return;
+  var cityId = CURRENT_CITY.city_id || '_default';
+  var coverageLevel = CURRENT_CITY.coverageLevel || 'national_basic';
+  var isNational = cityId === '_default' || coverageLevel === 'national_basic';
+  var title;
+  var description;
+  var footerText;
+
+  if (isNational) {
+    title = 'VOY — Movilidad en Argentina';
+    description = 'VOY — Comparador de movilidad urbana en Argentina. La disponibilidad, las tarifas y el transporte se muestran sólo donde existe cobertura territorial verificada.';
+    footerText = 'VOY · Argentina · Cobertura nacional básica · Sin tarifas locales verificadas';
+  } else if (cityId === 'santafe') {
+    title = 'VOY — Movilidad Santa Fe';
+    description = 'VOY — Movilidad urbana en Santa Fe. Cobertura parcial con tarifas reguladas verificadas y datos de transporte informativos.';
+    footerText = 'VOY · Movilidad Santa Fe · Cobertura parcial · Datos informativos';
+  } else {
+    title = 'VOY — Movilidad ' + CURRENT_CITY.name;
+    description = 'VOY — Movilidad urbana en ' + CURRENT_CITY.name + '. Cobertura: ' + coverageLevel + '.';
+    footerText = 'VOY · Movilidad ' + CURRENT_CITY.name + ' · Cobertura ' + coverageLevel;
+  }
+
+  document.title = title;
+  document.body.setAttribute('data-city-id', cityId);
+  document.body.setAttribute('data-coverage-level', coverageLevel);
+  var metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.setAttribute('content', description);
+
+  var mapEl = document.getElementById('map');
+  if (mapEl) mapEl.setAttribute('aria-label', isNational ? 'Mapa de Argentina' : 'Mapa de ' + CURRENT_CITY.name);
+
+  var footer = document.querySelector('.footer');
+  if (footer) {
+    for (var i = 0; i < footer.childNodes.length; i++) {
+      var node = footer.childNodes[i];
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.indexOf('VOY') >= 0) {
+        node.nodeValue = footerText;
+        break;
       }
-    },
-    featureFlags: Object.assign({}, window.VoyCityPlatform ? VoyCityPlatform.DEFAULT_FLAGS : {}),
-    dataFreshness: {},
-    dataSources: { profile: 'emergency' }
-  };
+    }
+  }
 }
 
 `;
-html = replaceBetween(html, 'function createEmergencyDefault(cityId) {', 'function updateCityUI() {', emergency, 'emergency profile');
+html = replaceBetween(html, 'function updateCityUI() {', 'let cityLoadGeneration = 0;', updateCityUI, 'coverage-aware city UI');
 
-const loader = `async function loadCityProfileForGeneration(cityId, generation) {
+const loader = `let cityLoadGeneration = 0;
+var activeCityLoadController = null;
+window.cityLoadGeneration = 0;
+
+async function loadCityProfile(cityId) {
+  var generation = ++cityLoadGeneration;
+  window.cityLoadGeneration = cityLoadGeneration;
+  if (activeCityLoadController) activeCityLoadController.abort();
+  var controller = new AbortController();
+  activeCityLoadController = controller;
+  return loadCityProfileForGeneration(cityId, generation, controller);
+}
+
+async function loadCityProfileForGeneration(cityId, generation, controller) {
   if (generation !== cityLoadGeneration) return false;
   cityId = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
 
-  var controller = new AbortController();
   var timeoutId = setTimeout(function() { controller.abort(); }, 5000);
   var data = null;
   var profileSource = 'remote';
@@ -249,22 +287,25 @@ const loader = `async function loadCityProfileForGeneration(cityId, generation) 
   try {
     if (!window.VoyCityPlatform) throw new Error('city_platform_unavailable');
     data = await VoyCityPlatform.loadCity(cityId, { signal: controller.signal });
-    clearTimeout(timeoutId);
     if (generation !== cityLoadGeneration) return false;
     if (!isValidCitySchema(data, cityId)) throw new Error('invalid_composed_city');
   } catch (error) {
-    clearTimeout(timeoutId);
     if (generation !== cityLoadGeneration) return false;
     console.warn('[loadCityProfile] Versioned city load failed for ' + cityId, error);
     data = getValidCache(cityId);
     profileSource = data ? 'cache' : 'emergency';
-    if (!data && cityId !== '_default') {
-      return loadCityProfileForGeneration('_default', generation);
-    }
-    if (!data) data = createEmergencyDefault('_default');
+    if (!data) data = createEmergencyDefault(cityId);
+  } finally {
+    clearTimeout(timeoutId);
+    if (activeCityLoadController === controller) activeCityLoadController = null;
   }
 
   if (generation !== cityLoadGeneration) return false;
+  if (!isValidCitySchema(data, cityId)) {
+    data = createEmergencyDefault(cityId);
+    profileSource = 'emergency';
+  }
+
   var preparedMemoryState = prepareMemoryStateForCity(data.city_id);
   var nextContext = {
     profile: data,
@@ -294,41 +335,66 @@ const loader = `async function loadCityProfileForGeneration(cityId, generation) 
   return true;
 }
 
-`;
-html = replaceBetween(html, 'async function loadCityProfileForGeneration(cityId, generation) {', 'function getValidCache(cityId) {', loader, 'city loader');
-
-const cache = `function getValidCache(cityId) {
+function getValidCache(cityId) {
   cityId = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
-  try {
-    var cached = localStorage.getItem('voy_city_cache_v2_' + cityId);
-    if (cached) {
+  var v2Key = 'voy_city_cache_v2_' + cityId;
+  var legacyKey = 'voy_city_cache_' + cityId;
+  var cached = localStorage.getItem(v2Key);
+
+  if (cached) {
+    try {
       var parsed = JSON.parse(cached);
       if (isValidCitySchema(parsed, cityId)) return parsed;
-      localStorage.removeItem('voy_city_cache_v2_' + cityId);
+    } catch (error) {
+      console.error('[loadCityProfile] Invalid v2 city cache for ' + cityId, error);
     }
+    localStorage.removeItem(v2Key);
+  }
 
-    var legacy = localStorage.getItem('voy_city_cache_' + cityId);
-    if (legacy && window.VoyCityPlatform) {
+  var legacy = localStorage.getItem(legacyKey);
+  if (legacy && window.VoyCityPlatform) {
+    try {
       var upgraded = VoyCityPlatform.upgradeLegacyCity(JSON.parse(legacy), cityId);
       if (upgraded) {
-        try { localStorage.setItem('voy_city_cache_v2_' + cityId, JSON.stringify(upgraded)); } catch (e) {}
+        try { localStorage.setItem(v2Key, JSON.stringify(upgraded)); } catch (cacheWriteErr) {}
         return upgraded;
       }
+    } catch (error) {
+      console.error('[loadCityProfile] Invalid legacy city cache for ' + cityId, error);
     }
-  } catch (error) {
-    console.error('[loadCityProfile] Cache retrieval or migration failed', error);
+    localStorage.removeItem(legacyKey);
   }
+
   return null;
 }
 
 `;
-html = replaceBetween(html, 'function getValidCache(cityId) {', 'function prepareMemoryStateForCity(targetCityId) {', cache, 'city cache');
+html = replaceBetween(html, 'let cityLoadGeneration = 0;', 'function prepareMemoryStateForCity(targetCityId) {', loader, 'abortable fail-closed city loader');
 
-for (const forbidden of ["'city_' + fileId + '.json'", "fetch(url, { signal: controller.signal })"]) {
-  if (html.includes(forbidden)) throw new Error(`legacy city fetch remains: ${forbidden}`);
+const shareApp = `function shareApp(){
+  var url=window.location.href;
+  var city=CURRENT_CITY||createEmergencyDefault('_default');
+  var isNational=city.coverageLevel==='national_basic'||city.city_id==='_default';
+  var title=isNational?'VOY — Movilidad urbana':'VOY — Movilidad '+city.name;
+  var text=isNational
+    ?'Consultá opciones de movilidad con cobertura territorial clara y verificable.'
+    :'Consultá opciones de movilidad en '+city.name+'. Cobertura '+city.coverageLevel+'.';
+  var shareData={title:title,text:text,url:url};
+  if(navigator.share){
+    navigator.share(shareData).then(function(){v5event('share_app',{via:'native'})}).catch(function(e){
+      if(e&&e.name==='AbortError')return;
+      if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo compartir','error')}
+    });
+  }else if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){showToast('Enlace copiado','success');v5event('share_app',{via:'clipboard'})}).catch(function(){
+      if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo copiar el enlace','error')}
+    });
+  }else{
+    if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo copiar el enlace','error')}
+  }
+  closeFooterMenu();
 }
-for (const required of ['VoyCityPlatform.loadCity', 'voy_city_cache_v2_', 'core/cityPlatform.js?v=1']) {
-  if (!html.includes(required)) throw new Error(`city platform integration missing: ${required}`);
-}
+`;
+html = replaceBetween(html, 'function shareApp(){', 'function supportCreator(){', shareApp, 'coverage-aware share copy');
+
 await writeFile(htmlUrl, html, 'utf8');
-console.log('city platform v1 generated and integrated');
