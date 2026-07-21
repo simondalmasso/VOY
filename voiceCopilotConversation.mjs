@@ -145,8 +145,9 @@ export async function handleVoiceChat(request, env) {
         : 'No pude completar esa operación de VOY. No se aplicó ningún cambio.';
     }
   } else {
-    responseText = boundedString(plan.text, VOICE_LIMITS.maxResponseChars)
-      || conversationOnlyResponse(payload.message, session);
+    // Free model text never becomes an action claim. Without a successful typed
+    // tool, only a bounded, deterministic conversational response is emitted.
+    responseText = conversationOnlyResponse(payload.message, session);
   }
 
   session.turn_count += 1;
