@@ -63,7 +63,7 @@ jobs:
       - name: Node tests
         run: |
           set -o pipefail
-          bun test 2>&1 | tee test-results/evidence/node-tests.log
+          bun run test 2>&1 | tee test-results/evidence/node-tests.log
 
       - name: Wrangler dry-run
         run: |
