@@ -29,14 +29,14 @@ Constraints honored:
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-<meta name="description" content="VOY — Asistente de movilidad urbana para Santa Fe. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.">
+<meta name="description" content="VOY — Comparador de movilidad urbana. La disponibilidad, las tarifas y el transporte se muestran según la cobertura territorial verificada.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="voy-version" content="V7.8.0">
 <meta name="voy-build" content="__BUILD_HASH__">
-<title>VOY — Movilidad Santa Fe</title>
+<title>VOY — Movilidad urbana</title>
 <!-- V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — Resource Hinting: preconnect to third-party API/tile origins
      so DNS+TCP+TLS completes before the first map tile / geocode / route request fires. -->
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -1222,7 +1222,7 @@ button{font-family:inherit!important}
 </div>
 
 <!-- FOOTER (sticky bottom) -->
-<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos<button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button></footer>
+<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad urbana · Cobertura según ciudad · Datos informativos<button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button></footer>
 
 <!-- FOOTER DISCLOSURE MENU (VOY_SHARE_SUPPORT_V1: share + support, hidden by default — not always shown) -->
 <div class="footer-menu" id="footerMenu" role="menu" aria-label="Compartir y apoyar" hidden>
@@ -1387,21 +1387,42 @@ function createEmergencyDefault(cityId) {
 
 function updateCityUI() {
   if (!CURRENT_CITY) return;
-  document.title = 'VOY — Movilidad ' + CURRENT_CITY.name;
+  var cityId = CURRENT_CITY.city_id || '_default';
+  var coverageLevel = CURRENT_CITY.coverageLevel || 'national_basic';
+  var isNational = cityId === '_default' || coverageLevel === 'national_basic';
+  var title;
+  var description;
+  var footerText;
+
+  if (isNational) {
+    title = 'VOY — Movilidad en Argentina';
+    description = 'VOY — Comparador de movilidad urbana en Argentina. La disponibilidad, las tarifas y el transporte se muestran sólo donde existe cobertura territorial verificada.';
+    footerText = 'VOY · Argentina · Cobertura nacional básica · Sin tarifas locales verificadas';
+  } else if (cityId === 'santafe') {
+    title = 'VOY — Movilidad Santa Fe';
+    description = 'VOY — Movilidad urbana en Santa Fe. Cobertura parcial con tarifas reguladas verificadas y datos de transporte informativos.';
+    footerText = 'VOY · Movilidad Santa Fe · Cobertura parcial · Datos informativos';
+  } else {
+    title = 'VOY — Movilidad ' + CURRENT_CITY.name;
+    description = 'VOY — Movilidad urbana en ' + CURRENT_CITY.name + '. Cobertura: ' + coverageLevel + '.';
+    footerText = 'VOY · Movilidad ' + CURRENT_CITY.name + ' · Cobertura ' + coverageLevel;
+  }
+
+  document.title = title;
+  document.body.setAttribute('data-city-id', cityId);
+  document.body.setAttribute('data-coverage-level', coverageLevel);
   var metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc) {
-    metaDesc.setAttribute('content', 'VOY — Asistente de movilidad urbana para ' + CURRENT_CITY.name + '. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.');
-  }
+  if (metaDesc) metaDesc.setAttribute('content', description);
+
   var mapEl = document.getElementById('map');
-  if (mapEl) {
-    mapEl.setAttribute('aria-label', 'Mapa de ' + CURRENT_CITY.name);
-  }
+  if (mapEl) mapEl.setAttribute('aria-label', isNational ? 'Mapa de Argentina' : 'Mapa de ' + CURRENT_CITY.name);
+
   var footer = document.querySelector('.footer');
   if (footer) {
     for (var i = 0; i < footer.childNodes.length; i++) {
       var node = footer.childNodes[i];
-      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.indexOf('Movilidad') >= 0) {
-        node.nodeValue = 'VOY · Movilidad ' + CURRENT_CITY.name + ' · Datos informativos';
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.indexOf('VOY') >= 0) {
+        node.nodeValue = footerText;
         break;
       }
     }
@@ -1409,19 +1430,22 @@ function updateCityUI() {
 }
 
 let cityLoadGeneration = 0;
+var activeCityLoadController = null;
 window.cityLoadGeneration = 0;
 
 async function loadCityProfile(cityId) {
   var generation = ++cityLoadGeneration;
   window.cityLoadGeneration = cityLoadGeneration;
-  return loadCityProfileForGeneration(cityId, generation);
+  if (activeCityLoadController) activeCityLoadController.abort();
+  var controller = new AbortController();
+  activeCityLoadController = controller;
+  return loadCityProfileForGeneration(cityId, generation, controller);
 }
 
-async function loadCityProfileForGeneration(cityId, generation) {
+async function loadCityProfileForGeneration(cityId, generation, controller) {
   if (generation !== cityLoadGeneration) return false;
   cityId = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
 
-  var controller = new AbortController();
   var timeoutId = setTimeout(function() { controller.abort(); }, 5000);
   var data = null;
   var profileSource = 'remote';
@@ -1429,22 +1453,25 @@ async function loadCityProfileForGeneration(cityId, generation) {
   try {
     if (!window.VoyCityPlatform) throw new Error('city_platform_unavailable');
     data = await VoyCityPlatform.loadCity(cityId, { signal: controller.signal });
-    clearTimeout(timeoutId);
     if (generation !== cityLoadGeneration) return false;
     if (!isValidCitySchema(data, cityId)) throw new Error('invalid_composed_city');
   } catch (error) {
-    clearTimeout(timeoutId);
     if (generation !== cityLoadGeneration) return false;
     console.warn('[loadCityProfile] Versioned city load failed for ' + cityId, error);
     data = getValidCache(cityId);
     profileSource = data ? 'cache' : 'emergency';
-    if (!data && cityId !== '_default') {
-      return loadCityProfileForGeneration('_default', generation);
-    }
-    if (!data) data = createEmergencyDefault('_default');
+    if (!data) data = createEmergencyDefault(cityId);
+  } finally {
+    clearTimeout(timeoutId);
+    if (activeCityLoadController === controller) activeCityLoadController = null;
   }
 
   if (generation !== cityLoadGeneration) return false;
+  if (!isValidCitySchema(data, cityId)) {
+    data = createEmergencyDefault(cityId);
+    profileSource = 'emergency';
+  }
+
   var preparedMemoryState = prepareMemoryStateForCity(data.city_id);
   var nextContext = {
     profile: data,
@@ -1476,25 +1503,34 @@ async function loadCityProfileForGeneration(cityId, generation) {
 
 function getValidCache(cityId) {
   cityId = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
-  try {
-    var cached = localStorage.getItem('voy_city_cache_v2_' + cityId);
-    if (cached) {
+  var v2Key = 'voy_city_cache_v2_' + cityId;
+  var legacyKey = 'voy_city_cache_' + cityId;
+  var cached = localStorage.getItem(v2Key);
+
+  if (cached) {
+    try {
       var parsed = JSON.parse(cached);
       if (isValidCitySchema(parsed, cityId)) return parsed;
-      localStorage.removeItem('voy_city_cache_v2_' + cityId);
+    } catch (error) {
+      console.error('[loadCityProfile] Invalid v2 city cache for ' + cityId, error);
     }
+    localStorage.removeItem(v2Key);
+  }
 
-    var legacy = localStorage.getItem('voy_city_cache_' + cityId);
-    if (legacy && window.VoyCityPlatform) {
+  var legacy = localStorage.getItem(legacyKey);
+  if (legacy && window.VoyCityPlatform) {
+    try {
       var upgraded = VoyCityPlatform.upgradeLegacyCity(JSON.parse(legacy), cityId);
       if (upgraded) {
-        try { localStorage.setItem('voy_city_cache_v2_' + cityId, JSON.stringify(upgraded)); } catch (e) {}
+        try { localStorage.setItem(v2Key, JSON.stringify(upgraded)); } catch (cacheWriteErr) {}
         return upgraded;
       }
+    } catch (error) {
+      console.error('[loadCityProfile] Invalid legacy city cache for ' + cityId, error);
     }
-  } catch (error) {
-    console.error('[loadCityProfile] Cache retrieval or migration failed', error);
+    localStorage.removeItem(legacyKey);
   }
+
   return null;
 }
 
@@ -3513,10 +3549,16 @@ function restoreRouteFromUrl(){
 }
 function shareApp(){
   var url=window.location.href;
-  var shareData={title:'VOY — Movilidad Santa Fe',text:'Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.',url:url};
+  var city=CURRENT_CITY||createEmergencyDefault('_default');
+  var isNational=city.coverageLevel==='national_basic'||city.city_id==='_default';
+  var title=isNational?'VOY — Movilidad urbana':'VOY — Movilidad '+city.name;
+  var text=isNational
+    ?'Consultá opciones de movilidad con cobertura territorial clara y verificable.'
+    :'Consultá opciones de movilidad en '+city.name+'. Cobertura '+city.coverageLevel+'.';
+  var shareData={title:title,text:text,url:url};
   if(navigator.share){
     navigator.share(shareData).then(function(){v5event('share_app',{via:'native'})}).catch(function(e){
-      if(e&&e.name==='AbortError')return; // user cancelled share sheet — silent
+      if(e&&e.name==='AbortError')return;
       if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo compartir','error')}
     });
   }else if(navigator.clipboard&&navigator.clipboard.writeText){

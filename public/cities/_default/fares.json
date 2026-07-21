@@ -14,13 +14,30 @@
         "distFicha": 130
       },
       "source": "Sin verificar",
-      "updated_at": ""
+      "updated_at": "",
+      "status": "not_available"
+    },
+    "remis": {
+      "diurno": {
+        "bajada": null,
+        "ficha": null,
+        "distFicha": 130
+      },
+      "nocturno": {
+        "bajada": null,
+        "ficha": null,
+        "distFicha": 130
+      },
+      "source": "Sin verificar",
+      "updated_at": "",
+      "status": "not_available"
     },
     "bus": {
       "sube": null,
       "cash": null,
       "source": "Sin verificar",
-      "updated_at": ""
+      "updated_at": "",
+      "status": "not_available"
     },
     "apps": {
       "uber": {
@@ -29,7 +46,8 @@
         "min": null,
         "minFare": null,
         "source": "Sin verificar",
-        "updated_at": ""
+        "updated_at": "",
+        "status": "not_available"
       },
       "didi": {
         "base": null,
@@ -37,7 +55,8 @@
         "min": null,
         "minFare": null,
         "source": "Sin verificar",
-        "updated_at": ""
+        "updated_at": "",
+        "status": "not_available"
       },
       "maxim": {
         "base": null,
@@ -45,7 +64,8 @@
         "min": null,
         "minFare": null,
         "source": "Sin verificar",
-        "updated_at": ""
+        "updated_at": "",
+        "status": "not_available"
       },
       "cabify": {
         "base": null,
@@ -53,7 +73,8 @@
         "min": null,
         "minFare": null,
         "source": "Sin verificar",
-        "updated_at": ""
+        "updated_at": "",
+        "status": "not_available"
       }
     }
   },
