@@ -1,10 +1,12 @@
 const baseURL = process.env.VOY_BASE_URL;
 const versionId = process.env.VOY_CANDIDATE_VERSION_ID;
+const workerName = process.env.VOY_WORKER_NAME || 'voy-app';
 
 if (!baseURL) throw new Error('VOY_BASE_URL is required');
 if (!versionId) throw new Error('VOY_CANDIDATE_VERSION_ID is required');
 
 const base = new URL(baseURL);
+const overrideValue = `${workerName}="${versionId}"`;
 const analyticsOptOutState = {
   cookies: [{
     name: 'voy_analytics',
@@ -37,6 +39,12 @@ module.exports = {
     browserName: 'chromium',
     serviceWorkers: 'block',
     storageState: analyticsOptOutState,
+    extraHTTPHeaders: {
+      'Cloudflare-Workers-Version-Overrides': overrideValue,
+      'X-VOY-Candidate-Smoke': versionId,
+      'Cache-Control': 'no-cache, no-store, max-age=0',
+      Pragma: 'no-cache'
+    },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'
