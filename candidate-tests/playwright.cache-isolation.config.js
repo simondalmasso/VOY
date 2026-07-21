@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const base = require('./playwright.config.js');
 
 module.exports = {
