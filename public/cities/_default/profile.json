@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "city_id": "_default",
+  "slug": "_default",
+  "name": "Argentina",
+  "display_name": "Argentina",
+  "country": "AR",
+  "center": [
+    -64,
+    -34
+  ],
+  "zoom": 4,
+  "bbox": null,
+  "timezone": "America/Argentina/Buenos_Aires",
+  "coverage_level": "national_basic",
+  "coverage_notes": [
+    "Geocodificación nacional sin datos locales inventados.",
+    "Precios, paradas, bicicletas y disponibilidad por ciudad se muestran sólo cuando existen perfiles territoriales."
+  ],
+  "source": "VOY national fallback profile",
+  "verified_at": "2026-07-17"
+}

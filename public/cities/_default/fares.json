@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "city_id": "_default",
+  "fare_registry": {
+    "taxi": {
+      "diurno": {
+        "bajada": null,
+        "ficha": null,
+        "distFicha": 130
+      },
+      "nocturno": {
+        "bajada": null,
+        "ficha": null,
+        "distFicha": 130
+      },
+      "source": "Sin verificar",
+      "updated_at": "",
+      "status": "not_available"
+    },
+    "remis": {
+      "diurno": {
+        "bajada": null,
+        "ficha": null,
+        "distFicha": 130
+      },
+      "nocturno": {
+        "bajada": null,
+        "ficha": null,
+        "distFicha": 130
+      },
+      "source": "Sin verificar",
+      "updated_at": "",
+      "status": "not_available"
+    },
+    "bus": {
+      "sube": null,
+      "cash": null,
+      "source": "Sin verificar",
+      "updated_at": "",
+      "status": "not_available"
+    },
+    "apps": {
+      "uber": {
+        "base": null,
+        "km": null,
+        "min": null,
+        "minFare": null,
+        "source": "Sin verificar",
+        "updated_at": "",
+        "status": "not_available"
+      },
+      "didi": {
+        "base": null,
+        "km": null,
+        "min": null,
+        "minFare": null,
+        "source": "Sin verificar",
+        "updated_at": "",
+        "status": "not_available"
+      },
+      "maxim": {
+        "base": null,
+        "km": null,
+        "min": null,
+        "minFare": null,
+        "source": "Sin verificar",
+        "updated_at": "",
+        "status": "not_available"
+      },
+      "cabify": {
+        "base": null,
+        "km": null,
+        "min": null,
+        "minFare": null,
+        "source": "Sin verificar",
+        "updated_at": "",
+        "status": "not_available"
+      }
+    }
+  },
+  "source": "No national local fare asserted",
+  "verified_at": "2026-07-17",
+  "status": "not_available"
+}

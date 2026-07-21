@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "city_id": "santafe",
+  "providers": {
+    "uber": {
+      "name": "Uber",
+      "available": true,
+      "color": "#111111",
+      "category": "app",
+      "verified": true
+    },
+    "didi": {
+      "name": "DiDi",
+      "available": true,
+      "color": "#FF6B00",
+      "category": "app",
+      "verified": true
+    },
+    "maxim": {
+      "name": "Maxim",
+      "available": true,
+      "color": "#7C3AED",
+      "category": "app",
+      "verified": true
+    },
+    "cabify": {
+      "name": "Cabify",
+      "available": false,
+      "color": "#00A99D",
+      "category": "app",
+      "verified": true
+    },
+    "radiotaxi": {
+      "name": "Radiotaxi Santa Fe",
+      "available": true,
+      "color": "#F59E0B",
+      "category": "taxi",
+      "verified": true
+    },
+    "taxiapp": {
+      "name": "TaxiApp",
+      "available": true,
+      "color": "#22C55E",
+      "category": "taxi",
+      "verified": true
+    },
+    "remisreal": {
+      "name": "Remises Real",
+      "available": true,
+      "color": "#6B7280",
+      "category": "remis",
+      "verified": true
+    }
+  },
+  "taxi_companies": [
+    {
+      "id": "radiotaxi",
+      "name": "Radiotaxi Santa Fe",
+      "whatsapp": "https://wa.link/n7u2e7",
+      "app": null,
+      "web": null,
+      "phone": null
+    },
+    {
+      "id": "taxiapp",
+      "name": "TaxiApp",
+      "whatsapp": "https://wa.link/vavbcl",
+      "app": null,
+      "web": null,
+      "phone": null
+    }
+  ],
+  "remis_companies": [
+    {
+      "id": "remisreal",
+      "name": "Remises Real",
+      "whatsapp": "https://wa.link/rqov56",
+      "app": null,
+      "web": null,
+      "phone": null
+    }
+  ],
+  "source": "VOY legacy city provider registry; source hardening pending",
+  "verified_at": null,
+  "status": "partial"
+}

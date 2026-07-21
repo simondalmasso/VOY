@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "city_id": "_default",
+  "bus_stops": [],
+  "bike_stations": [],
+  "landmarks": [],
+  "source": "No national local-transport dataset",
+  "verified_at": "2026-07-17",
+  "status": "not_available"
+}

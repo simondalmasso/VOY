@@ -29,14 +29,14 @@ Constraints honored:
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-<meta name="description" content="VOY — Asistente de movilidad urbana para Santa Fe. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.">
+<meta name="description" content="VOY — Comparador de movilidad urbana. La disponibilidad, las tarifas y el transporte se muestran según la cobertura territorial verificada.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOY">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="voy-version" content="V7.8.0">
 <meta name="voy-build" content="__BUILD_HASH__">
-<title>VOY — Movilidad Santa Fe</title>
+<title>VOY — Movilidad urbana</title>
 <!-- V7.7 PERFORMANCE_AUDIT_AND_TELEMETRY — Resource Hinting: preconnect to third-party API/tile origins
      so DNS+TCP+TLS completes before the first map tile / geocode / route request fires. -->
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
@@ -53,6 +53,7 @@ Constraints honored:
 <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-120.png">
 <link rel="apple-touch-icon" sizes="1024x1024" href="/icons/apple-touch-1024.png">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
+<script src="core/cityPlatform.js?v=1"></script>
 <script src="core/mobilityEngine.js?v=12"></script>
 <script src="core/pricingEngine.js?v=10"></script>
 <script src="core/eventBus.js?v=10"></script>
@@ -1221,7 +1222,7 @@ button{font-family:inherit!important}
 </div>
 
 <!-- FOOTER (sticky bottom) -->
-<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad Santa Fe · Datos informativos<button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button></footer>
+<footer class="footer"><span class="footer-mark" aria-hidden="true"></span>VOY · Movilidad urbana · Cobertura según ciudad · Datos informativos<button class="footer-more" id="footerMore" aria-label="Más opciones" aria-expanded="false" aria-haspopup="menu" aria-controls="footerMenu">··</button></footer>
 
 <!-- FOOTER DISCLOSURE MENU (VOY_SHARE_SUPPORT_V1: share + support, hidden by default — not always shown) -->
 <div class="footer-menu" id="footerMenu" role="menu" aria-label="Compartir y apoyar" hidden>
@@ -1293,24 +1294,14 @@ var REMIS_COMPANIES = [];
 var FareRegistry = {};
 
 function isValidCitySchema(data, expectedCityId) {
-  if (!data || typeof data !== 'object') return false;
-  if (data.city_id !== expectedCityId) return false;
-  if (typeof data.name !== 'string') return false;
-  if (!data.map || typeof data.map !== 'object') return false;
-  if (!data.providers || typeof data.providers !== 'object') return false;
-  if (!data.fareRegistry || typeof data.fareRegistry !== 'object') return false;
-  return true;
+  return Boolean(window.VoyCityPlatform) && VoyCityPlatform.isValidComposedCity(data, expectedCityId);
 }
 
 function detectCity() {
   var q = new URLSearchParams(window.location.search);
   var cityId = q.get('city') || q.get('city_id');
   if (cityId) {
-    cityId = cityId.toLowerCase();
-    if (cityId === 'santafe' || cityId === 'santa_fe') {
-      return 'santafe';
-    }
-    return '_default';
+    return window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
   }
   try {
     var cached = localStorage.getItem('voy_last_pos');
@@ -1343,20 +1334,28 @@ function detectCity() {
 }
 
 function createEmergencyDefault(cityId) {
-  var isSF = cityId === 'santafe';
+  var normalized = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
+  var isSF = normalized === 'santafe';
   return {
-    city_id: cityId,
-    name: isSF ? 'Santa Fe' : 'Desconocida',
-    displayName: isSF ? 'Santa Fe, Argentina' : 'Ciudad Desconocida',
+    schemaVersion: 1,
+    city_id: normalized,
+    slug: isSF ? 'santa-fe' : '_default',
+    name: isSF ? 'Santa Fe' : 'Argentina',
+    displayName: isSF ? 'Santa Fe, Argentina' : 'Argentina',
+    country: 'AR',
+    timezone: isSF ? 'America/Argentina/Cordoba' : 'America/Argentina/Buenos_Aires',
+    coverageLevel: isSF ? 'partial' : 'national_basic',
+    coverageNotes: ['emergency_offline_profile'],
     map: isSF ? {
       center: [-60.7087, -31.6256],
       zoom: 13,
       bbox: { minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 },
-      viewbox: "-60.75,-31.67,-60.65,-31.57",
+      viewbox: '-60.75,-31.67,-60.65,-31.57',
       recentCenter: [-60.70, -31.61]
     } : {
-      center: [0, 0],
-      zoom: 2
+      center: [-64, -34],
+      zoom: 4,
+      bbox: null
     },
     busStops: [],
     bikeStations: [],
@@ -1370,35 +1369,60 @@ function createEmergencyDefault(cityId) {
     taxiCompanies: [],
     remisCompanies: [],
     fareRegistry: {
-      taxi: { diurno: {bajada:null,ficha:null,distFicha:130}, nocturno: {bajada:null,ficha:null,distFicha:130}, source:'Sin verificar', updated_at:'' },
-      bus: { sube:null, cash:null, source:'Sin verificar', updated_at:'' },
+      taxi: { diurno: {bajada:null,ficha:null,distFicha:130}, nocturno: {bajada:null,ficha:null,distFicha:130}, source:'Sin verificar', status:'not_available' },
+      remis: { diurno: {bajada:null,ficha:null,distFicha:130}, nocturno: {bajada:null,ficha:null,distFicha:130}, source:'Sin verificar', status:'not_available' },
+      bus: { sube:null, cash:null, source:'Sin verificar', status:'not_available' },
       apps: {
-        uber: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''},
-        didi: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''},
-        maxim: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''},
-        cabify: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',updated_at:''}
+        uber: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'},
+        didi: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'},
+        maxim: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'},
+        cabify: {base:null,km:null,min:null,minFare:null,source:'Sin verificar',status:'not_available'}
       }
-    }
+    },
+    featureFlags: Object.assign({}, window.VoyCityPlatform ? VoyCityPlatform.DEFAULT_FLAGS : {}),
+    dataFreshness: {},
+    dataSources: { profile: 'emergency' }
   };
 }
 
 function updateCityUI() {
   if (!CURRENT_CITY) return;
-  document.title = 'VOY — Movilidad ' + CURRENT_CITY.name;
+  var cityId = CURRENT_CITY.city_id || '_default';
+  var coverageLevel = CURRENT_CITY.coverageLevel || 'national_basic';
+  var isNational = cityId === '_default' || coverageLevel === 'national_basic';
+  var title;
+  var description;
+  var footerText;
+
+  if (isNational) {
+    title = 'VOY — Movilidad en Argentina';
+    description = 'VOY — Comparador de movilidad urbana en Argentina. La disponibilidad, las tarifas y el transporte se muestran sólo donde existe cobertura territorial verificada.';
+    footerText = 'VOY · Argentina · Cobertura nacional básica · Sin tarifas locales verificadas';
+  } else if (cityId === 'santafe') {
+    title = 'VOY — Movilidad Santa Fe';
+    description = 'VOY — Movilidad urbana en Santa Fe. Cobertura parcial con tarifas reguladas verificadas y datos de transporte informativos.';
+    footerText = 'VOY · Movilidad Santa Fe · Cobertura parcial · Datos informativos';
+  } else {
+    title = 'VOY — Movilidad ' + CURRENT_CITY.name;
+    description = 'VOY — Movilidad urbana en ' + CURRENT_CITY.name + '. Cobertura: ' + coverageLevel + '.';
+    footerText = 'VOY · Movilidad ' + CURRENT_CITY.name + ' · Cobertura ' + coverageLevel;
+  }
+
+  document.title = title;
+  document.body.setAttribute('data-city-id', cityId);
+  document.body.setAttribute('data-coverage-level', coverageLevel);
   var metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc) {
-    metaDesc.setAttribute('content', 'VOY — Asistente de movilidad urbana para ' + CURRENT_CITY.name + '. Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.');
-  }
+  if (metaDesc) metaDesc.setAttribute('content', description);
+
   var mapEl = document.getElementById('map');
-  if (mapEl) {
-    mapEl.setAttribute('aria-label', 'Mapa de ' + CURRENT_CITY.name);
-  }
+  if (mapEl) mapEl.setAttribute('aria-label', isNational ? 'Mapa de Argentina' : 'Mapa de ' + CURRENT_CITY.name);
+
   var footer = document.querySelector('.footer');
   if (footer) {
     for (var i = 0; i < footer.childNodes.length; i++) {
       var node = footer.childNodes[i];
-      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.indexOf('Movilidad') >= 0) {
-        node.nodeValue = 'VOY · Movilidad ' + CURRENT_CITY.name + ' · Datos informativos';
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.indexOf('VOY') >= 0) {
+        node.nodeValue = footerText;
         break;
       }
     }
@@ -1406,228 +1430,107 @@ function updateCityUI() {
 }
 
 let cityLoadGeneration = 0;
+var activeCityLoadController = null;
 window.cityLoadGeneration = 0;
 
 async function loadCityProfile(cityId) {
   var generation = ++cityLoadGeneration;
   window.cityLoadGeneration = cityLoadGeneration;
-  return loadCityProfileForGeneration(cityId, generation);
+  if (activeCityLoadController) activeCityLoadController.abort();
+  var controller = new AbortController();
+  activeCityLoadController = controller;
+  return loadCityProfileForGeneration(cityId, generation, controller);
 }
 
-async function loadCityProfileForGeneration(cityId, generation) {
-  if (generation !== cityLoadGeneration) {
-    return false;
-  }
+async function loadCityProfileForGeneration(cityId, generation, controller) {
+  if (generation !== cityLoadGeneration) return false;
+  cityId = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
 
-  var fileId = cityId === '_default' ? 'default' : cityId;
-  var url = 'city_' + fileId + '.json';
+  var timeoutId = setTimeout(function() { controller.abort(); }, 5000);
   var data = null;
-  var is404 = false;
-  var controller = new AbortController();
-  var timeoutId = setTimeout(function() { controller.abort(); }, 4000);
-  var response = null;
   var profileSource = 'remote';
 
   try {
-    response = await fetch(url, { signal: controller.signal });
-    if (generation !== cityLoadGeneration) {
-      clearTimeout(timeoutId);
-      return false;
-    }
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      try {
-        var parsed = await response.json();
-        if (generation !== cityLoadGeneration) {
-          return false;
-        }
-
-        if (isValidCitySchema(parsed, cityId)) {
-          data = parsed;
-          profileSource = 'remote';
-        } else {
-          console.warn('[loadCityProfile] Fetched JSON schema is invalid for: ' + cityId);
-          data = getValidCache(cityId);
-          if (data) {
-            profileSource = 'cache';
-          } else {
-            if (cityId === '_default') {
-              data = createEmergencyDefault('_default');
-              profileSource = 'emergency';
-            } else {
-              return loadCityProfileForGeneration('_default', generation);
-            }
-          }
-        }
-      } catch (jsonErr) {
-        if (generation !== cityLoadGeneration) {
-          return false;
-        }
-        console.error('[loadCityProfile] JSON parse failed for fetched ' + cityId, jsonErr);
-        data = getValidCache(cityId);
-        if (data) {
-          profileSource = 'cache';
-        } else {
-          if (cityId === '_default') {
-            data = createEmergencyDefault('_default');
-            profileSource = 'emergency';
-          } else {
-            return loadCityProfileForGeneration('_default', generation);
-          }
-        }
-      }
-    } else {
-      if (response.status === 404) {
-        is404 = true;
-        console.warn('[loadCityProfile] Profile not found (404) for: ' + cityId);
-        if (cityId !== '_default') {
-          console.warn('[loadCityProfile] Falling back to _default due to 404.');
-          return loadCityProfileForGeneration('_default', generation);
-        } else {
-          data = createEmergencyDefault('_default');
-          profileSource = 'emergency';
-        }
-      } else {
-        throw new Error('Response status ' + response.status);
-      }
-    }
-
-    if (generation !== cityLoadGeneration) {
-      return false;
-    }
-
-    if (!data) {
-      if (cityId === '_default') {
-        data = createEmergencyDefault('_default');
-        profileSource = 'emergency';
-      } else {
-        return loadCityProfileForGeneration('_default', generation);
-      }
-    }
-
-    if (generation !== cityLoadGeneration) {
-      return false;
-    }
-
-    // Pre-resolve preparedMemoryState síncronamente
-    var preparedMemoryState = prepareMemoryStateForCity(cityId);
-
-    // Prepare nextContext
-    var nextContext = {
-      profile: data,
-      busStops: data.busStops || [],
-      bikeStations: data.bikeStations || [],
-      landmarks: data.landmarks || [],
-      providers: data.providers || {},
-      taxiCompanies: data.taxiCompanies || [],
-      remisCompanies: data.remisCompanies || [],
-      fareRegistry: data.fareRegistry || {},
-      preparedMemoryState: preparedMemoryState
-    };
-
-    if (generation !== cityLoadGeneration) {
-      return false;
-    }
-
-    // Write city cache ONLY when profileSource is 'remote'
-    if (profileSource === 'remote' && data && response && response.ok) {
-      try {
-        localStorage.setItem('voy_city_cache_' + cityId, JSON.stringify(data));
-      } catch (cacheWriteErr) {}
-    }
-
-    // Ensure we have a saved memory state in storage for isolated city context
-    var memKey = 'voy_memory_' + cityId;
-    if (!localStorage.getItem(memKey)) {
-      try {
-        localStorage.setItem(memKey, JSON.stringify(preparedMemoryState));
-      } catch (e) {}
-    }
-
-    if (generation !== cityLoadGeneration) {
-      return false;
-    }
-
-    commitCityContext(nextContext);
-    return true;
-
+    if (!window.VoyCityPlatform) throw new Error('city_platform_unavailable');
+    data = await VoyCityPlatform.loadCity(cityId, { signal: controller.signal });
+    if (generation !== cityLoadGeneration) return false;
+    if (!isValidCitySchema(data, cityId)) throw new Error('invalid_composed_city');
   } catch (error) {
+    if (generation !== cityLoadGeneration) return false;
+    console.warn('[loadCityProfile] Versioned city load failed for ' + cityId, error);
+    data = getValidCache(cityId);
+    profileSource = data ? 'cache' : 'emergency';
+    if (!data) data = createEmergencyDefault(cityId);
+  } finally {
     clearTimeout(timeoutId);
-    if (generation !== cityLoadGeneration) {
-      return false;
-    }
-
-    // If fetch failed completely (network error / timeout) and NOT 404, try local cache before giving up
-    if (response === null && !is404) {
-      console.warn('[loadCityProfile] Fetch failed, trying local cache...', error);
-      var cachedData = getValidCache(cityId);
-      if (cachedData) {
-        var preparedMem = prepareMemoryStateForCity(cityId);
-        var cachedContext = {
-          profile: cachedData,
-          busStops: cachedData.busStops || [],
-          bikeStations: cachedData.bikeStations || [],
-          landmarks: cachedData.landmarks || [],
-          providers: cachedData.providers || {},
-          taxiCompanies: cachedData.taxiCompanies || [],
-          remisCompanies: cachedData.remisCompanies || [],
-          fareRegistry: cachedData.fareRegistry || {},
-          preparedMemoryState: preparedMem
-        };
-        if (generation !== cityLoadGeneration) {
-          return false;
-        }
-        commitCityContext(cachedContext);
-        return true;
-      } else {
-        if (cityId !== '_default') {
-          console.warn('[loadCityProfile] Cache fallback unavailable. Falling back to _default.');
-          return loadCityProfileForGeneration('_default', generation);
-        } else {
-          // If '_default' cache fails, construct and commit emergency default properly
-          var emergencyData = createEmergencyDefault('_default');
-          var emergencyContext = {
-            profile: emergencyData,
-            busStops: emergencyData.busStops || [],
-            bikeStations: emergencyData.bikeStations || [],
-            landmarks: emergencyData.landmarks || [],
-            providers: emergencyData.providers || {},
-            taxiCompanies: emergencyData.taxiCompanies || [],
-            remisCompanies: emergencyData.remisCompanies || [],
-            fareRegistry: emergencyData.fareRegistry || {},
-            preparedMemoryState: prepareMemoryStateForCity('_default')
-          };
-
-          if (generation !== cityLoadGeneration) {
-            return false;
-          }
-
-          commitCityContext(emergencyContext);
-          return true;
-        }
-      }
-    } else {
-      console.error('[loadCityProfile] City context preparation failed', error);
-      return false;
-    }
+    if (activeCityLoadController === controller) activeCityLoadController = null;
   }
+
+  if (generation !== cityLoadGeneration) return false;
+  if (!isValidCitySchema(data, cityId)) {
+    data = createEmergencyDefault(cityId);
+    profileSource = 'emergency';
+  }
+
+  var preparedMemoryState = prepareMemoryStateForCity(data.city_id);
+  var nextContext = {
+    profile: data,
+    busStops: data.busStops || [],
+    bikeStations: data.bikeStations || [],
+    landmarks: data.landmarks || [],
+    providers: data.providers || {},
+    taxiCompanies: data.taxiCompanies || [],
+    remisCompanies: data.remisCompanies || [],
+    fareRegistry: data.fareRegistry || {},
+    preparedMemoryState: preparedMemoryState
+  };
+
+  if (profileSource === 'remote') {
+    try {
+      localStorage.setItem('voy_city_cache_v2_' + data.city_id, JSON.stringify(data));
+    } catch (cacheWriteErr) {}
+  }
+
+  var memKey = 'voy_memory_' + data.city_id;
+  if (!localStorage.getItem(memKey)) {
+    try { localStorage.setItem(memKey, JSON.stringify(preparedMemoryState)); } catch (e) {}
+  }
+
+  if (generation !== cityLoadGeneration) return false;
+  commitCityContext(nextContext);
+  return true;
 }
 
 function getValidCache(cityId) {
-  try {
-    var cached = localStorage.getItem('voy_city_cache_' + cityId);
-    if (cached) {
+  cityId = window.VoyCityPlatform ? VoyCityPlatform.normalizeCityId(cityId) : '_default';
+  var v2Key = 'voy_city_cache_v2_' + cityId;
+  var legacyKey = 'voy_city_cache_' + cityId;
+  var cached = localStorage.getItem(v2Key);
+
+  if (cached) {
+    try {
       var parsed = JSON.parse(cached);
-      if (isValidCitySchema(parsed, cityId)) {
-        return parsed;
-      } else {
-        console.warn('[loadCityProfile] Cached JSON schema is invalid or mismatched for: ' + cityId);
-      }
+      if (isValidCitySchema(parsed, cityId)) return parsed;
+    } catch (error) {
+      console.error('[loadCityProfile] Invalid v2 city cache for ' + cityId, error);
     }
-  } catch (e) {
-    console.error('[loadCityProfile] Cache retrieval or parsing failed', e);
+    localStorage.removeItem(v2Key);
   }
+
+  var legacy = localStorage.getItem(legacyKey);
+  if (legacy && window.VoyCityPlatform) {
+    try {
+      var upgraded = VoyCityPlatform.upgradeLegacyCity(JSON.parse(legacy), cityId);
+      if (upgraded) {
+        try { localStorage.setItem(v2Key, JSON.stringify(upgraded)); } catch (cacheWriteErr) {}
+        return upgraded;
+      }
+    } catch (error) {
+      console.error('[loadCityProfile] Invalid legacy city cache for ' + cityId, error);
+    }
+    localStorage.removeItem(legacyKey);
+  }
+
   return null;
 }
 
@@ -3646,10 +3549,16 @@ function restoreRouteFromUrl(){
 }
 function shareApp(){
   var url=window.location.href;
-  var shareData={title:'VOY — Movilidad Santa Fe',text:'Compará Uber, DiDi, Maxim, taxi, remis y colectivo en un solo lugar.',url:url};
+  var city=CURRENT_CITY||createEmergencyDefault('_default');
+  var isNational=city.coverageLevel==='national_basic'||city.city_id==='_default';
+  var title=isNational?'VOY — Movilidad urbana':'VOY — Movilidad '+city.name;
+  var text=isNational
+    ?'Consultá opciones de movilidad con cobertura territorial clara y verificable.'
+    :'Consultá opciones de movilidad en '+city.name+'. Cobertura '+city.coverageLevel+'.';
+  var shareData={title:title,text:text,url:url};
   if(navigator.share){
     navigator.share(shareData).then(function(){v5event('share_app',{via:'native'})}).catch(function(e){
-      if(e&&e.name==='AbortError')return; // user cancelled share sheet — silent
+      if(e&&e.name==='AbortError')return;
       if(_fallbackCopy(url)){showToast('Enlace copiado','success');v5event('share_app',{via:'copy_fallback'})}else{showToast('No se pudo compartir','error')}
     });
   }else if(navigator.clipboard&&navigator.clipboard.writeText){

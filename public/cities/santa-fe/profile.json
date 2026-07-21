@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "city_id": "santafe",
+  "slug": "santa-fe",
+  "name": "Santa Fe",
+  "display_name": "Santa Fe, Argentina",
+  "country": "AR",
+  "center": [
+    -60.7087,
+    -31.6256
+  ],
+  "zoom": 13,
+  "bbox": {
+    "minLat": -31.67,
+    "maxLat": -31.57,
+    "minLon": -60.75,
+    "maxLon": -60.65
+  },
+  "viewbox": "-60.75,-31.67,-60.65,-31.57",
+  "recent_center": [
+    -60.7,
+    -31.61
+  ],
+  "timezone": "America/Argentina/Cordoba",
+  "coverage_level": "partial",
+  "coverage_notes": [
+    "Tarifas reguladas verificadas.",
+    "Disponibilidad de proveedores preservada del registro existente.",
+    "Paradas y estaciones curadas pendientes de trazabilidad oficial completa."
+  ],
+  "source": "VOY curated Santa Fe profile",
+  "verified_at": "2026-07-17"
+}
