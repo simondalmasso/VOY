@@ -1,0 +1,171 @@
+name: VOY Verify City Platform Rollback
+
+on:
+  push:
+    branches:
+      - ops/voy-city-platform-promote-v1
+    paths:
+      - .github/workflows/verify-city-platform-rollback.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-city-platform-rollback-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      EXPECTED_MAIN_SHA: 4a8b91e605597989b3db19860a745c21472a3a14
+      EXPECTED_DEPLOYMENT_ID: cbe9fdb7-e422-4fbe-b754-86698d57e832
+      STABLE_VERSION_ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
+      CANDIDATE_VERSION_ID: aec70bcf-d02c-416a-b9f5-be4d83b34b32
+      EXPECTED_BUILD: 4a8b91e
+      EXPECTED_VERSION: V7.8.0
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EVIDENCE_DIR: evidence/city-platform-rollback-verification
+
+    steps:
+      - name: Checkout exact restored main
+        uses: actions/checkout@v4
+        with:
+          ref: 4a8b91e605597989b3db19860a745c21472a3a14
+          fetch-depth: 0
+
+      - name: Verify rollback control-plane and health
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN_SHA"
+          npm install --global wrangler@4.112.0
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          wrangler deployments list --json > "$EVIDENCE_DIR/wrangler-deployments.json"
+          curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments.json"
+          : > "$EVIDENCE_DIR/health-rounds.jsonl"
+          consecutive=0
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error --max-time 20 "$WORKER_URL/api/health?rollback_verify=$(date +%s%N)" > /tmp/health.json
+            if node <<'NODE'
+          const fs = require('node:fs');
+          const h = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
+          if (h.ok !== true || h.version !== process.env.EXPECTED_VERSION || h.build_hash !== process.env.EXPECTED_BUILD) process.exit(1);
+          NODE
+            then consecutive=$((consecutive + 1)); else consecutive=0; fi
+            node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('/tmp/health.json'));fs.appendFileSync('$EVIDENCE_DIR/health-rounds.jsonl',JSON.stringify({attempt:$attempt,consecutive:$consecutive,health:h,timestamp:new Date().toISOString()})+'\\n')"
+            if [ "$consecutive" -ge 3 ]; then break; fi
+            sleep 3
+          done
+          test "$consecutive" -ge 3
+          cp /tmp/health.json "$EVIDENCE_DIR/health-final.json"
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const p = JSON.parse(fs.readFileSync(`${process.env.EVIDENCE_DIR}/api-deployments.json`, 'utf8'));
+          const list = p.result?.deployments || p.result || [];
+          const active = list[0];
+          if (!p.success || !active || !Array.isArray(active.versions)) throw new Error('active_deployment_missing');
+          if (active.id !== process.env.EXPECTED_DEPLOYMENT_ID) throw new Error(`rollback_deployment_changed:${active.id}`);
+          const percentages = new Map(active.versions.map(v => [v.version_id, Number(v.percentage)]));
+          if (percentages.get(process.env.STABLE_VERSION_ID) !== 100 || percentages.get(process.env.CANDIDATE_VERSION_ID) !== 0) throw new Error('rollback_traffic_mismatch');
+          fs.writeFileSync(`${process.env.EVIDENCE_DIR}/rollback-state.json`, JSON.stringify({
+            deployment_id: active.id,
+            stable_version_id: process.env.STABLE_VERSION_ID,
+            stable_traffic: 100,
+            failed_candidate_version_id: process.env.CANDIDATE_VERSION_ID,
+            failed_candidate_traffic: 0,
+            verified_at: new Date().toISOString()
+          }, null, 2));
+          NODE
+
+      - name: Install Chromium
+        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+
+      - name: Verify restored production browser desktop and mobile
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rollback-browser
+          cat > /tmp/rollback-browser/rollback.spec.js <<'EOF'
+          const { test, expect } = require('@playwright/test');
+          const fs = require('node:fs/promises');
+          const baseURL = process.env.WORKER_URL;
+          const evidenceDir = process.env.EVIDENCE_DIR;
+          test('restored stable production remains healthy and usable', async ({ page }, testInfo) => {
+            const evidence = { console: [], pageerrors: [], requests: [], directNominatim: 0 };
+            page.on('console', m => evidence.console.push({ type: m.type(), text: m.text() }));
+            page.on('pageerror', e => evidence.pageerrors.push(String(e && e.stack || e)));
+            page.on('request', r => {
+              evidence.requests.push({ method: r.method(), url: r.url() });
+              if (r.url().includes('nominatim.openstreetmap.org')) evidence.directNominatim += 1;
+            });
+            await page.route('**nominatim.openstreetmap.org/**', route => route.abort('blockedbyclient'));
+            await page.goto(`${baseURL}/?rollback_browser=${Date.now()}`, { waitUntil: 'domcontentloaded' });
+            await page.waitForFunction(() => window.MC && window.CURRENT_CITY && !document.getElementById('splash'));
+            const state = await page.evaluate(async expected => {
+              const health = await fetch(`/api/health?rollback_browser_health=${Date.now()}`, { cache: 'no-store' }).then(r => r.json());
+              return {
+                health,
+                buildHash: window.VOY_BUILD_HASH,
+                cityId: window.CURRENT_CITY?.city_id,
+                platformPresent: Boolean(window.VoyCityPlatform),
+                overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth,
+                bodyLength: document.body.innerText.length,
+                expected
+              };
+            }, process.env.EXPECTED_BUILD);
+            expect(state.health).toMatchObject({ ok: true, version: process.env.EXPECTED_VERSION, build_hash: process.env.EXPECTED_BUILD });
+            expect(state.buildHash).toBe(process.env.EXPECTED_BUILD);
+            expect(state.cityId).toBe('_default');
+            expect(state.platformPresent).toBe(false);
+            expect(state.overflow).toBeLessThanOrEqual(1);
+            expect(state.bodyLength).toBeGreaterThan(100);
+            expect(evidence.pageerrors).toEqual([]);
+            expect(evidence.console.filter(x => x.type === 'error')).toEqual([]);
+            expect(evidence.directNominatim).toBe(0);
+            await fs.mkdir(evidenceDir, { recursive: true });
+            await fs.writeFile(`${evidenceDir}/${testInfo.project.name}-browser.json`, JSON.stringify({ state, evidence }, null, 2));
+            await page.screenshot({ path: `${evidenceDir}/${testInfo.project.name}.png`, fullPage: false });
+          });
+          EOF
+          cat > /tmp/rollback-browser/playwright.config.js <<'EOF'
+          module.exports = {
+            testDir: '/tmp/rollback-browser',
+            testMatch: 'rollback.spec.js',
+            timeout: 60000,
+            workers: 1,
+            retries: 0,
+            use: { headless: true, trace: 'retain-on-failure' },
+            projects: [
+              { name: 'desktop', use: { viewport: { width: 1440, height: 1000 } } },
+              { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
+            ],
+            reporter: [['list']],
+            outputDir: 'evidence/city-platform-rollback-verification/playwright-output'
+          };
+          EOF
+          npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
+            PLAYWRIGHT_BIN=$(command -v playwright)
+            NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
+            export NODE_PATH
+            playwright test --config=/tmp/rollback-browser/playwright.config.js
+          ' 2>&1 | tee "$EVIDENCE_DIR/playwright.log"
+
+      - name: Build manifest
+        if: always()
+        run: |
+          find "$EVIDENCE_DIR" -type f -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload rollback verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-city-platform-rollback-verification-${{ github.run_id }}
+          path: evidence/city-platform-rollback-verification
+          if-no-files-found: error
+          retention-days: 30
