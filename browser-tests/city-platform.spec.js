@@ -22,6 +22,23 @@ function unavailableFareAssertions() {
   });
 }
 
+function evidenceFor(page) {
+  return page.__cityEvidence || { consoleLog: [], requestLog: [], pageErrors: [], nominatimCalls: 0 };
+}
+
+async function saveEvidenceSnapshot(page, testInfo, phase) {
+  await fs.mkdir(evidenceDirectory, { recursive: true });
+  const evidence = evidenceFor(page);
+  const slug = `city-platform-${testInfo.project.name}-${phase}`;
+  await fs.writeFile(`${evidenceDirectory}/${slug}-console.json`, JSON.stringify(evidence.consoleLog, null, 2));
+  await fs.writeFile(`${evidenceDirectory}/${slug}-requests.json`, JSON.stringify(evidence.requestLog, null, 2));
+  await fs.writeFile(`${evidenceDirectory}/${slug}-pageerrors.json`, JSON.stringify(evidence.pageErrors, null, 2));
+  if (!page.isClosed()) {
+    await page.screenshot({ path: `${evidenceDirectory}/${slug}.png`, fullPage: false, timeout: 5_000 });
+  }
+  return evidence;
+}
+
 test.describe('City Platform V1 browser smoke', () => {
   test.beforeEach(async ({ page }) => {
     const requestLog = [];
@@ -51,22 +68,15 @@ test.describe('City Platform V1 browser smoke', () => {
   });
 
   test.afterEach(async ({ page }, testInfo) => {
-    await fs.mkdir(evidenceDirectory, { recursive: true });
-    const evidence = page.__cityEvidence || { consoleLog: [], requestLog: [], pageErrors: [], nominatimCalls: 0 };
-    const caseSlug = testInfo.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
-    const slug = `city-platform-${testInfo.project.name}-${caseSlug}`;
-    await fs.writeFile(`${evidenceDirectory}/${slug}-console.json`, JSON.stringify(evidence.consoleLog, null, 2));
-    await fs.writeFile(`${evidenceDirectory}/${slug}-requests.json`, JSON.stringify(evidence.requestLog, null, 2));
-    await fs.writeFile(`${evidenceDirectory}/${slug}-pageerrors.json`, JSON.stringify(evidence.pageErrors, null, 2));
-    if (!page.isClosed()) await page.screenshot({ path: `${evidenceDirectory}/${slug}.png`, fullPage: false });
-
+    const evidence = await saveEvidenceSnapshot(page, testInfo, 'final');
     expect(evidence.pageErrors, 'fatal page errors').toEqual([]);
     expect(evidence.nominatimCalls, 'direct browser Nominatim requests').toBe(0);
     const relevantErrors = evidence.consoleLog.filter(entry => entry.type === 'error');
     expect(relevantErrors, 'relevant console errors').toEqual([]);
   });
 
-  test('national profile is fail-closed, neutral and unbounded', async ({ page }) => {
+  test('national profile, territorial transitions and same-city emergency remain fail-closed', async ({ page }, testInfo) => {
+    test.setTimeout(75_000);
     await page.goto('/?city=_default', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.MC && window.CURRENT_CITY && window.CURRENT_CITY.city_id === '_default' && !document.getElementById('splash'));
 
@@ -74,6 +84,7 @@ test.describe('City Platform V1 browser smoke', () => {
     if (!hasPlatform) {
       expect(new URL(page.url()).hostname).toBe(productionHost);
       expect(await page.evaluate(() => window.CURRENT_CITY.city_id)).toBe('_default');
+      await saveEvidenceSnapshot(page, testInfo, 'national');
       return;
     }
 
@@ -143,17 +154,7 @@ test.describe('City Platform V1 browser smoke', () => {
     const wideRequests = page.__cityEvidence.requestLog.filter(entry => entry.url.includes('/api/geocode') && entry.url.includes('wide=1'));
     expect(wideRequests).toHaveLength(1);
     expect(wideRequests[0].url).toContain('city=_default');
-  });
-
-  test('territorial transitions isolate data and same-city emergency remains fail-closed', async ({ page }) => {
-    await page.goto('/?city=_default', { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.MC && window.CURRENT_CITY && window.CURRENT_CITY.city_id === '_default' && !document.getElementById('splash'));
-
-    const hasPlatform = await page.evaluate(() => Boolean(window.VoyCityPlatform));
-    if (!hasPlatform) {
-      expect(new URL(page.url()).hostname).toBe(productionHost);
-      return;
-    }
+    await saveEvidenceSnapshot(page, testInfo, 'national');
 
     expect(await page.evaluate(() => window.loadCityProfile('santafe'))).toBe(true);
     const santaFe = await page.evaluate(() => ({
