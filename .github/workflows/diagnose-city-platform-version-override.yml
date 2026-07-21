@@ -1,0 +1,263 @@
+name: Diagnose Existing City Platform Version Override
+
+on:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - .github/workflows/diagnose-city-platform-version-override.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-city-platform-version-override-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      STABLE_VERSION_ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
+      CANDIDATE_VERSION_ID: 63c18a47-fb7b-4034-bf5c-326d94a7d10a
+      EXPECTED_DEPLOYMENT_ID: d7406cfe-8e70-4087-ac59-1480f26b2e84
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EVIDENCE_DIR: test-results/version-override-diagnostic
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 1
+
+      - name: Prepare diagnostic environment
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR/probes"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npm install --global wrangler@4.112.0
+          test "$(wrangler --version | awk '{print $1}')" = "4.112.0"
+          git rev-parse HEAD | tee "$EVIDENCE_DIR/diagnostic-source-sha.txt"
+
+      - name: Confirm current deployment with Wrangler and API
+        run: |
+          set -euo pipefail
+          wrangler deployments list --json > "$EVIDENCE_DIR/wrangler-deployments.json"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments.json"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-version-detail.json"
+          wrangler versions view "$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/wrangler-version-view.txt" 2>&1
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/api-deployments.json', 'utf8'));
+          if (!payload.success) throw new Error('deployments_api_failed');
+          const deployments = payload.result?.deployments || payload.result || [];
+          const active = deployments[0];
+          if (!active || active.id !== process.env.EXPECTED_DEPLOYMENT_ID) throw new Error(`unexpected_active_deployment:${active?.id}`);
+          const byId = new Map((active.versions || []).map(v => [v.version_id, Number(v.percentage)]));
+          if (byId.get(process.env.STABLE_VERSION_ID) !== 100) throw new Error('stable_not_100');
+          if (byId.get(process.env.CANDIDATE_VERSION_ID) !== 0) throw new Error('candidate_not_0');
+          const detail = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/candidate-version-detail.json', 'utf8'));
+          if (!detail.success || detail.result?.id !== process.env.CANDIDATE_VERSION_ID) throw new Error('candidate_detail_mismatch');
+          const metadata = detail.result?.metadata || {};
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/deployment-proof.json', JSON.stringify({
+            deployment_id: active.id,
+            stable_version_id: process.env.STABLE_VERSION_ID,
+            stable_percentage: byId.get(process.env.STABLE_VERSION_ID),
+            candidate_version_id: process.env.CANDIDATE_VERSION_ID,
+            candidate_percentage: byId.get(process.env.CANDIDATE_VERSION_ID),
+            candidate_has_preview: metadata.hasPreview ?? null,
+            preview_url_status: metadata.hasPreview === true ? 'AVAILABLE_BUT_NOT_RETURNED_BY_API' : 'UNAVAILABLE_DURABLE_OBJECT',
+            checked_at: new Date().toISOString()
+          }, null, 2));
+          NODE
+
+      - name: Start candidate version tail
+        run: |
+          set -euo pipefail
+          timeout 240s wrangler tail "$WORKER_NAME" \
+            --format json \
+            --version-id "$CANDIDATE_VERSION_ID" \
+            > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
+          echo "TAIL_PID=$!" >> "$GITHUB_ENV"
+          sleep 5
+          kill -0 "$!"
+
+      - name: Probe override and normal routing without redirects
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+
+          const outDir = process.env.EVIDENCE_DIR + '/probes';
+          const base = process.env.WORKER_URL;
+          const overrideValue = `${process.env.WORKER_NAME}="${process.env.CANDIDATE_VERSION_ID}"`;
+          const paths = [
+            '/api/health',
+            '/',
+            '/VOY-Lite.html',
+            '/core/cityPlatform.js?v=1',
+            '/cities/_default/profile.json',
+            '/cities/_default/providers.json',
+            '/cities/_default/transport.json',
+            '/cities/_default/fares.json',
+            '/cities/_default/feature_flags.json',
+            '/cities/santa-fe/profile.json'
+          ];
+          const records = [];
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          function safeName(value) {
+            return value.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_') || 'root';
+          }
+          function parseHeaders(raw) {
+            const blocks = raw.trim().split(/\r?\n\r?\n/).filter(Boolean);
+            const block = blocks.at(-1) || '';
+            const lines = block.split(/\r?\n/);
+            const statusLine = lines.shift() || '';
+            const headers = {};
+            for (const line of lines) {
+              const idx = line.indexOf(':');
+              if (idx > 0) headers[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
+            }
+            return { statusLine, headers };
+          }
+          function addProbe(urlPath, round, mode) {
+            const ts = Date.now();
+            const separator = urlPath.includes('?') ? '&' : '?';
+            const requestedUrl = `${base}${urlPath}${separator}candidate_probe=${ts}-${round}-${mode}`;
+            const slug = `r${round}-${mode}-${safeName(urlPath)}`;
+            const headersPath = path.join(outDir, `${slug}.headers`);
+            const bodyPath = path.join(outDir, `${slug}.body`);
+            const tracePath = path.join(outDir, `${slug}.trace`);
+            const requestHeaders = {
+              'Cache-Control': 'no-cache, no-store, max-age=0',
+              'Pragma': 'no-cache',
+              'X-VOY-Candidate-Probe': `${ts}-${round}-${mode}`
+            };
+            if (mode === 'override') requestHeaders['Cloudflare-Workers-Version-Overrides'] = overrideValue;
+            fs.writeFileSync(path.join(outDir, `${slug}.request.json`), JSON.stringify({ requestedUrl, headers: requestHeaders }, null, 2));
+            const args = [
+              '--http2', '--silent', '--show-error', '--max-time', '30',
+              '--max-redirs', '0', '--path-as-is',
+              '--dump-header', headersPath,
+              '--output', bodyPath,
+              '--trace-ascii', tracePath,
+              '--write-out', '%{json}'
+            ];
+            for (const [name, value] of Object.entries(requestHeaders)) args.push('-H', `${name}: ${value}`);
+            args.push(requestedUrl);
+            const result = spawnSync('curl', args, { encoding: 'utf8' });
+            const curlMeta = result.stdout ? JSON.parse(result.stdout) : {};
+            const body = fs.existsSync(bodyPath) ? fs.readFileSync(bodyPath) : Buffer.alloc(0);
+            const received = fs.existsSync(headersPath) ? parseHeaders(fs.readFileSync(headersPath, 'utf8')) : { statusLine: '', headers: {} };
+            let health = null;
+            if (urlPath === '/api/health' && body.length) {
+              try {
+                const parsed = JSON.parse(body.toString('utf8'));
+                health = { ok: parsed.ok, build_hash: parsed.build_hash, version: parsed.version, worker_version_id: parsed.worker_version_id || null, worker_version_tag: parsed.worker_version_tag || null };
+              } catch {}
+            }
+            records.push({
+              round, mode, path: urlPath,
+              requested_url: requestedUrl,
+              effective_url: curlMeta.url_effective || null,
+              status: curlMeta.http_code || 0,
+              redirect_url: curlMeta.redirect_url || null,
+              curl_exit: result.status,
+              sent_headers: requestHeaders,
+              received_headers: received.headers,
+              status_line: received.statusLine,
+              body_sha256: crypto.createHash('sha256').update(body).digest('hex'),
+              body_bytes: body.length,
+              health,
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          (async () => {
+            for (let round = 1; round <= 3; round++) {
+              for (const mode of ['normal', 'override']) {
+                for (const urlPath of paths) addProbe(urlPath, round, mode);
+              }
+              if (round < 3) await sleep(5000);
+            }
+            fs.writeFileSync(process.env.EVIDENCE_DIR + '/probe-records.json', JSON.stringify(records, null, 2));
+            const health = records.filter(r => r.path === '/api/health').map(r => ({ round: r.round, mode: r.mode, status: r.status, body_sha256: r.body_sha256, health: r.health, cf_ray: r.received_headers['cf-ray'] || null }));
+            const comparisons = [];
+            for (let round = 1; round <= 3; round++) {
+              for (const urlPath of paths) {
+                const normal = records.find(r => r.round === round && r.mode === 'normal' && r.path === urlPath);
+                const override = records.find(r => r.round === round && r.mode === 'override' && r.path === urlPath);
+                comparisons.push({ round, path: urlPath, normal_status: normal.status, override_status: override.status, same_body_hash: normal.body_sha256 === override.body_sha256, normal_hash: normal.body_sha256, override_hash: override.body_sha256 });
+              }
+            }
+            fs.writeFileSync(process.env.EVIDENCE_DIR + '/health-summary.json', JSON.stringify(health, null, 2));
+            fs.writeFileSync(process.env.EVIDENCE_DIR + '/body-comparisons.json', JSON.stringify(comparisons, null, 2));
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+
+      - name: Stop tail and classify routing
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then
+            kill "$TAIL_PID" 2>/dev/null || true
+            wait "$TAIL_PID" 2>/dev/null || true
+          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const records = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/probe-records.json', 'utf8'));
+          const candidateHash = 'fa48331';
+          const stableHash = '4a8b91e';
+          const overrideHealth = records.filter(r => r.mode === 'override' && r.path === '/api/health');
+          const normalHealth = records.filter(r => r.mode === 'normal' && r.path === '/api/health');
+          const candidateHealthCount = overrideHealth.filter(r => r.health?.build_hash === candidateHash).length;
+          const stableNormalCount = normalHealth.filter(r => r.health?.build_hash === stableHash).length;
+          const cityPlatformOverride = records.filter(r => r.mode === 'override' && r.path === '/core/cityPlatform.js?v=1' && r.status === 200);
+          const cityPlatformNormal = records.filter(r => r.mode === 'normal' && r.path === '/core/cityPlatform.js?v=1' && r.status === 200);
+          const tail = fs.existsSync(process.env.EVIDENCE_DIR + '/candidate-tail.log') ? fs.readFileSync(process.env.EVIDENCE_DIR + '/candidate-tail.log', 'utf8') : '';
+          const classification = {
+            candidate_health_rounds: candidateHealthCount,
+            stable_normal_health_rounds: stableNormalCount,
+            override_city_platform_200_rounds: cityPlatformOverride.length,
+            normal_city_platform_200_rounds: cityPlatformNormal.length,
+            candidate_tail_bytes: Buffer.byteLength(tail),
+            override_header_exact: `${process.env.WORKER_NAME}="${process.env.CANDIDATE_VERSION_ID}"`,
+            diagnosed_at: new Date().toISOString()
+          };
+          if (candidateHealthCount === 3 && stableNormalCount === 3) classification.result = 'OVERRIDE_WORKER_PASS';
+          else if (candidateHealthCount === 0 && cityPlatformOverride.length > 0) classification.result = 'WORKER_OVERRIDE_FAIL_ASSET_SIGNAL_MIXED';
+          else if (candidateHealthCount === 0) classification.result = 'OVERRIDE_NOT_APPLIED';
+          else classification.result = 'OVERRIDE_INCONSISTENT';
+          fs.writeFileSync(process.env.EVIDENCE_DIR + '/classification.json', JSON.stringify(classification, null, 2));
+          console.log(JSON.stringify(classification, null, 2));
+          NODE
+
+      - name: Build evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          find "$EVIDENCE_DIR" -type f -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-version-override-diagnostic-${{ github.run_id }}
+          path: test-results/version-override-diagnostic
+          if-no-files-found: error
+          retention-days: 30
