@@ -73,6 +73,7 @@ export function searchTerritorial(bundle, cityId, query) {
   const needle = foldText(query);
   if (needle.length < 2) return [];
   const candidates = [];
+  let exactLandmarkAlias = null;
   for (const [sourceType, items] of [
     ['landmark', bundle.transport.landmarks],
     ['stop', bundle.transport.bus_stops],
@@ -82,13 +83,22 @@ export function searchTerritorial(bundle, cityId, query) {
     for (const item of items) {
       const ref = toPlaceRef(item, cityId, sourceType);
       if (!ref) continue;
+      const aliases = Array.isArray(item.aliases) ? item.aliases.map(foldText) : [];
+      const exactAlias = sourceType === 'landmark' && aliases.includes(needle);
       const haystack = foldText(`${ref.name} ${ref.address} ${(item.aliases || []).join(' ')}`);
       const allParts = needle.split(' ').every(part => haystack.includes(part));
       if (!haystack.includes(needle) && !allParts) continue;
-      const score = (foldText(ref.name) === needle ? 2 : 0) + (foldText(ref.name).startsWith(needle) ? 1 : 0);
-      candidates.push({ ref, score });
+      const score = (foldText(ref.name) === needle ? 2 : 0)
+        + (foldText(ref.name).startsWith(needle) ? 1 : 0)
+        + (exactAlias ? 4 : 0);
+      const candidate = { ref, score };
+      candidates.push(candidate);
+      if (exactAlias && (!exactLandmarkAlias || score > exactLandmarkAlias.score)) {
+        exactLandmarkAlias = candidate;
+      }
     }
   }
+  if (exactLandmarkAlias) return [exactLandmarkAlias.ref];
   return candidates
     .sort((a, b) => b.score - a.score || a.ref.name.localeCompare(b.ref.name, 'es'))
     .slice(0, VOICE_LIMITS.maxCandidates)
@@ -113,7 +123,11 @@ export function safeExternalUrl(bundle, requestedProvider) {
   ];
   const company = companies.find(item => {
     const category = bundle.providers.providers?.[item.id]?.category;
-    return requestedProvider === 'taxi' ? category === 'taxi' : requestedProvider === 'remis' ? category === 'remis' : item.id === requestedProvider;
+    return requestedProvider === 'taxi'
+      ? category === 'taxi'
+      : requestedProvider === 'remis'
+        ? category === 'remis'
+        : item.id === requestedProvider;
   });
   const candidate = company?.whatsapp || company?.web || company?.app;
   if (typeof candidate !== 'string') return null;
