@@ -1,0 +1,45 @@
+name: Fix Candidate Browser Cross-Origin Headers
+
+on:
+  push:
+    branches:
+      - feat/voy-city-platform-v1
+    paths:
+      - .github/workflows/fix-candidate-browser-cross-origin.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/voy-city-platform-v1
+          fetch-depth: 0
+
+      - name: Strip candidate-only headers from external resources
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('candidate-tests/cloudflare-candidate.spec.js')
+          text = path.read_text()
+          old = """    const evidence = emptyEvidence();\n\n    page.on('console', message => evidence.console.push({ type: message.type(), text: message.text() }));\n"""
+          new = """    const evidence = emptyEvidence();\n\n    await page.route('**/*', async route => {\n      const request = route.request();\n      if (new URL(request.url()).origin === baseOrigin) {\n        await route.continue();\n        return;\n      }\n      const headers = { ...request.headers() };\n      delete headers['cloudflare-workers-version-overrides'];\n      delete headers['x-voy-candidate-smoke'];\n      delete headers['cache-control'];\n      delete headers.pragma;\n      await route.continue({ headers });\n    });\n\n    page.on('console', message => evidence.console.push({ type: message.type(), text: message.text() }));\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'expected replacement count 1, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+          grep -F "delete headers['cloudflare-workers-version-overrides'];" candidate-tests/cloudflare-candidate.spec.js
+
+      - name: Commit cross-origin harness fix
+        run: |
+          set -euo pipefail
+          git config user.name "voy-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add candidate-tests/cloudflare-candidate.spec.js
+          git commit -m "test(candidate): scope override to VOY origin"
+          git push origin HEAD:feat/voy-city-platform-v1
