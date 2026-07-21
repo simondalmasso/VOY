@@ -109,6 +109,7 @@ test.describe('Cloudflare exact-version candidate', () => {
       description: document.querySelector('meta[name="description"]')?.content || '',
       footer: document.querySelector('.footer')?.textContent || '',
       bodyText: document.body.innerText,
+      splashPresent: Boolean(document.getElementById('splash')),
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
     }));
 
@@ -116,7 +117,7 @@ test.describe('Cloudflare exact-version candidate', () => {
     expect(national.buildHash).toBe(expectedHash);
     expect(national).toMatchObject({
       cityId: '_default', name: 'Argentina', coverage: 'national_basic', center: [-64, -34], bbox: null,
-      stops: 0, bikes: 0, landmarks: 0, companies: 0, activeProviders: 0
+      stops: 0, bikes: 0, landmarks: 0, companies: 0, activeProviders: 0, splashPresent: false
     });
     expect(national.title).toBe('VOY — Movilidad en Argentina');
     expect(national.description).toContain('cobertura territorial verificada');
@@ -143,9 +144,13 @@ test.describe('Cloudflare exact-version candidate', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(expected => (
       window.MC && window.VoyCityPlatform && window.CURRENT_CITY?.city_id === '_default' &&
-      window.VOY_BUILD_HASH === expected
+      window.VOY_BUILD_HASH === expected && !document.getElementById('splash')
     ), expectedHash, { timeout: 10_000 });
-    expect(await page.evaluate(() => window.VOY_BUILD_HASH)).toBe(expectedHash);
+    expect(await page.evaluate(() => ({
+      buildHash: window.VOY_BUILD_HASH,
+      cityId: window.CURRENT_CITY?.city_id,
+      splashPresent: Boolean(document.getElementById('splash'))
+    }))).toEqual({ buildHash: expectedHash, cityId: '_default', splashPresent: false });
 
     expect(await page.evaluate(() => window.loadCityProfile('santafe'))).toBe(true);
     const santaFe = await page.evaluate(() => ({
@@ -158,6 +163,7 @@ test.describe('Cloudflare exact-version candidate', () => {
       taxi: window.FareRegistry.taxi.diurno.bajada,
       remis: window.FareRegistry.remis.diurno.bajada,
       bus: window.FareRegistry.bus.sube,
+      splashPresent: Boolean(document.getElementById('splash')),
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
     }));
     expect(santaFe.cityId).toBe('santafe');
@@ -166,7 +172,7 @@ test.describe('Cloudflare exact-version candidate', () => {
     expect(santaFe.stops).toBeGreaterThan(0);
     expect(santaFe.landmarks).toBeGreaterThan(0);
     expect(santaFe.activeProviders).toBeGreaterThan(0);
-    expect(santaFe).toMatchObject({ taxi: 1790, remis: 1600, bus: 1900 });
+    expect(santaFe).toMatchObject({ taxi: 1790, remis: 1600, bus: 1900, splashPresent: false });
     expect(santaFe.overflow).toBeLessThanOrEqual(1);
 
     expect(await page.evaluate(() => window.loadCityProfile('_default'))).toBe(true);
@@ -179,11 +185,12 @@ test.describe('Cloudflare exact-version candidate', () => {
       activeProviders: Object.values(window.PROVIDERS).filter(provider => provider.available).length,
       taxi: window.FareRegistry.taxi.diurno.bajada,
       remis: window.FareRegistry.remis.diurno.bajada,
-      bus: window.FareRegistry.bus.sube
+      bus: window.FareRegistry.bus.sube,
+      splashPresent: Boolean(document.getElementById('splash'))
     }));
     expect(nationalAgain).toMatchObject({
       cityId: '_default', bbox: null, stops: 0, bikes: 0, landmarks: 0,
-      activeProviders: 0, taxi: null, remis: null, bus: null
+      activeProviders: 0, taxi: null, remis: null, bus: null, splashPresent: false
     });
 
     const emergencyLoaded = await page.evaluate(async () => {
@@ -215,11 +222,12 @@ test.describe('Cloudflare exact-version candidate', () => {
       companies: window.TAXI_COMPANIES.length + window.REMIS_COMPANIES.length,
       activeProviders: Object.values(window.PROVIDERS).filter(provider => provider.available).length,
       fares: window.FareRegistry,
+      splashPresent: Boolean(document.getElementById('splash')),
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
     }));
     expect(emergency).toMatchObject({
       cityId: 'santafe', source: 'emergency', stops: 0, bikes: 0,
-      landmarks: 0, companies: 0, activeProviders: 0
+      landmarks: 0, companies: 0, activeProviders: 0, splashPresent: false
     });
     expect(emergency.bbox).not.toBeNull();
     expect(emergency.fares.taxi.diurno.bajada).toBeNull();
