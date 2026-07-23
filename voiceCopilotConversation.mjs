@@ -24,6 +24,8 @@ No afirmes acciones sin un resultado exitoso de herramienta. NO_TOOL_SUCCESS imp
 Las acciones externas requieren confirmación separada de un solo uso.
 Respondé de forma breve y útil.`;
 
+const EXTERNAL_PROVIDERS = ['uber', 'didi', 'maxim', 'cabify', 'taxi', 'remis'];
+
 function modelContext(session) {
   return {
     city_id: session.city_id,
@@ -60,7 +62,27 @@ function conversationOnlyResponse(message, session) {
   return 'Puedo ayudarte con un destino, cobertura, tarifas verificadas, proveedores, paradas o las estimaciones que ya calculó VOY.';
 }
 
+function deterministicSafetyTool(message, session) {
+  const normalized = String(message || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  if (/\b(?:cancela|cancelar|cancela|detene|detener|no abras|no abrir)\b/.test(normalized)
+    && session.pending_confirmation) {
+    return { name: 'cancel_pending_action', arguments: {} };
+  }
+  if (/\b(?:abrime|abri|abre|abrir|abrilo|abrila|open)\b/.test(normalized)) {
+    const provider = EXTERNAL_PROVIDERS.find(name => normalized.includes(name));
+    if (provider) return { name: 'prepare_external_provider_action', arguments: { provider } };
+  }
+  return null;
+}
+
 function selectToolCall(plan, message, session) {
+  const protectedTool = deterministicSafetyTool(message, session);
+  if (protectedTool) return protectedTool;
   const deterministicFallback = fallbackTool(message, session);
   const modelCall = plan.tool_calls[0] || null;
   if (!modelCall) return deterministicFallback;
@@ -193,5 +215,6 @@ export const __voiceConversationTest = Object.freeze({
   modelContext,
   modelMessages,
   conversationOnlyResponse,
+  deterministicSafetyTool,
   selectToolCall
 });
