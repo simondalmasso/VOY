@@ -27,7 +27,7 @@ const voiceAwareWorker = {
     const response = await worker.fetch(request, env, ctx);
     const url = new URL(request.url);
     if ((url.pathname === '/' || url.pathname === '') && request.method === 'GET') {
-      return maybeInjectVoiceCopilotHtml(response, env);
+      return maybeInjectVoiceCopilotHtml(request, response, env);
     }
     return response;
   },
