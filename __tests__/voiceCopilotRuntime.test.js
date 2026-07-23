@@ -89,13 +89,14 @@ describe('Voice Copilot deterministic runtime', () => {
     runtime.__voiceRuntimeTest.confirmationStore.clear();
   });
 
-  test('searches only the fixed territorial bundle and sets exact destination', async () => {
+  test('prefers the exact territorial landmark alias and sets one destination', async () => {
     const contracts = await contractsPromise;
     const runtime = await runtimePromise;
     const session = contracts.newSession('santafe');
     const execution = await runtime.executeVoiceTool('search_destination', { query: 'terminal' }, session, env(), 'r1');
     assert.equal(execution.record.status, 'success');
-    assert.equal(execution.result.candidates.length, 2);
+    assert.equal(execution.result.candidates.length, 1);
+    assert.equal(execution.result.candidates[0].ref, 'santafe:landmark:terminal');
     assert.equal(execution.session.destination.ref, 'santafe:landmark:terminal');
     assert.equal(execution.session.state_revision, 1);
   });
