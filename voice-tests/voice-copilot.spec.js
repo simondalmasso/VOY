@@ -37,15 +37,23 @@ async function installBrowserStubs(page, options = {}) {
         this.rate = 1;
       }
     }
-    window.SpeechSynthesisUtterance = FakeUtterance;
-    window.speechSynthesis = {
-      speak(utterance) {
-        window.__voiceTest.spoken.push(utterance.text);
-        utterance.dispatchEvent(new Event('start'));
-        setTimeout(() => utterance.dispatchEvent(new Event('end')), 10);
-      },
-      cancel() { window.__voiceTest.cancelled += 1; }
-    };
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      writable: true,
+      value: FakeUtterance
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      writable: true,
+      value: {
+        speak(utterance) {
+          window.__voiceTest.spoken.push(utterance.text);
+          utterance.dispatchEvent(new Event('start'));
+          setTimeout(() => utterance.dispatchEvent(new Event('end')), 10);
+        },
+        cancel() { window.__voiceTest.cancelled += 1; }
+      }
+    });
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
@@ -185,7 +193,8 @@ test('cancel aborts an in-flight request and applies no action', async ({ page }
   await openCopilot(page);
   await page.getByLabel('Mensaje para VOY').fill('Abrime Uber');
   await page.getByRole('button', { name: 'Enviar' }).click();
-  await page.getByRole('button', { name: 'Cancelar' }).click();
+  const copilot = page.getByRole('dialog', { name: 'Asistente de movilidad VOY' });
+  await copilot.getByRole('button', { name: 'Cancelar', exact: true }).click();
   await expect(page.locator('.voy-voice-status')).toHaveText('cancelled');
   expect(await page.evaluate(() => window.__voiceTest.opened.length)).toBe(0);
 });
