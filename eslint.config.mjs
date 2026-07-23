@@ -49,7 +49,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "@typescript-eslint/no-this-alias": "off",
   },
 }, {
-  files: ["voice-tests/**/*.js"],
+  files: ["voice-tests/**/*.js", "voice-candidate-tests/**/*.js"],
   rules: {
     "@typescript-eslint/no-require-imports": "off",
   },
