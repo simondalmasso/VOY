@@ -1,7 +1,8 @@
 import { VOICE_TEST_HEADER } from './voiceCopilotApiUtils.mjs';
 
-export async function maybeInjectVoiceCopilotHtml(response, env) {
+export async function maybeInjectVoiceCopilotHtml(request, response, env) {
   if (env.VOY_VOICE_TEST_MODE !== 'true') return response;
+  if (request.headers.get('X-VOY-Voice-Test') !== VOICE_TEST_HEADER) return response;
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return response;
   const text = await response.text();
