@@ -24,7 +24,7 @@ permissions:
 
 concurrency:
   group: voy-voice-copilot-v1-candidate
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   candidate:
@@ -46,7 +46,7 @@ jobs:
       - name: Checkout exact Voice head
         uses: actions/checkout@v4
         with:
-          ref: feat/voy-voice-copilot-v1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Verify exact branch identity
