@@ -55,7 +55,36 @@ describe('Voice destination selection boundary', () => {
     assert.equal(selected.arguments.query, 'la terminal');
   });
 
-  test('does not replace a different allowlisted model tool with unrelated fallback arguments', async () => {
+  test('forces the confirmation tool when the model only lists providers for an open action', async () => {
+    const contracts = await contractsPromise;
+    const conversation = await conversationPromise;
+    const selected = conversation.__voiceConversationTest.selectToolCall({
+      tool_calls: [{ id: 'model-call', name: 'list_available_providers', arguments: {} }]
+    }, 'Abrime Uber para este destino.', contracts.newSession('santafe'));
+    assert.equal(selected.name, 'prepare_external_provider_action');
+    assert.deepEqual(selected.arguments, { provider: 'uber' });
+  });
+
+  test('forces cancellation for a pending external action', async () => {
+    const contracts = await contractsPromise;
+    const conversation = await conversationPromise;
+    const session = contracts.newSession('santafe');
+    session.pending_confirmation = {
+      token: 'token',
+      provider: 'uber',
+      destination_ref: 'santafe:stop:terminal',
+      operation_id: 'operation',
+      state_revision: 1,
+      expires_at: Date.now() + 60000
+    };
+    const selected = conversation.__voiceConversationTest.selectToolCall({
+      tool_calls: [{ id: 'model-call', name: 'list_available_providers', arguments: {} }]
+    }, 'Cancelá la acción pendiente.', session);
+    assert.equal(selected.name, 'cancel_pending_action');
+    assert.deepEqual(selected.arguments, {});
+  });
+
+  test('does not replace a different allowlisted model tool with unrelated non-safety fallback arguments', async () => {
     const contracts = await contractsPromise;
     const conversation = await conversationPromise;
     const selected = conversation.__voiceConversationTest.selectToolCall({
