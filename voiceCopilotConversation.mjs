@@ -60,6 +60,19 @@ function conversationOnlyResponse(message, session) {
   return 'Puedo ayudarte con un destino, cobertura, tarifas verificadas, proveedores, paradas o las estimaciones que ya calculó VOY.';
 }
 
+function selectToolCall(plan, message, session) {
+  const deterministicFallback = fallbackTool(message, session);
+  const modelCall = plan.tool_calls[0] || null;
+  if (!modelCall) return deterministicFallback;
+  if (deterministicFallback && modelCall.name === deterministicFallback.name) {
+    return {
+      ...modelCall,
+      arguments: deterministicFallback.arguments
+    };
+  }
+  return modelCall;
+}
+
 export async function handleVoiceChat(request, env) {
   if (!(await voiceRateAllowed(request, 'chat', VOICE_LIMITS.maxDailyChat))) {
     throw new Error('chat_rate_limited');
@@ -93,7 +106,7 @@ export async function handleVoiceChat(request, env) {
     };
   }
 
-  const selected = plan.tool_calls[0] || fallbackTool(payload.message, session);
+  const selected = selectToolCall(plan, payload.message, session);
   let responseText;
   let toolExecution = null;
   let toolResult = null;
@@ -179,5 +192,6 @@ export async function handleVoiceChat(request, env) {
 export const __voiceConversationTest = Object.freeze({
   modelContext,
   modelMessages,
-  conversationOnlyResponse
+  conversationOnlyResponse,
+  selectToolCall
 });
