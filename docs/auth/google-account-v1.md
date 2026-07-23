@@ -1,222 +1,394 @@
-# VOY Google Account V1 — Authentication Contract
+# VOY Google Authenticated Session V1 — Authentication Contract
 
-Last updated: 2026-07-22
+Last updated: 2026-07-23
 
-## Decision
+This document replaces any prior “Google account” semantics for V1. The historical file path is retained for continuity, but VOY V1 does not create, register or persist a reusable VOY account.
 
-VOY Google Account V1 uses **Google Identity Services for authentication only**.
+## Canonical decision
 
 ```text
-GOOGLE_AUTHENTICATION=YES
+AUTH_MODE=GOOGLE_IDENTITY_AUTHENTICATION
+VOY_IDENTITY_MODE=EPHEMERAL_AUTHENTICATED_SESSION
+PERSISTENT_VOY_ACCOUNT=NO
+RETURNING_USER_RECOGNITION_AFTER_EXPIRY=NO
+CROSS_DEVICE_CONTINUITY=NO
+SESSION_DURATION=8h
 GOOGLE_API_AUTHORIZATION=NO
 GOOGLE_ACCESS_TOKEN=NO
 GOOGLE_REFRESH_TOKEN=NO
-GOOGLE_DRIVE_ACCESS=NO
-GOOGLE_CALENDAR_ACCESS=NO
-PERSISTENT_VOY_ACCOUNT=NO
-SHORT_LIVED_VOY_SESSION=YES
 ```
 
-The visible action is:
+The visible Google action may remain:
 
 ```text
-Continue with Google
+Continuar con Google
 ```
 
-The same action covers first-time and returning users. A first-time user receives a VOY session after Google identity verification; VOY does not create a durable user record in V1.
+The login surface must also display this explanation:
 
-## Why authentication and authorization are separated
+```text
+“Iniciá una sesión temporal. VOY no guarda historial de viajes ni crea un perfil permanente.”
+```
 
-Google Identity Services distinguishes sign-in from authorization to access Google APIs. VOY needs only identity authentication in this phase. Requesting Drive, Calendar, Contacts, location or other Google scopes would be unnecessary and is prohibited.
+The UI, API responses, documentation and telemetry must not claim:
 
-Allowed claims:
+```text
+cuenta creada
+usuario registrado
+perfil guardado
+usuario recurrente reconocido
+```
+
+A future persistent association with the verified Google `sub` requires a separate authorization, storage design, privacy review, deletion/export contract and migration plan.
+
+## Scope
+
+Google Identity Services is used only to authenticate control of a Google identity and create an eight-hour VOY session.
+
+VOY does not request access to Google APIs or receive OAuth access or refresh tokens. Drive, Calendar, Contacts, Gmail, location and other Google scopes are prohibited in V1.
+
+Authentication remains optional. All core VOY mobility functions must remain usable without signing in.
+
+## UX mode
+
+```text
+RECOMMENDED_MODE=redirect POST to Worker
+LOGIN_ENDPOINT=POST /api/auth/google
+```
+
+Reasons:
+
+```text
+credential received directly by backend
+Google-managed official double-submit CSRF pattern
+less sensitive frontend logic
+no ID token in query strings, fragments or browser analytics
+```
+
+Google renders the official button. VOY must not imitate the Google logo, account chooser or button styling.
+
+If a future implementation instead uses the popup JavaScript callback, it must introduce a separately reviewed same-origin POST and independent CSRF mechanism. The Google ID token must never be placed in a URL query, fragment, log, analytics event or client storage.
+
+## Redirect POST flow
+
+```text
+user selects Continuar con Google
+→ Google renders the official account chooser
+→ Google Identity Services POSTs directly to /api/auth/google
+→ Worker enforces exact Origin allowlist
+→ Worker enforces application/x-www-form-urlencoded
+→ Worker enforces bounded request size
+→ Worker verifies g_csrf_token cookie exists
+→ Worker verifies g_csrf_token body field exists
+→ Worker compares both CSRF values in constant time
+→ Worker verifies Google ID token cryptographically
+→ Worker extracts only the minimal application claims
+→ Worker discards the raw ID token
+→ Worker creates __Host-voy_session
+→ Worker redirects to a fixed same-origin post-login path
+→ browser calls GET /api/auth/session for display state
+```
+
+No credential, token, name, subject or error detail may be returned in the redirect URL.
+
+## Request contract
+
+`POST /api/auth/google` must accept only the Google Identity Services redirect POST contract.
+
+Required gates:
+
+```text
+METHOD=POST
+ORIGIN=exact allowlisted VOY origin
+CONTENT_TYPE=application/x-www-form-urlencoded
+MAX_BODY_BYTES=16384
+REDIRECTS=not applicable at request boundary
+credential=present bounded JWT string
+g_csrf_token_cookie=present
+g_csrf_token_body=present
+g_csrf_token_cookie_equals_body=YES
+```
+
+Reject the request when either CSRF value is absent or when they differ.
+
+The endpoint must not accept credentials through query parameters, JSON fallback, multipart form data or GET.
+
+## Google ID-token verification
+
+The Worker must verify all of the following before using any application claim:
+
+```text
+signature=valid Google public key
+kid=present and recognized
+alg=explicitly allowed
+alg=RS256 for V1
+iss=accounts.google.com OR https://accounts.google.com
+aud=exact environment-specific VOY_GOOGLE_CLIENT_ID
+exp=valid with bounded clock skew
+iat=reasonable and not unreasonably old or future-dated
+nonce=exact match when the configured flow uses nonce
+sub=non-empty bounded string
+```
+
+Verification must be performed by the Worker. Data merely decoded by browser JavaScript is untrusted.
+
+Google public keys may be retrieved only from the exact HTTPS Google JWK endpoint with:
+
+```text
+exact host allowlist
+redirects disabled
+explicit timeout
+bounded response size
+JSON schema validation
+cache lifetime limited by Google response headers
+unknown kid fail-closed
+unknown alg fail-closed
+```
+
+The production implementation must not call Google `tokeninfo` for every sign-in.
+
+## Minimal application data
+
+After full token verification, VOY may use only:
 
 ```text
 sub
-email
-email_verified
-name
-picture
-iss
-aud
-exp
+name optional for presentation
+picture optional for presentation
 iat
-nonce when present
+exp
 ```
 
-The canonical user identifier is the verified Google `sub` claim. Email must never be treated as an immutable account identifier.
+`iss`, `aud`, `kid`, `alg` and nonce are verification inputs, not retained profile data.
 
-## Credential inventory
+The email claim is not used as an identifier and is not included in the VOY session. VOY V1 does not need to retain or display email.
 
-### Public configuration
+The raw ID token must be discarded immediately after session creation. It must not be copied into the cookie, memory cache, logs, analytics, artifacts, error messages or browser storage.
+
+## Session endpoints
+
+```text
+POST /api/auth/google
+GET /api/auth/session
+POST /api/auth/logout
+```
+
+`GET /api/auth/session` returns only bounded presentation state derived from the authenticated cookie, for example:
+
+```text
+authenticated=true
+name optional
+picture optional
+expires_at
+```
+
+It must not return raw or pseudonymous subject values, tokens or internal cryptographic metadata.
+
+`POST /api/auth/logout` expires the browser cookie immediately and returns `Cache-Control: no-store`.
+
+## Session cookie
+
+```text
+NAME=__Host-voy_session
+Secure=YES
+HttpOnly=YES
+SameSite=Lax
+Path=/
+Max-Age=28800
+Domain=ABSENT
+```
+
+The cookie payload must be encrypted and authenticated with AEAD. It contains only:
+
+```text
+version
+session_id random
+subject derived or keyed-pseudonymized
+issued_at
+expires_at
+auth_provider=google
+```
+
+Optional presentation fields `name` and `picture` should be omitted from the cookie when they can be returned only in the immediate post-authentication response. If retained for the eight-hour presentation session, they remain bounded, encrypted, authenticated and never persisted elsewhere.
+
+The cookie must not contain:
+
+```text
+email
+raw Google sub
+Google ID token
+access token
+refresh token
+location
+origin or destination
+travel history
+audio
+transcript
+```
+
+## Stateless-session limitation
+
+V1 keeps no server-side session or account record. Logout expires the cookie in the current browser, but VOY cannot globally revoke a previously stolen valid stateless cookie before its expiry.
+
+Mitigations:
+
+```text
+8-hour maximum lifetime
+AEAD confidentiality and integrity
+Secure
+HttpOnly
+SameSite=Lax
+__Host- prefix
+no Domain attribute
+key rotation support
+no sensitive mobility data in payload
+```
+
+A global early-revocation mechanism would require authorized server-side state and a separate architecture review.
+
+## Key management
+
+Public configuration:
 
 ```text
 VOY_GOOGLE_CLIENT_ID
 ```
 
-The Web client ID is public by design and may be delivered to the browser. It must still be configured through a controlled Worker variable and must match the audience validated by the backend.
-
-### Secret configuration
+Secret:
 
 ```text
-VOY_AUTH_SESSION_SECRET
+VOY_AUTH_SESSION_SECRET_V1
 ```
 
-This must be stored as a Cloudflare Worker secret. It must never be committed to GitHub, placed in `wrangler.jsonc`, exposed in browser assets, included in logs or returned by diagnostics.
-
-No Google client secret is required for the Google Identity Services ID-token callback used by this V1 design. If VOY later adopts an authorization-code flow, that is a separate architecture and requires a new review.
-
-## Google Cloud configuration
-
-Create one OAuth client of type:
+Cookie format:
 
 ```text
-Web application
+active_key_version=1
+accept previous version only during controlled rotation
 ```
 
-Authorized JavaScript origin for production:
+New sessions use the active key. A previous key version may be accepted only during a documented, bounded rotation window and must then be removed.
+
+No real key value may be created until explicitly authorized.
+
+For Cloudflare Versions, the only approved creation command is:
 
 ```text
-https://voy-app.simondalmasso44.workers.dev
+wrangler versions secret put VOY_AUTH_SESSION_SECRET_V1
 ```
 
-Local development origins may be configured separately and must not weaken production origin checks.
-
-The V1 client uses a JavaScript credential callback. It does not require a Google OAuth redirect endpoint and does not request access or refresh tokens.
-
-The Google OAuth consent screen must identify VOY accurately and reference public Terms and Privacy pages before production activation.
-
-## Authentication flow
+Do not use:
 
 ```text
-user selects Continue with Google
-→ Google renders the official button and account chooser
-→ browser receives a Google ID credential
-→ browser POSTs credential to /api/auth/google
-→ Worker enforces same-origin request and bounded body
-→ Worker verifies JWT signature using Google's current JWK set
-→ Worker verifies aud, iss, exp, iat and nonce/CSRF contract
-→ Worker extracts only allowed claims
-→ Worker creates an encrypted and authenticated short-lived VOY session cookie
-→ browser fetches /api/auth/session
-→ UI shows the authenticated profile
+wrangler secret put
 ```
 
-No plain Google user ID supplied by the browser is trusted.
+because it can create an immediate deployment outside the candidate-first workflow.
 
-## Token verification
-
-The Worker must verify:
+## Environment separation
 
 ```text
-alg=RS256
-signature=valid Google public key
-kid=present and known
-iss=accounts.google.com OR https://accounts.google.com
-aud=exact VOY_GOOGLE_CLIENT_ID
-exp>now with bounded clock skew
-iat<=now with bounded clock skew
-sub=non-empty bounded string
-email_verified=true when email is displayed as verified
+GOOGLE_CLOUD_PROJECT_TEST=separate project
+GOOGLE_CLOUD_PROJECT_PRODUCTION=separate project
+TEST_CLIENT_ID=separate Web client ID
+PRODUCTION_CLIENT_ID=separate Web client ID
 ```
 
-Google public keys may be cached only according to their HTTP cache headers. The JWK response reader must enforce HTTPS, exact host allowlisting, redirects disabled, timeout and maximum response size.
-
-The production implementation must not call Google's `tokeninfo` endpoint for each login.
-
-## CSRF and replay controls
-
-The login endpoint must require:
+Production Web application configuration:
 
 ```text
-Origin=exact current VOY origin
-Content-Type=application/json
-credential=bounded JWT string
-nonce=single-use browser nonce
+AUTHORIZED_JAVASCRIPT_ORIGIN=https://voy-app.simondalmasso44.workers.dev
+AUTHORIZED_REDIRECT_URI=https://voy-app.simondalmasso44.workers.dev/api/auth/google
 ```
 
-The nonce is bound to a short-lived `Secure; HttpOnly; SameSite=Lax` cookie and deleted after use. A replayed, missing, expired or mismatched nonce is rejected.
+Testing must use its own project, consent configuration and client ID. Localhost origins and redirect URIs are allowed only in the testing project and must use explicit ports. Wildcards are prohibited.
 
-## VOY session
+## Public pages and links
 
-Default V1 session:
+Before any real authentication activation, VOY must publish:
 
 ```text
-MAX_AGE=8 hours
-COOKIE_NAME=voy_auth
-SECURE=YES
-HTTP_ONLY=YES
-SAME_SITE=Lax
-PATH=/
-PERSISTENT_SERVER_RECORD=NO
+/privacy
+/terms
 ```
 
-The cookie contains only an encrypted and authenticated bounded session payload:
+Both must be linked from:
 
 ```text
-version
-provider=google
-sub_hash
-name
-picture
-issued_at
-expires_at
-session_id
+homepage
+footer
+login panel or screen
 ```
 
-Raw Google ID tokens, access tokens and refresh tokens must never be stored in the session.
-
-The email claim is returned by `/api/auth/session` only when required by the UI. It is not written to analytics or logs.
-
-## Account UI
-
-Unauthenticated state:
-
-```text
-Cuenta
-Continue with Google
-```
-
-Authenticated state:
-
-```text
-profile picture when valid
-first name or bounded display name
-Account
-Sign out
-```
-
-The official Google-rendered button must be used. VOY must not imitate Google's logo, button or account chooser.
+The privacy page must state the processed ID-token data, absence of Google API access and OAuth tokens, eight-hour session duration, absence of a persistent account, absence of stored travel history and exact location, Google and Cloudflare involvement, contact mechanism and effective date.
 
 ## Fail-closed behavior
 
-When credentials, origin, JWK verification, nonce validation or encryption are unavailable:
+When any credential, page, origin, CSRF, JWK, signature, audience, issuer, time, nonce, AEAD or cookie gate is unavailable or invalid:
 
 ```text
 AUTH_AVAILABLE=NO
 BUTTON_DISABLED_OR_NOT_RENDERED
 SESSION_NOT_CREATED
-NO_FALLBACK_PASSWORD
-NO_UNVERIFIED_ACCOUNT
+NO_PASSWORD_FALLBACK
+NO_UNVERIFIED_SESSION
+VOY_CORE_MOBILITY_REMAINS_AVAILABLE=YES
 ```
 
-The rest of VOY remains fully usable without signing in.
+## Implementation order
+
+PR #24 remains documentation-only and Draft.
+
+After documentation approval:
+
+1. create a new branch from the exact productive `main`;
+2. implement `/privacy` and `/terms`;
+3. validate and publish both pages;
+4. create separate Google Cloud testing and production projects;
+5. configure branding, homepage, privacy and terms;
+6. create separate Web client IDs;
+7. implement authentication behind a disabled feature flag;
+8. create `VOY_AUTH_SESSION_SECRET_V1` through Cloudflare Versions only, after explicit authorization;
+9. create and validate a zero-traffic candidate;
+10. test desktop, Android and Safari;
+11. stop before enabling the button for normal users.
+
+## Mandatory gates
+
+```text
+PRIVACY_PAGE=PUBLIC_PASS
+TERMS_PAGE=PUBLIC_PASS
+TEST_PROJECT_SEPARATE=PASS
+PRODUCTION_PROJECT_SEPARATE=PASS
+CLIENT_ID_NOT_SECRET=PASS
+SESSION_SECRET_NOT_IN_REPO=PASS
+ID_TOKEN_SERVER_VERIFICATION=PASS
+CSRF=PASS
+COOKIE_FLAGS=PASS
+ID_TOKEN_PERSISTED=0
+GOOGLE_ACCESS_TOKEN_RECEIVED=0
+GOOGLE_REFRESH_TOKEN_RECEIVED=0
+USER_DATABASE_WRITES=0
+TRAVEL_HISTORY_WRITES=0
+EXACT_LOCATION_WRITES=0
+AUTH_OPTIONAL=PASS
+```
 
 ## Deferred functionality
 
-The following require a new explicit authorization and data architecture:
+A separate future authorization is required for:
 
 ```text
-persistent VOY accounts
+persistent VOY account
+returning-user recognition after session expiry
+cross-device continuity
 saved places
 travel history
-cross-device preferences
 server-side profile database
 account linking
 Google API access
 refresh tokens
-password login
-email login
+password or email login
 account recovery
 ```
 
@@ -224,7 +396,7 @@ account recovery
 
 - Google Identity Services web overview: https://developers.google.com/identity/gsi/web/guides/overview
 - Google ID-token server verification: https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
-- Google Identity Services JavaScript reference: https://developers.google.com/identity/gsi/web/reference/js-reference
+- Google Identity Services HTML API reference: https://developers.google.com/identity/gsi/web/reference/html-reference
 - Google OAuth policies: https://developers.google.com/identity/protocols/oauth2/policies
 - Cloudflare Worker secrets: https://developers.cloudflare.com/workers/configuration/secrets/
 - Cloudflare Web Crypto: https://developers.cloudflare.com/workers/runtime-apis/web-crypto/
