@@ -6,9 +6,18 @@ on:
       - feat/voy-voice-copilot-v1
     paths:
       - .github/workflows/voice-copilot-candidate.yml
+      - eslint.config.mjs
+      - voiceCopilot*.mjs
+      - worker-entry.js
+      - wrangler.jsonc
+      - public/core/voiceCopilot.js
+      - public/ui/voiceCopilot.css
+      - __tests__/voiceCopilot*.test.js
+      - voice-tests/**
+      - voice-candidate-tests/**
+      - scripts/run-voice-browser-smoke.sh
       - scripts/run-voice-copilot-candidate.sh
       - scripts/voice-candidate-api-gate.mjs
-      - voice-candidate-tests/**
 
 permissions:
   contents: read
