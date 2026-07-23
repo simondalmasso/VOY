@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: voy-voice-copilot-v1-candidate
-  cancel-in-progress: true
+  group: voy-voice-copilot-v1-candidate-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   candidate:
@@ -49,10 +49,14 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Verify exact branch identity
+      - name: Verify exact current PR branch head
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          REMOTE_HEAD="$(git ls-remote origin refs/heads/feat/voy-voice-copilot-v1 | awk '{print $1}')"
+          test -n "$REMOTE_HEAD"
+          test "$REMOTE_HEAD" = "$GITHUB_SHA"
+          printf '%s\n' "$REMOTE_HEAD" > /tmp/voice-current-remote-head.txt
           git diff --check
 
       - name: Install frozen toolchain and speech fixture dependency
@@ -76,6 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
+          cp /tmp/voice-current-remote-head.txt "$EVIDENCE_DIR/remote-head-at-preflight.txt" 2>/dev/null || true
           find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 \
             | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
           sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
