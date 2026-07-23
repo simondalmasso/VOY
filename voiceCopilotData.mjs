@@ -80,6 +80,7 @@ export function searchTerritorial(bundle, cityId, query) {
   const needles = searchNeedles(query);
   if (!needles.length) return [];
   const candidates = [];
+  const exactNameByRef = new Map();
   let exactLandmarkAlias = null;
   for (const [sourceType, items] of [
     ['landmark', bundle.transport.landmarks],
@@ -95,23 +96,26 @@ export function searchTerritorial(bundle, cityId, query) {
       const haystack = foldText(`${ref.name} ${ref.address} ${(item.aliases || []).join(' ')}`);
       let best = null;
       for (const needle of needles) {
+        const exactName = foldedName === needle;
         const exactAlias = sourceType === 'landmark' && aliases.includes(needle);
         const allParts = needle.split(' ').every(part => haystack.includes(part));
         if (!haystack.includes(needle) && !allParts) continue;
-        const score = (foldedName === needle ? 2 : 0)
+        const score = (exactName ? 2 : 0)
           + (foldedName.startsWith(needle) ? 1 : 0)
           + (exactAlias ? 4 : 0);
-        if (!best || score > best.score) best = { needle, exactAlias, score };
+        if (!best || score > best.score) best = { exactName, exactAlias, score };
       }
       if (!best) continue;
       const candidate = { ref, score: best.score };
       candidates.push(candidate);
+      if (best.exactName) exactNameByRef.set(ref.ref, candidate);
       if (best.exactAlias && (!exactLandmarkAlias || best.score > exactLandmarkAlias.score)) {
         exactLandmarkAlias = candidate;
       }
     }
   }
   if (exactLandmarkAlias) return [exactLandmarkAlias.ref];
+  if (exactNameByRef.size === 1) return [[...exactNameByRef.values()][0].ref];
   return candidates
     .sort((a, b) => b.score - a.score || a.ref.name.localeCompare(b.ref.name, 'es'))
     .slice(0, VOICE_LIMITS.maxCandidates)
