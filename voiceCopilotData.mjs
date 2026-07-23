@@ -60,6 +60,13 @@ export function foldText(value) {
     .trim();
 }
 
+function searchNeedles(query) {
+  const original = foldText(query);
+  if (original.length < 2) return [];
+  const withoutLeadingArticle = original.replace(/^(?:a la|a los|a las|al|a|la|el|los|las)\s+/, '').trim();
+  return [...new Set([original, withoutLeadingArticle].filter(value => value.length >= 2))];
+}
+
 export function toPlaceRef(item, cityId, sourceType) {
   const name = boundedString(item?.nombre || item?.name, 180);
   if (!name) return null;
@@ -70,8 +77,8 @@ export function toPlaceRef(item, cityId, sourceType) {
 }
 
 export function searchTerritorial(bundle, cityId, query) {
-  const needle = foldText(query);
-  if (needle.length < 2) return [];
+  const needles = searchNeedles(query);
+  if (!needles.length) return [];
   const candidates = [];
   let exactLandmarkAlias = null;
   for (const [sourceType, items] of [
@@ -84,16 +91,22 @@ export function searchTerritorial(bundle, cityId, query) {
       const ref = toPlaceRef(item, cityId, sourceType);
       if (!ref) continue;
       const aliases = Array.isArray(item.aliases) ? item.aliases.map(foldText) : [];
-      const exactAlias = sourceType === 'landmark' && aliases.includes(needle);
+      const foldedName = foldText(ref.name);
       const haystack = foldText(`${ref.name} ${ref.address} ${(item.aliases || []).join(' ')}`);
-      const allParts = needle.split(' ').every(part => haystack.includes(part));
-      if (!haystack.includes(needle) && !allParts) continue;
-      const score = (foldText(ref.name) === needle ? 2 : 0)
-        + (foldText(ref.name).startsWith(needle) ? 1 : 0)
-        + (exactAlias ? 4 : 0);
-      const candidate = { ref, score };
+      let best = null;
+      for (const needle of needles) {
+        const exactAlias = sourceType === 'landmark' && aliases.includes(needle);
+        const allParts = needle.split(' ').every(part => haystack.includes(part));
+        if (!haystack.includes(needle) && !allParts) continue;
+        const score = (foldedName === needle ? 2 : 0)
+          + (foldedName.startsWith(needle) ? 1 : 0)
+          + (exactAlias ? 4 : 0);
+        if (!best || score > best.score) best = { needle, exactAlias, score };
+      }
+      if (!best) continue;
+      const candidate = { ref, score: best.score };
       candidates.push(candidate);
-      if (exactAlias && (!exactLandmarkAlias || score > exactLandmarkAlias.score)) {
+      if (best.exactAlias && (!exactLandmarkAlias || best.score > exactLandmarkAlias.score)) {
         exactLandmarkAlias = candidate;
       }
     }
