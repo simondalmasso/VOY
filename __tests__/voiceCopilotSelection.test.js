@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
 
 const contractsPromise = import('../voiceCopilotContracts.mjs');
 const dataPromise = import('../voiceCopilotData.mjs');
 const conversationPromise = import('../voiceCopilotConversation.mjs');
 
-const bundle = {
+const fixtureBundle = {
   transport: {
     landmarks: [
       { canonicalId: 'santafe:landmark:terminal', nombre: 'Terminal de Ómnibus', aliases: ['terminal'], address: 'Belgrano 2910' }
@@ -18,12 +20,25 @@ const bundle = {
   }
 };
 
+const actualSantaFeBundle = {
+  transport: JSON.parse(readFileSync(resolve(__dirname, '../public/cities/santa-fe/transport.json'), 'utf8'))
+};
+
 describe('Voice destination selection boundary', () => {
   test('normalizes a leading article without inventing a different place', async () => {
     const data = await dataPromise;
-    const matches = data.searchTerritorial(bundle, 'santafe', 'la terminal');
+    const matches = data.searchTerritorial(fixtureBundle, 'santafe', 'la terminal');
     assert.equal(matches.length, 1);
     assert.equal(matches[0].ref, 'santafe:landmark:terminal');
+  });
+
+  test('selects the unique exact name from the real Santa Fe territorial asset', async () => {
+    const data = await dataPromise;
+    const matches = data.searchTerritorial(actualSantaFeBundle, 'santafe', 'la terminal');
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].name, 'Terminal');
+    assert.equal(matches[0].city_id, 'santafe');
+    assert.equal(matches[0].source, 'local');
   });
 
   test('preserves the model tool name but replaces generated search arguments with bounded user intent', async () => {
