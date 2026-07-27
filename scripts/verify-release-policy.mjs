@@ -11,14 +11,17 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const posix = (s) => s.split(path.sep).join('/');
 const indent = (s) => s.match(/^ */)?.[0].length ?? 0;
 const read = (p) => new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(p));
+const BLOCK_SCALAR = /^[|>](?:(?:[1-9][+-]?)|(?:[+-][1-9]?)|[+-]?)$/;
 
 function uncomment(line) {
   let single = false;
   let double = false;
   for (let i = 0; i < line.length; i += 1) {
     const c = line[i];
-    if (c === "'" && !double) single = !single;
-    else if (c === '"' && !single && line[i - 1] !== '\\') double = !double;
+    if (c === "'" && !double) {
+      if (single && line[i + 1] === "'") { i += 1; continue; }
+      single = !single;
+    } else if (c === '"' && !single && line[i - 1] !== '\\') double = !double;
     else if (c === '#' && !single && !double) return line.slice(0, i);
   }
   return line;
@@ -45,7 +48,11 @@ function yamlMeta(source) {
     let double = false;
     for (let i = 0; i < line.length; i += 1) {
       const c = line[i];
-      if (c === "'" && !double) { single = !single; continue; }
+      if (c === "'" && !double) {
+        if (single && line[i + 1] === "'") { i += 1; continue; }
+        single = !single;
+        continue;
+      }
       if (c === '"' && !single && line[i - 1] !== '\\') { double = !double; continue; }
       if (single || double) continue;
       const prev = i ? line[i - 1] : '';
@@ -59,10 +66,12 @@ function yamlMeta(source) {
 }
 
 function flow(source) {
-  if (yamlMeta(source)) throw new Error('anchors, aliases, tags or merge keys are unsupported');
+  const input = source.trim();
+  if (BLOCK_SCALAR.test(input)) throw new Error('YAML block scalar is unsupported');
+  if (yamlMeta(input)) throw new Error('anchors, aliases, tags or merge keys are unsupported');
   const tokens = [];
-  for (let i = 0; i < source.length;) {
-    const c = source[i];
+  for (let i = 0; i < input.length;) {
+    const c = input[i];
     if (/\s/.test(c)) { i += 1; continue; }
     if ('{}[],:'.includes(c)) { tokens.push([c, c]); i += 1; continue; }
     if (c === "'" || c === '"') {
@@ -70,11 +79,11 @@ function flow(source) {
       let value = '';
       let closed = false;
       i += 1;
-      while (i < source.length) {
-        const x = source[i];
-        if (quote === "'" && x === "'" && source[i + 1] === "'") { value += "'"; i += 2; continue; }
+      while (i < input.length) {
+        const x = input[i];
+        if (quote === "'" && x === "'" && input[i + 1] === "'") { value += "'"; i += 2; continue; }
         if (x === quote) { closed = true; i += 1; break; }
-        if (quote === '"' && x === '\\' && i + 1 < source.length) { value += source[i + 1]; i += 2; continue; }
+        if (quote === '"' && x === '\\' && i + 1 < input.length) { value += input[i + 1]; i += 2; continue; }
         value += x;
         i += 1;
       }
@@ -83,10 +92,11 @@ function flow(source) {
       continue;
     }
     const start = i;
-    while (i < source.length && !/[\s{}\[\],:]/.test(source[i])) i += 1;
-    if (start === i) throw new Error(`unsupported ${source[i]}`);
-    tokens.push(['s', source.slice(start, i)]);
+    while (i < input.length && !/[\s{}\[\],:]/.test(input[i])) i += 1;
+    if (start === i) throw new Error(`unsupported ${input[i]}`);
+    tokens.push(['s', input.slice(start, i)]);
   }
+
   let at = 0;
   const take = (type) => {
     const token = tokens[at];
@@ -139,7 +149,7 @@ function mainGlob(pattern) {
 
 function branchValues(value) {
   if (typeof value === 'string') return [value];
-  if (Array.isArray(value) && value.every((x) => typeof x === 'string')) return value;
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value;
   return null;
 }
 
@@ -164,9 +174,10 @@ function pushTarget(value) {
 function scalar(source) {
   const value = source.trim();
   if (!value) return null;
+  if (BLOCK_SCALAR.test(value)) throw new Error('YAML block scalar is unsupported');
   if (yamlMeta(value)) throw new Error('anchors, aliases, tags or merge keys are unsupported');
   if (/^[\[{]/.test(value)) return flow(value);
-  if (/^['"]/.test(value)) {
+  if (/^["']/.test(value)) {
     const parsed = flow(value);
     if (typeof parsed !== 'string') throw new Error('expected scalar');
     return parsed;
@@ -184,6 +195,9 @@ function yamlList(lines, key, minIndent) {
     const rhs = match[1].trim();
     try {
       if (rhs) {
+        if (BLOCK_SCALAR.test(rhs)) {
+          return { present: true, values: null, error: `${key} uses a YAML block scalar that is not safely analyzable` };
+        }
         if ((rhs.startsWith('[') && !rhs.endsWith(']')) || (rhs.startsWith('{') && !rhs.endsWith('}'))) {
           return { present: true, values: null, error: `${key} uses a multiline flow collection that is not safely analyzable` };
         }
@@ -219,10 +233,11 @@ function trigger(text) {
     return { root: true, errors: ['on trigger uses YAML anchors, aliases, tags or merge keys that are not safely analyzable'] };
   }
   if (on.inline) {
+    if (BLOCK_SCALAR.test(on.inline)) return { root: true, errors: ['on trigger uses a YAML block scalar that is not safely analyzable'] };
     try {
       const value = flow(on.inline);
       if (typeof value === 'string') return { root: value === 'push', errors: [] };
-      if (Array.isArray(value)) return { root: value.includes('push'), errors: value.every((x) => typeof x === 'string') ? [] : ['on sequence has non-scalar event'] };
+      if (Array.isArray(value)) return { root: value.includes('push'), errors: value.every((item) => typeof item === 'string') ? [] : ['on sequence has non-scalar event'] };
       if (value && typeof value === 'object') return Object.hasOwn(value, 'push') ? pushTarget(value.push) : { root: false, errors: [] };
       return { root: true, errors: ['inline on is not safely analyzable'] };
     } catch (error) {
@@ -237,6 +252,7 @@ function trigger(text) {
   const pushIndent = indent(push.line);
   const inline = push.clean.split(':').slice(1).join(':').trim();
   if (inline) {
+    if (BLOCK_SCALAR.test(inline)) return { root: true, errors: ['push trigger uses a YAML block scalar that is not safely analyzable'] };
     try { return pushTarget(flow(inline)); }
     catch (error) { return { root: true, errors: [`inline push flow is not safely analyzable (${error.message})`] }; }
   }
@@ -270,11 +286,11 @@ function shape(file, text) {
   return errors.map((error) => `${file}: ${error}`);
 }
 
-const refs = (text, re, map = (x) => x) => [...text.matchAll(re)].map((m) => map(m[1]));
-const workflows = (text) => refs(text, /uses\s*:\s*['"]?(\.\/\.github\/workflows\/[^'"\s#]+)/g, (x) => x.slice(2));
-const actions = (text) => refs(text, /uses\s*:\s*['"]?(\.\/[^'"\s#]+)/g, (x) => x.slice(2)).filter((x) => !x.startsWith('.github/workflows/'));
-const scripts = (text) => [...new Set(refs(text, /(?:^|[\s;&|])(?:bash|sh|node|bun|python3?|ruby|perl)?\s*((?:\.\/)?(?:scripts|\.github)\/[\w./-]+)/gm, (x) => x.replace(/^\.\//, '')))];
-const packageScripts = (text) => [...new Set([...text.matchAll(/\b(?:npm|bun|pnpm)\s+run\s+([\w:-]+)|\byarn\s+([\w:-]+)/g)].map((m) => m[1] || m[2]))];
+const refs = (text, re, map = (value) => value) => [...text.matchAll(re)].map((match) => map(match[1]));
+const workflows = (text) => refs(text, /uses\s*:\s*['"]?(\.\/\.github\/workflows\/[^'"\s#]+)/g, (value) => value.slice(2));
+const actions = (text) => refs(text, /uses\s*:\s*['"]?(\.\/[^'"\s#]+)/g, (value) => value.slice(2)).filter((value) => !value.startsWith('.github/workflows/'));
+const scripts = (text) => [...new Set(refs(text, /(?:^|[\s;&|])(?:bash|sh|node|bun|python3?|ruby|perl)?\s*((?:\.\/)?(?:scripts|\.github)\/[\w./-]+)/gm, (value) => value.replace(/^\.\//, '')))];
+const packageScripts = (text) => [...new Set([...text.matchAll(/\b(?:npm|bun|pnpm)\s+run\s+([\w:-]+)|\byarn\s+([\w:-]+)/g)].map((match) => match[1] || match[2]))];
 
 function runCommands(text) {
   const lines = text.split(/\r?\n/);
@@ -284,7 +300,7 @@ function runCommands(text) {
     if (!match) continue;
     const at = match[1].length;
     const value = match[2].trim();
-    if (/^[|>][+-]?$/.test(value)) {
+    if (BLOCK_SCALAR.test(value)) {
       const block = [];
       for (let j = i + 1; j < lines.length; j += 1) {
         if (uncomment(lines[j]).trim() && indent(lines[j]) <= at) break;
@@ -482,6 +498,7 @@ export function analyzeRepository(root = process.cwd()) {
   const done = new Set();
   const active = new Set();
   let packageJson = null;
+
   function inspect(file) {
     if (done.has(file)) return;
     if (active.has(file)) { violations.push(`${file}: local reference cycle is not safely analyzable`); return; }
@@ -521,6 +538,7 @@ export function analyzeRepository(root = process.cwd()) {
     active.delete(file);
     done.add(file);
   }
+
   for (const file of roots) inspect(file);
   const unique = [...new Set(violations)].sort();
   return { ok: unique.length === 0, roots, inspected: [...done].sort(), violations: unique };
