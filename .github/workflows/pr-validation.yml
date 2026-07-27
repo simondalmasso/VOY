@@ -32,6 +32,11 @@ jobs:
       - name: Frozen install
         run: bun install --frozen-lockfile
 
+      - name: Pin Wrangler 4.112.0 for deterministic validation
+        run: |
+          npm install --no-save --package-lock=false wrangler@4.112.0
+          test "$(./node_modules/.bin/wrangler --version | awk '{print $1}')" = "4.112.0"
+
       - name: Lint
         run: bun run lint
 
@@ -39,7 +44,7 @@ jobs:
         run: bun run test
 
       - name: Wrangler dry-run
-        run: npx wrangler deploy --dry-run --minify
+        run: ./node_modules/.bin/wrangler deploy --dry-run --minify
 
       - name: Install Chromium 1.61.1
         run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
@@ -76,6 +81,7 @@ jobs:
           retention-days: 14
           path: |
             production-health.json
+            test-results/wrangler-local.log
             test-results/evidence/
             test-results/production-browser/
             playwright-report/
