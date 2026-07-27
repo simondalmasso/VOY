@@ -1,573 +1,351 @@
 #!/usr/bin/env node
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { TextDecoder } from 'node:util';
 
-const WORKFLOW_DIRECTORY = '.github/workflows';
-const POLICY_PATH = 'docs/control/release-policy.yaml';
-const POLICY_ENGINE_PATH = 'scripts/verify-release-policy.mjs';
+const WF = '.github/workflows';
+const POLICY = 'docs/control/release-policy.yaml';
+const ENGINE = 'scripts/verify-release-policy.mjs';
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const posix = (s) => s.split(path.sep).join('/');
+const indent = (s) => s.match(/^ */)?.[0].length ?? 0;
+const read = (p) => new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(p));
 
-function posix(value) {
-  return value.split(path.sep).join('/');
-}
-
-function readUtf8Strict(filePath) {
-  const bytes = fs.readFileSync(filePath);
-  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-}
-
-function stripComment(line) {
-  let single = false;
-  let double = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === "'" && !double) single = !single;
-    if (character === '"' && !single && line[index - 1] !== '\\') double = !double;
-    if (character === '#' && !single && !double) return line.slice(0, index);
+function uncomment(line) {
+  let s = false, d = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const c = line[i];
+    if (c === "'" && !d) s = !s;
+    else if (c === '"' && !s && line[i - 1] !== '\\') d = !d;
+    else if (c === '#' && !s && !d) return line.slice(0, i);
   }
   return line;
 }
 
-function indentation(line) {
-  return line.match(/^ */)?.[0].length ?? 0;
-}
-
-function extractTopLevelBlock(text, key) {
+function top(text, key) {
   const lines = text.split(/\r?\n/);
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const matcher = new RegExp(`^(?:${escaped}|'${escaped}'|"${escaped}")\\s*:\\s*(.*)$`);
-  const start = lines.findIndex((line) => matcher.test(stripComment(line)));
+  const re = new RegExp(`^(?:${esc(key)}|'${esc(key)}'|"${esc(key)}")\\s*:\\s*(.*)$`);
+  const start = lines.findIndex((line) => re.test(uncomment(line)));
   if (start < 0) return null;
-
-  const match = stripComment(lines[start]).match(matcher);
+  const inline = uncomment(lines[start]).match(re)?.[1]?.trim() ?? '';
   const block = [lines[start]];
-  for (let index = start + 1; index < lines.length; index += 1) {
-    const candidate = lines[index];
-    const clean = stripComment(candidate);
-    if (clean.trim() && indentation(candidate) === 0) break;
-    block.push(candidate);
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (uncomment(lines[i]).trim() && indent(lines[i]) === 0) break;
+    block.push(lines[i]);
   }
-  return { inline: match?.[1]?.trim() ?? '', lines: block, start };
+  return { inline, lines: block };
 }
 
-function splitYamlValues(value) {
-  return value
-    .replace(/[\[\]{}]/g, ' ')
-    .split(/[\s,]+/)
-    .map((item) => item.replace(/^['"]|['"]$/g, '').trim())
-    .filter(Boolean);
-}
-
-function globMatchesMain(pattern) {
-  if (typeof pattern !== 'string' || pattern.startsWith('!')) return false;
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`^${escaped.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '.')}$`);
-  return regex.test('main');
-}
-
-function collectNestedValues(lines, key, minimumIndent) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const keyMatcher = new RegExp(`^\\s{${minimumIndent},}(?:${escaped}|'${escaped}'|"${escaped}")\\s*:\\s*(.*)$`);
-  for (let index = 0; index < lines.length; index += 1) {
-    const clean = stripComment(lines[index]);
-    const match = clean.match(keyMatcher);
-    if (!match) continue;
-
-    const keyIndent = indentation(lines[index]);
-    const values = splitYamlValues(match[1] ?? '');
-    for (let nested = index + 1; nested < lines.length; nested += 1) {
-      const nestedLine = stripComment(lines[nested]);
-      if (!nestedLine.trim()) continue;
-      const nestedIndent = indentation(lines[nested]);
-      if (nestedIndent <= keyIndent) break;
-      const item = nestedLine.trim().match(/^-\s*(.+)$/);
-      if (item) values.push(...splitYamlValues(item[1]));
+function flowTokens(source) {
+  const out = [];
+  for (let i = 0; i < source.length;) {
+    const c = source[i];
+    if (/\s/.test(c)) { i += 1; continue; }
+    if ('{}[],:'.includes(c)) { out.push([c, c]); i += 1; continue; }
+    if (c === "'" || c === '"') {
+      const q = c; let v = ''; let closed = false; i += 1;
+      while (i < source.length) {
+        const x = source[i];
+        if (q === "'" && x === "'" && source[i + 1] === "'") { v += "'"; i += 2; continue; }
+        if (x === q) { closed = true; i += 1; break; }
+        if (q === '"' && x === '\\' && i + 1 < source.length) { v += source[i + 1]; i += 2; continue; }
+        v += x; i += 1;
+      }
+      if (!closed) throw new Error('unterminated quote');
+      out.push(['s', v]); continue;
     }
-    return values;
+    const start = i;
+    while (i < source.length && !/[\s{}\[\],:]/.test(source[i])) i += 1;
+    if (start === i) throw new Error(`unsupported ${source[i]}`);
+    out.push(['s', source.slice(start, i)]);
+  }
+  return out;
+}
+
+function flow(source) {
+  const tokens = flowTokens(source); let i = 0;
+  const take = (t) => {
+    const x = tokens[i];
+    if (!x || x[0] !== t) throw new Error(`expected ${t}`);
+    i += 1; return x[1];
+  };
+  const value = () => {
+    const t = tokens[i]?.[0];
+    if (t === '{') {
+      i += 1; const o = {};
+      if (tokens[i]?.[0] === '}') { i += 1; return o; }
+      while (i < tokens.length) {
+        const k = take('s'); take(':'); o[k] = value();
+        if (tokens[i]?.[0] === '}') { i += 1; return o; }
+        take(',');
+      }
+      throw new Error('unterminated mapping');
+    }
+    if (t === '[') {
+      i += 1; const a = [];
+      if (tokens[i]?.[0] === ']') { i += 1; return a; }
+      while (i < tokens.length) {
+        a.push(value());
+        if (tokens[i]?.[0] === ']') { i += 1; return a; }
+        take(',');
+      }
+      throw new Error('unterminated sequence');
+    }
+    const v = take('s');
+    if (/^(?:null|~)$/i.test(v)) return null;
+    if (/^true$/i.test(v)) return true;
+    if (/^false$/i.test(v)) return false;
+    return v;
+  };
+  const result = value();
+  if (i !== tokens.length) throw new Error('trailing token');
+  return result;
+}
+
+function mainGlob(p) {
+  if (typeof p !== 'string' || p.startsWith('!')) return false;
+  const r = esc(p).replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '.');
+  return new RegExp(`^${r}$`).test('main');
+}
+
+function branches(v) {
+  if (typeof v === 'string') return [v];
+  if (Array.isArray(v) && v.every((x) => typeof x === 'string')) return v;
+  return null;
+}
+
+function pushTarget(v) {
+  if (v === null || v === true) return { root: true, errors: [] };
+  if (v === false) return { root: false, errors: [] };
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return { root: true, errors: ['push configuration is not safely analyzable'] };
+  const b = Object.hasOwn(v, 'branches');
+  const bi = Object.hasOwn(v, 'branches-ignore');
+  if (b && bi) return { root: true, errors: ['push has branches and branches-ignore'] };
+  if (b) {
+    const x = branches(v.branches);
+    return x ? { root: x.some(mainGlob), errors: [] } : { root: true, errors: ['branches filter is not safely analyzable'] };
+  }
+  if (bi) {
+    const x = branches(v['branches-ignore']);
+    return x ? { root: !x.some(mainGlob), errors: [] } : { root: true, errors: ['branches-ignore filter is not safely analyzable'] };
+  }
+  return { root: true, errors: [] };
+}
+
+function yamlValues(lines, key, min) {
+  const re = new RegExp(`^\\s{${min},}(?:${esc(key)}|'${esc(key)}'|"${esc(key)}")\\s*:\\s*(.*)$`);
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = uncomment(lines[i]).match(re);
+    if (!m) continue;
+    const at = indent(lines[i]);
+    const out = m[1].replace(/[\[\]{}]/g, ' ').split(/[\s,]+/).map((x) => x.replace(/^['"]|['"]$/g, '')).filter(Boolean);
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const c = uncomment(lines[j]);
+      if (!c.trim()) continue;
+      if (indent(lines[j]) <= at) break;
+      const item = c.trim().match(/^-\s*(.+)$/);
+      if (item) out.push(...item[1].replace(/[\[\]{}]/g, ' ').split(/[\s,]+/).map((x) => x.replace(/^['"]|['"]$/g, '')).filter(Boolean));
+    }
+    return out;
   }
   return null;
 }
 
-function tokenizeFlowYaml(source) {
-  const tokens = [];
-  let index = 0;
-
-  while (index < source.length) {
-    const character = source[index];
-    if (/\s/.test(character)) {
-      index += 1;
-      continue;
-    }
-    if ('{}[],:'.includes(character)) {
-      tokens.push({ type: character, value: character });
-      index += 1;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      const quote = character;
-      let value = '';
-      index += 1;
-      let closed = false;
-      while (index < source.length) {
-        const current = source[index];
-        if (quote === "'" && current === "'" && source[index + 1] === "'") {
-          value += "'";
-          index += 2;
-          continue;
-        }
-        if (current === quote) {
-          closed = true;
-          index += 1;
-          break;
-        }
-        if (quote === '"' && current === '\\' && index + 1 < source.length) {
-          value += source[index + 1];
-          index += 2;
-          continue;
-        }
-        value += current;
-        index += 1;
-      }
-      if (!closed) throw new Error('unterminated quoted scalar');
-      tokens.push({ type: 'scalar', value });
-      continue;
-    }
-
-    const start = index;
-    while (index < source.length && !/[\s{}\[\],:]/.test(source[index])) index += 1;
-    if (start === index) throw new Error(`unsupported flow character ${source[index]}`);
-    tokens.push({ type: 'scalar', value: source.slice(start, index) });
-  }
-  return tokens;
-}
-
-function parseFlowYaml(source) {
-  const tokens = tokenizeFlowYaml(source);
-  let index = 0;
-
-  function take(type) {
-    const token = tokens[index];
-    if (!token || token.type !== type) throw new Error(`expected ${type} at token ${index}`);
-    index += 1;
-    return token;
-  }
-
-  function parseValue() {
-    const token = tokens[index];
-    if (!token) throw new Error('unexpected end of flow value');
-
-    if (token.type === '{') {
-      index += 1;
-      const result = {};
-      if (tokens[index]?.type === '}') {
-        index += 1;
-        return result;
-      }
-      while (index < tokens.length) {
-        const key = take('scalar').value;
-        take(':');
-        result[key] = parseValue();
-        if (tokens[index]?.type === '}') {
-          index += 1;
-          return result;
-        }
-        take(',');
-      }
-      throw new Error('unterminated flow mapping');
-    }
-
-    if (token.type === '[') {
-      index += 1;
-      const result = [];
-      if (tokens[index]?.type === ']') {
-        index += 1;
-        return result;
-      }
-      while (index < tokens.length) {
-        result.push(parseValue());
-        if (tokens[index]?.type === ']') {
-          index += 1;
-          return result;
-        }
-        take(',');
-      }
-      throw new Error('unterminated flow sequence');
-    }
-
-    const scalar = take('scalar').value;
-    if (/^(?:null|~)$/i.test(scalar)) return null;
-    if (/^true$/i.test(scalar)) return true;
-    if (/^false$/i.test(scalar)) return false;
-    return scalar;
-  }
-
-  const parsed = parseValue();
-  if (index !== tokens.length) throw new Error(`unexpected trailing token ${tokens[index]?.value}`);
-  return parsed;
-}
-
-function normalizeBranchValues(value) {
-  if (typeof value === 'string') return [value];
-  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value;
-  return null;
-}
-
-function flowPushTargetsMain(pushConfig) {
-  if (pushConfig === null || pushConfig === true) return { genericMainPush: true, errors: [] };
-  if (pushConfig === false) return { genericMainPush: false, errors: [] };
-  if (typeof pushConfig !== 'object' || Array.isArray(pushConfig)) {
-    return { genericMainPush: true, errors: ['flow-style push configuration is not safely analyzable'] };
-  }
-
-  const hasBranches = Object.prototype.hasOwnProperty.call(pushConfig, 'branches');
-  const hasIgnored = Object.prototype.hasOwnProperty.call(pushConfig, 'branches-ignore');
-  if (hasBranches && hasIgnored) {
-    return { genericMainPush: true, errors: ['flow-style push contains both branches and branches-ignore'] };
-  }
-
-  if (hasBranches) {
-    const branches = normalizeBranchValues(pushConfig.branches);
-    if (!branches) return { genericMainPush: true, errors: ['flow-style branches filter is not safely analyzable'] };
-    return { genericMainPush: branches.some(globMatchesMain), errors: [] };
-  }
-
-  if (hasIgnored) {
-    const ignored = normalizeBranchValues(pushConfig['branches-ignore']);
-    if (!ignored) return { genericMainPush: true, errors: ['flow-style branches-ignore filter is not safely analyzable'] };
-    return { genericMainPush: !ignored.some(globMatchesMain), errors: [] };
-  }
-
-  return { genericMainPush: true, errors: [] };
-}
-
-function analyzeGenericMainPush(text) {
-  const onBlock = extractTopLevelBlock(text, 'on');
-  if (!onBlock) return { genericMainPush: false, errors: ['workflow has no readable top-level on key'] };
-
-  if (onBlock.inline) {
+function trigger(text) {
+  const on = top(text, 'on');
+  if (!on) return { root: false, errors: ['workflow has no readable top-level on key'] };
+  if (on.inline) {
     try {
-      const parsed = parseFlowYaml(onBlock.inline);
-      if (typeof parsed === 'string') return { genericMainPush: parsed === 'push', errors: [] };
-      if (Array.isArray(parsed)) {
-        const invalid = parsed.some((event) => typeof event !== 'string');
-        return { genericMainPush: parsed.includes('push'), errors: invalid ? ['inline on sequence contains a non-scalar event'] : [] };
-      }
-      if (parsed && typeof parsed === 'object') {
-        if (!Object.prototype.hasOwnProperty.call(parsed, 'push')) return { genericMainPush: false, errors: [] };
-        return flowPushTargetsMain(parsed.push);
-      }
-      return { genericMainPush: true, errors: ['inline on value is not safely analyzable'] };
-    } catch (error) {
-      return { genericMainPush: true, errors: [`inline on flow syntax is not safely analyzable (${error.message})`] };
-    }
+      const v = flow(on.inline);
+      if (typeof v === 'string') return { root: v === 'push', errors: [] };
+      if (Array.isArray(v)) return { root: v.includes('push'), errors: v.every((x) => typeof x === 'string') ? [] : ['on sequence has non-scalar event'] };
+      if (v && typeof v === 'object') return Object.hasOwn(v, 'push') ? pushTarget(v.push) : { root: false, errors: [] };
+      return { root: true, errors: ['inline on is not safely analyzable'] };
+    } catch (e) { return { root: true, errors: [`inline on flow is not safely analyzable (${e.message})`] }; }
   }
-
-  const eventLines = onBlock.lines.slice(1);
-  const nonEmpty = eventLines
-    .map((line, index) => ({ line, index, clean: stripComment(line) }))
-    .filter(({ clean }) => clean.trim());
-
-  if (nonEmpty.length === 0) return { genericMainPush: true, errors: ['top-level on mapping is empty and not safely analyzable'] };
-
-  const eventIndent = Math.min(...nonEmpty.map(({ line }) => indentation(line)));
-  const pushEntry = nonEmpty.find(({ line, clean }) => (
-    indentation(line) === eventIndent && /^(?:\s*)(?:push|'push'|"push")\s*:/.test(clean)
-  ));
-  if (!pushEntry) return { genericMainPush: false, errors: [] };
-
-  const pushLine = stripComment(pushEntry.line);
-  const pushIndent = indentation(pushEntry.line);
-  const inline = pushLine.split(':').slice(1).join(':').trim();
-
+  const rows = on.lines.slice(1).map((line, i) => ({ line, i, clean: uncomment(line) })).filter((x) => x.clean.trim());
+  if (!rows.length) return { root: true, errors: ['on mapping is empty'] };
+  const level = Math.min(...rows.map((x) => indent(x.line)));
+  const p = rows.find((x) => indent(x.line) === level && /^\s*(?:push|'push'|"push")\s*:/.test(x.clean));
+  if (!p) return { root: false, errors: [] };
+  const pi = indent(p.line);
+  const inline = p.clean.split(':').slice(1).join(':').trim();
   if (inline) {
-    try {
-      return flowPushTargetsMain(parseFlowYaml(inline));
-    } catch (error) {
-      return { genericMainPush: true, errors: [`inline push flow syntax is not safely analyzable (${error.message})`] };
-    }
+    try { return pushTarget(flow(inline)); }
+    catch (e) { return { root: true, errors: [`inline push flow is not safely analyzable (${e.message})`] }; }
   }
-
-  const pushLines = [pushEntry.line];
-  for (let index = pushEntry.index + 1; index < eventLines.length; index += 1) {
-    const line = eventLines[index];
-    if (stripComment(line).trim() && indentation(line) <= pushIndent) break;
-    pushLines.push(line);
+  const block = [p.line];
+  for (let j = p.i + 1; j < on.lines.length - 1; j += 1) {
+    const line = on.lines[j + 1];
+    if (uncomment(line).trim() && indent(line) <= pi) break;
+    block.push(line);
   }
-
-  const branches = collectNestedValues(pushLines, 'branches', pushIndent + 1);
-  const ignored = collectNestedValues(pushLines, 'branches-ignore', pushIndent + 1);
-  if (branches && ignored) return { genericMainPush: true, errors: ['push contains both branches and branches-ignore'] };
-  if (branches) return { genericMainPush: branches.some(globMatchesMain), errors: [] };
-  if (ignored) return { genericMainPush: !ignored.some(globMatchesMain), errors: [] };
-  return { genericMainPush: true, errors: [] };
+  const b = yamlValues(block, 'branches', pi + 1);
+  const bi = yamlValues(block, 'branches-ignore', pi + 1);
+  if (b && bi) return { root: true, errors: ['push has branches and branches-ignore'] };
+  if (b) return { root: b.some(mainGlob), errors: [] };
+  if (bi) return { root: !bi.some(mainGlob), errors: [] };
+  return { root: true, errors: [] };
 }
 
-export function allowsGenericMainPush(text) {
-  return analyzeGenericMainPush(text).genericMainPush;
+export const allowsGenericMainPush = (text) => trigger(text).root;
+
+function shape(file, text) {
+  const e = [];
+  if (!text.trim()) e.push('workflow is empty');
+  if (text.includes('\0')) e.push('workflow contains NUL');
+  if (/^[ ]*\t/m.test(text)) e.push('workflow contains tab indentation');
+  if (/^(?:<<<<<<<|=======|>>>>>>>)/m.test(text)) e.push('workflow contains conflict markers');
+  if (!top(text, 'on')) e.push('workflow has no readable top-level on key');
+  if (!top(text, 'jobs')) e.push('workflow has no readable top-level jobs key');
+  e.push(...trigger(text).errors);
+  return e.map((x) => `${file}: ${x}`);
 }
 
-function validateWorkflowShape(relativePath, text) {
-  const errors = [];
-  if (!text.trim()) errors.push('workflow is empty');
-  if (text.includes('\0')) errors.push('workflow contains a NUL byte');
-  if (/^[ ]*\t/m.test(text)) errors.push('workflow contains tab indentation');
-  if (/^(?:<<<<<<<|=======|>>>>>>>)/m.test(text)) errors.push('workflow contains merge-conflict markers');
-  if (!extractTopLevelBlock(text, 'on')) errors.push('workflow has no readable top-level on key');
-  if (!extractTopLevelBlock(text, 'jobs')) errors.push('workflow has no readable top-level jobs key');
-  errors.push(...analyzeGenericMainPush(text).errors);
-  return errors.map((message) => `${relativePath}: ${message}`);
-}
+const refs = (text, re, map = (x) => x) => [...text.matchAll(re)].map((m) => map(m[1]));
+const workflows = (t) => refs(t, /uses\s*:\s*['"]?(\.\/\.github\/workflows\/[^'"\s#]+)/g, (x) => x.slice(2));
+const actions = (t) => refs(t, /uses\s*:\s*['"]?(\.\/[^'"\s#]+)/g, (x) => x.slice(2)).filter((x) => !x.startsWith('.github/workflows/'));
+const scripts = (t) => [...new Set(refs(t, /(?:^|[\s;&|])(?:bash|sh|node|bun|python3?|ruby|perl)?\s*((?:\.\/)?(?:scripts|\.github)\/[A-Za-z0-9_.\/-]+)/gm, (x) => x.replace(/^\.\//, '')))];
+const packageScripts = (t) => [...new Set([...t.matchAll(/\b(?:npm|bun|pnpm)\s+run\s+([A-Za-z0-9:_-]+)|\byarn\s+([A-Za-z0-9:_-]+)/g)].map((m) => m[1] || m[2]))];
 
-function localWorkflowReferences(text) {
-  const references = [];
-  const matcher = /uses\s*:\s*['"]?(\.\/\.github\/workflows\/[^'"\s#]+)/g;
-  for (const match of text.matchAll(matcher)) references.push(match[1].slice(2));
-  return references;
-}
-
-function localActionReferences(text) {
-  const references = [];
-  const matcher = /uses\s*:\s*['"]?(\.\/[^'"\s#]+)/g;
-  for (const match of text.matchAll(matcher)) {
-    const value = match[1].slice(2);
-    if (!value.startsWith('.github/workflows/')) references.push(value);
-  }
-  return references;
-}
-
-function localScriptReferences(text) {
-  const references = new Set();
-  const matcher = /(?:^|[\s;&|])(?:bash|sh|node|bun|python3?|ruby|perl)?\s*((?:\.\/)?(?:scripts|\.github)\/[A-Za-z0-9_.\/-]+)/gm;
-  for (const match of text.matchAll(matcher)) references.add(match[1].replace(/^\.\//, ''));
-  return [...references];
-}
-
-function packageScriptReferences(text) {
-  const references = new Set();
-  const matcher = /\b(?:npm|bun|pnpm)\s+run\s+([A-Za-z0-9:_-]+)|\byarn\s+([A-Za-z0-9:_-]+)/g;
-  for (const match of text.matchAll(matcher)) references.add(match[1] || match[2]);
-  return [...references];
-}
-
-function extractYamlRunCommands(text) {
-  const lines = text.split(/\r?\n/);
-  const commands = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const clean = stripComment(lines[index]);
-    const match = clean.match(/^(\s*)(?:-\s*)?(?:run|'run'|"run")\s*:\s*(.*)$/);
-    if (!match) continue;
-
-    const keyIndent = match[1].length;
-    const inline = match[2].trim();
-    if (inline === '|' || inline === '>' || /^[|>][+-]?$/.test(inline)) {
+function runCommands(text) {
+  const lines = text.split(/\r?\n/); const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = uncomment(lines[i]).match(/^(\s*)(?:-\s*)?(?:run|'run'|"run")\s*:\s*(.*)$/);
+    if (!m) continue;
+    const at = m[1].length, v = m[2].trim();
+    if (/^[|>][+-]?$/.test(v)) {
       const block = [];
-      for (let nested = index + 1; nested < lines.length; nested += 1) {
-        const candidate = lines[nested];
-        if (stripComment(candidate).trim() && indentation(candidate) <= keyIndent) break;
-        block.push(candidate.slice(Math.min(candidate.length, keyIndent + 2)));
-        index = nested;
+      for (let j = i + 1; j < lines.length; j += 1) {
+        if (uncomment(lines[j]).trim() && indent(lines[j]) <= at) break;
+        block.push(lines[j].slice(Math.min(lines[j].length, at + 2))); i = j;
       }
-      commands.push(block.join('\n'));
-    } else if (inline) {
-      commands.push(inline.replace(/^(['"])([\s\S]*)\1$/, '$2'));
-    }
+      out.push(block.join('\n'));
+    } else if (v) out.push(v.replace(/^(['"])([\s\S]*)\1$/, '$2'));
   }
-  return commands;
+  return out;
 }
 
-function splitShellStatements(text) {
-  const statements = [];
-  let start = 0;
-  let single = false;
-  let double = false;
-  let backtick = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === "'" && !double && !backtick) single = !single;
-    else if (character === '"' && !single && !backtick && text[index - 1] !== '\\') double = !double;
-    else if (character === '`' && !single && !double && text[index - 1] !== '\\') backtick = !backtick;
-
-    if (single || double || backtick) continue;
-    const pair = text.slice(index, index + 2);
-    if (character === '\n' || character === ';' || pair === '&&' || pair === '||') {
-      const statement = text.slice(start, index).trim();
-      if (statement) statements.push(statement);
-      index += pair === '&&' || pair === '||' ? 1 : 0;
-      start = index + 1;
+function statements(text) {
+  const out = []; let start = 0, s = false, d = false, b = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "'" && !d && !b) s = !s;
+    else if (c === '"' && !s && !b && text[i - 1] !== '\\') d = !d;
+    else if (c === '`' && !s && !d && text[i - 1] !== '\\') b = !b;
+    if (s || d || b) continue;
+    const pair = text.slice(i, i + 2);
+    if (c === '\n' || c === ';' || pair === '&&' || pair === '||') {
+      const x = text.slice(start, i).trim(); if (x) out.push(x);
+      if (pair === '&&' || pair === '||') i += 1;
+      start = i + 1;
     }
   }
-  const tail = text.slice(start).trim();
-  if (tail) statements.push(tail);
-  return statements;
+  const x = text.slice(start).trim(); if (x) out.push(x); return out;
 }
 
-function shellWords(text) {
-  const words = [];
-  let current = '';
-  let single = false;
-  let double = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === "'" && !double) {
-      single = !single;
-      continue;
-    }
-    if (character === '"' && !single && text[index - 1] !== '\\') {
-      double = !double;
-      continue;
-    }
-    if (!single && !double && /\s/.test(character)) {
-      if (current) {
-        words.push(current);
-        current = '';
+function words(text) {
+  const out = []; let x = '', s = false, d = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "'" && !d) { s = !s; continue; }
+    if (c === '"' && !s && text[i - 1] !== '\\') { d = !d; continue; }
+    if (!s && !d && /\s/.test(c)) { if (x) out.push(x); x = ''; }
+    else x += c;
+  }
+  if (x) out.push(x); return out;
+}
+
+function install(stmt) {
+  const w = words(stmt.toLowerCase());
+  while (w[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0])) w.shift();
+  if (w[0] === 'sudo' || w[0] === 'command') w.shift();
+  return (w[0] === 'npm' && ['install', 'i', 'add'].includes(w[1]))
+    || (w[0] === 'pnpm' && ['install', 'i', 'add'].includes(w[1]))
+    || (w[0] === 'yarn' && w[1] === 'add')
+    || (w[0] === 'bun' && ['install', 'i', 'add'].includes(w[1]));
+}
+
+function quoteAt(text, offset) {
+  let s = false, d = false, b = false, start = -1;
+  for (let i = 0; i < offset; i += 1) {
+    const c = text[i];
+    if (c === "'" && !d && !b) { s = !s; start = s ? i : -1; }
+    else if (c === '"' && !s && !b && text[i - 1] !== '\\') { d = !d; start = d ? i : -1; }
+    else if (c === '`' && !s && !d && text[i - 1] !== '\\') { b = !b; start = b ? i : -1; }
+  }
+  return { s, d, b, start };
+}
+
+function activeQuoted(stmt, offset) {
+  const q = quoteAt(stmt, offset);
+  if (!q.s && !q.d && !q.b) return true;
+  if (q.b) return true;
+  const before = stmt.slice(0, offset), prefix = stmt.slice(0, q.start);
+  if (before.lastIndexOf('$(') > before.lastIndexOf(')')) return true;
+  return /(?:^|\s)(?:bash|sh|zsh|dash|ksh)\s+(?:[^;]*\s)?-c\s*$/i.test(prefix) || /(?:^|\s)eval\s*$/i.test(prefix);
+}
+
+function argsAfter(stmt, end) {
+  const tail = stmt.slice(end); const cut = tail.search(/(?:&&|\|\||;|\n|\))/);
+  const w = words(cut >= 0 ? tail.slice(0, cut) : tail).filter(Boolean);
+  while (w[0] === '--') w.shift(); return w;
+}
+
+function wranglerClass(file, args) {
+  if (!args.length) return `${file}: Wrangler reference is not provably read-only`;
+  const c = args[0].toLowerCase();
+  if (['--version', '-v', 'version', '--help', '-h', 'help'].includes(c)) return null;
+  if (c === 'deploy') return args.some((x) => /^--dry-run(?:=true)?$/i.test(x)) ? null : `${file}: non-dry-run wrangler deploy`;
+  if (c === 'dev') {
+    const local = args.some((x) => /^--local(?:=true)?$/i.test(x));
+    const remote = args.some((x) => /^--remote(?:=true)?$/i.test(x));
+    return local && !remote ? null : `${file}: wrangler dev is not provably local-only`;
+  }
+  if (c === 'versions' && args[1]?.toLowerCase() === 'deploy') return `${file}: wrangler versions deploy`;
+  if (c === 'secret' || (c === 'versions' && args[1]?.toLowerCase() === 'secret')) return `${file}: wrangler secret mutation`;
+  if (c === 'rollback' || c === 'delete' || (c === 'versions' && args[1]?.toLowerCase() === 'upload') || (c === 'deployments' && args[1]?.toLowerCase() === 'create')) return `${file}: other mutating wrangler command`;
+  return `${file}: Wrangler command is not provably read-only (${args.slice(0, 3).join(' ')})`;
+}
+
+function executable(file, text) { return /\.ya?ml$/i.test(file) ? runCommands(text) : [text]; }
+
+function unsafe(file, text) {
+  if (file === ENGINE) return [];
+  const out = [];
+  const matcher = /(?:^|[\s"'`$()&;|])((?:(?:\.{0,2}\/)?(?:[A-Za-z0-9_.-]+\/)*)?wrangler(?:@[A-Za-z0-9*_.+-]+)?(?:\.(?:cmd|exe))?)(?=$|[\s"'`$()&;|])/gi;
+  for (const command of executable(file, text)) {
+    for (const stmt of statements(command.replace(/\\\r?\n\s*/g, ' '))) {
+      const pkg = install(stmt);
+      for (const m of stmt.matchAll(matcher)) {
+        if (pkg) continue;
+        const at = m.index + m[0].lastIndexOf(m[1]);
+        if (!activeQuoted(stmt, at)) continue;
+        const finding = wranglerClass(file, argsAfter(stmt, at + m[1].length));
+        if (finding) out.push(finding);
       }
-      continue;
     }
-    current += character;
-  }
-  if (current) words.push(current);
-  return words;
-}
-
-function isPackageInstallationStatement(statement) {
-  const words = shellWords(statement.toLowerCase());
-  while (words[0] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
-  if (words[0] === 'sudo' || words[0] === 'command') words.shift();
-  const manager = words[0];
-  const command = words[1];
-  if (manager === 'npm') return ['install', 'i', 'add'].includes(command);
-  if (manager === 'pnpm') return ['install', 'i', 'add'].includes(command);
-  if (manager === 'yarn') return command === 'add';
-  if (manager === 'bun') return ['install', 'i', 'add'].includes(command);
-  return false;
-}
-
-function normalizeWranglerToken(value) {
-  const clean = value.replace(/^[\s"'`$()]+/, '').replace(/[\s"'`$()]+$/, '').replace(/\\/g, '/');
-  const base = clean.split('/').pop()?.replace(/\.(?:cmd|exe)$/i, '') ?? '';
-  return /^wrangler(?:@[A-Za-z0-9*_.+-]+)?$/i.test(base) ? base : null;
-}
-
-function argsAfterWrangler(statement, endIndex) {
-  const remainder = statement.slice(endIndex);
-  const boundary = remainder.search(/(?:&&|\|\||;|\n|\))/);
-  const bounded = boundary >= 0 ? remainder.slice(0, boundary) : remainder;
-  const words = shellWords(bounded).filter(Boolean);
-  while (words[0] === '--') words.shift();
-  return words;
-}
-
-function classifyWranglerArgs(relativePath, args) {
-  if (args.length === 0) return `${relativePath}: Wrangler reference is not provably read-only`;
-  const command = args[0].toLowerCase();
-  if (['--version', '-v', 'version', '--help', '-h', 'help'].includes(command)) return null;
-
-  if (command === 'deploy') {
-    const dryRun = args.some((argument) => /^--dry-run(?:=true)?$/i.test(argument));
-    return dryRun ? null : `${relativePath}: non-dry-run wrangler deploy`;
-  }
-  if (command === 'versions' && args[1]?.toLowerCase() === 'deploy') return `${relativePath}: wrangler versions deploy`;
-  if ((command === 'versions' && args[1]?.toLowerCase() === 'secret') || command === 'secret') return `${relativePath}: wrangler secret mutation`;
-  if (
-    command === 'rollback' || command === 'delete'
-    || (command === 'versions' && args[1]?.toLowerCase() === 'upload')
-    || (command === 'deployments' && args[1]?.toLowerCase() === 'create')
-  ) return `${relativePath}: other mutating wrangler command`;
-
-  return `${relativePath}: Wrangler command is not provably read-only (${args.slice(0, 3).join(' ')})`;
-}
-
-function wranglerFindingsForCommand(relativePath, commandText) {
-  const findings = [];
-  const joined = commandText.replace(/\\\r?\n\s*/g, ' ');
-  for (const statement of splitShellStatements(joined)) {
-    const packageInstall = isPackageInstallationStatement(statement);
-    let recognized = 0;
-    let ignoredPackageReferences = 0;
-    const matcher = /(?:^|[\s"'`$()&;|])((?:(?:\.{0,2}\/)?(?:[A-Za-z0-9_.-]+\/)*)?wrangler(?:@[A-Za-z0-9*_.+-]+)?(?:\.(?:cmd|exe))?)(?=$|[\s"'`$()&;|])/gi;
-    for (const match of statement.matchAll(matcher)) {
-      const token = normalizeWranglerToken(match[1]);
-      if (!token) continue;
-      if (packageInstall) {
-        ignoredPackageReferences += 1;
-        continue;
-      }
-      recognized += 1;
-      const tokenOffset = match.index + match[0].lastIndexOf(match[1]);
-      const finding = classifyWranglerArgs(relativePath, argsAfterWrangler(statement, tokenOffset + match[1].length));
-      if (finding) findings.push(finding);
-    }
-
-    if (/wrangler/i.test(statement) && recognized === 0 && ignoredPackageReferences === 0) {
-      findings.push(`${relativePath}: executable Wrangler reference is not safely classifiable`);
-    }
-  }
-  return findings;
-}
-
-function executableSegments(relativePath, text) {
-  if (/\.ya?ml$/i.test(relativePath)) return extractYamlRunCommands(text);
-  return [text];
-}
-
-function mutatingWranglerFindings(relativePath, text) {
-  return executableSegments(relativePath, text).flatMap((command) => wranglerFindingsForCommand(relativePath, command));
-}
-
-function unsafeFindings(relativePath, text) {
-  if (relativePath === POLICY_ENGINE_PATH) return [];
-
-  const findings = [...mutatingWranglerFindings(relativePath, text)];
-  const credentialPatterns = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_ZONE_ID', 'CF_API_TOKEN'];
-  for (const credential of credentialPatterns) {
-    if (text.includes(credential)) findings.push(`${relativePath}: references ${credential}`);
-  }
-
-  if (/\bsecrets\s*:\s*inherit\b/i.test(text)) findings.push(`${relativePath}: uses secrets: inherit`);
-  if (/uses\s*:\s*['"]?[^'"\s#]*(?:cloudflare|wrangler-action)/i.test(text)) findings.push(`${relativePath}: uses a Cloudflare or Wrangler action`);
-
-  for (const command of executableSegments(relativePath, text)) {
     if (/api\.cloudflare\.com\/client\/v4/i.test(command)) {
-      const mutatingMethod = /(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b/i.test(command);
-      const implicitPost = /(?:--data(?:-raw|-binary)?|-d)\s+/i.test(command);
-      const programmaticMethod = /method\s*[:=]\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i.test(command);
-      if (mutatingMethod || implicitPost || programmaticMethod) findings.push(`${relativePath}: calls a mutating Cloudflare API method`);
-      else findings.push(`${relativePath}: Cloudflare API reference is not provably read-only`);
+      const mut = /(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b/i.test(command) || /(?:--data(?:-raw|-binary)?|-d)\s+/i.test(command) || /method\s*[:=]\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i.test(command);
+      out.push(`${file}: Cloudflare API reference is ${mut ? 'mutating' : 'not provably read-only'}`);
     }
-
-    if (/(?:^|[\s"'`$()&;|])(?:cloudflare|cloudflared)(?=$|[\s"'`$()&;|])/i.test(command)) {
-      findings.push(`${relativePath}: executable Cloudflare command is not provably read-only`);
+    for (const m of command.matchAll(/(?:^|[\s"'`$()&;|])(?:cloudflare|cloudflared)(?=$|[\s"'`$()&;|])/gi)) {
+      const at = m.index + m[0].search(/cloudflare/i);
+      if (activeQuoted(command, at)) out.push(`${file}: executable Cloudflare command is not provably read-only`);
     }
   }
-  return [...new Set(findings)];
+  for (const key of ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_ZONE_ID', 'CF_API_TOKEN']) if (text.includes(key)) out.push(`${file}: references ${key}`);
+  if (/\bsecrets\s*:\s*inherit\b/i.test(text)) out.push(`${file}: uses secrets: inherit`);
+  if (/uses\s*:\s*['"]?[^'"\s#]*(?:cloudflare|wrangler-action)/i.test(text)) out.push(`${file}: uses a Cloudflare or Wrangler action`);
+  return [...new Set(out)];
 }
 
-function resolveLocalAction(root, reference) {
-  const absolute = path.join(root, reference);
-  if (!fs.existsSync(absolute)) return null;
-  const stats = fs.statSync(absolute);
-  if (stats.isFile()) return reference;
-  for (const manifest of ['action.yml', 'action.yaml']) {
-    const candidate = path.join(reference, manifest);
-    if (fs.existsSync(path.join(root, candidate))) return candidate;
-  }
-  return null;
-}
-
-function validatePolicy(root) {
-  const absolute = path.join(root, POLICY_PATH);
-  if (!fs.existsSync(absolute)) return [`${POLICY_PATH}: missing policy document`];
-  let text;
-  try {
-    text = readUtf8Strict(absolute);
-  } catch (error) {
-    return [`${POLICY_PATH}: unreadable UTF-8 (${error.message})`];
-  }
-  if (/^[ ]*\t/m.test(text)) return [`${POLICY_PATH}: tab indentation is prohibited`];
-
-  const requirements = [
+function policy(root) {
+  const p = path.join(root, POLICY);
+  if (!fs.existsSync(p)) return [`${POLICY}: missing policy document`];
+  let text; try { text = read(p); } catch (e) { return [`${POLICY}: unreadable UTF-8 (${e.message})`]; }
+  const req = [
     ['generic_main_push_production_write: false', /generic_main_push_production_write\s*:\s*false\b/],
     ['candidate_required: true', /candidate_required\s*:\s*true\b/],
     ['candidate_traffic_percent: 0', /candidate_traffic_percent\s*:\s*0\b/],
@@ -577,130 +355,59 @@ function validatePolicy(root) {
     ['current_cloudflare_state_required: true', /current_cloudflare_state_required\s*:\s*true\b/],
     ['rollback_requires_separate_authorization: true', /rollback_requires_separate_authorization\s*:\s*true\b/]
   ];
-  return requirements.filter(([, matcher]) => !matcher.test(text)).map(([requirement]) => `${POLICY_PATH}: missing ${requirement}`);
+  return req.filter(([, re]) => !re.test(text)).map(([x]) => `${POLICY}: missing ${x}`);
+}
+
+function resolveAction(root, ref) {
+  const abs = path.join(root, ref);
+  if (!fs.existsSync(abs)) return null;
+  if (fs.statSync(abs).isFile()) return ref;
+  for (const name of ['action.yml', 'action.yaml']) if (fs.existsSync(path.join(abs, name))) return path.join(ref, name);
+  return null;
 }
 
 export function analyzeRepository(root = process.cwd()) {
-  const violations = [...validatePolicy(root)];
-  const workflowRoot = path.join(root, WORKFLOW_DIRECTORY);
-  if (!fs.existsSync(workflowRoot)) {
-    return { ok: false, roots: [], inspected: [], violations: [...violations, `${WORKFLOW_DIRECTORY}: missing`] };
-  }
-
-  const workflowFiles = fs.readdirSync(workflowRoot)
-    .filter((name) => /\.ya?ml$/i.test(name)).sort().map((name) => `${WORKFLOW_DIRECTORY}/${name}`);
-
-  const contents = new Map();
-  const triggerAnalysis = new Map();
-  for (const relativePath of workflowFiles) {
+  const violations = policy(root), dir = path.join(root, WF);
+  if (!fs.existsSync(dir)) return { ok: false, roots: [], inspected: [], violations: [...violations, `${WF}: missing`] };
+  const files = fs.readdirSync(dir).filter((x) => /\.ya?ml$/i.test(x)).sort().map((x) => `${WF}/${x}`);
+  const content = new Map(), analysis = new Map();
+  for (const file of files) {
     try {
-      const text = readUtf8Strict(path.join(root, relativePath));
-      contents.set(relativePath, text);
-      triggerAnalysis.set(relativePath, analyzeGenericMainPush(text));
-      violations.push(...validateWorkflowShape(relativePath, text));
-    } catch (error) {
-      violations.push(`${relativePath}: unreadable UTF-8 (${error.message})`);
-    }
+      const text = read(path.join(root, file)); content.set(file, text); analysis.set(file, trigger(text)); violations.push(...shape(file, text));
+    } catch (e) { violations.push(`${file}: unreadable UTF-8 (${e.message})`); }
   }
-
-  const roots = workflowFiles.filter((relativePath) => triggerAnalysis.get(relativePath)?.genericMainPush === true);
-  if (roots.length === 0) violations.push('No workflow guards generic pushes to main');
-
-  const inspected = new Set();
-  const visiting = new Set();
-  let packageJson = null;
-
-  function inspectFile(relativePath) {
-    if (inspected.has(relativePath)) return;
-    if (visiting.has(relativePath)) {
-      violations.push(`${relativePath}: local reference cycle is not safely analyzable`);
-      return;
-    }
-    visiting.add(relativePath);
-
-    const absolute = path.join(root, relativePath);
-    if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
-      violations.push(`${relativePath}: referenced local file is missing`);
-      visiting.delete(relativePath);
-      return;
-    }
-
-    let text;
-    try {
-      text = readUtf8Strict(absolute);
-    } catch (error) {
-      violations.push(`${relativePath}: unreadable UTF-8 (${error.message})`);
-      visiting.delete(relativePath);
-      return;
-    }
-
-    violations.push(...unsafeFindings(relativePath, text));
-
-    for (const workflow of localWorkflowReferences(text)) {
-      if (!contents.has(workflow)) violations.push(`${relativePath}: unresolved local workflow ${workflow}`);
-      else inspectFile(workflow);
-    }
-
-    for (const action of localActionReferences(text)) {
-      const resolved = resolveLocalAction(root, action);
-      if (!resolved) violations.push(`${relativePath}: unresolved local action ${action}`);
-      else inspectFile(posix(resolved));
-    }
-
-    for (const script of localScriptReferences(text)) {
-      if (script !== relativePath) inspectFile(posix(script));
-    }
-
-    for (const scriptName of packageScriptReferences(text)) {
-      if (!packageJson) {
-        const packagePath = path.join(root, 'package.json');
-        if (!fs.existsSync(packagePath)) {
-          violations.push(`${relativePath}: package script ${scriptName} cannot be resolved without package.json`);
-          continue;
-        }
-        try {
-          packageJson = JSON.parse(readUtf8Strict(packagePath));
-        } catch (error) {
-          violations.push(`package.json: unreadable package scripts (${error.message})`);
-          continue;
-        }
+  const roots = files.filter((file) => analysis.get(file)?.root);
+  if (!roots.length) violations.push('No workflow guards generic pushes to main');
+  const done = new Set(), active = new Set(); let pkg = null;
+  function inspect(file) {
+    if (done.has(file)) return;
+    if (active.has(file)) { violations.push(`${file}: local reference cycle is not safely analyzable`); return; }
+    active.add(file); const abs = path.join(root, file);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) { violations.push(`${file}: referenced local file is missing`); active.delete(file); return; }
+    let text; try { text = read(abs); } catch (e) { violations.push(`${file}: unreadable UTF-8 (${e.message})`); active.delete(file); return; }
+    violations.push(...unsafe(file, text));
+    for (const ref of workflows(text)) content.has(ref) ? inspect(ref) : violations.push(`${file}: unresolved local workflow ${ref}`);
+    for (const ref of actions(text)) { const x = resolveAction(root, ref); x ? inspect(posix(x)) : violations.push(`${file}: unresolved local action ${ref}`); }
+    for (const ref of scripts(text)) if (ref !== file) inspect(posix(ref));
+    for (const name of packageScripts(text)) {
+      if (!pkg) {
+        try { pkg = JSON.parse(read(path.join(root, 'package.json'))); }
+        catch (e) { violations.push(`package.json: unreadable package scripts (${e.message})`); continue; }
       }
-      const command = packageJson?.scripts?.[scriptName];
-      if (typeof command !== 'string') violations.push(`${relativePath}: unresolved package script ${scriptName}`);
-      else {
-        violations.push(...unsafeFindings(`package.json#scripts.${scriptName}`, command));
-        for (const script of localScriptReferences(command)) inspectFile(posix(script));
-      }
+      const command = pkg?.scripts?.[name];
+      if (typeof command !== 'string') violations.push(`${file}: unresolved package script ${name}`);
+      else { violations.push(...unsafe(`package.json#scripts.${name}`, command)); for (const ref of scripts(command)) inspect(posix(ref)); }
     }
-
-    visiting.delete(relativePath);
-    inspected.add(relativePath);
+    active.delete(file); done.add(file);
   }
-
-  for (const rootWorkflow of roots) inspectFile(rootWorkflow);
-
-  return {
-    ok: violations.length === 0,
-    roots,
-    inspected: [...inspected].sort(),
-    violations: [...new Set(violations)].sort()
-  };
+  for (const file of roots) inspect(file);
+  const unique = [...new Set(violations)].sort();
+  return { ok: unique.length === 0, roots, inspected: [...done].sort(), violations: unique };
 }
 
-function runCli() {
-  const result = analyzeRepository(process.cwd());
-  console.log(JSON.stringify({
-    ok: result.ok,
-    genericMainPushWorkflows: result.roots,
-    inspectedFiles: result.inspected,
-    violations: result.violations,
-    claims: {
-      currentTreeGenericMainPushProductionWrite: result.ok ? 'NO' : 'NOT_PROVEN',
-      prRegressionDetection: result.ok ? 'YES' : 'NOT_PROVEN',
-      futureDirectPushPrevention: 'UNVERIFIED'
-    }
-  }, null, 2));
-  if (!result.ok) process.exitCode = 1;
+function cli() {
+  const r = analyzeRepository();
+  console.log(JSON.stringify({ ok: r.ok, genericMainPushWorkflows: r.roots, inspectedFiles: r.inspected, violations: r.violations, claims: { currentTreeGenericMainPushProductionWrite: r.ok ? 'NO' : 'NOT_PROVEN', prRegressionDetection: r.ok ? 'YES' : 'NOT_PROVEN', futureDirectPushPrevention: 'UNVERIFIED' } }, null, 2));
+  if (!r.ok) process.exitCode = 1;
 }
-
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) runCli();
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) cli();
