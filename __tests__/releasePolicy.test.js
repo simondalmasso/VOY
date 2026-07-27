@@ -124,6 +124,51 @@ test('fails closed on YAML anchor and alias trigger and inspects command', async
   assert.match(errors, /non-dry-run/);
 });
 
+for (const header of ['>-', '|-', '>', '|', '>2-', '|+', '|-2', '>+2']) {
+  test(`fails closed on branches block scalar ${header} and inspects command`, async () => {
+    const { analyzeRepository, allowsGenericMainPush } = await load();
+    const on = `on:
+  push:
+    branches: ${header} # valid YAML block scalar header
+      main`;
+    assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
+    const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
+    const errors = result.violations.join('\n');
+    assert.equal(result.ok, false);
+    assert.match(errors, /block scalar|not safely analyzable/);
+    assert.match(errors, /non-dry-run/);
+  });
+}
+
+test('fails closed on branches-ignore block scalar and inspects command', async () => {
+  const { analyzeRepository, allowsGenericMainPush } = await load();
+  const on = `on:
+  push:
+    branches-ignore: |2-
+      main`;
+  assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
+  const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
+  const errors = result.violations.join('\n');
+  assert.equal(result.ok, false);
+  assert.match(errors, /block scalar|not safely analyzable/);
+  assert.match(errors, /non-dry-run/);
+});
+
+test('fails closed on top-level and push block scalar headers', async () => {
+  const { analyzeRepository, allowsGenericMainPush } = await load();
+  for (const on of [
+    `on: >-\n  push`,
+    `on:\n  push: |-\n    branches:\n      - main`
+  ]) {
+    assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
+    const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
+    const errors = result.violations.join('\n');
+    assert.equal(result.ok, false);
+    assert.match(errors, /block scalar|not safely analyzable/);
+    assert.match(errors, /non-dry-run/);
+  }
+});
+
 test('does not classify feature-only flow mapping as main root', async () => {
   const { allowsGenericMainPush } = await load();
   assert.equal(allowsGenericMainPush('name: x\non: { push: { branches: [feat/x] } }\njobs:\n  x:\n    runs-on: ubuntu-latest\n'), false);
