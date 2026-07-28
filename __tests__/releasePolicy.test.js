@@ -282,3 +282,43 @@ test('non-main candidate mutation is not a generic root', async () => {
   }));
   assert.equal(result.ok, true, result.violations.join('\n'));
 });
+
+test('security verifier source remains mechanically reviewable', () => {
+  const verifierPath = path.join(
+    __dirname,
+    '..',
+    'scripts',
+    'verify-release-policy.mjs',
+  );
+  const source = fs.readFileSync(verifierPath, 'utf8');
+  const lines = source.split(/\r?\n/);
+  const functionNames = [
+    'analyzeOnTrigger',
+    'analyzePushConfiguration',
+    'parseYamlFlowValue',
+    'findUnsafeReferences',
+    'classifyWranglerCommand',
+    'analyzeRepository',
+  ];
+
+  assert.ok(lines.length >= 300, `expected readable source, found ${lines.length} lines`);
+  const ordinaryLines = lines.filter(
+    (line) => !line.startsWith('const WRANGLER_EXECUTABLE_PATTERN = /'),
+  );
+  assert.ok(
+    Math.max(...ordinaryLines.map((line) => line.length)) <= 180,
+    'verifier contains an ordinary line longer than 180 characters',
+  );
+  assert.ok(
+    lines.every((line) => line.length <= 320),
+    'verifier contains an unreviewably long regular-expression line',
+  );
+  assert.ok(
+    lines.every((line) => (line.match(/;/g) ?? []).length <= 3),
+    'verifier contains a densely packed statement line',
+  );
+
+  for (const functionName of functionNames) {
+    assert.match(source, new RegExp(`function ${functionName}\\(`));
+  }
+});
