@@ -156,10 +156,7 @@ test('fails closed on branches-ignore block scalar and inspects command', async 
 
 test('fails closed on top-level and push block scalar headers', async () => {
   const { analyzeRepository, allowsGenericMainPush } = await load();
-  for (const on of [
-    `on: >-\n  push`,
-    `on:\n  push: |-\n    branches:\n      - main`
-  ]) {
+  for (const on of [`on: >-\n  push`, `on:\n  push: |-\n    branches:\n      - main`]) {
     assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
     const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
     const errors = result.violations.join('\n');
@@ -167,6 +164,34 @@ test('fails closed on top-level and push block scalar headers', async () => {
     assert.match(errors, /block scalar|not safely analyzable/);
     assert.match(errors, /non-dry-run/);
   }
+});
+
+const escapedTriggers = [
+  ['flow branch x escape', 'on: { push: { branches: ["m\\x61in"] } }'],
+  ['flow branch u escape', 'on: { push: { branches: ["ma\\u0069n"] } }'],
+  ['flow branch U escape', 'on: { push: { branches: ["ma\\U00000069n"] } }'],
+  ['block-list branch escape', 'on:\n  push:\n    branches:\n      - "ma\\u0069n"'],
+  ['inline escaped event key', 'on: { "pu\\u0073h": { branches: [main] } }'],
+  ['block escaped event key', 'on:\n  "pu\\u0073h":\n    branches: [main]'],
+  ['escaped branches key', 'on:\n  push:\n    "bran\\u0063hes": [main]'],
+  ['escaped branches-ignore key', 'on:\n  push:\n    "branches-\\u0069gnore": [feat/**]'],
+  ['escaped top-level on key', '"o\\u006e": { push: { branches: [main] } }']
+];
+
+for (const [name, on] of escapedTriggers) test(`fails closed on ${name} and inspects command`, async () => {
+  const { analyzeRepository, allowsGenericMainPush } = await load();
+  const text = wf('npx wrangler deploy --minify', on);
+  assert.equal(allowsGenericMainPush(text), true);
+  const result = analyzeRepository(fixture({ 'main.yml': text }));
+  const errors = result.violations.join('\n');
+  assert.equal(result.ok, false);
+  assert.match(errors, /double-quoted YAML escape|not safely analyzable/);
+  assert.match(errors, /non-dry-run/);
+});
+
+test('ordinary double-quoted feature branch remains non-main', async () => {
+  const { allowsGenericMainPush } = await load();
+  assert.equal(allowsGenericMainPush('name: x\non: { push: { branches: ["feat/x"] } }\njobs:\n  x:\n    runs-on: ubuntu-latest\n'), false);
 });
 
 test('does not classify feature-only flow mapping as main root', async () => {
