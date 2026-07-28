@@ -1,0 +1,74 @@
+name: PR26 Semantic Evidence Tooling Trial
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/pr26-semantic-evidence.yml
+      - scripts/pr26-semantic-evidence.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr26-semantic-evidence-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  semantic-evidence-tooling-trial:
+    if: github.event.pull_request.head.ref == 'feat/pr26-semantic-evidence-tooling-bootstrap-03'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      MISSION_ID: VOY-PR26-SEMANTIC-EVIDENCE-TOOLING-BOOTSTRAP-03
+      AUD_SEQUENCE: '22'
+      BASE_SHA: 1374f0914676ef5150c32a801637f08826e6d26c
+      PREVIOUS_HEAD: 669e38ac7a9b27166f00b35404b235bcd0aa8414
+      CURRENT_HEAD: d33900fdd9950df6c11c4d7fd9045ac50e3508c9
+      CURRENT_TREE_SHA: 59fb316e931f46f9f791d5fc8b90fb7d1d954467
+      PREVIOUS_VERIFIER_BLOB: e013f6100d3be368db17156630f9f7a2311093da
+      CURRENT_VERIFIER_BLOB: a84dcd3a97aa5b2ca67e155643f2d03d00e04204
+      PREVIOUS_TEST_BLOB: 4c9c87244e8057807034ef80a3132f9ba43ea56e
+      CURRENT_TEST_BLOB: 5f5816b6b7e001f8278e6773409b5d416d1a86c2
+      TOOLING_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      MERGE_REF_SHA: ${{ github.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      EVIDENCE_DIR: ${{ runner.temp }}/pr26-semantic-evidence
+
+    steps:
+      - name: Checkout exact tooling head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure exact Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.16.0
+          cache: false
+
+      - name: Verify runtime versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v22.16.0"
+          test "$(npm --version)" = "10.9.2"
+
+      - name: Execute untrusted Stage 1 tooling trial
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pr26-semantic-evidence.mjs
+
+      - name: Upload temporary untrusted evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr26-semantic-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr26-semantic-evidence
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
