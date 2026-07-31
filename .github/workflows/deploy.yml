@@ -1,20 +1,5 @@
-# ============================================================
-#  VOY V7 — Atomic deploy pipeline (single source of truth)
-#
-#  Trigger: push to main
-#  Pipeline: lint → tests → browser gate → inject hash → deploy →
-#            bounded convergence check → production browser smoke
-#
-#  GUARDRAIL (hard fail): the deploy is rejected if the live /api/health
-#  does not converge to the deployed git short SHA and expected version
-#  within the bounded propagation window.
-#
-#  Required secrets (Settings → Secrets and variables → Actions):
-#    CLOUDFLARE_API_TOKEN   — API token with Workers Deploy + Cache Purge perms
-#    CLOUDFLARE_ACCOUNT_ID  — numeric account ID (dashboard → right sidebar)
-#    CLOUDFLARE_ZONE_ID     — optional; only if you own the zone for cache purge.
-# ============================================================
-name: Deploy VOY V7
+# VOY main validation only. Release actions require a separate, audited mission.
+name: Validate VOY main
 
 on:
   push:
@@ -25,153 +10,80 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-voy-prod
-  cancel-in-progress: false
+  group: validate-voy-main-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 24
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
+      - name: Enforce release policy
+        run: node scripts/verify-release-policy.mjs
+
       - name: Install Bun 1.3.14
         run: |
           npm install --global bun@1.3.14
           test "$(bun --version)" = "1.3.14"
 
-      - name: Install deps
+      - name: Frozen install
         run: bun install --frozen-lockfile
 
-      - name: Lint (predeploy check)
+      - name: Pin Wrangler 4.112.0 for deterministic validation
+        run: |
+          npm install --no-save --package-lock=false wrangler@4.112.0
+          test "$(./node_modules/.bin/wrangler --version | awk '{print $1}')" = "4.112.0"
+
+      - name: Lint
         run: bun run lint
 
-      - name: Tests (predeploy check)
+      - name: Tests
         run: bun run test
 
-      - name: Dry-run (predeploy check — config + asset binding)
-        run: npx wrangler deploy --dry-run --minify
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Wrangler dry-run
+        run: ./node_modules/.bin/wrangler deploy --dry-run --minify
 
       - name: Install Chromium 1.61.1
         run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
 
-      - name: Browser smoke (predeploy gate)
+      - name: Browser smoke (local Worker)
         run: bash scripts/run-browser-smoke.sh
 
-      - name: Upload predeploy browser evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: destination-resolution-browser-${{ github.run_id }}
-          if-no-files-found: warn
-          retention-days: 14
-          path: |
-            test-results/evidence/
-            playwright-report/
-
-      - name: Inject build hash (git SHA = single source of truth)
-        run: node scripts/inject-build-hash.mjs
-
-      - name: Deploy to Cloudflare Workers
-        id: deploy
+      - name: Observe current production health
         run: |
-          set -o pipefail
-          npx wrangler deploy --minify 2>&1 | tee deploy.log
-          WORKER_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1 || true)
-          echo "worker_url=${WORKER_URL}" >> "$GITHUB_OUTPUT"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          curl -fsS https://voy-app.simondalmasso44.workers.dev/api/health > production-health.json
+          node -e '
+            const fs = require("node:fs");
+            const health = JSON.parse(fs.readFileSync("production-health.json", "utf8"));
+            if (health.ok !== true || health.version !== "V7.8.0") {
+              throw new Error(`Unexpected public production health: ${JSON.stringify(health)}`);
+            }
+            console.log(`PUBLIC_PRODUCTION_OK=true VERSION=${health.version} BUILD=${health.build_hash || "unverified"}`);
+          '
 
-      - name: Purge Cloudflare cache (if zone owned)
-        if: env.ZONE_ID != ''
+      - name: Browser smoke (current production, read-only)
         env:
-          ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-        run: |
-          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            --data '{"purge_everything":true}' | jq .
-        continue-on-error: true
-
-      - name: Health check (bounded edge convergence + version match)
-        id: production
-        env:
-          EXPECTED_HASH: ${{ github.sha }}
-          EXPECTED_VERSION: V7.8.0
-          MAX_ATTEMPTS: 30
-          POLL_SECONDS: 2
-        run: |
-          WORKER_URL="${{ steps.deploy.outputs.worker_url }}"
-          if [ -z "$WORKER_URL" ]; then
-            echo "Could not extract worker URL; using canonical endpoint."
-            WORKER_URL="https://voy-app.simondalmasso44.workers.dev"
-          fi
-          echo "worker_url=${WORKER_URL}" >> "$GITHUB_OUTPUT"
-          VOY_BASE_URL="$WORKER_URL" bash scripts/verify-production-release.sh
-
-      - name: Verify UI serves V7 (HTML contains version pin)
-        env:
-          WORKER_URL: ${{ steps.production.outputs.worker_url }}
-        run: |
-          set -e
-          HTML=$(curl -fsS "$WORKER_URL/")
-          if echo "$HTML" | grep -q 'voy-version" content="V7.8.0"'; then
-            echo "UI HTML contains V7.8.0 version pin."
-          else
-            echo "::error::UI HTML does not contain V7.8.0 version pin."
-            exit 1
-          fi
-          CC=$(curl -sI "$WORKER_URL/" | grep -i '^cache-control:' || true)
-          echo "Cache-Control: $CC"
-          if echo "$CC" | grep -qi 'no-store'; then
-            echo "HTML Cache-Control: no-store confirmed."
-          else
-            echo "::warning::HTML Cache-Control header does not contain no-store."
-          fi
-
-      - name: Verify entrypoint (/VOY-Lite.html)
-        env:
-          WORKER_URL: ${{ steps.production.outputs.worker_url }}
-        run: |
-          set -e
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -I "$WORKER_URL/VOY-Lite.html")
-          echo "GET /VOY-Lite.html → HTTP $CODE"
-          if [ "$CODE" = "301" ] || [ "$CODE" = "308" ]; then
-            echo "/VOY-Lite.html redirects to the canonical entrypoint."
-          elif [ "$CODE" = "200" ]; then
-            BODY=$(curl -fsS "$WORKER_URL/VOY-Lite.html")
-            if echo "$BODY" | grep -q 'voy-version" content="V7.8.0"'; then
-              echo "/VOY-Lite.html serves verified V7.8.0 content."
-            else
-              echo "::error::/VOY-Lite.html returned stale content."
-              exit 1
-            fi
-          else
-            echo "::error::/VOY-Lite.html → $CODE; expected 200, 301 or 308."
-            exit 1
-          fi
-
-      - name: Browser smoke (production desktop/mobile)
-        env:
-          VOY_BASE_URL: ${{ steps.production.outputs.worker_url }}
+          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
           VOY_EVIDENCE_DIR: test-results/production-browser
           VOY_REPORT_DIR: playwright-report-production
         run: bash scripts/run-production-browser-smoke.sh
 
-      - name: Upload production browser evidence
+      - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: production-browser-${{ github.run_id }}
+          name: main-validation-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 14
           path: |
+            production-health.json
+            test-results/wrangler-local.log
+            test-results/evidence/
             test-results/production-browser/
+            playwright-report/
             playwright-report-production/
