@@ -34,8 +34,8 @@ jobs:
       WORKER_NAME: voy-app
       WORKER_URL: https://voy-app.simondalmasso44.workers.dev
       EXPECTED_PRODUCTION_VERSION: V7.8.0
-      EXPECTED_PRODUCTION_HASH: 841d9f4
-      EXPECTED_STABLE_VERSION_ID: 1ddc8c2d-5c44-4217-b64b-61470d0cbe08
+      EXPECTED_PRODUCTION_HASH: 1374f09
+      EXPECTED_STABLE_VERSION_ID: b4f1833a-f2a1-4a44-b351-13ae48972c20
       EXPECTED_SOURCE_ROOT: ${{ github.workspace }}
       CONVERGENCE_INTERVAL_MS: 7000
       EVIDENCE_DIR: test-results/voice-candidate

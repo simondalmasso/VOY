@@ -1,0 +1,31 @@
+version: 1
+project: VOY
+
+authority:
+  governance: google_drive
+  executable_rules: github
+  release_control: cloudflare_workers
+  runtime_confirmation: production
+  systems_are_not_substitutable: true
+
+release:
+  generic_main_push_production_write: false
+  candidate_required: true
+  candidate_traffic_percent: 0
+  exact_source_sha_required: true
+  production_promotion: mission_specific
+  aud_pass_required: true
+  current_cloudflare_state_required: true
+  rollback_requires_separate_authorization: true
+  order:
+    - traceable_commit
+    - workers_candidate_zero_traffic
+    - validate_candidate
+    - independent_audit
+    - merge_or_promote
+
+claims:
+  current_tree_generic_main_push_production_write: false
+  pr_regression_detection: true
+  future_direct_push_prevention: unverified
+  ruleset_and_secret_isolation: unverified
