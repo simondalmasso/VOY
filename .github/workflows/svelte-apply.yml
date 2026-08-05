@@ -7,6 +7,7 @@ on:
     paths:
       - .migration/payload.tar.gz
       - .migration/delete-paths.txt
+      - .github/workflows/svelte-apply.yml
 
 permissions:
   contents: write
@@ -39,7 +40,8 @@ jobs:
         if: steps.payload.outputs.present == 'true'
         run: |
           set -euo pipefail
-          echo '289699680893fbc51db0d024123ce2ce10502d1dc910388903aae1ee988c8266  .migration/payload.tar.gz' | sha256sum -c -
+          test "$(git hash-object .migration/payload.tar.gz)" = 'd93a009dd4161ed101c31309110c03998005f251'
+          sha256sum .migration/payload.tar.gz > /tmp/voy-svelte-payload.sha256
           while IFS= read -r path; do
             [[ -n "$path" ]] && rm -rf -- "$path"
           done < .migration/delete-paths.txt
