@@ -110,8 +110,9 @@ node scripts/svelte-candidate-gate.mjs converge
 node scripts/svelte-candidate-api-gate.mjs 2>&1 | tee "$EVIDENCE_DIR/api-gate.log"
 if [[ -s "$VOICE_SAMPLE_WAV" ]]; then node scripts/voice-candidate-api-gate.mjs 2>&1 | tee "$EVIDENCE_DIR/voice-api-gate.log"; fi
 VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_WORKER_NAME="$WORKER_NAME" VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" VOY_EVIDENCE_DIR="$EVIDENCE_DIR/candidate-browser-screens" VOY_OUTPUT_DIR="$EVIDENCE_DIR/candidate-browser-output" VOY_REPORT_DIR="$EVIDENCE_DIR/candidate-browser-report" bunx playwright test -c browser-tests/playwright.config.ts 2>&1 | tee "$EVIDENCE_DIR/candidate-browser.log"
-node scripts/svelte-candidate-gate.mjs final
 stop_tail; trap - EXIT
+test -s "$EVIDENCE_DIR/candidate-tail.log" || { echo 'candidate_tail_empty_after_flush' >&2; exit 1; }
+node scripts/svelte-candidate-gate.mjs final
 printf 'CANDIDATE_VERSION_ID=%s\n' "$CANDIDATE_VERSION_ID" >> "$GITHUB_ENV"
 CANDIDATE_DEPLOYMENT_ID="$(node -p "JSON.parse(require('fs').readFileSync('$EVIDENCE_DIR/final-state.json','utf8')).deployment_id")"
 printf 'CANDIDATE_DEPLOYMENT_ID=%s\n' "$CANDIDATE_DEPLOYMENT_ID" >> "$GITHUB_ENV"
