@@ -4,6 +4,17 @@ import { handleRoute } from './routes/route';
 export { NominatimCoordinator };
 const API_PREFIX = '/api/';
 const VERSION = 'V8.0.0';
+const RETIRED_PUBLIC_PATHS = new Set([
+  '/voy-lite.html',
+  '/voyv2.html',
+  '/movilidad.html',
+  '/city_default.json',
+  '/city_santafe.json',
+  '/fares.json',
+  '/chaos-tests.html',
+  '/navigator',
+  '/navigator/navigator.js'
+]);
 const SECURITY_HEADERS = Object.freeze({
   'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com; connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'",
   'Referrer-Policy': 'strict-origin-when-cross-origin', 'Permissions-Policy': 'camera=(), geolocation=(self), microphone=(self)', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
@@ -15,6 +26,17 @@ function secure(response: Response, request: Request): Response {
   else if (/\/assets\/[^/]+-[A-Za-z0-9_-]+\.(js|css)$/.test(path)) headers.set('Cache-Control', 'public, max-age=31536000, immutable');
   if (path.startsWith('/api/')) headers.set('Cache-Control', 'no-store');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+function normalizedPath(pathname: string): string {
+  try { return decodeURIComponent(pathname).toLowerCase(); }
+  catch { return pathname.toLowerCase(); }
+}
+function isRetiredPublicPath(pathname: string): boolean {
+  const path = normalizedPath(pathname);
+  return RETIRED_PUBLIC_PATHS.has(path) || path.startsWith('/navigator/');
+}
+function retiredPublicAsset(): Response {
+  return new Response('Recurso público retirado.', { status: 410, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 function authConfigured(env: Env): boolean { return Boolean(String(env.VOY_GOOGLE_CLIENT_ID || '').trim() && String(env.VOY_AUTH_SESSION_SECRET_V1 || '').trim()); }
 function health(env: Env): Response {
@@ -30,6 +52,7 @@ async function assets(request: Request, env: Env): Promise<Response> {
 const worker: ExportedHandler<Env> = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (isRetiredPublicPath(url.pathname)) return secure(retiredPublicAsset(), request);
     if (url.pathname === '/api/health' && request.method === 'GET') return secure(health(env), request);
     if (url.pathname === '/api/route') return secure(await handleRoute(request, env), request);
     if (url.pathname === '/api/auth/session' && request.method === 'GET' && !authConfigured(env)) {
