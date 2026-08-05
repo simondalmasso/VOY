@@ -1,15 +1,74 @@
 name: Validate VOY pull request
 
-# Temporarily manual while the Svelte migration lockfile and gates converge.
-# The final exact-head commit restores pull_request validation with frozen install.
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: voy-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  migration-in-progress:
+  validate-svelte:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      BUILD_HASH: ${{ github.event.pull_request.head.sha }}
+      VOY_METRICS_PATH: test-results/build-metrics.json
+      VOY_EVIDENCE_DIR: test-results/pr-screens
+      VOY_OUTPUT_DIR: test-results/pr-browser
+      VOY_REPORT_DIR: playwright-report-pr
+      VOY_LOCAL_SERVER_LOG: test-results/pr-vite.log
     steps:
-      - run: echo 'Svelte migration validation is performed by svelte-validation.yml'
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Verify exact source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          git diff --check
+      - name: Install pinned frozen toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+      - name: Release and syntax policy
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs
+          node --check public/sw.js
+          node --check scripts/svelte-candidate-gate.mjs
+          node --check scripts/svelte-candidate-api-gate.mjs
+          bash -n scripts/run-browser-smoke.sh scripts/run-master-final-candidate.sh
+      - name: Typecheck lint tests build and budgets
+        run: bun run validate
+      - name: Wrangler exact build dry-run
+        run: wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+      - name: Install Chromium 1.61.1
+        run: bunx playwright install --with-deps chromium
+      - name: Clean-profile mobile and desktop browser gates
+        env:
+          WRANGLER_LOG: none
+        run: bash scripts/run-browser-smoke.sh
+      - name: Upload PR evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-pr-validation-${{ github.run_id }}
+          path: |
+            test-results
+            playwright-report-pr
+            dist/client/index.html
+            dist/client/.vite/manifest.json
+            dist/voy_app/wrangler.json
+          if-no-files-found: error
+          retention-days: 30
