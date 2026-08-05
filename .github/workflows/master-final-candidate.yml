@@ -1,4 +1,4 @@
-# aud-test-inventory-pr-body-final-candidate: reconciled-runtime-2026-08-05-r13
+# aud-public-bundle-cleanup-final-candidate: reconciled-runtime-2026-08-05-r14
 name: VOY Svelte Final Zero-Traffic Candidate
 
 on:
@@ -64,6 +64,9 @@ jobs:
       - name: Create and deeply validate exact Svelte candidate at zero traffic
         run: bash scripts/run-master-final-candidate.sh
 
+      - name: Verify retired public routes on exact candidate
+        run: node scripts/verify-retired-candidate-assets.mjs
+
       - name: Build immutable evidence manifest
         if: always()
         run: |
@@ -95,6 +98,7 @@ jobs:
             echo "- Stable production version: $EXPECTED_STABLE_VERSION_ID at 100%"
             echo "- Candidate version: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
             echo "- Deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Retired public routes: exact-candidate negative probe required'
             echo '- Production promoted: no'
             if [ -f "$EVIDENCE_DIR/final-state.json" ]; then
               echo '```json'
