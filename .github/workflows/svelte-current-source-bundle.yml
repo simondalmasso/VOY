@@ -30,7 +30,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/voy-complete-product-master-01 | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          echo 'd1d9949bded93e1a844ca46ad2e3fd3de9aba97b351b6b3ef083e83f2a4b9891  .github/voy-master-apply.patch.gz' | sha256sum -c -
+          gzip -t .github/voy-master-apply.patch.gz
           gzip -dc .github/voy-master-apply.patch.gz > /tmp/voy-master-apply.patch
           echo '308b759d738466eda64a2fea80383046db2a12444181984147f3f9a80425dbf0  /tmp/voy-master-apply.patch' | sha256sum -c -
           git apply --check /tmp/voy-master-apply.patch
