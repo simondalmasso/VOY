@@ -1,4 +1,4 @@
-# retry-cause: regenerate-config-after-browser-build
+# retry-cause: publishable-assets-and-worker-first-security
 name: VOY Svelte Final Zero-Traffic Candidate
 
 on:
