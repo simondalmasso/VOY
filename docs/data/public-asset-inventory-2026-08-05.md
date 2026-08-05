@@ -41,13 +41,13 @@ This document classifies every source file allowed under `public/`. The machine-
 | `/icons/maskable-192.png` | required static asset | maskable PWA icon |
 | `/icons/maskable-512.png` | required static asset | maskable PWA icon |
 
-## Build-generated assets
+## Build-generated assets and metadata
 
-Only the canonical `index.html` and Vite-hashed JavaScript/CSS under `/assets/` may be added by the build. `scripts/build-static-manifest.mjs` classifies every emitted file and rejects anything outside those patterns and the exact public-source allowlist.
+The routable build may add only the canonical `index.html` and Vite-hashed JavaScript/CSS under `/assets/`. Cloudflare's Vite integration also emits `.assetsignore` as non-routable upload-control metadata; it contains no product, destination, fare, provider or diagnostic payload and is excluded from the static runtime manifest. `scripts/verify-production-assets.mjs` nevertheless classifies and checks it, while `scripts/build-static-manifest.mjs` rejects every unclassified routable file.
 
 ## Retired public surfaces
 
-The following routes are absent from `public/` and `dist/client`, and the Worker returns `410` before consulting `ASSETS`:
+The following routes are absent from `public/` and the routable `dist/client` manifest, and the Worker returns `410` before consulting `ASSETS`:
 
 - `/VOY-Lite.html`
 - `/VOYv2.html`
