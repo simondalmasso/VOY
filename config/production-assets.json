@@ -36,8 +36,9 @@
     ]
   },
   "generated_build_patterns": [
-    "^index\\.html$",
-    "^assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\\.(js|css)$"
+    "^[.]assetsignore$",
+    "^index[.]html$",
+    "^assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]+[.](js|css)$"
   ],
   "retired_public_paths": [
     "/VOY-Lite.html",
