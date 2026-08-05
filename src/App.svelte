@@ -45,23 +45,30 @@
   async function calculate(): Promise<void> {
     if (!origin || !selectedDestination) return;
     controller?.abort(); controller = new AbortController();
-    message = mode === 'bus' ? 'Verificando disponibilidad de colectivo…' : 'Calculando una referencia verificable…'; tone = 'info';
+    message = mode === 'bus' ? 'Verificando si hay datos actuales de colectivo…' : 'Calculando una referencia verificable…'; tone = 'info';
     try {
+      if (mode === 'bus') {
+        routeResult = null;
+        options = await providerOptions(null, mode);
+        trip.set({ origin, originLabel, route: null, mode, loading: false, error: '' });
+        message = 'No recomendamos líneas de colectivo hasta contar con recorridos, paradas, frecuencias y sentidos actuales.';
+        tone = 'info';
+        return;
+      }
       routeResult = await resolveRoute(origin, selectedDestination.coordinates, mode, controller.signal);
       options = await providerOptions(routeResult, mode);
       trip.set({ origin, originLabel, route: routeResult, mode, loading: false, error: '' });
-      if (mode === 'bus') message = 'No recomendamos líneas de colectivo hasta contar con datos actuales de recorridos, paradas y sentido.';
-      else message = routeResult.source === 'osrm_route' ? 'Ruta calculada. Revisá las condiciones de cada opción.' : 'No hubo ruta por calle disponible: mostramos una estimación en línea recta.';
-      tone = routeResult.source === 'osrm_route' && mode !== 'bus' ? 'success' : 'info';
+      message = routeResult.source === 'osrm_route' ? 'Ruta calculada. Revisá las condiciones de cada opción.' : 'No hubo ruta vial verificable: mostramos sólo una estimación en línea recta.';
+      tone = routeResult.source === 'osrm_route' ? 'success' : 'info';
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) { message = 'No pudimos calcular el viaje. Revisá origen y destino.'; tone = 'error'; }
+      if (!(error instanceof DOMException && error.name === 'AbortError')) { routeResult = null; options = []; message = 'No pudimos calcular el viaje. Revisá origen y destino.'; tone = 'error'; }
     }
   }
   function setOrigin(coordinates: Coordinates, label: string): void { origin = coordinates; originLabel = label; void calculate(); }
   function setDestination(value: Destination): void { selectedDestination = value; destination.set(value); void calculate(); }
   function setMode(value: TravelMode): void { mode = value; void calculate(); }
   function choose(option: ProviderOptionModel): void {
-    if (!origin || !selectedDestination || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
+    if (!origin || !selectedDestination || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
     action = createExternalAction(option.id, origin, selectedDestination.coordinates);
   }
   function confirmAction(): void {
@@ -80,13 +87,13 @@
     <section class="controls" aria-label="Planificar viaje">
       <DestinationSearch onSelect={setDestination} />
       <OriginControl label={originLabel} onOrigin={setOrigin} />
-      {#if routeResult}<ModeSelector value={mode} onChange={setMode} />{/if}
+      {#if origin && selectedDestination}<ModeSelector value={mode} onChange={setMode} />{/if}
       <StatusMessage {message} {tone} />
       {#if capabilities?.voice && !voiceOpen}<button type="button" class="assistant-trigger" on:click={openVoice} data-testid="voice-open">Consultar al asistente</button>{/if}
       {#if voiceOpen && VoiceComponent}<svelte:component this={VoiceComponent} onClose={() => voiceOpen = false} />{/if}
     </section>
     <MapViewport {origin} destination={selectedDestination?.coordinates || null} route={routeResult} />
-    {#if routeResult && selectedDestination}<TripDecisionSheet route={routeResult} {options} onChoose={choose} destinationName={selectedDestination.name} />{/if}
+    {#if selectedDestination && (routeResult || options.length)}<TripDecisionSheet route={routeResult} {options} onChoose={choose} destinationName={selectedDestination.name} />{/if}
     <footer><a href="/privacy">Privacidad</a><a href="/terms">Términos</a><a href="/sources">Fuentes</a><a href="/contact">Contacto</a></footer>
   </main>
   <ConfirmExternalAction {action} onConfirm={confirmAction} onCancel={() => action = null} />

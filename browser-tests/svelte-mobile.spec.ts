@@ -5,8 +5,9 @@ import { join } from 'node:path';
 const evidenceDir = process.env.VOY_EVIDENCE_DIR || 'test-results/evidence/screenshots';
 mkdirSync(evidenceDir, { recursive: true });
 
-async function deterministicApis(page: Page): Promise<string[]> {
+async function deterministicApis(page: Page): Promise<{ browserExternalRequests: string[]; routeRequests: string[] }> {
   const browserExternalRequests: string[] = [];
+  const routeRequests: string[] = [];
   page.on('request', request => {
     const url = request.url();
     if (/nominatim\.openstreetmap\.org|router\.project-osrm\.org/.test(url)) browserExternalRequests.push(url);
@@ -19,13 +20,13 @@ async function deterministicApis(page: Page): Promise<string[]> {
       body: JSON.stringify({ results: [{ id: `test:${q}`, name: q.includes('Origen') ? 'Plaza 25 de Mayo' : 'Terminal de Ómnibus', display_name: q, address: 'Santa Fe', lat: q.includes('Origen') ? -31.633 : -31.648, lon: q.includes('Origen') ? -60.706 : -60.71, precision: 'poi', verified: true, source: 'browser_fixture', verified_at: '2026-08-05' }] })
     });
   });
-  await page.route('**/api/route', route => route.fulfill({
+  await page.route('**/api/route', route => { routeRequests.push(route.request().postData() || ''); return route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706, -31.633], [-60.708, -31.64], [-60.71, -31.648]] })
-  }));
+  }); });
   await page.route('https://basemaps.cartocdn.com/**', route => route.abort());
-  return browserExternalRequests;
+  return { browserExternalRequests, routeRequests };
 }
 
 async function planTrip(page: Page): Promise<void> {
@@ -39,7 +40,7 @@ async function planTrip(page: Page): Promise<void> {
 }
 
 test('mobile-first journey is usable, truthful and accessible', async ({ page }, testInfo) => {
-  const external = await deterministicApis(page);
+  const { browserExternalRequests: external, routeRequests } = await deterministicApis(page);
   await page.goto('/');
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByRole('heading', { name: '¿A dónde vas?' })).toHaveCount(0);
@@ -51,12 +52,16 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await expect(page.getByTestId('provider-didi')).toContainText('Precio en la app');
   await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-result.png`), fullPage: true });
 
+  const routeCountBeforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
-  await expect(page.getByTestId('provider-bus')).toBeDisabled();
-  await expect(page.getByTestId('provider-bus')).toContainText('Desactivado');
+  await expect(page.getByTestId('provider-bus')).toHaveAttribute('role', 'listitem');
+  await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
+  expect(routeRequests.length).toBe(routeCountBeforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 
   await page.locator('[data-mode="app"]').click();
+  await expect(page.getByTestId('provider-taxi')).toHaveAttribute('role', 'listitem');
+  await expect(page.getByTestId('provider-remis')).toHaveAttribute('role', 'listitem');
   await page.getByTestId('provider-uber').click();
   await expect(page.getByTestId('external-confirmation')).toBeVisible();
   await page.getByRole('button', { name: 'Cancelar' }).click();
@@ -108,4 +113,34 @@ test('rotation keeps the primary decision reachable', async ({ page }, testInfo)
   await expect(page.getByTestId('trip-sheet')).toBeVisible();
   await expect(page.getByTestId('destination-input')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+
+test('stale origin requests cannot overwrite the latest choice', async ({ page }) => {
+  let firstAborted = false;
+  page.on('requestfailed', request => { if (request.url().includes('q=Primero')) firstAborted = true; });
+  await page.route('**/api/geocode?*', async route => {
+    const query = new URL(route.request().url()).searchParams.get('q') || '';
+    if (query === 'Primero') await new Promise(resolve => setTimeout(resolve, 400));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: query === 'Primero' ? -31.63 : -31.64, lon: -60.7 }] }) }).catch(() => undefined);
+  });
+  await page.goto('/');
+  await page.getByTestId('origin-input').fill('Primero');
+  await page.getByTestId('origin-apply').click();
+  await page.getByTestId('origin-input').fill('Segundo');
+  await page.getByTestId('origin-apply').click();
+  await expect(page.getByTestId('origin-control')).toContainText('Segundo');
+  await page.waitForTimeout(500);
+  await expect(page.getByTestId('origin-control')).not.toContainText('Primero');
+  expect(firstAborted).toBeTruthy();
+});
+
+test('straight-line references never render a street route claim', async ({ page }) => {
+  await deterministicApis(page);
+  await page.route('**/api/route', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false }) }));
+  await page.goto('/');
+  await planTrip(page);
+  await page.locator('[data-mode="bike"]').click();
+  await expect(page.getByTestId('map-truth')).toContainText('no representa calles');
+  await expect(page.getByTestId('provider-bike')).toHaveAttribute('role', 'listitem');
 });

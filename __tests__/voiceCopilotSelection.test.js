@@ -36,7 +36,7 @@ describe('Voice destination selection boundary', () => {
     const data = await dataPromise;
     const matches = data.searchTerritorial(actualSantaFeBundle, 'santafe', 'la terminal');
     assert.equal(matches.length, 1);
-    assert.equal(matches[0].name, 'Terminal');
+    assert.equal(matches[0].name, 'Terminal de Ómnibus');
     assert.equal(matches[0].city_id, 'santafe');
     assert.equal(matches[0].source, 'local');
   });

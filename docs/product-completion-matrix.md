@@ -2,17 +2,17 @@
 
 | Surface | Completion contract |
 |---|---|
-| Santa Fe core flow | city selection, origin/destination and deterministic comparison |
-| UI | responsive desktop/mobile, no dead controls, honest loading/empty/error states |
-| Search | curated suggestions, explicit remote search, ambiguous selection and map fallback |
-| Data | dated provenance and honest `APP_ONLY`, `REFERENCE`, `NO_VERIFICADO` states |
-| Fares | current regulated taxi/remis/bus; no stale app amount ranking |
-| Distance/time | canonical deterministic contracts; unknown remains unknown |
-| Providers | verified availability and single-use confirmed external actions |
-| Voice | bounded typed mobility interface; no persistence; text fallback |
-| Auth | complete optional ephemeral implementation; disabled without external config |
-| Legal | privacy, terms, sources and contact publicly reachable |
-| Security/privacy | headers, opt-out, same-origin controls, no browser Nominatim or secret exposure |
-| PWA | installable manifest, offline shell and update convergence |
-| Accessibility | named controls, keyboard skip/focus, reduced motion and mobile target sizing |
-| Validation | Node, lint, dry-run, browser/device matrix and candidate evidence |
+| Santa Fe core | origin, destination and deterministic comparison with honest unknown states |
+| UI | Svelte 5 mobile-first at 360/390/412/430, desktop support, no dead controls or horizontal overflow |
+| Search | local-first destinations, abortable Worker geocoding, stale-response suppression and explicit ambiguity |
+| Routing | Worker-only road/foot routing; cycling and failed routing use labelled straight-line reference with no fake map line |
+| Collective | no line, stop, route, direction, wait or frequency recommendation without current authoritative data |
+| Fares | regulated taxi/remis values with source/date; private apps remain `APP_ONLY` |
+| Providers | only verified external app actions are buttons; taxi/remis/walk/bike/bus are accessible information surfaces |
+| Map | lazy MapLibre, point markers, route line only for verified OSRM geometry, deterministic comparison survives tile failure |
+| Voice | lazy bounded typed mobility interface, fail-closed, text fallback, no audio/transcript persistence |
+| Auth | optional ephemeral implementation, fail-closed and disabled without external public config/secret |
+| Privacy | analytics opt-in only, GPC/DNT, no exact location/audio/transcript persistence |
+| PWA | VOY-only cache migration, network-first city freshness, offline shell, controlled one-time update reload |
+| Accessibility | semantic controls, keyboard focus, 48px targets, 200% text, reduced motion and named status regions |
+| Validation | frozen install, exact-head CI, typecheck, lint, tests, build, budgets, dry-run, clean browser matrix and candidate evidence |

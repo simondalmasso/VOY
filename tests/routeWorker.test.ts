@@ -5,11 +5,17 @@ const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
 describe('route API boundary', () => {
-  test('rejects malformed and out-of-territory input before upstream fetch', async () => {
-    const malformed = await handleRoute(new Request('https://voy.test/api/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }), {});
-    expect(malformed.status).toBe(400);
-    const outside = await handleRoute(new Request('https://voy.test/api/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: { lat: -34.6, lon: -58.4 }, destination: { lat: -31.63, lon: -60.7 }, profile: 'driving' }) }), {});
-    expect(outside.status).toBe(400);
+  test('rejects malformed, coercive, cycling and out-of-territory input before upstream fetch', async () => {
+    const inputs = [
+      {},
+      { origin: { lat: '-31.63', lon: -60.7 }, destination: { lat: -31.64, lon: -60.69 }, profile: 'driving' },
+      { origin: { lat: -31.63, lon: -60.7 }, destination: { lat: -31.64, lon: -60.69 }, profile: 'cycling' },
+      { origin: { lat: -34.6, lon: -58.4 }, destination: { lat: -31.63, lon: -60.7 }, profile: 'driving' }
+    ];
+    for (const body of inputs) {
+      const response = await handleRoute(new Request('https://voy.test/api/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), {});
+      expect(response.status).toBe(400);
+    }
   });
   test('rejects cross-origin writes', async () => {
     const response = await handleRoute(new Request('https://voy.test/api/route', { method: 'POST', headers: { Origin: 'https://evil.test', 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: { lat: -31.63, lon: -60.7 }, destination: { lat: -31.64, lon: -60.69 }, profile: 'driving' }) }), {});

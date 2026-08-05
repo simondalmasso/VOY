@@ -6,7 +6,8 @@ interface GeocodePayload { results?: Array<Record<string, unknown>> }
 let localCache: Destination[] | null = null;
 
 export function normalizeLocalDestination(item: Record<string, unknown>): Destination | null {
-  const lat = Number(item.lat); const lon = Number(item.lon);
+  if (typeof item.lat !== 'number' || !Number.isFinite(item.lat) || typeof item.lon !== 'number' || !Number.isFinite(item.lon)) return null;
+  const lat = item.lat; const lon = item.lon;
   const coordinates = { lat, lon };
   if (!isInsideSantaFe(coordinates)) return null;
   const name = String(item.nombre || '').trim();
@@ -48,7 +49,8 @@ export async function searchDestinations(query: string, signal: AbortSignal): Pr
     if (response.ok) {
       const payload = await response.json() as GeocodePayload;
       for (const raw of payload.results || []) {
-        const lat = Number(raw.lat); const lon = Number(raw.lon);
+        if (typeof raw.lat !== 'number' || !Number.isFinite(raw.lat) || typeof raw.lon !== 'number' || !Number.isFinite(raw.lon)) continue;
+        const lat = raw.lat; const lon = raw.lon;
         const coordinates = { lat, lon };
         if (!isInsideSantaFe(coordinates)) continue;
         const name = String(raw.name || raw.display_name || '').trim();

@@ -3,38 +3,48 @@ import { regulatedMeterFare } from '../../core/pricing';
 import type { RouteResult } from '../trip/trip.types';
 import type { ProviderOptionModel } from './provider.types';
 
-interface FarePayload {
-  fare_registry: {
-    taxi: { diurno: { bajada: number; ficha: number; distFicha: number }; source: string; verified_at: string };
-    remis: { diurno: { bajada: number; ficha: number; distFicha: number }; source: string; verified_at: string };
-  }
+interface MeterRegistry { diurno: { bajada: number; ficha: number; distFicha: number }; source: string; verified_at: string; status: string }
+interface FarePayload { fare_registry: { taxi: MeterRegistry; remis: MeterRegistry } }
+interface ProviderRecord { name?: string; available?: boolean; verified?: boolean; availability_status?: string; verified_at?: string; price_status?: string }
+interface ProviderPayload { providers?: Record<string, ProviderRecord> }
+let registryCache: Promise<{ fares: FarePayload; providers: ProviderPayload }> | null = null;
+async function loadRegistry(): Promise<{ fares: FarePayload; providers: ProviderPayload }> {
+  registryCache ||= Promise.all([
+    fetch('/cities/santa-fe/fares.json', { cache: 'no-cache' }),
+    fetch('/cities/santa-fe/providers.json', { cache: 'no-cache' })
+  ]).then(async ([fareResponse, providerResponse]) => {
+    if (!fareResponse.ok || !providerResponse.ok) throw new Error('provider_registry_unavailable');
+    return { fares: await fareResponse.json() as FarePayload, providers: await providerResponse.json() as ProviderPayload };
+  }).catch(error => { registryCache = null; throw error; });
+  return registryCache;
 }
-let fares: FarePayload | null = null;
-async function loadFares(): Promise<FarePayload> {
-  if (fares) return fares;
-  const response = await fetch('/cities/santa-fe/fares.json', { cache: 'no-cache' });
-  if (!response.ok) throw new Error('fare_registry_unavailable');
-  fares = await response.json() as FarePayload;
-  return fares;
+function currentApp(record: ProviderRecord | undefined): boolean {
+  return record?.available === true && record.verified === true && record.availability_status === 'verified_current'
+    && record.price_status === 'app_only' && typeof record.verified_at === 'string' && record.verified_at.length >= 10;
 }
-
+function currentMeter(record: MeterRegistry): boolean {
+  return record.status === 'regulated_current' && Boolean(record.source) && /^\d{4}-\d{2}-\d{2}$/.test(record.verified_at);
+}
 function visibleForMode(option: ProviderOptionModel, selected: TravelMode): boolean {
   if (selected === 'app') return option.id === 'uber' || option.id === 'didi' || option.id === 'taxi' || option.id === 'remis';
   return option.mode === selected;
 }
 
-export async function providerOptions(route: RouteResult, selectedMode: TravelMode): Promise<ProviderOptionModel[]> {
-  const registry = await loadFares();
-  const taxi = registry.fare_registry.taxi;
-  const remis = registry.fare_registry.remis;
+export async function providerOptions(route: RouteResult | null, selectedMode: TravelMode): Promise<ProviderOptionModel[]> {
+  if (selectedMode === 'bus') return [{ id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: 0, price: { kind: 'unavailable', label: 'Sin recomendación disponible' }, detail: 'Sin recorridos, paradas, frecuencias ni espera verificables. VOY no calcula ni sugiere una línea.', external: false, rank: 99 }];
+  if (!route) return [];
+  const { fares, providers } = await loadRegistry();
+  const taxi = fares.fare_registry.taxi;
+  const remis = fares.fare_registry.remis;
+  const uber = providers.providers?.uber;
+  const didi = providers.providers?.didi;
   const all: ProviderOptionModel[] = [
-    { id: 'uber', name: 'Uber', mode: 'app', available: true, etaMin: route.durationMin, price: { kind: 'app_only', label: 'Precio en la app' }, detail: 'Disponibilidad verificada; el precio final se consulta en Uber.', external: true, rank: 20 },
-    { id: 'didi', name: 'DiDi', mode: 'app', available: true, etaMin: route.durationMin, price: { kind: 'app_only', label: 'Precio en la app' }, detail: 'Disponibilidad verificada; el precio final se consulta en DiDi.', external: true, rank: 21 },
-    { id: 'taxi', name: 'Taxi', mode: 'taxi', available: true, etaMin: route.durationMin, price: { kind: 'regulated_estimate', value: regulatedMeterFare(route.distanceKm, taxi.diurno), source: taxi.source, verifiedAt: taxi.verified_at }, detail: 'Estimación diurna con tarifa regulada; manda el taxímetro.', external: false, rank: 10 },
-    { id: 'remis', name: 'Remis', mode: 'remis', available: true, etaMin: route.durationMin, price: { kind: 'regulated_estimate', value: regulatedMeterFare(route.distanceKm, remis.diurno), source: remis.source, verifiedAt: remis.verified_at }, detail: 'Estimación diurna regulada; confirmar disponibilidad con el prestador.', external: false, rank: 11 },
-    { id: 'walk', name: 'Caminar', mode: 'walk', available: route.distanceKm <= 8, etaMin: Math.max(1, Math.round(route.distanceKm / 4.7 * 60)), price: { kind: 'unavailable', label: 'Sin costo' }, detail: route.source === 'osrm_route' ? 'Tiempo sobre distancia de ruta.' : 'Tiempo sobre línea recta estimada.', external: false, rank: 30 },
-    { id: 'bike', name: 'Bicicleta', mode: 'bike', available: route.distanceKm <= 20, etaMin: Math.max(1, Math.round(route.distanceKm / 14 * 60)), price: { kind: 'unavailable', label: 'Sin costo estimado' }, detail: route.source === 'osrm_route' ? 'Tiempo sobre distancia de ruta.' : 'Tiempo sobre línea recta estimada.', external: false, rank: 31 },
-    { id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: 0, price: { kind: 'unavailable', label: 'Sin recomendación disponible' }, detail: 'Desactivado hasta contar con rutas, líneas, paradas y sentido vigentes.', external: false, rank: 99 }
+    { id: 'uber', name: uber?.name || 'Uber', mode: 'app', available: currentApp(uber), etaMin: route.durationMin, price: { kind: 'app_only', label: 'Precio en la app' }, detail: currentApp(uber) ? 'Disponibilidad verificada; el precio final se consulta en Uber.' : 'Disponibilidad actual no verificada.', external: true, rank: 20 },
+    { id: 'didi', name: didi?.name || 'DiDi', mode: 'app', available: currentApp(didi), etaMin: route.durationMin, price: { kind: 'app_only', label: 'Precio en la app' }, detail: currentApp(didi) ? 'Disponibilidad verificada; el precio final se consulta en DiDi.' : 'Disponibilidad actual no verificada.', external: true, rank: 21 },
+    { id: 'taxi', name: 'Taxi', mode: 'taxi', available: currentMeter(taxi), etaMin: route.durationMin, price: currentMeter(taxi) ? { kind: 'regulated_estimate', value: regulatedMeterFare(route.distanceKm, taxi.diurno), source: taxi.source, verifiedAt: taxi.verified_at } : { kind: 'unavailable', label: 'Tarifa no verificada' }, detail: 'Referencia diurna regulada; no reserva un vehículo y manda el taxímetro.', external: false, rank: 10 },
+    { id: 'remis', name: 'Remis', mode: 'remis', available: currentMeter(remis), etaMin: route.durationMin, price: currentMeter(remis) ? { kind: 'regulated_estimate', value: regulatedMeterFare(route.distanceKm, remis.diurno), source: remis.source, verifiedAt: remis.verified_at } : { kind: 'unavailable', label: 'Tarifa no verificada' }, detail: 'Referencia diurna regulada; no reserva y la disponibilidad se confirma con el prestador.', external: false, rank: 11 },
+    { id: 'walk', name: 'Caminar', mode: 'walk', available: route.distanceKm <= 8, etaMin: route.durationMin, price: { kind: 'unavailable', label: 'Sin costo monetario' }, detail: route.source === 'osrm_route' ? 'Tiempo calculado sobre una ruta peatonal.' : 'Tiempo estimado sobre distancia en línea recta; no se dibuja como recorrido.', external: false, rank: 30 },
+    { id: 'bike', name: 'Bicicleta', mode: 'bike', available: route.distanceKm <= 20, etaMin: route.durationMin, price: { kind: 'unavailable', label: 'Sin costo monetario' }, detail: 'Tiempo estimado sobre distancia en línea recta; no se presenta como ciclovía o recorrido vial.', external: false, rank: 31 }
   ];
   return all.filter(option => visibleForMode(option, selectedMode)).sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 }
