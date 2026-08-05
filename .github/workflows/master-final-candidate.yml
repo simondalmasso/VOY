@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: voy-complete-product-candidate-${{ github.sha }}
-  cancel-in-progress: false
+  group: voy-complete-product-candidate-feat-voy-complete-product-master-01
+  cancel-in-progress: true
 
 jobs:
   candidate:
