@@ -9,11 +9,13 @@
     "preview": "vite preview",
     "deploy": "bun run build && wrangler deploy",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
-    "lint": "eslint src worker tests browser-tests scripts/build-static-manifest.mjs scripts/check-bundle-budgets.mjs scripts/run-test-inventory.mjs vite.config.ts",
+    "lint": "eslint src worker tests browser-tests scripts/build-static-manifest.mjs scripts/check-bundle-budgets.mjs scripts/run-test-inventory.mjs scripts/verify-production-assets.mjs vite.config.ts",
+    "assets:source": "node scripts/verify-production-assets.mjs --source-only",
+    "assets:build": "node scripts/verify-production-assets.mjs --build-only",
     "test": "node scripts/run-test-inventory.mjs",
     "test:browser": "playwright test -c browser-tests/playwright.config.ts",
     "budget": "node scripts/check-bundle-budgets.mjs",
-    "validate": "bun run typecheck && bun run lint && bun run test && bun run build && bun run budget"
+    "validate": "bun run typecheck && bun run lint && bun run assets:source && bun run test && bun run build && bun run assets:build && bun run budget"
   },
   "dependencies": {
     "maplibre-gl": "4.7.1",
