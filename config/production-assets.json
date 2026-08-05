@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "public_source_allowlist": {
+    "current_runtime_data": [
+      "cities/_default/fares.json",
+      "cities/_default/feature_flags.json",
+      "cities/_default/profile.json",
+      "cities/_default/providers.json",
+      "cities/_default/transport.json",
+      "cities/santa-fe/fares.json",
+      "cities/santa-fe/feature_flags.json",
+      "cities/santa-fe/profile.json",
+      "cities/santa-fe/providers.json",
+      "cities/santa-fe/transport.json"
+    ],
+    "required_static_assets": [
+      "icons/app-icon-maskable.svg",
+      "icons/app-icon.svg",
+      "icons/apple-touch-1024.png",
+      "icons/apple-touch-120.png",
+      "icons/apple-touch-152.png",
+      "icons/apple-touch-167.png",
+      "icons/apple-touch-180.png",
+      "icons/icon-144.png",
+      "icons/icon-192.png",
+      "icons/icon-48.png",
+      "icons/icon-512.png",
+      "icons/icon-72.png",
+      "icons/icon-96.png",
+      "icons/maskable-192.png",
+      "icons/maskable-512.png",
+      "logo.svg",
+      "manifest.json",
+      "robots.txt",
+      "sw.js"
+    ]
+  },
+  "generated_build_patterns": [
+    "^index\\.html$",
+    "^assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\\.(js|css)$"
+  ],
+  "retired_public_paths": [
+    "/VOY-Lite.html",
+    "/VOYv2.html",
+    "/movilidad.html",
+    "/city_default.json",
+    "/city_santafe.json",
+    "/fares.json",
+    "/chaos-tests.html",
+    "/navigator/navigator.js"
+  ],
+  "retired_public_prefixes": [
+    "/navigator/"
+  ],
+  "forbidden_public_markers": [
+    "Belgrano y Freyre",
+    "window.VOY_BUILD_HASH",
+    "VOYv2.html",
+    "chaos-tests.html",
+    "navigator/navigator.js"
+  ]
+}
