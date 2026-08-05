@@ -1,212 +1,106 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "city_id": "santafe",
-  "bus_stops": [],
-  "bike_stations": [],
+  "verified_at": "2026-08-05",
   "landmarks": [
-    {
-      "canonicalId": "santafe:landmark:puente-colgante",
-      "nombre": "Puente Colgante",
-      "aliases": [
-        "Puente Colgante de Santa Fe",
-        "Puente Colgante Ingeniero Marcial Candioti"
-      ],
-      "verified": true,
-      "source": "curated",
-      "precision": "poi",
-      "lat": -31.639764,
-      "lon": -60.682736,
-      "address": "Bv. Gálvez 1150"
-    },
-    {
-      "canonicalId": "santafe:landmark:catedral-metropolitana",
-      "nombre": "Catedral Metropolitana",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.6315,
-      "lon": -60.701,
-      "address": "San Martín y San Jerónimo"
-    },
-    {
-      "canonicalId": "santafe:landmark:universidad-nacional-del-litoral",
-      "nombre": "Universidad Nacional del Litoral",
-      "aliases": [
-        "UNL"
-      ],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.634,
-      "lon": -60.699,
-      "address": "9 de Julio y San Jerónimo"
-    },
-    {
-      "canonicalId": "santafe:landmark:parque-del-encuentro",
-      "nombre": "Parque del Encuentro",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.627,
-      "lon": -60.68,
-      "address": "Av. Costanera Oeste"
-    },
-    {
-      "canonicalId": "santafe:landmark:museo-historico",
-      "nombre": "Museo Histórico",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.633,
-      "lon": -60.7015,
-      "address": "San Martín y 25 de Mayo"
-    },
-    {
-      "canonicalId": "santafe:landmark:puente-orono",
-      "nombre": "Puente Oroño",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.619,
-      "lon": -60.682,
-      "address": "Av. Costanera y Bv. Pellegrini"
-    },
-    {
-      "canonicalId": "santafe:landmark:mercado-norte",
-      "nombre": "Mercado Norte",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.636,
-      "lon": -60.698,
-      "address": "San Martín y Tucumán"
-    },
-    {
-      "canonicalId": "santafe:landmark:iglesia-san-francisco",
-      "nombre": "Iglesia San Francisco",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.632,
-      "lon": -60.703,
-      "address": "San Martín y Ameghino"
-    },
-    {
-      "canonicalId": "santafe:landmark:shopping-la-estacion",
-      "nombre": "Shopping La Estación",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.629,
-      "lon": -60.6895,
-      "address": "Gral. López y Javier de la Rosa"
-    },
-    {
-      "canonicalId": "santafe:landmark:barrio-candioti",
-      "nombre": "Barrio Candioti",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.608,
-      "lon": -60.69,
-      "address": "Norte de la ciudad"
-    },
-    {
-      "canonicalId": "santafe:landmark:barrio-guadalupe",
-      "nombre": "Barrio Guadalupe",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.638,
-      "lon": -60.68,
-      "address": "Noreste de la ciudad"
-    },
-    {
-      "canonicalId": "santafe:landmark:barrio-centenario",
-      "nombre": "Barrio Centenario",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.614,
-      "lon": -60.71,
-      "address": "Oeste de la ciudad"
-    },
     {
       "canonicalId": "santafe:landmark:terminal-omnibus",
       "nombre": "Terminal de Ómnibus",
       "aliases": [
-        "Terminal de Omnibus"
+        "terminal",
+        "terminal de omnibus",
+        "terminal de ómnibus",
+        "terminal de colectivos"
       ],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.6435,
-      "lon": -60.7011,
-      "address": "Belgrano y Freyre"
+      "verified": true,
+      "source": "authoritative",
+      "precision": "poi",
+      "lat": -31.643533,
+      "lon": -60.700503,
+      "address": "Belgrano 2910",
+      "verified_at": "2026-08-05",
+      "provenance": {
+        "status": "authoritative",
+        "issuer": "Municipalidad de Santa Fe",
+        "source_title": "Estación Terminal de Ómnibus de Santa Fe",
+        "source_url": "https://santafeciudad.gov.ar/terminal-de-colectivos/",
+        "license": "Información pública institucional; sin licencia de reutilización explícita",
+        "coordinate_method": "Dirección oficial municipal cruzada con geodato público gubernamental de la misma dirección",
+        "coordinate_source_url": "https://www.bcra.gob.ar/entidades-financieras-filiales-y-cajeros-filtros/?Provincia=SANTA+FE&Tipo=4&Tit=2&bco=AAA10"
+      }
     },
     {
       "canonicalId": "santafe:landmark:estacion-belgrano",
       "nombre": "Estación Belgrano",
       "aliases": [
-        "Estacion Belgrano"
+        "estacion belgrano",
+        "estación belgrano",
+        "centro de convenciones estacion belgrano"
       ],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.6289,
-      "lon": -60.6891,
-      "address": "Gral. López y Javier de la Rosa"
+      "verified": true,
+      "source": "authoritative",
+      "precision": "poi",
+      "lat": -31.638849,
+      "lon": -60.686789,
+      "address": "Bv. Gálvez 1150",
+      "verified_at": "2026-08-05",
+      "provenance": {
+        "status": "authoritative",
+        "issuer": "Municipalidad de Santa Fe",
+        "source_title": "Estación Belgrano",
+        "source_url": "https://santafeciudad.gov.ar/ubicaciones/estacion-belgrano/",
+        "license": "Información pública institucional; sin licencia de reutilización explícita",
+        "coordinate_method": "Coordenadas de la ubicación oficial municipal cruzadas con la dirección institucional vigente",
+        "coordinate_source_url": "https://agenda.santafeciudad.gov.ar/ubicaciones/estacion-belgrano/"
+      }
     },
     {
-      "canonicalId": "santafe:landmark:hospital-cullen",
-      "nombre": "Hospital Cullen",
-      "aliases": [],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.6198,
-      "lon": -60.6978,
-      "address": "Gral. López y Marcial Candioti"
-    },
-    {
-      "canonicalId": "santafe:landmark:plaza-espana",
-      "nombre": "Plaza España",
+      "canonicalId": "santafe:landmark:puente-colgante",
+      "nombre": "Puente Colgante",
       "aliases": [
-        "Plaza Espana"
+        "puente colgante",
+        "puente colgante marcial candioti",
+        "ingeniero marcial candioti"
       ],
-      "verified": false,
-      "source": "curated",
-      "precision": "approximate",
-      "lat": -31.6402,
-      "lon": -60.7134,
-      "address": "Bv. Gálvez y San Jerónimo"
+      "verified": true,
+      "source": "authoritative",
+      "precision": "poi",
+      "lat": -31.639764,
+      "lon": -60.682736,
+      "address": "Costanera Oeste–Este, Laguna Setúbal",
+      "verified_at": "2026-08-05",
+      "provenance": {
+        "status": "authoritative",
+        "issuer": "Poder Ejecutivo Nacional y Municipalidad de Santa Fe",
+        "source_title": "Decreto 1669/2014 y ficha turística Puente Colgante",
+        "source_url": "https://www.argentina.gob.ar/normativa/nacional/decreto-1669-2014-235865/texto",
+        "license": "Normativa pública nacional e información turística institucional",
+        "coordinate_method": "Conversión decimal de las coordenadas oficiales del Decreto 1669/2014",
+        "coordinate_source_url": "https://www.argentina.gob.ar/normativa/nacional/decreto-1669-2014-235865/texto"
+      }
     }
   ],
-  "source": "VOY runtime-safe Santa Fe destination reference dataset; historical transport arrays archived outside runtime",
-  "verified_at": "2026-08-05",
-  "status": "runtime_safe_partial_no_bus_or_bike_operational_data",
+  "bus_routes": [],
+  "bus_stops": [],
+  "bike_stations": [],
   "components": {
+    "landmarks": {
+      "status": "operational_authoritative_only",
+      "count": 3,
+      "provenance_document": "docs/data/santa-fe-destination-provenance-2026-08-05.md"
+    },
     "bus_routes": {
       "status": "unavailable",
-      "reason": "No current authoritative route, stop, direction or frequency feed is integrated. Not used for decisions."
+      "reason": "no_current_authoritative_operational_dataset"
+    },
+    "bus_stops": {
+      "status": "unavailable",
+      "reason": "no_current_authoritative_operational_dataset"
     },
     "bike_stations": {
       "status": "unavailable",
-      "reason": "No current authoritative station availability feed is integrated. Not used for decisions."
-    },
-    "landmarks": {
-      "status": "reference",
-      "reason": "Approximate curated destination references; not transport coverage."
+      "reason": "no_current_authoritative_operational_dataset"
     }
-  }
+  },
+  "status": "runtime_authoritative_destinations_only_no_bus_or_bike_operational_data"
 }
