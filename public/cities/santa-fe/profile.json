@@ -24,10 +24,11 @@
   "timezone": "America/Argentina/Cordoba",
   "coverage_level": "partial",
   "coverage_notes": [
-    "Tarifas reguladas verificadas.",
-    "Disponibilidad de proveedores preservada del registro existente.",
-    "Paradas y estaciones curadas pendientes de trazabilidad oficial completa."
+    "Tarifas reguladas verificadas y fechadas; precios de apps privadas se consultan en cada app.",
+    "Uber y DiDi verificados como disponibles en Santa Fe al 2026-08-04.",
+    "Maxim y Cabify no se presentan como disponibilidad actual sin verificación.",
+    "Paradas y estaciones curadas; cualquier falta de trazabilidad se muestra como cobertura parcial del componente."
   ],
-  "source": "VOY curated Santa Fe profile",
-  "verified_at": "2026-07-17"
+  "source": "VOY curated Santa Fe profile with official municipal and provider sources",
+  "verified_at": "2026-08-04"
 }

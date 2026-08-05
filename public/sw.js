@@ -17,11 +17,27 @@
 //   - other cross-origin requests: passthrough.
 
 var CACHE_PREFIX = 'voy-';
-var CACHE = 'voy-v7-8-fares-1';
+var CACHE = 'voy-product-complete-2026-08-04-v2';
 var IMMUTABLE = /^https:\/\/unpkg\.com\//;
 var API_PATH = /^\/api\//;
 var TILE_DOMAINS = /basemaps\.cartocdn\.com|tile\.openstreetmap\.org/;
 var TILE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+var APP_SHELL = [
+  '/',
+  '/VOY-Lite.html',
+  '/manifest.json',
+  '/core/cityPlatform.js?v=1',
+  '/core/mobilityEngine.js?v=12',
+  '/core/pricingEngine.js?v=10',
+  '/core/eventBus.js?v=10',
+  '/core/destinationResolver.js?v=2',
+  '/core/productShell.js?v=2',
+  '/ui/productShell.css?v=2',
+  '/privacy',
+  '/terms',
+  '/sources',
+  '/contact'
+];
 
 function _safePut(cache, request, response) {
   try {
@@ -32,7 +48,16 @@ function _safePut(cache, request, response) {
 }
 
 self.addEventListener('install', function (event) {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(function (cache) { return cache.addAll(APP_SHELL); })
+      .catch(function () {})
+      .then(function () { return self.skipWaiting(); })
+  );
+});
+
+self.addEventListener('message', function (event) {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', function (event) {
@@ -63,12 +88,18 @@ self.addEventListener('fetch', function (event) {
   if (request.method !== 'GET') return;
   if (request.cache === 'no-store') return;
 
-  // Navigation HTML: network-first. Cached HTML is used only when offline.
+  // Navigation HTML: network-first, then refresh the same-origin offline shell.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(function () {
+      fetch(request).then(function (response) {
+        if (response && response.ok) {
+          var copy = response.clone();
+          event.waitUntil(caches.open(CACHE).then(function (cache) { return _safePut(cache, request, copy); }));
+        }
+        return response;
+      }).catch(function () {
         return caches.match(request).then(function (cached) {
-          return cached || caches.match('/VOY-Lite.html');
+          return cached || caches.match('/') || caches.match('/VOY-Lite.html');
         });
       })
     );
@@ -121,7 +152,7 @@ self.addEventListener('fetch', function (event) {
       return;
     }
 
-    // Nominatim, OSRM and every other external request: passthrough.
+    // OSRM and every other approved external request: passthrough. Nominatim is Worker-owned and never requested by the browser.
     return;
   }
 

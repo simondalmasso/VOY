@@ -4,10 +4,22 @@ export const VOICE_TEST_HEADER = 'synthetic-ci-v1';
 const rateBuckets = new Map();
 const MAX_RATE_BUCKETS = 2000;
 
-export function voiceEnabled(request, env) {
-  return env.VOY_VOICE_TEST_MODE === 'true'
+export function voiceMode(request, env = {}) {
+  const product = env.VOY_VOICE_ENABLED === 'true' && Boolean(env.AI);
+  const test = env.VOY_VOICE_TEST_MODE === 'true'
     && request.headers.get('X-VOY-Voice-Test') === VOICE_TEST_HEADER;
+  return product ? 'product' : (test ? 'test' : null);
 }
+
+export function voiceEnabled(request, env) {
+  return Boolean(voiceMode(request, env));
+}
+
+export function voiceOriginAllowed(request) {
+  const origin = request.headers.get('Origin');
+  return !origin || origin === new URL(request.url).origin;
+}
+
 
 export function voiceJson(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {

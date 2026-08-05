@@ -21,6 +21,15 @@ describe('Voice candidate HTML injection', () => {
     assert.match(body, /<title>VOY<\/title>/);
   });
 
+  test('injects the final product UI when Voice is explicitly enabled and AI is bound', async () => {
+    const { maybeInjectVoiceCopilotHtml } = await htmlPromise;
+    const response = await maybeInjectVoiceCopilotHtml(new Request('https://voy.test/'), pageResponse(), { VOY_VOICE_ENABLED: 'true', AI: {} });
+    const body = await response.text();
+    assert.match(body, /window\.VOY_VOICE_ENABLED=true/);
+    assert.match(body, /window\.VOY_VOICE_TEST_MODE=false/);
+    assert.match(body, /voiceCopilot\.js/);
+  });
+
   test('injects candidate UI only with test mode and exact typed header', async () => {
     const { maybeInjectVoiceCopilotHtml } = await htmlPromise;
     const request = new Request('https://voy.test/', {

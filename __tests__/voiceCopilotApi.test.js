@@ -58,6 +58,18 @@ describe('Voice Copilot guarded API', () => {
     assert.equal(noHeader.status, 404);
   });
 
+  test('is available in product mode without the synthetic header and rejects foreign origins', async () => {
+    const api = await apiPromise;
+    const productEnv = { ...env(), VOY_VOICE_TEST_MODE: 'false', VOY_VOICE_ENABLED: 'true' };
+    const response = await api.handleVoiceRequest(new Request('https://voy.test/api/voice/capabilities'), productEnv);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.mode, 'product');
+    assert.equal(body.available, true);
+    const foreign = await api.handleVoiceRequest(new Request('https://voy.test/api/voice/capabilities', { headers: { Origin: 'https://evil.example' } }), productEnv);
+    assert.equal(foreign.status, 403);
+  });
+
   test('reports providers, limits and no persistence', async () => {
     const api = await apiPromise;
     const response = await api.handleVoiceRequest(request('/api/voice/capabilities'), env());

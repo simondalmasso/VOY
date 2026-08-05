@@ -1,12 +1,11 @@
 {
   // ============================================================
-  //  VOY — Cloudflare Workers config (V7.8 + candidate-only Voice Copilot V1)
+  //  VOY — Cloudflare Workers config (V7.8 + production-ready optional Voice Copilot V1)
   //
   //  Worker name: voy-app
   //  workers_dev remains enabled for the existing workers.dev origin.
-  //  Voice Copilot is available only when VOY_VOICE_TEST_MODE=true and the
-  //  typed test/candidate request header is present. Productive territorial
-  //  feature flags remain false.
+  //  Voice Copilot is explicitly enabled for the validated Santa Fe product.
+  //  Core mobility remains independent of Voice, AI and authentication.
   // ============================================================
   "name": "voy-app",
   "compatibility_date": "2026-01-01",
@@ -51,7 +50,7 @@
     "VOY_EXCLUDE_BOT": "true",
     "VOY_EXCLUDE_GLM": "true",
     "VOY_EXCLUDE_UA_PATTERNS": "",
-    "VOY_VOICE_TEST_MODE": "true"
+    "VOY_VOICE_ENABLED": "true"
   },
 
   "observability": {

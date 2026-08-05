@@ -206,7 +206,7 @@ test('preflight is handled without forwarding a request body', async () => {
   assert.equal(base.calls.length, 0);
 });
 
-test('HTML receives report-only CSP and a one-day Secure HttpOnly session cookie', async () => {
+test('HTML receives enforced CSP and a one-day Secure HttpOnly session cookie', async () => {
   const { createSecurityBoundary, securityBoundaryContract } = await loadBoundary();
   const base = createBaseWorker(() => new Response('<!doctype html><title>VOY</title>', {
     headers: {
@@ -222,10 +222,14 @@ test('HTML receives report-only CSP and a one-day Secure HttpOnly session cookie
   assert.match(cookie, /Secure/);
   assert.match(cookie, /HttpOnly/);
   assert.doesNotMatch(cookie, /Max-Age=2592000/);
-  assert.equal(response.headers.get('Content-Security-Policy-Report-Only'), securityBoundaryContract.cspReportOnly);
-  assert.doesNotMatch(securityBoundaryContract.cspReportOnly, /unsafe-eval/);
+  assert.equal(response.headers.get('Content-Security-Policy'), securityBoundaryContract.csp);
+  assert.equal(response.headers.get('Content-Security-Policy-Report-Only'), securityBoundaryContract.csp);
+  assert.doesNotMatch(securityBoundaryContract.csp, /unsafe-eval|nominatim\.openstreetmap\.org/);
+  assert.match(securityBoundaryContract.csp, /accounts\.google\.com/);
   assert.equal(response.headers.get('X-Frame-Options'), 'DENY');
   assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(response.headers.get('Cross-Origin-Opener-Policy'), 'same-origin');
+  assert.match(response.headers.get('Strict-Transport-Security'), /max-age=31536000/);
 });
 
 test('base Worker lifecycle methods remain available through the wrapper', async () => {

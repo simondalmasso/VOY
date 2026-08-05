@@ -13,6 +13,8 @@ import { consumeConfirmation } from './voiceCopilotRuntime.mjs';
 import {
   boundedRequestText,
   voiceEnabled,
+  voiceMode,
+  voiceOriginAllowed,
   voiceErrorResponse,
   voiceJson,
   voiceRateAllowed
@@ -68,6 +70,9 @@ async function handleConfirmation(request) {
 export async function handleVoiceRequest(request, env) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/voice/')) return null;
+  if (!voiceOriginAllowed(request)) {
+    return voiceJson({ ok: false, error: 'origin_not_allowed' }, 403);
+  }
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -82,6 +87,8 @@ export async function handleVoiceRequest(request, env) {
       return voiceJson({
         ok: true,
         enabled: true,
+        mode: voiceMode(request, env),
+        available: Boolean(env.AI),
         providers: {
           stt: VOICE_MODELS.stt,
           llm: VOICE_MODELS.llm,

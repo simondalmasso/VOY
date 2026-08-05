@@ -1,8 +1,10 @@
 import { VOICE_TEST_HEADER } from './voiceCopilotApiUtils.mjs';
 
-export async function maybeInjectVoiceCopilotHtml(request, response, env) {
-  if (env.VOY_VOICE_TEST_MODE !== 'true') return response;
-  if (request.headers.get('X-VOY-Voice-Test') !== VOICE_TEST_HEADER) return response;
+export async function maybeInjectVoiceCopilotHtml(request, response, env = {}) {
+  const productMode = env.VOY_VOICE_ENABLED === 'true' && Boolean(env.AI);
+  const testMode = env.VOY_VOICE_TEST_MODE === 'true'
+    && request.headers.get('X-VOY-Voice-Test') === VOICE_TEST_HEADER;
+  if (!productMode && !testMode) return response;
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return response;
   const text = await response.text();
@@ -15,7 +17,7 @@ export async function maybeInjectVoiceCopilotHtml(request, response, env) {
   }
   const injection = [
     '<link rel="stylesheet" href="/ui/voiceCopilot.css?v=1" data-voy-voice-copilot>',
-    `<script data-voy-voice-copilot>window.VOY_VOICE_TEST_MODE=true;window.VOY_VOICE_TEST_HEADER=${JSON.stringify(VOICE_TEST_HEADER)};</script>`,
+    `<script data-voy-voice-copilot>window.VOY_VOICE_ENABLED=${productMode ? 'true' : 'false'};window.VOY_VOICE_TEST_MODE=${testMode ? 'true' : 'false'};window.VOY_VOICE_TEST_HEADER=${JSON.stringify(testMode ? VOICE_TEST_HEADER : '')};</script>`,
     '<script src="/core/voiceCopilot.js?v=1" defer data-voy-voice-copilot></script>'
   ].join('');
   const body = text.includes('</head>')

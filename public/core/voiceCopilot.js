@@ -1,7 +1,7 @@
 (function (global) {
   'use strict';
 
-  if (!global.VOY_VOICE_TEST_MODE) return;
+  if (!global.VOY_VOICE_ENABLED && !global.VOY_VOICE_TEST_MODE) return;
 
   var MAX_RECORDING_MS = 30000;
   var MAX_EVENTS = 80;
@@ -10,9 +10,8 @@
     'reviewing', 'thinking', 'tool_running', 'awaiting_confirmation',
     'speaking', 'cancelled', 'error', 'offline'
   ];
-  var API_HEADERS = {
-    'X-VOY-Voice-Test': global.VOY_VOICE_TEST_HEADER || 'synthetic-ci-v1'
-  };
+  var API_HEADERS = {};
+  if (global.VOY_VOICE_TEST_MODE) API_HEADERS['X-VOY-Voice-Test'] = global.VOY_VOICE_TEST_HEADER || 'synthetic-ci-v1';
 
   function currentCityId() {
     var query = new URLSearchParams(global.location.search).get('city');
