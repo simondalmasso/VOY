@@ -84,6 +84,9 @@ function selectToolCall(plan, message, session) {
   const protectedTool = deterministicSafetyTool(message, session);
   if (protectedTool) return protectedTool;
   const deterministicFallback = fallbackTool(message, session);
+  if (deterministicFallback?.name === 'compare_modes' && session.destination) {
+    return deterministicFallback;
+  }
   const modelCall = plan.tool_calls[0] || null;
   if (!modelCall) return deterministicFallback;
   if (deterministicFallback && modelCall.name === deterministicFallback.name) {
@@ -157,16 +160,16 @@ export async function handleVoiceChat(request, env) {
         }));
       }
       if (DETERMINISTIC_NARRATION_TOOLS.has(selected.name)) {
-      responseText = fallbackNarration(selected.name, toolResult, session);
-    } else {
-      try {
-        const narration = await providers.llm.narrate(messages, selected, toolResult);
-        session.inference_count += 1;
-        responseText = narration.text;
-      } catch {
         responseText = fallbackNarration(selected.name, toolResult, session);
+      } else {
+        try {
+          const narration = await providers.llm.narrate(messages, selected, toolResult);
+          session.inference_count += 1;
+          responseText = narration.text;
+        } catch {
+          responseText = fallbackNarration(selected.name, toolResult, session);
+        }
       }
-    }
     } catch (error) {
       toolExecution = failedExecutionRecord(
         selected.name,
