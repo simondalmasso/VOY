@@ -13,6 +13,48 @@ const FIXED_PROVIDER_URLS = Object.freeze({
   cabify: 'https://cabify.com/'
 });
 
+const AUTHORITATIVE_DESTINATION_HOSTS = new Set([
+  'santafeciudad.gov.ar',
+  'www.santafeciudad.gov.ar',
+  'turismo.santafeciudad.gov.ar',
+  'agenda.santafeciudad.gov.ar',
+  'argentina.gob.ar',
+  'www.argentina.gob.ar',
+  'bcra.gob.ar',
+  'www.bcra.gob.ar'
+]);
+
+function authoritativeHttpsUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && AUTHORITATIVE_DESTINATION_HOSTS.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+export function isAuthoritativeTerritorialDestination(item) {
+  if (!isPlainObject(item) || item.verified !== true || item.source !== 'authoritative') return false;
+  if (item.precision !== 'poi' && item.precision !== 'address') return false;
+  if (typeof item.lat !== 'number' || !Number.isFinite(item.lat) || typeof item.lon !== 'number' || !Number.isFinite(item.lon)) return false;
+  if (typeof item.address !== 'string' || !item.address.trim()) return false;
+  if (typeof item.verified_at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.verified_at)) return false;
+  const provenance = item.provenance;
+  return isPlainObject(provenance)
+    && provenance.status === 'authoritative'
+    && typeof provenance.issuer === 'string'
+    && Boolean(provenance.issuer.trim())
+    && typeof provenance.source_title === 'string'
+    && Boolean(provenance.source_title.trim())
+    && typeof provenance.license === 'string'
+    && Boolean(provenance.license.trim())
+    && typeof provenance.coordinate_method === 'string'
+    && Boolean(provenance.coordinate_method.trim())
+    && authoritativeHttpsUrl(provenance.source_url)
+    && authoritativeHttpsUrl(provenance.coordinate_source_url);
+}
+
 export function cityFolder(cityId) {
   return normalizeCityId(cityId) === 'santafe' ? 'santa-fe' : '_default';
 }
@@ -68,9 +110,10 @@ function searchNeedles(query) {
 }
 
 export function toPlaceRef(item, cityId, sourceType) {
+  if (sourceType !== 'landmark' || !isAuthoritativeTerritorialDestination(item)) return null;
   const name = boundedString(item?.nombre || item?.name, 180);
   if (!name) return null;
-  const address = boundedString(item?.address || item?.calles, 240, { allowEmpty: true }) || '';
+  const address = boundedString(item.address, 240);
   const ref = boundedString(item?.canonicalId, 160, { allowEmpty: true })
     || `${cityId}:${sourceType}:${foldText(name).replace(/\s+/g, '-')}`;
   return sanitizePlaceRef({ ref, name, address, source: 'local', city_id: cityId });
