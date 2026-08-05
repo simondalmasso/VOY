@@ -1,4 +1,4 @@
-# retry-cause: validated-dist-wrangler-config
+# retry-cause: regenerate-config-after-browser-build
 name: VOY Svelte Final Zero-Traffic Candidate
 
 on:
