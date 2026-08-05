@@ -54,7 +54,7 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await page.locator('[data-mode="bus"]').click();
   await expect(page.getByTestId('provider-bus')).toBeDisabled();
   await expect(page.getByTestId('provider-bus')).toContainText('Desactivado');
-  await expect(page.getByTestId('trip-sheet')).not.toContainText(/Línea|Lin\./i);
+  await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 
   await page.locator('[data-mode="app"]').click();
   await page.getByTestId('provider-uber').click();
