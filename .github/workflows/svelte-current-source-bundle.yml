@@ -43,13 +43,22 @@ jobs:
           git apply /tmp/voy-master-apply.patch
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('tests/providerRegistry.test.ts')
-          original = path.read_text()
+
+          typed_fetch = Path('tests/providerRegistry.test.ts')
+          original = typed_fetch.read_text()
           before = "globalThis.fetch = (async input =>"
           after = "globalThis.fetch = (async (input: RequestInfo | URL) =>"
           if original.count(before) != 1:
               raise SystemExit('expected exactly one untyped fetch parameter')
-          path.write_text(original.replace(before, after))
+          typed_fetch.write_text(original.replace(before, after))
+
+          selection = Path('__tests__/voiceCopilotSelection.test.js')
+          original = selection.read_text()
+          before = "assert.equal(matches[0].name, 'Terminal');"
+          after = "assert.equal(matches[0].name, 'Terminal de Ómnibus');"
+          if original.count(before) != 1:
+              raise SystemExit('expected exactly one historical terminal assertion')
+          selection.write_text(original.replace(before, after))
           PY
           rm -f .github/voy-master-apply.patch.gz .github/voy-master-apply.patch.part* .github/workflows/svelte-current-source-bundle.yml
           git diff --check
