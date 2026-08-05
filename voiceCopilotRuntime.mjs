@@ -116,25 +116,26 @@ export async function executeVoiceTool(name, rawArgs, session, env, requestId) {
     next.destination = args.place_ref;
     result = { destination: next.destination };
   } else if (name === 'estimate_modes') {
-  if (!next.destination) throw new Error('destination_required');
-  result = {
-    destination: next.destination,
-    estimates: serverVerifiedMobilitySnapshot(bundle),
-    calculated_by: 'VOY server-verified territorial metadata',
-    numerical_ranking_available: false,
-    collective_recommendations: false
-  };
-} else if (name === 'compare_modes') {
-  if (!next.destination) throw new Error('destination_required');
-  const available = serverVerifiedMobilitySnapshot(bundle).filter(item => item.available);
-  result = {
-    available,
-    cheapest: null,
-    fastest: null,
-    ranking_source: 'VOY server-verified territorial metadata',
-    numerical_ranking_available: false,
-    collective_recommendations: false
-  }  } else if (name === 'list_available_providers') {
+    if (!next.destination) throw new Error('destination_required');
+    result = {
+      destination: next.destination,
+      estimates: serverVerifiedMobilitySnapshot(bundle),
+      calculated_by: 'VOY server-verified territorial metadata',
+      numerical_ranking_available: false,
+      collective_recommendations: false
+    };
+  } else if (name === 'compare_modes') {
+    if (!next.destination) throw new Error('destination_required');
+    const available = serverVerifiedMobilitySnapshot(bundle).filter(item => item.available);
+    result = {
+      available,
+      cheapest: null,
+      fastest: null,
+      ranking_source: 'VOY server-verified territorial metadata',
+      numerical_ranking_available: false,
+      collective_recommendations: false
+    };
+  } else if (name === 'list_available_providers') {
     result = { providers: providerSummary(bundle) };
   } else if (name === 'list_nearby_stops') {
     result = {
@@ -230,7 +231,7 @@ export function fallbackTool(message, session) {
     }
   }
   if (/\b(cuanto|tarifa|precio|cuesta|taxi)\b/.test(text)) return { name: 'get_fare_metadata', arguments: {} };
-  if (/\b(barat|econom|conviene|rapido|mejor|compar)\b/.test(text)) return { name: 'compare_modes', arguments: {} };
+  if (/\b(?:barat|econom|conviene|rapido|mejor|compar)/.test(text)) return { name: 'compare_modes', arguments: {} };
   if (/\b(proveedor|app|uber|didi|maxim|cabify)\b/.test(text)) return { name: 'list_available_providers', arguments: {} };
   if (/\b(colectivo|parada|bus)\b/.test(text)) return { name: 'list_nearby_stops', arguments: {} };
   if (/\b(bici|bicicleta|estacion)\b/.test(text)) return { name: 'list_nearby_bike_stations', arguments: {} };
