@@ -43,7 +43,7 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await page.goto('/');
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByRole('heading', { name: '¿A dónde vas?' })).toHaveCount(0);
-  await expect(page.getByLabel('¿A dónde vas?')).toBeVisible();
+  await expect(page.getByTestId('destination-input')).toBeVisible();
   await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-initial.png`), fullPage: true });
 
   await planTrip(page);
