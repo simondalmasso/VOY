@@ -104,6 +104,7 @@ jobs:
           test "$remote_head" = "$GITHUB_SHA"
           git config user.name 'VOY EJE'
           git config user.email 'actions@users.noreply.github.com'
+          rm -rf dist test-results playwright-report playwright-report-*
           git add -A
           git diff --cached --check
           git commit -m 'fix: complete truthful Svelte mobility runtime'
