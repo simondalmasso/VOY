@@ -63,12 +63,11 @@ jobs:
         run: |
           bun run build
           bun run budget
+          test -f dist/voy_app/wrangler.json
+          test -f dist/client/index.html
 
       - name: Wrangler dry-run
-        run: |
-          CONFIG=.wrangler/deploy/config.json
-          test -f "$CONFIG" || CONFIG=wrangler.jsonc
-          wrangler deploy --config "$CONFIG" --dry-run --minify
+        run: wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
 
       - name: Install Chromium 1.61.1
         run: bunx playwright install --with-deps chromium
@@ -87,6 +86,6 @@ jobs:
             bun.lock
             test-results
             playwright-report-svelte
-            .wrangler/deploy/config.json
+            dist/voy_app/wrangler.json
           if-no-files-found: warn
           retention-days: 14
