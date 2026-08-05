@@ -1,0 +1,71 @@
+name: Retry AUD voice provenance correction
+
+on:
+  push:
+    branches:
+      - feat/voy-complete-product-master-01
+    paths:
+      - .github/workflows/aud-block-voice-provenance-fix-v2.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voy-aud-voice-provenance-fix-v2
+  cancel-in-progress: false
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Apply corrected AUD patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          workflow = Path('.github/workflows/aud-block-voice-provenance-fix.yml').read_text(encoding='utf-8')
+          body = workflow.split("          python3 - <<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
+          script = dedent(body)
+          old = "runtime = replace_once(runtime, old_modes, new_modes, 'runtime mode comparison')"
+          new = """mode_start = runtime.index(\"  } else if (name === 'estimate_modes') {\")
+          mode_end = runtime.index(\"  } else if (name === 'list_available_providers') {\", mode_start)
+          runtime = runtime[:mode_start] + new_modes[:-len(\"  } else if (name === 'list_available_providers') {\")] + runtime[mode_end:]"""
+          if script.count(old) != 1:
+              raise SystemExit('runtime replacement hook missing')
+          script = script.replace(old, new, 1)
+          exec(compile(script, 'aud-block-extracted.py', 'exec'), {'__name__': '__main__'})
+          PY
+
+      - name: Verify correction locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14
+          bun install --frozen-lockfile
+          bun run check
+          bun run lint
+          bun test
+          bun run build
+          git diff --check
+
+      - name: Commit verified correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'VOY ARQ'
+          git config user.email 'actions@users.noreply.github.com'
+          git add voiceCopilotContracts.mjs voiceCopilotRuntime.mjs voiceCopilotConversation.mjs \
+            __tests__/voiceCopilotContracts.test.js __tests__/voiceCopilotRuntime.test.js \
+            __tests__/voiceCopilotApi.test.js scripts/voice-candidate-api-gate.mjs docs/CURRENT_STATE.md
+          git diff --cached --quiet && { echo 'no_changes_to_commit'; exit 1; }
+          git commit -m 'fix: enforce server-owned Voice mobility provenance'
+          git push origin HEAD:feat/voy-complete-product-master-01
