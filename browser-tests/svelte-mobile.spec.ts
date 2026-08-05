@@ -14,16 +14,15 @@ async function deterministicApis(page: Page): Promise<{ browserExternalRequests:
   });
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ results: [{ id: `test:${q}`, name: q.includes('Origen') ? 'Plaza 25 de Mayo' : 'Terminal de Ómnibus', display_name: q, address: 'Santa Fe', lat: q.includes('Origen') ? -31.633 : -31.648, lon: q.includes('Origen') ? -60.706 : -60.71, precision: 'poi', verified: true, source: 'browser_fixture', verified_at: '2026-08-05' }] })
-    });
+    const results = q.includes('Origen')
+      ? [{ id: `test:${q}`, name: 'Plaza 25 de Mayo', display_name: q, address: 'Santa Fe', lat: -31.633, lon: -60.706 }]
+      : [];
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => { routeRequests.push(route.request().postData() || ''); return route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706, -31.633], [-60.708, -31.64], [-60.71, -31.648]] })
+    body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706, -31.633], [-60.7, -31.64], [-60.700503, -31.643533]] })
   }); });
   await page.route('https://basemaps.cartocdn.com/**', route => route.abort());
   return { browserExternalRequests, routeRequests };
@@ -35,8 +34,14 @@ async function planTrip(page: Page): Promise<void> {
   await expect(page.getByTestId('origin-control')).toContainText('Plaza 25 de Mayo');
   await page.getByTestId('destination-input').fill('Terminal');
   await expect(page.getByTestId('destination-results')).toBeVisible();
-  await page.getByTestId('destination-results').getByRole('button').first().click();
+  const verifiedDestination = page.getByTestId('destination-result-verified').first();
+  await expect(verifiedDestination).toContainText('Terminal de Ómnibus');
+  await expect(verifiedDestination).toContainText('Belgrano 2910');
+  await expect(verifiedDestination).toContainText('Fuente oficial');
+  await verifiedDestination.click();
   await expect(page.getByTestId('trip-sheet')).toBeVisible();
+  await expect(page.getByTestId('destination-provenance')).toContainText('Municipalidad de Santa Fe');
+  await expect(page.getByTestId('destination-provenance')).toContainText('2026-08-05');
 }
 
 test('mobile-first journey is usable, truthful and accessible', async ({ page }, testInfo) => {
@@ -78,6 +83,30 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   expect(overflow).toBeLessThanOrEqual(1);
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test('unverified destination remains visibly blocked even when it contains an address', async ({ page }) => {
+  const routeRequests: string[] = [];
+  await page.route('**/cities/santa-fe/transport.json', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ city_id: 'santafe', landmarks: [], bus_stops: [], bike_stations: [] })
+  }));
+  await page.route('**/api/geocode?*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ results: [{ id: 'forged-terminal', name: 'Terminal de Ómnibus', address: 'Belgrano y Freyre', lat: -31.6435, lon: -60.7011, verified: true, source: 'browser_fixture', verified_at: '2026-08-05' }] })
+  }));
+  await page.route('**/api/route', route => { routeRequests.push(route.request().postData() || ''); return route.abort(); });
+  await page.goto('/');
+  await page.getByTestId('destination-input').fill('Terminal');
+  const blocked = page.getByTestId('destination-result-unverified').first();
+  await expect(blocked).toBeVisible();
+  await expect(blocked).toBeDisabled();
+  await expect(blocked).toContainText('Ubicación no verificada');
+  await expect(blocked).toContainText('No disponible para calcular');
+  await expect(page.getByTestId('trip-sheet')).toHaveCount(0);
+  expect(routeRequests).toEqual([]);
 });
 
 test('legal, privacy, offline and PWA contracts remain available', async ({ page }, testInfo) => {
