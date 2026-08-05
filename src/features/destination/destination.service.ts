@@ -5,7 +5,7 @@ interface TransportPayload { landmarks?: Array<Record<string, unknown>> }
 interface GeocodePayload { results?: Array<Record<string, unknown>> }
 let localCache: Destination[] | null = null;
 
-function normalizeLocal(item: Record<string, unknown>): Destination | null {
+export function normalizeLocalDestination(item: Record<string, unknown>): Destination | null {
   const lat = Number(item.lat); const lon = Number(item.lon);
   const coordinates = { lat, lon };
   if (!isInsideSantaFe(coordinates)) return null;
@@ -20,7 +20,7 @@ function normalizeLocal(item: Record<string, unknown>): Destination | null {
     kind: item.precision === 'poi' ? 'poi' : 'approximate',
     verified,
     source: String(item.source || 'curated_unverified'),
-    verifiedAt: typeof item.verified_at === 'string' ? item.verified_at : undefined
+    verifiedAt: verified && typeof item.verified_at === 'string' ? item.verified_at : undefined
   };
 }
 
@@ -30,7 +30,7 @@ async function localDestinations(): Promise<Destination[]> {
     const response = await fetch('/cities/santa-fe/transport.json', { cache: 'no-cache' });
     if (!response.ok) return [];
     const payload = await response.json() as TransportPayload;
-    localCache = (payload.landmarks || []).map(normalizeLocal).filter((item): item is Destination => Boolean(item));
+    localCache = (payload.landmarks || []).map(normalizeLocalDestination).filter((item): item is Destination => Boolean(item));
     return localCache;
   } catch { return []; }
 }
@@ -53,15 +53,16 @@ export async function searchDestinations(query: string, signal: AbortSignal): Pr
         if (!isInsideSantaFe(coordinates)) continue;
         const name = String(raw.name || raw.display_name || '').trim();
         if (!name) continue;
+        const verified = raw.verified === true && Boolean(raw.source) && Boolean(raw.verified_at);
         remote.push({
           id: String(raw.canonicalId || raw.id || `remote:${lat}:${lon}`),
           name,
           address: String(raw.address || raw.display_name || ''),
           coordinates,
           kind: raw.precision === 'poi' ? 'poi' : raw.precision === 'address' ? 'address' : 'approximate',
-          verified: raw.verified === true && Boolean(raw.source) && Boolean(raw.verified_at),
+          verified,
           source: String(raw.source || 'worker_geocode'),
-          verifiedAt: typeof raw.verified_at === 'string' ? raw.verified_at : undefined
+          verifiedAt: verified && typeof raw.verified_at === 'string' ? raw.verified_at : undefined
         });
       }
     }
