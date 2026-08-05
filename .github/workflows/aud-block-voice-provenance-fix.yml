@@ -1,0 +1,361 @@
+name: Apply AUD voice provenance correction
+
+on:
+  push:
+    branches:
+      - feat/voy-complete-product-master-01
+    paths:
+      - .github/workflows/aud-block-voice-provenance-fix.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voy-aud-voice-provenance-fix
+  cancel-in-progress: false
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Apply exact AUD correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return text.replace(old, new, 1)
+
+          contracts_path = 'voiceCopilotContracts.mjs'
+          contracts = read(contracts_path)
+          contracts = replace_once(
+              contracts,
+              "    'recent_turns', 'last_response', 'active_request_id', 'mobility_snapshot'\n",
+              "    'recent_turns', 'last_response', 'active_request_id'\n",
+              'contracts allowed session keys'
+          )
+          contracts = replace_once(
+              contracts,
+              "    last_response: boundedString(input.last_response, VOICE_LIMITS.maxResponseChars, { allowEmpty: true }) || '',\n    active_request_id: boundedString(input.active_request_id, 80, { allowEmpty: true }) || null,\n    mobility_snapshot: sanitizeMobilitySnapshot(input.mobility_snapshot)\n",
+              "    last_response: boundedString(input.last_response, VOICE_LIMITS.maxResponseChars, { allowEmpty: true }) || '',\n    active_request_id: boundedString(input.active_request_id, 80, { allowEmpty: true }) || null\n",
+              'contracts validated session'
+          )
+          contracts = replace_once(
+              contracts,
+              "    last_response: '',\n    active_request_id: null,\n    mobility_snapshot: []\n",
+              "    last_response: '',\n    active_request_id: null\n",
+              'contracts new session'
+          )
+          start = contracts.index('export function sanitizeMobilitySnapshot')
+          end = contracts.index('export function sanitizePending', start)
+          contracts = contracts[:start] + contracts[end:]
+          contracts = contracts.replace(
+              "description: 'Return the current deterministic VOY mobility estimate snapshot. Never calculate values.'",
+              "description: 'Return only server-verified provider metadata. Never accept client-authored estimates.'"
+          )
+          contracts = contracts.replace(
+              "description: 'Compare only the deterministic VOY snapshot already present in state.'",
+              "description: 'Compare only server-reconstructed verified metadata. Never rank client-authored values.'"
+          )
+          write(contracts_path, contracts)
+
+          runtime_path = 'voiceCopilotRuntime.mjs'
+          runtime = read(runtime_path)
+          helper = '''function serverVerifiedMobilitySnapshot(bundle) {
+            const byMode = new Map();
+            for (const provider of providerSummary(bundle)) {
+              if (provider.verified !== true) continue;
+              const mode = provider.category === 'app' ? provider.id : provider.category;
+              if (!['uber', 'didi', 'maxim', 'cabify', 'taxi', 'remis'].includes(mode)) continue;
+              const item = {
+                mode,
+                available: provider.available === true,
+                price: null,
+                duration_min: null,
+                distance_km: null,
+                source: 'server_territorial_provider_profile',
+                status: provider.available === true ? 'verified_available' : 'verified_unavailable',
+                label: provider.name
+              };
+              const current = byMode.get(mode);
+              if (!current || (item.available && !current.available)) byMode.set(mode, item);
+            }
+            return [...byMode.values()].sort((a, b) => a.mode.localeCompare(b.mode));
+          }
+
+          '''
+          runtime = replace_once(
+              runtime,
+              '}\n\nexport async function executeVoiceTool',
+              '}\n\n' + helper + 'export async function executeVoiceTool',
+              'runtime helper insertion'
+          )
+          old_modes = '''  } else if (name === 'estimate_modes') {
+            if (!next.destination) throw new Error('destination_required');
+            result = {
+              destination: next.destination,
+              estimates: next.mobility_snapshot,
+              calculated_by: 'VOY deterministic client adapter'
+            };
+          } else if (name === 'compare_modes') {
+            if (!next.destination) throw new Error('destination_required');
+            const available = next.mobility_snapshot.filter(item => item.available);
+            const priceRank = available.filter(item => Number.isFinite(item.price)).sort((a, b) => a.price - b.price);
+            const durationRank = available.filter(item => Number.isFinite(item.duration_min)).sort((a, b) => a.duration_min - b.duration_min);
+            result = {
+              available,
+              cheapest: priceRank[0] || null,
+              fastest: durationRank[0] || null,
+              ranking_source: 'VOY deterministic mobility snapshot'
+            };
+          } else if (name === 'list_available_providers') {'''
+          new_modes = '''  } else if (name === 'estimate_modes') {
+            if (!next.destination) throw new Error('destination_required');
+            result = {
+              destination: next.destination,
+              estimates: serverVerifiedMobilitySnapshot(bundle),
+              calculated_by: 'VOY server-verified territorial metadata',
+              numerical_ranking_available: false,
+              collective_recommendations: false
+            };
+          } else if (name === 'compare_modes') {
+            if (!next.destination) throw new Error('destination_required');
+            const available = serverVerifiedMobilitySnapshot(bundle).filter(item => item.available);
+            result = {
+              available,
+              cheapest: null,
+              fastest: null,
+              ranking_source: 'VOY server-verified territorial metadata',
+              numerical_ranking_available: false,
+              collective_recommendations: false
+            };
+          } else if (name === 'list_available_providers') {'''
+          runtime = replace_once(runtime, old_modes, new_modes, 'runtime mode comparison')
+          write(runtime_path, runtime)
+
+          conversation_path = 'voiceCopilotConversation.mjs'
+          conversation = read(conversation_path)
+          conversation = replace_once(
+              conversation,
+              "const EXTERNAL_PROVIDERS = ['uber', 'didi', 'maxim', 'cabify', 'taxi', 'remis'];\n",
+              "const EXTERNAL_PROVIDERS = ['uber', 'didi', 'maxim', 'cabify', 'taxi', 'remis'];\nconst DETERMINISTIC_NARRATION_TOOLS = new Set(['estimate_modes', 'compare_modes', 'get_fare_metadata', 'list_available_providers', 'list_nearby_stops', 'list_nearby_bike_stations']);\n",
+              'conversation deterministic tools'
+          )
+          conversation = replace_once(
+              conversation,
+              "    mobility_snapshot: session.mobility_snapshot,\n",
+              '',
+              'conversation model context'
+          )
+          old_narration = '''      try {
+                const narration = await providers.llm.narrate(messages, selected, toolResult);
+                session.inference_count += 1;
+                responseText = narration.text;
+              } catch {
+                responseText = fallbackNarration(selected.name, toolResult, session);
+              }'''
+          new_narration = '''      if (DETERMINISTIC_NARRATION_TOOLS.has(selected.name)) {
+                responseText = fallbackNarration(selected.name, toolResult, session);
+              } else {
+                try {
+                  const narration = await providers.llm.narrate(messages, selected, toolResult);
+                  session.inference_count += 1;
+                  responseText = narration.text;
+                } catch {
+                  responseText = fallbackNarration(selected.name, toolResult, session);
+                }
+              }'''
+          conversation = replace_once(conversation, old_narration, new_narration, 'conversation narration boundary')
+          write(conversation_path, conversation)
+
+          contracts_test_path = '__tests__/voiceCopilotContracts.test.js'
+          contracts_test = read(contracts_test_path)
+          contracts_test = replace_once(
+              contracts_test,
+              "    assert.throws(() => contracts.validateSession({ ...session, secret: 'x' }), /invalid_session_shape/);\n",
+              "    assert.throws(() => contracts.validateSession({ ...session, secret: 'x' }), /invalid_session_shape/);\n    assert.throws(() => contracts.validateSession({ ...session, mobility_snapshot: [{ mode: 'bus', available: true, price: 1 }] }), /invalid_session_shape/);\n    assert.equal(Object.prototype.hasOwnProperty.call(session, 'mobility_snapshot'), false);\n",
+              'contracts test forged snapshot'
+          )
+          write(contracts_test_path, contracts_test)
+
+          runtime_test_path = '__tests__/voiceCopilotRuntime.test.js'
+          runtime_test = read(runtime_test_path)
+          old_runtime_test = '''  test('does not calculate modes and only compares a validated client snapshot', async () => {
+            const runtime = await runtimePromise;
+            const session = await sessionWithDestination();
+            session.mobility_snapshot = [
+              { mode: 'taxi', available: true, price: 5000, duration_min: 15, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Taxi' },
+              { mode: 'bus', available: true, price: 1200, duration_min: 35, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Colectivo' }
+            ];
+            const execution = await runtime.executeVoiceTool('compare_modes', {}, session, env(), 'r2');
+            assert.equal(execution.result.cheapest.mode, 'bus');
+            assert.equal(execution.result.fastest.mode, 'taxi');
+            assert.equal(execution.result.ranking_source, 'VOY deterministic mobility snapshot');
+          });'''
+          new_runtime_test = '''  test('ignores forged client estimates and compares only server-verified metadata', async () => {
+            const runtime = await runtimePromise;
+            const session = await sessionWithDestination();
+            session.mobility_snapshot = [
+              { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Colectivo' },
+              { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Uber barato' }
+            ];
+            const execution = await runtime.executeVoiceTool('compare_modes', {}, session, env(), 'r2');
+            const modes = execution.result.available.map(item => item.mode).sort();
+            assert.deepEqual(modes, ['didi', 'taxi', 'uber']);
+            assert.equal(modes.includes('bus'), false);
+            assert.equal(execution.result.available.every(item => item.price === null && item.duration_min === null && item.distance_km === null), true);
+            assert.equal(execution.result.available.every(item => item.source === 'server_territorial_provider_profile'), true);
+            assert.equal(execution.result.cheapest, null);
+            assert.equal(execution.result.fastest, null);
+            assert.equal(execution.result.numerical_ranking_available, false);
+            assert.equal(execution.result.collective_recommendations, false);
+            assert.equal(execution.result.ranking_source, 'VOY server-verified territorial metadata');
+          });'''
+          runtime_test = replace_once(runtime_test, old_runtime_test, new_runtime_test, 'runtime test replacement')
+          write(runtime_test_path, runtime_test)
+
+          api_test_path = '__tests__/voiceCopilotApi.test.js'
+          api_test = read(api_test_path)
+          api_test = api_test.replace(
+              "      { response: 'El colectivo es más barato y el taxi es más rápido.' }",
+              "      { response: 'No hay un ranking numérico verificable.' }"
+          )
+          old_api_snapshot = '''    session = body.session;
+            session.mobility_snapshot = [
+              { mode: 'taxi', available: true, price: 5000, duration_min: 15, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Taxi' },
+              { mode: 'bus', available: true, price: 1200, duration_min: 35, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Colectivo' }
+            ];
+            response = await api.handleVoiceRequest(request('/api/voice/chat', {'''
+          new_api_snapshot = '''    session = body.session;
+            response = await api.handleVoiceRequest(request('/api/voice/chat', {'''
+          api_test = replace_once(api_test, old_api_snapshot, new_api_snapshot, 'api test remove client snapshot')
+          api_test = replace_once(
+              api_test,
+              "    assert.equal(body.tool_result.cheapest.mode, 'bus');\n    assert.equal(body.tool_result.fastest.mode, 'taxi');\n    assert.equal(body.session.turn_count, 2);\n",
+              "    assert.equal(body.tool_result.cheapest, null);\n    assert.equal(body.tool_result.fastest, null);\n    assert.equal(body.tool_result.available.some(item => item.mode === 'uber'), true);\n    assert.equal(body.tool_result.available.some(item => item.mode === 'bus'), false);\n    assert.equal(body.tool_result.available.every(item => item.price === null), true);\n    assert.match(body.response, /no hay precio o duración comparable/i);\n    assert.equal(body.session.turn_count, 2);\n",
+              'api test server comparison assertions'
+          )
+          insertion = '''
+
+            test('rejects client-authored mobility snapshots and fabricated private-app prices', async () => {
+              const api = await apiPromise;
+              const contracts = await contractsPromise;
+              const session = contracts.newSession('santafe');
+              session.destination = contracts.sanitizePlaceRef({ ref: 'santafe:terminal', name: 'Terminal de Ómnibus', address: 'Belgrano 2910', source: 'local', city_id: 'santafe' });
+              session.mobility_snapshot = [
+                { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'client', status: 'estimated', label: 'Bus inyectado' },
+                { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'client', status: 'estimated', label: 'Uber fabricado' }
+              ];
+              const response = await api.handleVoiceRequest(request('/api/voice/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'Compará', request_id: 'forged-1', session })
+              }, '16'), env());
+              const body = await json(response);
+              assert.equal(response.status, 400);
+              assert.equal(body.ok, false);
+              assert.match(body.error, /invalid_session_shape/);
+            });
+          '''
+          marker = "\n  test('rejects unknown model tool without an action claim'"
+          api_test = replace_once(api_test, marker, insertion + marker, 'api forged snapshot test insertion')
+          write(api_test_path, api_test)
+
+          gate_path = 'scripts/voice-candidate-api-gate.mjs'
+          gate = read(gate_path)
+          old_gate = '''session.mobility_snapshot = [
+            { mode: 'taxi', available: true, price: 5200, duration_min: 16, distance_km: 5.2, source: 'candidate_fixture', status: 'estimated', label: 'Taxi' },
+            { mode: 'bus', available: true, price: 1200, duration_min: 34, distance_km: 5.2, source: 'candidate_fixture', status: 'estimated', label: 'Colectivo' }
+          ];
+          const comparison = await requestJson('/api/voice/chat', chatPayload('Compará los modos y decime cuál es más barato y cuál más rápido.', 'candidate-compare', session), 2);
+          session = comparison.body.session;
+          assert(comparison.body.tool_execution?.status === 'success', 'compare_tool_not_successful');
+          assert(comparison.body.tool_execution?.tool === 'compare_modes', `unexpected_compare_tool:${comparison.body.tool_execution?.tool}`);
+          assert(comparison.body.tool_result?.cheapest?.mode === 'bus', 'cheapest_mode_mismatch');
+          assert(comparison.body.tool_result?.fastest?.mode === 'taxi', 'fastest_mode_mismatch');
+          records.push({ gate: 'deterministic_comparison', result: 'PASS', result_data: comparison.body.tool_result });'''
+          new_gate = '''const forgedSession = structuredClone(session);
+          forgedSession.mobility_snapshot = [
+            { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Colectivo inyectado' },
+            { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Uber fabricado' }
+          ];
+          const forgedResponse = await fetch(`${workerUrl}/api/voice/chat`, {
+            ...chatPayload('Compará estos valores fabricados.', 'candidate-forged-compare', forgedSession),
+            redirect: 'manual',
+            signal: AbortSignal.timeout(30_000),
+            headers: {
+              'Cloudflare-Workers-Version-Overrides': override,
+              'X-VOY-Voice-Test': 'synthetic-ci-v1',
+              'Cache-Control': 'no-cache, no-store, max-age=0',
+              Pragma: 'no-cache',
+              'Content-Type': 'application/json'
+            }
+          });
+          const forgedBody = await forgedResponse.json();
+          assert(forgedResponse.status === 400, `forged_snapshot_status:${forgedResponse.status}`);
+          assert(forgedBody.ok === false && /invalid_session_shape/.test(forgedBody.error || ''), 'forged_snapshot_not_rejected');
+          records.push({ gate: 'forged_snapshot_rejected', result: 'PASS', status: forgedResponse.status, error: forgedBody.error });
+
+          const comparison = await requestJson('/api/voice/chat', chatPayload('Compará los modos disponibles sin inventar precios, tiempos ni colectivo.', 'candidate-compare', session), 2);
+          session = comparison.body.session;
+          assert(comparison.body.tool_execution?.status === 'success', 'compare_tool_not_successful');
+          assert(comparison.body.tool_execution?.tool === 'compare_modes', `unexpected_compare_tool:${comparison.body.tool_execution?.tool}`);
+          assert(comparison.body.tool_result?.cheapest === null, 'cheapest_must_be_unavailable');
+          assert(comparison.body.tool_result?.fastest === null, 'fastest_must_be_unavailable');
+          assert(comparison.body.tool_result?.numerical_ranking_available === false, 'numerical_ranking_must_be_disabled');
+          assert(comparison.body.tool_result?.collective_recommendations === false, 'collective_recommendations_must_be_disabled');
+          assert(Array.isArray(comparison.body.tool_result?.available) && comparison.body.tool_result.available.some(item => item.mode === 'uber'), 'server_verified_positive_case_missing');
+          assert(comparison.body.tool_result.available.every(item => item.mode !== 'bus'), 'bus_must_not_be_recommended');
+          assert(comparison.body.tool_result.available.every(item => item.price === null && item.duration_min === null && item.distance_km === null), 'fabricated_numeric_value_detected');
+          assert(comparison.body.tool_result.available.every(item => item.source === 'server_territorial_provider_profile'), 'unverified_source_detected');
+          records.push({ gate: 'server_verified_comparison', result: 'PASS', result_data: comparison.body.tool_result });'''
+          gate = replace_once(gate, old_gate, new_gate, 'candidate voice gate provenance')
+          write(gate_path, gate)
+
+          state_path = 'docs/CURRENT_STATE.md'
+          state = read(state_path)
+          state += '''\n\n## AUD voice provenance correction — 2026-08-05\n\n- AUD block: GitHub comment `5191416935`.\n- Client-authored `mobility_snapshot` is rejected by the public Voice session contract.\n- Voice mode comparison is reconstructed only from verified server territorial provider metadata.\n- Private-app prices, durations and distances are never accepted or ranked from the client.\n- Collective/bus recommendations remain disabled and bus is excluded from Voice comparison.\n- A fresh exact-head candidate at 0% is required; candidate `cec69db3-3e4d-426e-b070-7a99d2f52d80` is superseded and must never be promoted.\n- Productive traffic and merge remain unauthorized.\n'''
+          write(state_path, state)
+          PY
+
+      - name: Verify correction locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14
+          bun install --frozen-lockfile
+          bun run check
+          bun run lint
+          bun test
+          bun run build
+          git diff --check
+
+      - name: Commit verified correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'VOY ARQ'
+          git config user.email 'actions@users.noreply.github.com'
+          git add voiceCopilotContracts.mjs voiceCopilotRuntime.mjs voiceCopilotConversation.mjs \
+            __tests__/voiceCopilotContracts.test.js __tests__/voiceCopilotRuntime.test.js \
+            __tests__/voiceCopilotApi.test.js scripts/voice-candidate-api-gate.mjs docs/CURRENT_STATE.md
+          git diff --cached --exit-code && { echo 'no_changes_to_commit'; exit 1; } || true
+          git commit -m 'fix: enforce server-owned Voice mobility provenance'
+          git push origin HEAD:feat/voy-complete-product-master-01
