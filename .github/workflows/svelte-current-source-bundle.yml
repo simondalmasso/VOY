@@ -1,0 +1,35 @@
+name: VOY Svelte Current Source Bundle
+
+on:
+  push:
+    branches:
+      - feat/voy-complete-product-master-01
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify and archive exact source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/feat/voy-complete-product-master-01 | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          git archive --format=zip --output=/tmp/voy-svelte-current-source.zip HEAD
+          sha256sum /tmp/voy-svelte-current-source.zip > /tmp/voy-svelte-current-source.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voy-svelte-current-source-${{ github.run_id }}
+          path: |
+            /tmp/voy-svelte-current-source.zip
+            /tmp/voy-svelte-current-source.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
