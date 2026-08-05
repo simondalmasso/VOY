@@ -5,6 +5,50 @@ const assert = require('node:assert/strict');
 const contractsPromise = import('../voiceCopilotContracts.mjs');
 const runtimePromise = import('../voiceCopilotRuntime.mjs');
 
+const terminal = {
+  canonicalId: 'santafe:landmark:terminal-omnibus',
+  nombre: 'Terminal de Ómnibus',
+  aliases: ['terminal'],
+  address: 'Belgrano 2910',
+  lat: -31.643533,
+  lon: -60.700503,
+  verified: true,
+  source: 'authoritative',
+  precision: 'poi',
+  verified_at: '2026-08-05',
+  provenance: {
+    status: 'authoritative',
+    issuer: 'Municipalidad de Santa Fe',
+    source_title: 'Estación Terminal de Ómnibus de Santa Fe',
+    source_url: 'https://santafeciudad.gov.ar/terminal-de-colectivos/',
+    license: 'Información pública institucional',
+    coordinate_method: 'Dirección oficial cruzada con geodato gubernamental',
+    coordinate_source_url: 'https://www.bcra.gob.ar/entidades-financieras-filiales-y-cajeros-filtros/?Provincia=SANTA+FE&Tipo=4&Tit=2&bco=AAA10'
+  }
+};
+
+const puente = {
+  canonicalId: 'santafe:landmark:puente-colgante',
+  nombre: 'Puente Colgante',
+  aliases: ['puente colgante'],
+  address: 'Costanera Oeste–Este, Laguna Setúbal',
+  lat: -31.639764,
+  lon: -60.682736,
+  verified: true,
+  source: 'authoritative',
+  precision: 'poi',
+  verified_at: '2026-08-05',
+  provenance: {
+    status: 'authoritative',
+    issuer: 'Poder Ejecutivo Nacional y Municipalidad de Santa Fe',
+    source_title: 'Decreto 1669/2014 y ficha turística Puente Colgante',
+    source_url: 'https://www.argentina.gob.ar/normativa/nacional/decreto-1669-2014-235865/texto',
+    license: 'Normativa pública nacional e información turística institucional',
+    coordinate_method: 'Conversión decimal de las coordenadas oficiales del Decreto 1669/2014',
+    coordinate_source_url: 'https://www.argentina.gob.ar/normativa/nacional/decreto-1669-2014-235865/texto'
+  }
+};
+
 const files = {
   '/cities/santa-fe/profile.json': {
     schema_version: 1,
@@ -28,14 +72,11 @@ const files = {
     remis_companies: []
   },
   '/cities/santa-fe/transport.json': {
-    schema_version: 1,
+    schema_version: 2,
     city_id: 'santafe',
-    landmarks: [
-      { canonicalId: 'santafe:landmark:terminal', nombre: 'Terminal de Ómnibus', aliases: ['terminal'], address: 'Belgrano 2910' },
-      { canonicalId: 'santafe:landmark:puente', nombre: 'Puente Colgante', aliases: [], address: 'Bv. Gálvez 1150' }
-    ],
-    bus_stops: [{ nombre: 'Terminal', calles: 'Belgrano y Freyre' }],
-    bike_stations: [{ nombre: 'Estación Belgrano', calles: 'Bv. Gálvez' }]
+    landmarks: [terminal, puente],
+    bus_stops: [],
+    bike_stations: []
   },
   '/cities/santa-fe/fares.json': {
     schema_version: 1,
@@ -74,9 +115,9 @@ async function sessionWithDestination() {
   const contracts = await contractsPromise;
   const session = contracts.newSession('santafe');
   session.destination = contracts.sanitizePlaceRef({
-    ref: 'santafe:landmark:terminal',
-    name: 'Terminal de Ómnibus',
-    address: 'Belgrano 2910',
+    ref: terminal.canonicalId,
+    name: terminal.nombre,
+    address: terminal.address,
     source: 'local',
     city_id: 'santafe'
   });
@@ -96,30 +137,31 @@ describe('Voice Copilot deterministic runtime', () => {
     const execution = await runtime.executeVoiceTool('search_destination', { query: 'terminal' }, session, env(), 'r1');
     assert.equal(execution.record.status, 'success');
     assert.equal(execution.result.candidates.length, 1);
-    assert.equal(execution.result.candidates[0].ref, 'santafe:landmark:terminal');
-    assert.equal(execution.session.destination.ref, 'santafe:landmark:terminal');
+    assert.equal(execution.result.candidates[0].ref, terminal.canonicalId);
+    assert.equal(execution.result.candidates[0].address, 'Belgrano 2910');
+    assert.equal(execution.session.destination.ref, terminal.canonicalId);
     assert.equal(execution.session.state_revision, 1);
   });
 
   test('ignores forged client estimates and compares only server-verified metadata', async () => {
-  const runtime = await runtimePromise;
-  const session = await sessionWithDestination();
-  session.mobility_snapshot = [
-    { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Colectivo' },
-    { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Uber barato' }
-  ];
-  const execution = await runtime.executeVoiceTool('compare_modes', {}, session, env(), 'r2');
-  const modes = execution.result.available.map(item => item.mode).sort();
-  assert.deepEqual(modes, ['didi', 'taxi', 'uber']);
-  assert.equal(modes.includes('bus'), false);
-  assert.equal(execution.result.available.every(item => item.price === null && item.duration_min === null && item.distance_km === null), true);
-  assert.equal(execution.result.available.every(item => item.source === 'server_territorial_provider_profile'), true);
-  assert.equal(execution.result.cheapest, null);
-  assert.equal(execution.result.fastest, null);
-  assert.equal(execution.result.numerical_ranking_available, false);
-  assert.equal(execution.result.collective_recommendations, false);
-  assert.equal(execution.result.ranking_source, 'VOY server-verified territorial metadata');
-});
+    const runtime = await runtimePromise;
+    const session = await sessionWithDestination();
+    session.mobility_snapshot = [
+      { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Colectivo' },
+      { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Uber barato' }
+    ];
+    const execution = await runtime.executeVoiceTool('compare_modes', {}, session, env(), 'r2');
+    const modes = execution.result.available.map(item => item.mode).sort();
+    assert.deepEqual(modes, ['didi', 'taxi', 'uber']);
+    assert.equal(modes.includes('bus'), false);
+    assert.equal(execution.result.available.every(item => item.price === null && item.duration_min === null && item.distance_km === null), true);
+    assert.equal(execution.result.available.every(item => item.source === 'server_territorial_provider_profile'), true);
+    assert.equal(execution.result.cheapest, null);
+    assert.equal(execution.result.fastest, null);
+    assert.equal(execution.result.numerical_ranking_available, false);
+    assert.equal(execution.result.collective_recommendations, false);
+    assert.equal(execution.result.ranking_source, 'VOY server-verified territorial metadata');
+  });
 
   test('fails closed when a destination is required', async () => {
     const contracts = await contractsPromise;
@@ -158,9 +200,9 @@ describe('Voice Copilot deterministic runtime', () => {
     const prepared = await runtime.executeVoiceTool('prepare_external_provider_action', { provider: 'uber' }, session, env(), 'r6');
     const changed = structuredClone(prepared.session);
     changed.destination = contracts.sanitizePlaceRef({
-      ref: 'santafe:landmark:puente',
-      name: 'Puente Colgante',
-      address: 'Bv. Gálvez 1150',
+      ref: puente.canonicalId,
+      name: puente.nombre,
+      address: puente.address,
       source: 'local',
       city_id: 'santafe'
     });
