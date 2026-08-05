@@ -42,8 +42,19 @@
     VoiceComponent ||= (await import('./components/VoiceAssistant.svelte')).default;
     voiceOpen = true;
   }
+  function hasOperationalDestination(value: Destination | null): value is Destination {
+    return Boolean(value?.operational && value.verified && value.confidence === 'authoritative' && value.provenance);
+  }
   async function calculate(): Promise<void> {
     if (!origin || !selectedDestination) return;
+    if (!hasOperationalDestination(selectedDestination)) {
+      controller?.abort();
+      routeResult = null;
+      options = [];
+      message = 'El destino no tiene procedencia autoritativa suficiente para calcular un viaje.';
+      tone = 'error';
+      return;
+    }
     controller?.abort(); controller = new AbortController();
     message = mode === 'bus' ? 'Verificando si hay datos actuales de colectivo…' : 'Calculando una referencia verificable…'; tone = 'info';
     try {
@@ -65,10 +76,23 @@
     }
   }
   function setOrigin(coordinates: Coordinates, label: string): void { origin = coordinates; originLabel = label; void calculate(); }
-  function setDestination(value: Destination): void { selectedDestination = value; destination.set(value); void calculate(); }
+  function setDestination(value: Destination): void {
+    if (!hasOperationalDestination(value)) {
+      selectedDestination = null;
+      destination.set(null);
+      routeResult = null;
+      options = [];
+      message = 'Ese destino no tiene procedencia autoritativa suficiente.';
+      tone = 'error';
+      return;
+    }
+    selectedDestination = value;
+    destination.set(value);
+    void calculate();
+  }
   function setMode(value: TravelMode): void { mode = value; void calculate(); }
   function choose(option: ProviderOptionModel): void {
-    if (!origin || !selectedDestination || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
+    if (!origin || !hasOperationalDestination(selectedDestination) || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
     action = createExternalAction(option.id, origin, selectedDestination.coordinates);
   }
   function confirmAction(): void {
@@ -93,7 +117,7 @@
       {#if voiceOpen && VoiceComponent}<svelte:component this={VoiceComponent} onClose={() => voiceOpen = false} />{/if}
     </section>
     <MapViewport {origin} destination={selectedDestination?.coordinates || null} route={routeResult} />
-    {#if selectedDestination && (routeResult || options.length)}<TripDecisionSheet route={routeResult} {options} onChoose={choose} destinationName={selectedDestination.name} />{/if}
+    {#if selectedDestination && (routeResult || options.length)}<TripDecisionSheet route={routeResult} {options} onChoose={choose} destination={selectedDestination} />{/if}
     <footer><a href="/privacy">Privacidad</a><a href="/terms">Términos</a><a href="/sources">Fuentes</a><a href="/contact">Contacto</a></footer>
   </main>
   <ConfirmExternalAction {action} onConfirm={confirmAction} onCancel={() => action = null} />
