@@ -34,7 +34,10 @@ jobs:
             ops/master-workset.part01 \
             ops/master-workset.part02 \
             ops/master-workset.part03 \
-            ops/master-workset.part04 \
+            ops/master-workset.part04a \
+            ops/master-workset.part04b \
+            ops/master-workset.part04c \
+            ops/master-workset.part04d \
             ops/master-workset.part05 \
             ops/master-workset.part06 \
             ops/master-workset.part07 \
@@ -49,9 +52,12 @@ jobs:
           git apply /tmp/voy-master-workset.patch
           sed -i 's/governance: google_drive/governance: github/' docs/control/release-policy.yaml
           rm -f ops/master-workset.part00 ops/master-workset.part01 ops/master-workset.part02 \
-            ops/master-workset.part03 ops/master-workset.part04 ops/master-workset.part05 \
-            ops/master-workset.part06 ops/master-workset.part07 \
-            ops/master-workset.part08a ops/master-workset.part08b ops/master-workset.part08c
+            ops/master-workset.part03 ops/master-workset.part04 \
+            ops/master-workset.part04a ops/master-workset.part04b \
+            ops/master-workset.part04c ops/master-workset.part04d \
+            ops/master-workset.part05 ops/master-workset.part06 \
+            ops/master-workset.part07 ops/master-workset.part08a \
+            ops/master-workset.part08b ops/master-workset.part08c
           rm -f .github/workflows/master-apply-workset.yml
           git add -A
           git diff --cached --check
