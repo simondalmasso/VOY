@@ -22,7 +22,7 @@ jobs:
       VOY_EVIDENCE_DIR: test-results/svelte-screens
       VOY_OUTPUT_DIR: test-results/svelte-browser
       VOY_REPORT_DIR: playwright-report-svelte
-      WRANGLER_LOG: test-results/svelte-vite.log
+      VOY_LOCAL_SERVER_LOG: test-results/svelte-vite.log
 
     steps:
       - name: Checkout exact migration head
@@ -54,6 +54,7 @@ jobs:
         run: |
           bun run typecheck
           bun run lint
+          npx eslint scripts/svelte-candidate-gate.mjs scripts/svelte-candidate-api-gate.mjs
 
       - name: Deterministic tests
         run: bun run test
@@ -73,6 +74,8 @@ jobs:
         run: bunx playwright install --with-deps chromium
 
       - name: Required mobile and desktop browser gates
+        env:
+          WRANGLER_LOG: none
         run: bash scripts/run-browser-smoke.sh
 
       - name: Upload migration validation evidence and lockfile
