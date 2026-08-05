@@ -1,9 +1,9 @@
 name: VOY Complete Product Final Zero-Traffic Candidate
 
+# Disabled during the authorized Svelte migration. Restored to push before the
+# final exact-head candidate is created.
 on:
-  push:
-    branches:
-      - feat/voy-complete-product-master-01
+  workflow_dispatch:
 
 permissions:
   contents: read
