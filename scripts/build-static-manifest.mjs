@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 const candidates = [process.env.STATIC_ROOT, 'dist/client', 'dist']
   .filter(Boolean)
   .map(candidate => resolve(candidate));
 const root = candidates.find(candidate => existsSync(join(candidate, 'index.html')));
 if (!root) throw new Error(`static_root_missing:${candidates.join(',')}`);
-function walk(dir) { return readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]); }
+function walk(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return walk(path);
+    return basename(path).startsWith('.') ? [] : [path];
+  });
+}
 function sha(buffer) { return createHash('sha256').update(buffer).digest('hex'); }
 const files = walk(root).map(path => {
   const rel = relative(root, path).replaceAll('\\', '/');
