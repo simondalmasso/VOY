@@ -83,14 +83,11 @@ test('rotation keeps the primary decision reachable', async ({ page }, testInfo)
 
 test('stale origin requests cannot overwrite the latest choice', async ({ page }) => {
   let firstRequested = false;
-  let releaseFirst!: () => void;
-  const firstGate = new Promise<void>(resolve => { releaseFirst = resolve; });
-
   await page.route('**/api/geocode?*', async route => {
     const query = new URL(route.request().url()).searchParams.get('q') || '';
     if (query === 'Primero') {
       firstRequested = true;
-      await firstGate;
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: query === 'Primero' ? -31.63 : -31.64, lon: -60.7 }] }) }).catch(() => undefined);
   });
@@ -99,13 +96,10 @@ test('stale origin requests cannot overwrite the latest choice', async ({ page }
   await page.getByTestId('origin-input').fill('Primero');
   await page.getByTestId('origin-apply').click();
   await expect.poll(() => firstRequested).toBe(true);
-
   await page.getByTestId('origin-input').fill('Segundo');
   await page.getByTestId('origin-apply').click();
   await expect(page.getByTestId('origin-control')).toContainText('Segundo');
-
-  releaseFirst();
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(950);
   await expect(page.getByTestId('origin-control')).not.toContainText('Primero');
 });
 
