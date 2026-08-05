@@ -66,14 +66,14 @@ run_case() {
       set +e
       VOY_OUTPUT_DIR="${BASE_OUTPUT_DIR}/${label}-attempt-${attempt}" \
       VOY_REPORT_DIR="${BASE_REPORT_DIR}/${label}-attempt-${attempt}" \
+      VOY_CASE_PROJECT="$project" \
+      VOY_CASE_SPEC="$spec" \
       npm exec --yes --package="@playwright/test@${PLAYWRIGHT_VERSION}" -- sh -c '
         PLAYWRIGHT_BIN=$(command -v playwright)
         NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
         export NODE_PATH
         playwright test --config=playwright.config.js --project="$VOY_CASE_PROJECT" "$VOY_CASE_SPEC" --reporter=line
-      ' \
-      VOY_CASE_PROJECT="$project" \
-      VOY_CASE_SPEC="$spec"
+      '
       status=$?
       set -e
     fi
