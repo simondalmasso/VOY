@@ -36,6 +36,78 @@
     footer.appendChild(freshness);
   }
 
+  function ensureControlNames(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    Array.prototype.slice.call(scope.querySelectorAll('button,input,[role="button"]')).forEach(function (node) {
+      var name = node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '';
+      if (String(name).trim()) return;
+      var fallback = node.id ? ('Control ' + node.id) : 'Control de VOY';
+      node.setAttribute('aria-label', fallback);
+    });
+  }
+
+  function observeControlNames() {
+    ensureControlNames(document);
+    ensureRegulatedMobilityCards();
+    if (!global.MutationObserver) return;
+    var observer = new MutationObserver(function (records) {
+      records.forEach(function (record) {
+        Array.prototype.slice.call(record.addedNodes || []).forEach(function (node) {
+          if (node && node.nodeType === 1) {
+            if (node.matches && node.matches('button,input,[role="button"]')) ensureControlNames(node.parentNode || document);
+            else ensureControlNames(node);
+          }
+        });
+      });
+      ensureRegulatedMobilityCards();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function ensureRegulatedMobilityCards() {
+    var sheet = document.getElementById('decisionSheet');
+    if (!sheet || !global.MC || typeof global.MC.getEstimations !== 'function') return;
+    var estimates = global.MC.getEstimations();
+    if (!Array.isArray(estimates)) return;
+    var auto = estimates.find(function (item) { return item && item.mode === 'auto'; });
+    if (!auto || !Number.isFinite(Number(auto.distance))) return;
+    var hasTaxi = document.getElementById('accTaxiHead');
+    var hasRemis = document.getElementById('accRemisHead');
+    if (hasTaxi && hasRemis) return;
+    var format = typeof global.formatPrice === 'function' ? global.formatPrice : function (value) { return '$' + Math.round(value).toLocaleString('es-AR'); };
+    var minutes = typeof global.formatMin === 'function' ? global.formatMin(Number(auto.timeMin) || 0) : (Math.round(Number(auto.timeMin) || 0) + ' min');
+    var taxiFare = typeof global.computeTaxiFare === 'function' ? global.computeTaxiFare(Number(auto.distance), Number(auto.timeMin) || 0) : null;
+    var remisFare = typeof global.computeRemisFare === 'function' ? global.computeRemisFare(Number(auto.distance), Number(auto.timeMin) || 0) : null;
+    var host = sheet.querySelector('[data-voy-regulated-cards]');
+    if (!host) {
+      host = el('div', { className: 'more-opts voy-regulated-cards', 'data-voy-regulated-cards': 'v1' });
+      sheet.appendChild(host);
+    }
+    function addCard(id, label, fare, color, description) {
+      if (document.getElementById(id) || !Number.isFinite(Number(fare)) || Number(fare) <= 0) return;
+      var button = el('button', { type: 'button', className: 'acc-head', id: id, 'aria-expanded': 'false', 'aria-label': label + ': ' + format(fare) + ', ' + minutes });
+      button.style.width = '100%';
+      var icon = el('span', { className: 'ah-ic', 'aria-hidden': 'true', text: label === 'Taxi' ? 'T' : 'R' });
+      icon.style.color = color;
+      button.appendChild(icon);
+      button.appendChild(el('span', { className: 'ah-title', text: label }));
+      button.appendChild(el('span', { className: 'ah-meta', text: format(fare) + ' · ' + minutes }));
+      button.appendChild(el('span', { className: 'ah-chev', 'aria-hidden': 'true', text: '›' }));
+      var body = el('div', { className: 'acc-body', id: id.replace('Head', 'Body') });
+      body.appendChild(el('p', { className: 'co-meta', text: description }));
+      button.addEventListener('click', function () {
+        var expanded = button.getAttribute('aria-expanded') === 'true';
+        button.setAttribute('aria-expanded', String(!expanded));
+        button.classList.toggle('expanded', !expanded);
+        body.classList.toggle('expanded', !expanded);
+      });
+      var wrapper = el('div', { className: 'accordion' }, [button, body]);
+      host.appendChild(wrapper);
+    }
+    addCard('accTaxiHead', 'Taxi', taxiFare, '#F59E0B', 'Tarifa municipal vigente. Consultá un prestador habilitado local.');
+    addCard('accRemisHead', 'Remis', remisFare, '#6B7280', 'Tarifa municipal vigente. Consultá una agencia habilitada local.');
+  }
+
   function createAccountUi() {
     var open = el('button', { type: 'button', className: 'voy-account-open', text: 'Sesión opcional', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'voyAccountPanel' });
     var close = el('button', { type: 'button', className: 'voy-account-close', text: '×', 'aria-label': 'Cerrar sesión opcional' });
@@ -159,6 +231,7 @@
     if (document.querySelector('[data-voy-product-shell-ui]')) return;
     installSkipLink();
     legalLinks();
+    observeControlNames();
     if (!cfg.auth_enabled) return;
     var ui = createAccountUi();
     ui.open.setAttribute('data-voy-product-shell-ui', 'v1');
