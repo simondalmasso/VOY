@@ -30,15 +30,20 @@ BUILD_HASH="$SHORT_SHA" VOY_METRICS_PATH="$EVIDENCE_DIR/build-metrics.json" bun 
 VOY_METRICS_PATH="$EVIDENCE_DIR/build-metrics.json" bun run budget 2>&1 | tee "$EVIDENCE_DIR/bundle-budget.log"
 STATIC_ROOT="" SHORT_SHA="$SHORT_SHA" EXPECTED_CANDIDATE_VERSION="$EXPECTED_CANDIDATE_VERSION" STATIC_MANIFEST_PATH="$STATIC_MANIFEST_PATH" node scripts/build-static-manifest.mjs 2>&1 | tee "$EVIDENCE_DIR/static-manifest.log"
 
-DEPLOY_CONFIG=".wrangler/deploy/config.json"
-if [[ ! -f "$DEPLOY_CONFIG" ]]; then DEPLOY_CONFIG="wrangler.jsonc"; fi
+DEPLOY_CONFIG="dist/voy_app/wrangler.json"
+if [[ ! -f "$DEPLOY_CONFIG" ]]; then
+  echo "validated_deploy_config_missing:$DEPLOY_CONFIG" >&2
+  exit 1
+fi
 CANDIDATE_CONFIG="$(dirname "$DEPLOY_CONFIG")/candidate-config.json"
 export DEPLOY_CONFIG CANDIDATE_CONFIG
 node --input-type=module <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs';
 const source=process.env.DEPLOY_CONFIG;
-const raw=readFileSync(source,'utf8').replace(/^\s*\/\/.*$/gm,'');
-const config=JSON.parse(raw);
+const config=JSON.parse(readFileSync(source,'utf8'));
+if (typeof config.main !== 'string' || !config.main) throw new Error('candidate_main_missing');
+if (!config.assets || typeof config.assets.directory !== 'string') throw new Error('candidate_assets_missing');
+if ('auxiliaryWorkers' in config) throw new Error('candidate_internal_vite_field_present');
 config.vars ||= {};
 config.vars.VOY_BUILD_HASH=process.env.SHORT_SHA;
 writeFileSync(process.env.CANDIDATE_CONFIG,JSON.stringify(config,null,2)+'\n');
