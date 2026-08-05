@@ -1,0 +1,89 @@
+name: Validate VOY Svelte Migration
+
+on:
+  push:
+    branches:
+      - feat/voy-complete-product-master-01
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-svelte-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      BUILD_HASH: migration
+      VOY_METRICS_PATH: test-results/build-metrics.json
+      VOY_EVIDENCE_DIR: test-results/svelte-screens
+      VOY_OUTPUT_DIR: test-results/svelte-browser
+      VOY_REPORT_DIR: playwright-report-svelte
+      WRANGLER_LOG: test-results/svelte-vite.log
+
+    steps:
+      - name: Checkout exact migration head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Install pinned toolchain and resolve lockfile
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install
+          test -f bun.lock
+
+      - name: Release policy and source checks
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs
+          git diff --check
+          node --check public/sw.js
+          node --check scripts/svelte-candidate-gate.mjs
+          node --check scripts/svelte-candidate-api-gate.mjs
+          bash -n scripts/run-browser-smoke.sh scripts/run-master-final-candidate.sh
+
+      - name: Strict typecheck and lint
+        run: |
+          bun run typecheck
+          bun run lint
+
+      - name: Deterministic tests
+        run: bun run test
+
+      - name: Production build and budgets
+        run: |
+          bun run build
+          bun run budget
+
+      - name: Wrangler dry-run
+        run: |
+          CONFIG=.wrangler/deploy/config.json
+          test -f "$CONFIG" || CONFIG=wrangler.jsonc
+          wrangler deploy --config "$CONFIG" --dry-run --minify
+
+      - name: Install Chromium 1.61.1
+        run: bunx playwright install --with-deps chromium
+
+      - name: Required mobile and desktop browser gates
+        run: bash scripts/run-browser-smoke.sh
+
+      - name: Upload migration validation evidence and lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-svelte-validation-${{ github.run_id }}
+          path: |
+            bun.lock
+            test-results
+            playwright-report-svelte
+            .wrangler/deploy/config.json
+          if-no-files-found: warn
+          retention-days: 14

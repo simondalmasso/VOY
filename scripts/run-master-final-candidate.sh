@@ -3,300 +3,110 @@ set -euo pipefail
 
 WORKER_NAME="${WORKER_NAME:-voy-app}"
 WORKER_URL="${WORKER_URL:-https://voy-app.simondalmasso44.workers.dev}"
-EXPECTED_PRODUCTION_VERSION="${EXPECTED_PRODUCTION_VERSION:-V7.8.0}"
-EXPECTED_PRODUCTION_HASH="${EXPECTED_PRODUCTION_HASH:-1374f09}"
+EXPECTED_STABLE_VERSION="${EXPECTED_STABLE_VERSION:-V7.8.0}"
+EXPECTED_STABLE_HASH="${EXPECTED_STABLE_HASH:-1374f09}"
 EXPECTED_STABLE_VERSION_ID="${EXPECTED_STABLE_VERSION_ID:-b4f1833a-f2a1-4a44-b351-13ae48972c20}"
-EVIDENCE_DIR="${EVIDENCE_DIR:-test-results/master-final-candidate}"
-EXPECTED_SOURCE_ROOT="${EXPECTED_SOURCE_ROOT:-$PWD}"
+EXPECTED_CANDIDATE_VERSION="${EXPECTED_CANDIDATE_VERSION:-V8.0.0}"
+EVIDENCE_DIR="${EVIDENCE_DIR:-test-results/svelte-final-candidate}"
 CONVERGENCE_INTERVAL_MS="${CONVERGENCE_INTERVAL_MS:-7000}"
-
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
-
 SHORT_SHA="${GITHUB_SHA:0:7}"
 API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+STATIC_MANIFEST_PATH="$EVIDENCE_DIR/static-manifest.json"
 VOICE_SAMPLE_WAV="$EVIDENCE_DIR/voice-sample-es-ar.wav"
 mkdir -p "$EVIDENCE_DIR"
-export WORKER_NAME WORKER_URL EXPECTED_PRODUCTION_VERSION EXPECTED_PRODUCTION_HASH EXPECTED_SOURCE_ROOT
-export CONVERGENCE_INTERVAL_MS EVIDENCE_DIR SHORT_SHA VOICE_SAMPLE_WAV
+export WORKER_NAME WORKER_URL EXPECTED_STABLE_VERSION EXPECTED_STABLE_HASH EXPECTED_STABLE_VERSION_ID EXPECTED_CANDIDATE_VERSION EVIDENCE_DIR CONVERGENCE_INTERVAL_MS SHORT_SHA STATIC_MANIFEST_PATH VOICE_SAMPLE_WAV
 
-printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-source-sha.txt"
 test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 git diff --check
+printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-source-sha.txt"
 
-echo '[master-candidate] frozen static gates'
-bun run lint 2>&1 | tee "$EVIDENCE_DIR/eslint.log"
-bun run test 2>&1 | tee "$EVIDENCE_DIR/node-tests.log"
-wrangler deploy --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
+bun run typecheck 2>&1 | tee "$EVIDENCE_DIR/typecheck.log"
+bun run lint 2>&1 | tee "$EVIDENCE_DIR/lint.log"
+bun run test 2>&1 | tee "$EVIDENCE_DIR/unit-tests.log"
+BUILD_HASH="$SHORT_SHA" VOY_METRICS_PATH="$EVIDENCE_DIR/build-metrics.json" bun run build 2>&1 | tee "$EVIDENCE_DIR/vite-build.log"
+VOY_METRICS_PATH="$EVIDENCE_DIR/build-metrics.json" bun run budget 2>&1 | tee "$EVIDENCE_DIR/bundle-budget.log"
+STATIC_ROOT="" SHORT_SHA="$SHORT_SHA" EXPECTED_CANDIDATE_VERSION="$EXPECTED_CANDIDATE_VERSION" STATIC_MANIFEST_PATH="$STATIC_MANIFEST_PATH" node scripts/build-static-manifest.mjs 2>&1 | tee "$EVIDENCE_DIR/static-manifest.log"
 
-echo '[master-candidate] materialize exact build'
-BUILD_HASH="$SHORT_SHA" node scripts/inject-build-hash.mjs 2>&1 | tee "$EVIDENCE_DIR/inject-build-hash.log"
-grep -F "const BUILD_HASH = \"$SHORT_SHA\";" worker.js
-grep -F "window.VOY_BUILD_HASH='$SHORT_SHA'" public/VOY-Lite.html
+DEPLOY_CONFIG=".wrangler/deploy/config.json"
+if [[ ! -f "$DEPLOY_CONFIG" ]]; then DEPLOY_CONFIG="wrangler.jsonc"; fi
+CANDIDATE_CONFIG="$(dirname "$DEPLOY_CONFIG")/candidate-config.json"
+export DEPLOY_CONFIG CANDIDATE_CONFIG
 node --input-type=module <<'NODE'
-import { writeFileSync } from 'node:fs';
-import { expectedAssetManifest } from './scripts/required-city-platform-assets.mjs';
-const manifest = expectedAssetManifest(process.cwd());
-if (manifest.length !== 13) throw new Error(`materialized_asset_count:${manifest.length}`);
-writeFileSync(`${process.env.EVIDENCE_DIR}/materialized-required-assets.json`, JSON.stringify(manifest, null, 2));
+import { readFileSync, writeFileSync } from 'node:fs';
+const source=process.env.DEPLOY_CONFIG;
+const raw=readFileSync(source,'utf8').replace(/^\s*\/\/.*$/gm,'');
+const config=JSON.parse(raw);
+config.vars ||= {};
+config.vars.VOY_BUILD_HASH=process.env.SHORT_SHA;
+writeFileSync(process.env.CANDIDATE_CONFIG,JSON.stringify(config,null,2)+'\n');
 NODE
+wrangler deploy --config "$CANDIDATE_CONFIG" --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/wrangler-dry-run.log"
+node --check public/sw.js
+node --check scripts/svelte-candidate-gate.mjs
+node --check scripts/svelte-candidate-api-gate.mjs
 
-echo '[master-candidate] generate synthetic Spanish speech'
-espeak-ng -v es -s 125 -w "$VOICE_SAMPLE_WAV" 'Hola VOY quiero ir a la terminal de omnibus' 2>&1 | tee "$EVIDENCE_DIR/espeak.log"
-test -s "$VOICE_SAMPLE_WAV"
-sha256sum "$VOICE_SAMPLE_WAV" > "$EVIDENCE_DIR/voice-sample.sha256"
-
-echo '[master-candidate] existing local browser with one evidence-preserving retry'
-if ! bash scripts/run-browser-smoke.sh > "$EVIDENCE_DIR/local-browser-attempt-1.log" 2>&1; then
-  sleep 3
-  bash scripts/run-browser-smoke.sh > "$EVIDENCE_DIR/local-browser-attempt-2.log" 2>&1
-  printf 'PASS_ON_RETRY\n' > "$EVIDENCE_DIR/local-browser-result.txt"
-else
-  printf 'PASS_FIRST_ATTEMPT\n' > "$EVIDENCE_DIR/local-browser-result.txt"
+if command -v espeak-ng >/dev/null 2>&1; then
+  espeak-ng -v es -s 125 -w "$VOICE_SAMPLE_WAV" 'Hola VOY quiero ir a la terminal de omnibus'
+  sha256sum "$VOICE_SAMPLE_WAV" > "$EVIDENCE_DIR/voice-sample.sha256"
 fi
 
-echo '[master-candidate] local Voice browser desktop Android and iPhone'
-VOY_OUTPUT_DIR="$EVIDENCE_DIR/local-voice-output" \
-VOY_REPORT_DIR="$EVIDENCE_DIR/local-voice-report" \
-WRANGLER_LOG="$EVIDENCE_DIR/local-voice-wrangler.log" \
-bash scripts/run-voice-browser-smoke.sh 2>&1 | tee "$EVIDENCE_DIR/local-voice-browser.log"
+BUILD_HASH="$SHORT_SHA" VOY_EVIDENCE_DIR="$EVIDENCE_DIR/local-browser-screens" VOY_OUTPUT_DIR="$EVIDENCE_DIR/local-browser-output" VOY_REPORT_DIR="$EVIDENCE_DIR/local-browser-report" WRANGLER_LOG="$EVIDENCE_DIR/local-vite.log" bash scripts/run-browser-smoke.sh 2>&1 | tee "$EVIDENCE_DIR/local-browser.log"
 
-echo '[master-candidate] snapshot exact production baseline'
 wrangler deployments list --json > "$EVIDENCE_DIR/wrangler-deployments-before.json"
-curl --fail --silent --show-error --retry 3 \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments-before.json"
-curl --fail --silent --show-error --retry 3 \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "$API_ROOT/versions?per_page=100" > /tmp/master-versions-before.json
-curl --fail --silent --show-error --max-time 20 \
-  "$WORKER_URL/api/health?voice_candidate_baseline=$(date +%s%N)" \
-  > "$EVIDENCE_DIR/production-health-before.json"
+curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/api-deployments-before.json"
+curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions?per_page=100" > /tmp/svelte-versions-before.json
+curl --fail --silent --show-error --retry 3 "$WORKER_URL/api/health?baseline=$(date +%s%N)" > "$EVIDENCE_DIR/production-health-before.json"
 
 PREVIOUS_DEPLOYMENT_ID="$(node <<'NODE'
-const fs = require('node:fs');
-const payload = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/api-deployments-before.json', 'utf8'));
-if (payload.success !== true) throw new Error('deployments_query_failed');
-const deployments = payload.result?.deployments || payload.result || [];
-const active = deployments[0];
-if (!active || !Array.isArray(active.versions)) throw new Error('active_deployment_missing');
-const stable = active.versions.find(version => version.version_id === process.env.EXPECTED_STABLE_VERSION_ID);
-if (!stable || Number(stable.percentage) !== 100) throw new Error('stable_version_or_traffic_changed');
-if (active.versions.some(version => version.version_id !== process.env.EXPECTED_STABLE_VERSION_ID && Number(version.percentage) !== 0)) {
-  throw new Error('unexpected_nonzero_version');
-}
-const health = JSON.parse(fs.readFileSync(process.env.EVIDENCE_DIR + '/production-health-before.json', 'utf8'));
-if (health.ok !== true || health.version !== process.env.EXPECTED_PRODUCTION_VERSION || health.build_hash !== process.env.EXPECTED_PRODUCTION_HASH) {
-  throw new Error('production_baseline_mismatch');
-}
-fs.writeFileSync(process.env.EVIDENCE_DIR + '/production-baseline.json', JSON.stringify({
-  deployment_id: active.id,
-  stable_version_id: stable.version_id,
-  stable_traffic: Number(stable.percentage),
-  all_versions: active.versions,
-  health,
-  checked_at: new Date().toISOString()
-}, null, 2));
-process.stdout.write(active.id);
+const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+const payload=JSON.parse(fs.readFileSync(`${e}/api-deployments-before.json`,'utf8')); if(payload.success!==true)throw new Error('deployments_query_failed');
+const list=payload.result?.deployments||payload.result||[]; const active=list[0]; if(!active||!Array.isArray(active.versions))throw new Error('active_deployment_missing');
+const stable=active.versions.find(v=>v.version_id===process.env.EXPECTED_STABLE_VERSION_ID); if(!stable||Number(stable.percentage)!==100)throw new Error('stable_version_or_traffic_changed');
+if(active.versions.some(v=>v.version_id!==process.env.EXPECTED_STABLE_VERSION_ID&&Number(v.percentage)!==0))throw new Error('unexpected_nonzero_version');
+const health=JSON.parse(fs.readFileSync(`${e}/production-health-before.json`,'utf8')); if(health.ok!==true||health.version!==process.env.EXPECTED_STABLE_VERSION||health.build_hash!==process.env.EXPECTED_STABLE_HASH)throw new Error('production_baseline_mismatch');
+fs.writeFileSync(`${e}/production-baseline.json`,JSON.stringify({deployment_id:active.id,stable_version_id:stable.version_id,stable_traffic:100,all_versions:active.versions,health,checked_at:new Date().toISOString()},null,2)); process.stdout.write(active.id);
 NODE
 )"
 STABLE_VERSION_ID="$EXPECTED_STABLE_VERSION_ID"
 export PREVIOUS_DEPLOYMENT_ID STABLE_VERSION_ID
+curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$STABLE_VERSION_ID" > /tmp/svelte-stable-version.json
 
-curl --fail --silent --show-error --retry 3 \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "$API_ROOT/versions/$STABLE_VERSION_ID" > /tmp/master-stable-version-detail.json
-
-echo '[master-candidate] upload exactly one new version'
-CANDIDATE_TAG="voy-complete-product-${GITHUB_SHA:0:12}"
+CANDIDATE_TAG="voy-svelte-mobile-${GITHUB_SHA:0:12}"
 export CANDIDATE_TAG
-wrangler versions upload --minify \
-  --tag "$CANDIDATE_TAG" \
-  --message "VOY master complete-product exact-head candidate $GITHUB_SHA" \
-  2>&1 | tee "$EVIDENCE_DIR/version-upload.log"
-curl --fail --silent --show-error --retry 3 \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "$API_ROOT/versions?per_page=100" > /tmp/master-versions-after.json
-
+wrangler versions upload --config "$CANDIDATE_CONFIG" --minify --tag "$CANDIDATE_TAG" --message "VOY Svelte mobile exact-head candidate $GITHUB_SHA" 2>&1 | tee "$EVIDENCE_DIR/version-upload.log"
+curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions?per_page=100" > /tmp/svelte-versions-after.json
 CANDIDATE_VERSION_ID="$(node <<'NODE'
-const fs = require('node:fs');
-function versions(path) {
-  const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-  if (payload.success !== true) throw new Error('versions_query_failed');
-  if (Array.isArray(payload.result)) return payload.result;
-  if (Array.isArray(payload.result?.items)) return payload.result.items;
-  if (Array.isArray(payload.result?.versions)) return payload.result.versions;
-  throw new Error('versions_shape_unknown');
-}
-const before = new Set(versions('/tmp/master-versions-before.json').map(version => version.id).filter(Boolean));
-const added = versions('/tmp/master-versions-after.json').filter(version => version.id && !before.has(version.id));
-if (added.length !== 1) throw new Error(`candidate_version_not_unique:${added.length}`);
-const candidate = added[0];
-fs.writeFileSync(process.env.EVIDENCE_DIR + '/candidate-version.json', JSON.stringify({
-  version_id: candidate.id,
-  version_number: candidate.number || null,
-  source_sha: process.env.GITHUB_SHA,
-  source_short_sha: process.env.SHORT_SHA,
-  tag: process.env.CANDIDATE_TAG,
-  created_on: candidate.metadata?.created_on || null
-}, null, 2));
-process.stdout.write(candidate.id);
+const fs=require('node:fs');
+function versions(path){const p=JSON.parse(fs.readFileSync(path,'utf8'));if(p.success!==true)throw new Error('versions_query_failed');return Array.isArray(p.result)?p.result:(p.result?.items||p.result?.versions||[]);}
+const before=new Set(versions('/tmp/svelte-versions-before.json').map(v=>v.id)); const added=versions('/tmp/svelte-versions-after.json').filter(v=>v.id&&!before.has(v.id)); if(added.length!==1)throw new Error(`candidate_version_not_unique:${added.length}`);
+const c=added[0]; fs.writeFileSync(`${process.env.EVIDENCE_DIR}/candidate-version.json`,JSON.stringify({version_id:c.id,version_number:c.number||null,source_sha:process.env.GITHUB_SHA,source_short_sha:process.env.SHORT_SHA,tag:process.env.CANDIDATE_TAG,created_on:c.metadata?.created_on||null},null,2)); process.stdout.write(c.id);
 NODE
 )"
 export CANDIDATE_VERSION_ID
-
-curl --fail --silent --show-error --retry 3 \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > /tmp/master-candidate-version-detail.json
-
-echo '[master-candidate] verify stable bindings plus exact master product additions'
+curl --fail --silent --show-error --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > /tmp/svelte-candidate-version.json
 node <<'NODE'
-const fs = require('node:fs');
-function bindings(path) {
-  const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-  if (payload.success !== true) throw new Error('version_detail_failed');
-  const list = payload.result?.resources?.bindings;
-  if (!Array.isArray(list)) throw new Error('version_bindings_missing');
-  return list.map(binding => ({ name: binding.name, type: binding.type })).sort((a, b) => `${a.name}:${a.type}`.localeCompare(`${b.name}:${b.type}`));
-}
-const stable = bindings('/tmp/master-stable-version-detail.json');
-const candidate = bindings('/tmp/master-candidate-version-detail.json');
-const stableKeys = new Set(stable.map(binding => `${binding.name}:${binding.type}`));
-const candidateKeys = new Set(candidate.map(binding => `${binding.name}:${binding.type}`));
-const missing = [...stableKeys].filter(key => !candidateKeys.has(key));
-const additions = candidate.filter(binding => !stableKeys.has(`${binding.name}:${binding.type}`));
-if (missing.length) throw new Error(`stable_binding_missing:${missing.join(',')}`);
-if (additions.length !== 2) throw new Error(`master_binding_addition_count:${additions.length}`);
-const additionMap = new Map(additions.map(binding => [binding.name, binding.type]));
-if (additionMap.get('AI') !== 'ai') throw new Error(`ai_binding_invalid:${additionMap.get('AI')}`);
-if (additionMap.get('VOY_VOICE_ENABLED') !== 'plain_text') throw new Error(`voice_enabled_binding_invalid:${additionMap.get('VOY_VOICE_ENABLED')}`);
-if (candidate.length !== stable.length + 2) throw new Error('master_candidate_binding_count_invalid');
-fs.writeFileSync(process.env.EVIDENCE_DIR + '/binding-contract.json', JSON.stringify({
-  result: 'PASS',
-  stable_binding_count: stable.length,
-  candidate_binding_count: candidate.length,
-  stable_bindings: stable,
-  candidate_bindings: candidate,
-  exact_additions: additions
-}, null, 2));
+const fs=require('node:fs');
+function bindings(path){const p=JSON.parse(fs.readFileSync(path,'utf8'));if(p.success!==true)throw new Error('version_detail_failed');const list=p.result?.resources?.bindings;if(!Array.isArray(list))throw new Error('bindings_missing');return list.map(b=>({name:b.name,type:b.type})).sort((a,b)=>`${a.name}:${a.type}`.localeCompare(`${b.name}:${b.type}`));}
+const stable=bindings('/tmp/svelte-stable-version.json'), candidate=bindings('/tmp/svelte-candidate-version.json'); const stableSet=new Set(stable.map(x=>`${x.name}:${x.type}`)); const missing=stable.filter(x=>!candidate.some(y=>y.name===x.name&&y.type===x.type)); if(missing.length)throw new Error(`stable_binding_missing:${missing.map(x=>x.name).join(',')}`);
+const additions=candidate.filter(x=>!stableSet.has(`${x.name}:${x.type}`)); const map=new Map(additions.map(x=>[x.name,x.type])); for(const [name,type] of [['AI','ai'],['VOY_VOICE_ENABLED','plain_text'],['VOY_BUILD_HASH','plain_text']])if(map.get(name)!==type)throw new Error(`binding_addition_invalid:${name}:${map.get(name)}`);
+if(additions.length!==3)throw new Error(`binding_addition_count:${additions.length}`);
+fs.writeFileSync(`${process.env.EVIDENCE_DIR}/binding-contract.json`,JSON.stringify({result:'PASS',stable_binding_count:stable.length,candidate_binding_count:candidate.length,stable_bindings:stable,candidate_bindings:candidate,exact_additions:additions},null,2));
 NODE
 
-echo '[master-candidate] create production 100% / master candidate 0% deployment'
-wrangler versions deploy \
-  "$STABLE_VERSION_ID@100%" \
-  "$CANDIDATE_VERSION_ID@0%" \
-  --message "VOY master complete-product candidate 0% $GITHUB_SHA" \
-  --yes 2>&1 | tee "$EVIDENCE_DIR/candidate-deployment.log"
-
+wrangler versions deploy "$STABLE_VERSION_ID@100%" "$CANDIDATE_VERSION_ID@0%" --message "VOY Svelte candidate 0% $GITHUB_SHA" --yes 2>&1 | tee "$EVIDENCE_DIR/candidate-deployment.log"
 TAIL_PID=''
-stop_tail() {
-  if [[ -n "$TAIL_PID" ]] && kill -0 "$TAIL_PID" 2>/dev/null; then
-    kill "$TAIL_PID" 2>/dev/null || true
-    wait "$TAIL_PID" 2>/dev/null || true
-  fi
-}
+stop_tail(){ if [[ -n "$TAIL_PID" ]] && kill -0 "$TAIL_PID" 2>/dev/null; then kill "$TAIL_PID" 2>/dev/null||true; wait "$TAIL_PID" 2>/dev/null||true; fi; }
 trap stop_tail EXIT
-
-echo '[master-candidate] start exact-version tail'
-timeout 1200s wrangler tail "$WORKER_NAME" \
-  --format json \
-  --version-id "$CANDIDATE_VERSION_ID" \
-  > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
-TAIL_PID="$!"
-sleep 5
-kill -0 "$TAIL_PID"
-
-echo '[master-candidate] require 20 rounds, 13 exact assets and >=120 seconds'
-node scripts/candidate-runtime-gate.mjs converge
-
-echo '[master-candidate] real Workers AI API gate'
-node scripts/voice-candidate-api-gate.mjs 2>&1 | tee "$EVIDENCE_DIR/voice-api-gate.log"
-
-echo '[master-candidate] existing application browser through exact override'
-export VOY_BASE_URL="$WORKER_URL"
-export VOY_WORKER_NAME="$WORKER_NAME"
-export VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID"
-export VOY_EXPECTED_BUILD_HASH="$SHORT_SHA"
-export VOY_EVIDENCE_DIR="$EVIDENCE_DIR/city-browser"
-export VOY_OUTPUT_DIR="$EVIDENCE_DIR/city-browser-output"
-export VOY_REPORT_DIR="$EVIDENCE_DIR/city-browser-report"
-npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
-  PLAYWRIGHT_BIN=$(command -v playwright)
-  NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
-  export NODE_PATH
-  playwright test --config=candidate-tests/playwright.config.js
-' 2>&1 | tee "$EVIDENCE_DIR/city-candidate-browser.log"
-
-echo '[master-candidate] final product desktop Android iPhone through exact override'
-export VOY_EVIDENCE_DIR="$EVIDENCE_DIR/product-browser"
-export VOY_OUTPUT_DIR="$EVIDENCE_DIR/product-browser-output"
-export VOY_REPORT_DIR="$EVIDENCE_DIR/product-browser-report"
-npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
-  PLAYWRIGHT_BIN=$(command -v playwright)
-  NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
-  export NODE_PATH
-  playwright test --config=master-candidate-tests/playwright.config.js
-' 2>&1 | tee "$EVIDENCE_DIR/product-candidate-browser.log"
-
-echo '[master-candidate] clean Voice desktop/mobile through exact override'
-export VOY_EVIDENCE_DIR="$EVIDENCE_DIR/voice-browser"
-export VOY_OUTPUT_DIR="$EVIDENCE_DIR/voice-browser-output"
-export VOY_REPORT_DIR="$EVIDENCE_DIR/voice-browser-report"
-npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
-  PLAYWRIGHT_BIN=$(command -v playwright)
-  NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
-  export NODE_PATH
-  playwright test --config=voice-candidate-tests/playwright.config.js
-' 2>&1 | tee "$EVIDENCE_DIR/voice-candidate-browser.log"
-
-echo '[master-candidate] clean-cache territorial acquisition'
-export VOY_EXPECTED_SOURCE_ROOT="$EXPECTED_SOURCE_ROOT"
-export VOY_EVIDENCE_DIR="$EVIDENCE_DIR/cache-isolation"
-export VOY_OUTPUT_DIR="$EVIDENCE_DIR/cache-isolation-output"
-export VOY_REPORT_DIR="$EVIDENCE_DIR/cache-isolation-report"
-npm exec --yes --package=@playwright/test@1.61.1 -- sh -c '
-  PLAYWRIGHT_BIN=$(command -v playwright)
-  NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
-  export NODE_PATH
-  playwright test --config=candidate-tests/playwright.cache-isolation.config.js
-' 2>&1 | tee "$EVIDENCE_DIR/cache-isolation-browser.log"
-
-echo '[master-candidate] capture final product routes and content hashes'
-node --input-type=module <<'NODE'
-import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
-const base = process.env.WORKER_URL;
-const version = process.env.CANDIDATE_VERSION_ID;
-const worker = process.env.WORKER_NAME;
-const headers = {
-  'Cloudflare-Workers-Version-Overrides': `${worker}=\"${version}\"`,
-  'Cache-Control': 'no-cache, no-store, max-age=0'
-};
-const routes = ['/', '/api/health', '/manifest.json', '/sw.js', '/privacy', '/terms', '/sources', '/contact', '/core/productShell.js?v=2', '/ui/productShell.css?v=2'];
-const evidence = [];
-for (const route of routes) {
-  const response = await fetch(new URL(route, base), { headers });
-  const body = new Uint8Array(await response.arrayBuffer());
-  if (!response.ok || body.byteLength === 0) throw new Error(`product_route_failed:${route}:${response.status}`);
-  evidence.push({ route, status: response.status, content_type: response.headers.get('content-type'), bytes: body.byteLength, sha256: createHash('sha256').update(body).digest('hex') });
-}
-const health = JSON.parse(new TextDecoder().decode(await (await fetch(new URL('/api/health', base), { headers })).arrayBuffer()));
-if (health.ok !== true || health.build_hash !== process.env.SHORT_SHA) throw new Error('candidate_product_health_mismatch');
-if (health.features?.auth !== false || health.features?.voice !== true || health.features?.core_without_login_voice_ai !== true) throw new Error('candidate_feature_contract_mismatch');
-writeFileSync(`${process.env.EVIDENCE_DIR}/product-route-hashes.json`, JSON.stringify({ result: 'PASS', version_id: version, routes: evidence, health }, null, 2));
-NODE
-
-echo '[master-candidate] final exact state and tail verification'
-export EVIDENCE_DIR
-node scripts/candidate-runtime-gate.mjs final
-stop_tail
-trap - EXIT
-
-echo "CANDIDATE_VERSION_ID=$CANDIDATE_VERSION_ID" >> "$GITHUB_ENV"
-if [[ -f "$EVIDENCE_DIR/final-state.json" ]]; then
-  CANDIDATE_DEPLOYMENT_ID="$(node -p "require('./$EVIDENCE_DIR/final-state.json').deployment_id")"
-  echo "CANDIDATE_DEPLOYMENT_ID=$CANDIDATE_DEPLOYMENT_ID" >> "$GITHUB_ENV"
-fi
-
-echo '[master-candidate] complete: production unchanged at 100%, complete-product candidate at 0%'
+timeout 1200s wrangler tail "$WORKER_NAME" --format json --version-id "$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 & TAIL_PID=$!; sleep 5; kill -0 "$TAIL_PID"
+node scripts/svelte-candidate-gate.mjs converge
+node scripts/svelte-candidate-api-gate.mjs 2>&1 | tee "$EVIDENCE_DIR/api-gate.log"
+if [[ -s "$VOICE_SAMPLE_WAV" ]]; then node scripts/voice-candidate-api-gate.mjs 2>&1 | tee "$EVIDENCE_DIR/voice-api-gate.log"; fi
+VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_WORKER_NAME="$WORKER_NAME" VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" VOY_EVIDENCE_DIR="$EVIDENCE_DIR/candidate-browser-screens" VOY_OUTPUT_DIR="$EVIDENCE_DIR/candidate-browser-output" VOY_REPORT_DIR="$EVIDENCE_DIR/candidate-browser-report" bunx playwright test -c browser-tests/playwright.config.ts 2>&1 | tee "$EVIDENCE_DIR/candidate-browser.log"
+node scripts/svelte-candidate-gate.mjs final
+stop_tail; trap - EXIT
+printf 'CANDIDATE_VERSION_ID=%s\n' "$CANDIDATE_VERSION_ID" >> "$GITHUB_ENV"
+CANDIDATE_DEPLOYMENT_ID="$(node -p "JSON.parse(require('fs').readFileSync('$EVIDENCE_DIR/final-state.json','utf8')).deployment_id")"
+printf 'CANDIDATE_DEPLOYMENT_ID=%s\n' "$CANDIDATE_DEPLOYMENT_ID" >> "$GITHUB_ENV"

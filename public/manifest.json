@@ -1,68 +1,9 @@
 {
-  "name": "VOY — Movilidad Santa Fe",
-  "short_name": "VOY",
-  "description": "Movilidad urbana verificable para Santa Fe: destinos, comparación determinista, colectivo, taxi, remis y proveedores externos sin precios inventados.",
-  "id": "/",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#FFFFFF",
-  "theme_color": "#000000",
-  "categories": [
-    "navigation",
-    "travel",
-    "utilities"
-  ],
-  "lang": "es-AR",
-  "dir": "ltr",
+  "name": "VOY — Movilidad en Santa Fe", "short_name": "VOY", "description": "Comparador móvil de movilidad urbana con datos y límites visibles.",
+  "start_url": "/", "scope": "/", "display": "standalone", "background_color": "#f7f6f2", "theme_color": "#f7f6f2", "lang": "es-AR",
   "icons": [
-    {
-      "src": "/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/maskable-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/icons/maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/icons/app-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Buscar destino",
-      "url": "/?action=search",
-      "short_name": "Buscar"
-    },
-    {
-      "name": "Mi ubicación",
-      "url": "/?action=locate",
-      "short_name": "GPS"
-    },
-    {
-      "name": "Privacidad",
-      "url": "/privacy",
-      "short_name": "Privacidad"
-    }
+    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/apple-touch-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/apple-touch-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }

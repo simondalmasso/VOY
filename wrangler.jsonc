@@ -1,64 +1,19 @@
 {
-  // ============================================================
-  //  VOY — Cloudflare Workers config (V7.8 + production-ready optional Voice Copilot V1)
-  //
-  //  Worker name: voy-app
-  //  workers_dev remains enabled for the existing workers.dev origin.
-  //  Voice Copilot is explicitly enabled for the validated Santa Fe product.
-  //  Core mobility remains independent of Voice, AI and authentication.
-  // ============================================================
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "voy-app",
-  "compatibility_date": "2026-01-01",
-  "main": "./worker-entry.js",
-
+  "compatibility_date": "2026-07-27",
+  "main": "./worker/index.ts",
   "workers_dev": true,
   "routes": [],
-
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "html_handling": "none",
-    "not_found_handling": "none"
-  },
-
-  "ai": {
-    "binding": "AI"
-  },
-
-  "analytics_engine_datasets": [
-    { "binding": "VOY_METRICS", "dataset": "voy_metrics" }
-  ],
-
-  "durable_objects": {
-    "bindings": [
-      { "name": "NOMINATIM_COORDINATOR", "class_name": "NominatimCoordinator" }
-    ]
-  },
-
-  "migrations": [
-    { "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }
-  ],
-
+  "assets": { "directory": "./dist", "binding": "ASSETS", "html_handling": "none", "not_found_handling": "single-page-application" },
+  "ai": { "binding": "AI" },
+  "analytics_engine_datasets": [{ "binding": "VOY_METRICS", "dataset": "voy_metrics" }],
+  "durable_objects": { "bindings": [{ "name": "NOMINATIM_COORDINATOR", "class_name": "NominatimCoordinator" }] },
+  "migrations": [{ "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }],
   "vars": {
-    "VOY_OWNER_IPS": "",
-    "VOY_OWNER_IP_HASHES": "",
-    "VOY_DEV_IPS": "",
-    "VOY_OPERATOR_DIAGNOSTICS": "false",
-    "VOY_ALLOWED_ORIGINS": "",
-    "VOY_EXCLUDE_LOCALHOST": "true",
-    "VOY_EXCLUDE_HEADLESS": "true",
-    "VOY_EXCLUDE_BOT": "true",
-    "VOY_EXCLUDE_GLM": "true",
-    "VOY_EXCLUDE_UA_PATTERNS": "",
-    "VOY_VOICE_ENABLED": "true"
+    "VOY_OWNER_IPS": "", "VOY_OWNER_IP_HASHES": "", "VOY_DEV_IPS": "", "VOY_OPERATOR_DIAGNOSTICS": "false", "VOY_ALLOWED_ORIGINS": "",
+    "VOY_EXCLUDE_LOCALHOST": "true", "VOY_EXCLUDE_HEADLESS": "true", "VOY_EXCLUDE_BOT": "true", "VOY_EXCLUDE_GLM": "true", "VOY_EXCLUDE_UA_PATTERNS": "", "VOY_VOICE_ENABLED": "true", "VOY_BUILD_HASH": "dev"
   },
-
-  "observability": {
-    "enabled": true,
-    "logs": { "enabled": true, "head_sampling_rate": 1 }
-  },
-
-  "triggers": {
-    "crons": ["0 6 * * 1"]
-  }
+  "observability": { "enabled": true, "logs": { "enabled": true, "head_sampling_rate": 1 } },
+  "triggers": { "crons": ["0 6 * * 1"] }
 }
