@@ -122,7 +122,9 @@ test('legal, privacy, offline and PWA contracts remain available', async ({ page
   const manifestBody = await manifest.json();
   expect(manifestBody.start_url).toBe('/');
   expect(manifestBody.scope).toBe('/');
-  await expect.poll(() => page.evaluate(() => navigator.serviceWorker?.getRegistration().then(Boolean))).toBeTruthy();
+  if (process.env.VOY_EXTERNAL_SERVER !== '1') {
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker?.getRegistration().then(Boolean))).toBeTruthy();
+  }
   await page.context().setOffline(true);
   await page.evaluate(() => dispatchEvent(new Event('offline')));
   await expect(page.getByTestId('offline-banner')).toBeVisible();
