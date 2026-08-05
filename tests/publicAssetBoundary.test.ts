@@ -30,8 +30,10 @@ function environment(calls: string[]): Env {
 }
 
 async function dispatch(path: string, calls: string[], accept = '*/*'): Promise<Response> {
-  if (!worker.fetch) throw new Error('worker_fetch_missing');
-  return worker.fetch(new Request(`https://voy.invalid${path}`, { headers: { Accept: accept } }), environment(calls), testContext());
+  const fetchHandler = worker.fetch;
+  if (!fetchHandler) throw new Error('worker_fetch_missing');
+  type IncomingRequest = Parameters<typeof fetchHandler>[0];
+  return fetchHandler(new Request(`https://voy.invalid${path}`, { headers: { Accept: accept } }) as IncomingRequest, environment(calls), testContext());
 }
 
 describe('public asset truth boundary', () => {
@@ -64,7 +66,8 @@ describe('public asset truth boundary', () => {
     const calls: string[] = [];
     const manifest = await dispatch('/manifest.json', calls, 'application/json');
     expect(manifest.status).toBe(200);
-    expect(await manifest.json()).toEqual({ name: 'VOY' });
+    const manifestPayload = await manifest.json() as { name: string };
+    expect(manifestPayload).toEqual({ name: 'VOY' });
     const spa = await dispatch('/future-safe-route', calls, 'text/html');
     expect(spa.status).toBe(200);
     expect(await spa.text()).toContain('<div id="app"></div>');
