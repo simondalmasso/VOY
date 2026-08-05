@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "deploy": "bun run build && wrangler deploy",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
-    "lint": "eslint src worker tests __tests__ browser-tests scripts/build-static-manifest.mjs scripts/check-bundle-budgets.mjs vite.config.ts",
+    "lint": "eslint src worker tests browser-tests scripts/build-static-manifest.mjs scripts/check-bundle-budgets.mjs vite.config.ts",
     "test": "bun test tests/*.test.ts __tests__/*.test.js",
     "test:browser": "playwright test -c browser-tests/playwright.config.ts",
     "budget": "node scripts/check-bundle-budgets.mjs",
