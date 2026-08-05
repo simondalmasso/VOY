@@ -9,6 +9,8 @@ const viewports = [
   ['desktop-1280x800', { width: 1280, height: 800 }]
 ] as const;
 
+const externalCandidate = process.env.VOY_EXTERNAL_SERVER === '1';
+
 export default defineConfig({
   testDir: '.',
   outputDir: process.env.VOY_OUTPUT_DIR || '../test-results/svelte-browser',
@@ -18,7 +20,7 @@ export default defineConfig({
   use: {
     extraHTTPHeaders: process.env.VOY_CANDIDATE_VERSION_ID && process.env.VOY_WORKER_NAME ? { 'Cloudflare-Workers-Version-Overrides': `${process.env.VOY_WORKER_NAME}="${process.env.VOY_CANDIDATE_VERSION_ID}"` } : undefined,
     baseURL: process.env.VOY_BASE_URL || 'http://127.0.0.1:8787',
-    serviceWorkers: 'allow',
+    serviceWorkers: externalCandidate ? 'block' : 'allow',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off'
@@ -34,7 +36,7 @@ export default defineConfig({
       hasTouch: name.startsWith('mobile')
     }
   })),
-  webServer: process.env.VOY_EXTERNAL_SERVER === '1' ? undefined : {
+  webServer: externalCandidate ? undefined : {
     command: 'BUILD_HASH=browser bun run build && wrangler dev --local --port 8787',
     url: 'http://127.0.0.1:8787/api/health',
     timeout: 120_000,
