@@ -41,6 +41,16 @@ jobs:
           echo '308b759d738466eda64a2fea80383046db2a12444181984147f3f9a80425dbf0  /tmp/voy-master-apply.patch' | sha256sum -c -
           git apply --check /tmp/voy-master-apply.patch
           git apply /tmp/voy-master-apply.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/providerRegistry.test.ts')
+          original = path.read_text()
+          before = "globalThis.fetch = (async input =>"
+          after = "globalThis.fetch = (async (input: RequestInfo | URL) =>"
+          if original.count(before) != 1:
+              raise SystemExit('expected exactly one untyped fetch parameter')
+          path.write_text(original.replace(before, after))
+          PY
           rm -f .github/voy-master-apply.patch.gz .github/voy-master-apply.patch.part* .github/workflows/svelte-current-source-bundle.yml
           git diff --check
       - name: Install pinned frozen toolchain
