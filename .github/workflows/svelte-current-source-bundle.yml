@@ -1,35 +1,77 @@
-name: VOY Svelte Current Source Bundle
+name: Apply authorized VOY master completion
 
 on:
   push:
     branches:
       - feat/voy-complete-product-master-01
+    paths:
+      - .github/workflows/svelte-current-source-bundle.yml
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: voy-master-completion-writer
+  cancel-in-progress: false
 
 jobs:
-  bundle:
+  apply-validate-commit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact authorized head
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: feat/voy-complete-product-master-01
           fetch-depth: 0
-      - name: Verify and archive exact source
+      - name: Verify and apply exact staged patch
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/voy-complete-product-master-01 | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          git archive --format=zip --output=/tmp/voy-svelte-current-source.zip HEAD
-          sha256sum /tmp/voy-svelte-current-source.zip > /tmp/voy-svelte-current-source.zip.sha256
-      - uses: actions/upload-artifact@v4
-        with:
-          name: voy-svelte-current-source-${{ github.run_id }}
-          path: |
-            /tmp/voy-svelte-current-source.zip
-            /tmp/voy-svelte-current-source.zip.sha256
-          if-no-files-found: error
-          retention-days: 7
+          echo 'd1d9949bded93e1a844ca46ad2e3fd3de9aba97b351b6b3ef083e83f2a4b9891  .github/voy-master-apply.patch.gz' | sha256sum -c -
+          gzip -dc .github/voy-master-apply.patch.gz > /tmp/voy-master-apply.patch
+          echo '308b759d738466eda64a2fea80383046db2a12444181984147f3f9a80425dbf0  /tmp/voy-master-apply.patch' | sha256sum -c -
+          git apply --check /tmp/voy-master-apply.patch
+          git apply /tmp/voy-master-apply.patch
+          rm -f .github/voy-master-apply.patch.gz .github/workflows/svelte-current-source-bundle.yml
+          git diff --check
+      - name: Install pinned frozen toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+      - name: Validate complete Svelte product
+        env:
+          BUILD_HASH: ${{ github.sha }}
+          VOY_METRICS_PATH: test-results/build-metrics.json
+          VOY_EVIDENCE_DIR: test-results/master-apply-screens
+          VOY_OUTPUT_DIR: test-results/master-apply-browser
+          VOY_REPORT_DIR: playwright-report-master-apply
+          VOY_LOCAL_SERVER_LOG: test-results/master-apply-vite.log
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs
+          node --check public/sw.js
+          node --check scripts/svelte-candidate-gate.mjs
+          node --check scripts/svelte-candidate-api-gate.mjs
+          bash -n scripts/run-browser-smoke.sh scripts/run-master-final-candidate.sh
+          bun run validate
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+          bunx playwright install --with-deps chromium
+          WRANGLER_LOG=none bash scripts/run-browser-smoke.sh
+      - name: Commit validated completion without force push
+        run: |
+          set -euo pipefail
+          remote_head="$(git ls-remote origin refs/heads/feat/voy-complete-product-master-01 | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          git config user.name 'VOY EJE'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: complete truthful Svelte mobility runtime'
+          git push origin HEAD:feat/voy-complete-product-master-01
