@@ -84,6 +84,24 @@ describe('Voice destination selection boundary', () => {
     assert.deepEqual(selected.arguments, {});
   });
 
+  test('forces explicit comparison intent after a validated destination', async () => {
+    const contracts = await contractsPromise;
+    const conversation = await conversationPromise;
+    const session = contracts.newSession('santafe');
+    session.destination = contracts.sanitizePlaceRef({
+      ref: 'santafe:landmark:terminal',
+      name: 'Terminal de Ómnibus',
+      address: 'Belgrano 2910',
+      source: 'local',
+      city_id: 'santafe'
+    });
+    const selected = conversation.__voiceConversationTest.selectToolCall({
+      tool_calls: [{ id: 'model-call', name: 'list_nearby_stops', arguments: {} }]
+    }, 'Compará los modos disponibles sin inventar precios, tiempos ni colectivo.', session);
+    assert.equal(selected.name, 'compare_modes');
+    assert.deepEqual(selected.arguments, {});
+  });
+
   test('does not replace a different allowlisted model tool with unrelated non-safety fallback arguments', async () => {
     const contracts = await contractsPromise;
     const conversation = await conversationPromise;
