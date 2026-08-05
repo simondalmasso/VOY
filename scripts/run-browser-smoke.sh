@@ -7,12 +7,6 @@ BASE_OUTPUT_DIR="${VOY_OUTPUT_DIR:-test-results/playwright-local}"
 BASE_REPORT_DIR="${VOY_REPORT_DIR:-playwright-report}"
 mkdir -p test-results "$(dirname "$WRANGLER_LOG")"
 
-if command -v wrangler >/dev/null 2>&1; then
-  WRANGLER_CMD=(wrangler)
-else
-  WRANGLER_CMD=(npx wrangler)
-fi
-
 WRANGLER_PID=''
 CURRENT_LOG=''
 
@@ -32,7 +26,7 @@ trap cleanup EXIT INT TERM
 start_wrangler() {
   local label="$1"
   CURRENT_LOG="${WRANGLER_LOG%.log}-${label}.log"
-  "${WRANGLER_CMD[@]}" dev --local --port 8787 >"$CURRENT_LOG" 2>&1 &
+  npx wrangler dev --local --port 8787 >"$CURRENT_LOG" 2>&1 &
   WRANGLER_PID=$!
 
   for attempt in $(seq 1 60); do
