@@ -72,8 +72,8 @@ jobs:
           set -euo pipefail
           npm install --global bun@1.3.14
           bun install --frozen-lockfile
-          bun run check
-          bun run lint
+          bunx svelte-check --tsconfig ./tsconfig.json
+          bunx eslint src worker tests browser-tests scripts/build-static-manifest.mjs scripts/check-bundle-budgets.mjs vite.config.ts
           bun test
           bun run build
           git diff --check
