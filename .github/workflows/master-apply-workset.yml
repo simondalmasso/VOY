@@ -25,7 +25,7 @@ jobs:
           ref: feat/voy-complete-product-master-01
           fetch-depth: 0
 
-      - name: Verify, apply, validate and publish exact workset
+      - name: Verify, apply, validate and publish exact non-workflow workset
         shell: bash
         run: |
           set -euo pipefail
@@ -51,6 +51,14 @@ jobs:
           git apply --check /tmp/voy-master-workset.patch
           git apply /tmp/voy-master-workset.patch
           sed -i 's/governance: google_drive/governance: github/' docs/control/release-policy.yaml
+
+          # GitHub Actions tokens cannot update workflow files. Preserve the two
+          # temporary workflows and omit the final workflow from this push; ARQ
+          # will perform those three workflow-only commits through the authorized
+          # GitHub connector after this validated code commit lands.
+          git restore --source=HEAD -- .github/workflows/master-source-bundle.yml .github/workflows/master-apply-workset.yml
+          rm -f .github/workflows/master-final-candidate.yml
+
           rm -f ops/master-workset.part00 ops/master-workset.part01 ops/master-workset.part02 \
             ops/master-workset.part03 ops/master-workset.part04 \
             ops/master-workset.part04a ops/master-workset.part04b \
@@ -58,7 +66,6 @@ jobs:
             ops/master-workset.part05 ops/master-workset.part06 \
             ops/master-workset.part07 ops/master-workset.part08a \
             ops/master-workset.part08b ops/master-workset.part08c
-          rm -f .github/workflows/master-apply-workset.yml
           git add -A
           git diff --cached --check
           node scripts/verify-release-policy.mjs
