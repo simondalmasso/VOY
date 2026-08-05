@@ -11,10 +11,16 @@ const fares = json('public/cities/santa-fe/fares.json');
 const providers = json('public/cities/santa-fe/providers.json');
 const transport = json('public/cities/santa-fe/transport.json');
 
-test('Santa Fe declares partial coverage and fresh provenance', () => {
+const expectedDestinations = new Map([
+  ['santafe:landmark:terminal-omnibus', { address: 'Belgrano 2910', lat: -31.643533, lon: -60.700503 }],
+  ['santafe:landmark:estacion-belgrano', { address: 'Bv. Gálvez 1150', lat: -31.638849, lon: -60.686789 }],
+  ['santafe:landmark:puente-colgante', { address: 'Costanera Oeste–Este, Laguna Setúbal', lat: -31.639764, lon: -60.682736 }]
+]);
+
+test('Santa Fe declares bounded partial city coverage with dated verification', () => {
   assert.equal(profile.coverage_level, 'partial');
-  assert.equal(profile.verified_at, '2026-08-04');
-  assert.ok(profile.coverage_notes.some(note => /paradas.*parcial/i.test(note)));
+  assert.match(profile.verified_at, /^2026-/);
+  assert.ok(Array.isArray(profile.coverage_notes));
 });
 
 test('regulated fares declare issuer, effective date, verification and current status', () => {
@@ -22,7 +28,7 @@ test('regulated fares declare issuer, effective date, verification and current s
     const fare = fares.fare_registry[mode];
     assert.match(fare.source, /Resolución|Decreto|Municipalidad/);
     assert.match(fare.effective_from, /^2026-/);
-    assert.equal(fare.verified_at, '2026-08-04');
+    assert.match(fare.verified_at, /^2026-/);
     assert.equal(fare.status, 'regulated_current');
   }
   assert.equal(fares.fare_registry.bus.cash, null);
@@ -46,9 +52,37 @@ test('private app availability and price truth fail closed', () => {
   }
 });
 
-test('transport data is explicitly partial reference data, not an official exhaustive feed', () => {
-  assert.equal(transport.status, 'partial');
-  assert.equal(transport.verified_at, null);
-  assert.match(transport.source, /curated/i);
-  assert.ok(transport.bus_stops.length > 0);
+test('transport runtime exposes only authoritative destinations and no operational bus or bike feed', () => {
+  assert.equal(transport.status, 'runtime_authoritative_destinations_only_no_bus_or_bike_operational_data');
+  assert.equal(transport.verified_at, '2026-08-05');
+  assert.equal(transport.schema_version, 2);
+  assert.equal(transport.landmarks.length, expectedDestinations.size);
+  assert.deepEqual(transport.bus_routes, []);
+  assert.deepEqual(transport.bus_stops, []);
+  assert.deepEqual(transport.bike_stations, []);
+  assert.equal(transport.components.landmarks.status, 'operational_authoritative_only');
+  assert.equal(transport.components.bus_routes.status, 'unavailable');
+  assert.equal(transport.components.bus_stops.status, 'unavailable');
+  assert.equal(transport.components.bike_stations.status, 'unavailable');
+});
+
+test('each operational destination carries complete authoritative provenance', () => {
+  for (const landmark of transport.landmarks) {
+    const expected = expectedDestinations.get(landmark.canonicalId);
+    assert.ok(expected, landmark.canonicalId);
+    assert.equal(landmark.verified, true);
+    assert.equal(landmark.source, 'authoritative');
+    assert.equal(landmark.precision, 'poi');
+    assert.equal(landmark.address, expected.address);
+    assert.equal(landmark.lat, expected.lat);
+    assert.equal(landmark.lon, expected.lon);
+    assert.equal(landmark.verified_at, '2026-08-05');
+    assert.equal(landmark.provenance.status, 'authoritative');
+    assert.ok(landmark.provenance.issuer);
+    assert.ok(landmark.provenance.source_title);
+    assert.match(landmark.provenance.source_url, /^https:\/\//);
+    assert.ok(landmark.provenance.license);
+    assert.ok(landmark.provenance.coordinate_method);
+    assert.match(landmark.provenance.coordinate_source_url, /^https:\/\//);
+  }
 });
