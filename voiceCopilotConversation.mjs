@@ -25,6 +25,7 @@ Las acciones externas requieren confirmación separada de un solo uso.
 Respondé de forma breve y útil.`;
 
 const EXTERNAL_PROVIDERS = ['uber', 'didi', 'maxim', 'cabify', 'taxi', 'remis'];
+const DETERMINISTIC_NARRATION_TOOLS = new Set(['estimate_modes', 'compare_modes', 'get_fare_metadata', 'list_available_providers', 'list_nearby_stops', 'list_nearby_bike_stations']);
 
 function modelContext(session) {
   return {
@@ -33,7 +34,6 @@ function modelContext(session) {
     destination: session.destination ? { ref: session.destination.ref, name: session.destination.name } : null,
     selected_mode: session.selected_mode,
     result_refs: session.results.map(place => ({ ref: place.ref, name: place.name })),
-    mobility_snapshot: session.mobility_snapshot,
     pending_confirmation: session.pending_confirmation ? {
       provider: session.pending_confirmation.provider,
       destination_ref: session.pending_confirmation.destination_ref,
@@ -156,6 +156,9 @@ export async function handleVoiceChat(request, env) {
           expires_at: toolResult.expires_at
         }));
       }
+      if (DETERMINISTIC_NARRATION_TOOLS.has(selected.name)) {
+      responseText = fallbackNarration(selected.name, toolResult, session);
+    } else {
       try {
         const narration = await providers.llm.narrate(messages, selected, toolResult);
         session.inference_count += 1;
@@ -163,6 +166,7 @@ export async function handleVoiceChat(request, env) {
       } catch {
         responseText = fallbackNarration(selected.name, toolResult, session);
       }
+    }
     } catch (error) {
       toolExecution = failedExecutionRecord(
         selected.name,

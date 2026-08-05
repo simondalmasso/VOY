@@ -126,7 +126,7 @@ export function validateSession(input, now = Date.now()) {
   if (!closedObject(input, [
     'session_id', 'created_at', 'expires_at', 'turn_count', 'inference_count', 'state_revision',
     'city_id', 'origin', 'destination', 'selected_mode', 'results', 'pending_confirmation',
-    'recent_turns', 'last_response', 'active_request_id', 'mobility_snapshot'
+    'recent_turns', 'last_response', 'active_request_id'
   ], ['session_id', 'created_at', 'expires_at', 'turn_count', 'state_revision', 'city_id'])) {
     throw new Error('invalid_session_shape');
   }
@@ -159,8 +159,7 @@ export function validateSession(input, now = Date.now()) {
     pending_confirmation: sanitizePending(input.pending_confirmation),
     recent_turns: recentTurns,
     last_response: boundedString(input.last_response, VOICE_LIMITS.maxResponseChars, { allowEmpty: true }) || '',
-    active_request_id: boundedString(input.active_request_id, 80, { allowEmpty: true }) || null,
-    mobility_snapshot: sanitizeMobilitySnapshot(input.mobility_snapshot)
+    active_request_id: boundedString(input.active_request_id, 80, { allowEmpty: true }) || null
   };
   const bytes = new TextEncoder().encode(JSON.stringify(session)).byteLength;
   if (bytes > VOICE_LIMITS.maxContextBytes) throw new Error('session_context_too_large');
@@ -183,8 +182,7 @@ export function newSession(cityId = '_default', now = Date.now()) {
     pending_confirmation: null,
     recent_turns: [],
     last_response: '',
-    active_request_id: null,
-    mobility_snapshot: []
+    active_request_id: null
   };
 }
 
@@ -205,26 +203,6 @@ export function sanitizePlaceRef(value) {
 export function sanitizeResults(value) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, VOICE_LIMITS.maxCandidates).map(sanitizePlaceRef).filter(Boolean);
-}
-
-export function sanitizeMobilitySnapshot(value) {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 12).map(item => {
-    if (!closedObject(item, ['mode', 'available', 'price', 'duration_min', 'distance_km', 'source', 'status', 'label'], ['mode', 'available'])) return null;
-    const mode = normalizeMode(item.mode);
-    if (!mode || typeof item.available !== 'boolean') return null;
-    const finiteOrNull = number => number === null || number === undefined ? null : (Number.isFinite(Number(number)) ? Number(number) : null);
-    return {
-      mode,
-      available: item.available,
-      price: finiteOrNull(item.price),
-      duration_min: finiteOrNull(item.duration_min),
-      distance_km: finiteOrNull(item.distance_km),
-      source: boundedString(item.source, 120, { allowEmpty: true }) || '',
-      status: boundedString(item.status, 80, { allowEmpty: true }) || '',
-      label: boundedString(item.label, 80, { allowEmpty: true }) || mode
-    };
-  }).filter(Boolean);
 }
 
 export function sanitizePending(value) {
@@ -331,8 +309,8 @@ export const TOOL_DEFINITIONS = Object.freeze([
   { name: 'resolve_destination', description: 'Resolve one destination from the current deterministic result list by exact reference.', parameters: schema({ destination_ref: { type: 'string', minLength: 1, maxLength: 160 } }, ['destination_ref']) },
   { name: 'set_origin', description: 'Set the VOY origin from a validated place reference.', parameters: schema({ place_ref: placeRefSchema }, ['place_ref']) },
   { name: 'set_destination', description: 'Set the VOY destination from a validated place reference.', parameters: schema({ place_ref: placeRefSchema }, ['place_ref']) },
-  { name: 'estimate_modes', description: 'Return the current deterministic VOY mobility estimate snapshot. Never calculate values.', parameters: schema() },
-  { name: 'compare_modes', description: 'Compare only the deterministic VOY snapshot already present in state.', parameters: schema() },
+  { name: 'estimate_modes', description: 'Return only server-verified provider metadata. Never accept client-authored estimates.', parameters: schema() },
+  { name: 'compare_modes', description: 'Compare only server-reconstructed verified metadata. Never rank client-authored values.', parameters: schema() },
   { name: 'list_available_providers', description: 'List provider availability from the current territorial profile.', parameters: schema() },
   { name: 'list_nearby_stops', description: 'List the bounded current-city stop sample from territorial data.', parameters: schema() },
   { name: 'list_nearby_bike_stations', description: 'List the bounded current-city bicycle station sample from territorial data.', parameters: schema() },

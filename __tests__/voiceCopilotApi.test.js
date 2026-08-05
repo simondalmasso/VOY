@@ -101,7 +101,7 @@ describe('Voice Copilot guarded API', () => {
       { tool_calls: [{ name: 'search_destination', arguments: { query: 'terminal' } }] },
       { response: 'Encontré la terminal.' },
       { tool_calls: [{ name: 'compare_modes', arguments: {} }] },
-      { response: 'El colectivo es más barato y el taxi es más rápido.' }
+      { response: 'No hay un ranking numérico verificable.' }
     ];
     const testEnv = env({ run: async () => plans.shift() });
     let session = contracts.newSession('santafe');
@@ -115,10 +115,6 @@ describe('Voice Copilot guarded API', () => {
     assert.equal(body.tool_execution.status, 'success');
     assert.equal(body.session.destination.name, 'Terminal de Ómnibus');
     session = body.session;
-    session.mobility_snapshot = [
-      { mode: 'taxi', available: true, price: 5000, duration_min: 15, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Taxi' },
-      { mode: 'bus', available: true, price: 1200, duration_min: 35, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Colectivo' }
-    ];
     response = await api.handleVoiceRequest(request('/api/voice/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -126,9 +122,34 @@ describe('Voice Copilot guarded API', () => {
     }, '11'), testEnv);
     body = await json(response);
     assert.equal(body.tool_execution.tool, 'compare_modes');
-    assert.equal(body.tool_result.cheapest.mode, 'bus');
-    assert.equal(body.tool_result.fastest.mode, 'taxi');
+    assert.equal(body.tool_result.cheapest, null);
+    assert.equal(body.tool_result.fastest, null);
+    assert.equal(body.tool_result.available.some(item => item.mode === 'uber'), true);
+    assert.equal(body.tool_result.available.some(item => item.mode === 'bus'), false);
+    assert.equal(body.tool_result.available.every(item => item.price === null), true);
+    assert.match(body.response, /no hay precio o duración comparable/i);
     assert.equal(body.session.turn_count, 2);
+  });
+
+
+  test('rejects client-authored mobility snapshots and fabricated private-app prices', async () => {
+    const api = await apiPromise;
+    const contracts = await contractsPromise;
+    const session = contracts.newSession('santafe');
+    session.destination = contracts.sanitizePlaceRef({ ref: 'santafe:terminal', name: 'Terminal de Ómnibus', address: 'Belgrano 2910', source: 'local', city_id: 'santafe' });
+    session.mobility_snapshot = [
+      { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'client', status: 'estimated', label: 'Bus inyectado' },
+      { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'client', status: 'estimated', label: 'Uber fabricado' }
+    ];
+    const response = await api.handleVoiceRequest(request('/api/voice/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Compará', request_id: 'forged-1', session })
+    }, '16'), env());
+    const body = await json(response);
+    assert.equal(response.status, 400);
+    assert.equal(body.ok, false);
+    assert.match(body.error, /invalid_session_shape/);
   });
 
   test('rejects unknown model tool without an action claim', async () => {

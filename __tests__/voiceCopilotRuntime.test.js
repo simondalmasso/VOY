@@ -101,18 +101,25 @@ describe('Voice Copilot deterministic runtime', () => {
     assert.equal(execution.session.state_revision, 1);
   });
 
-  test('does not calculate modes and only compares a validated client snapshot', async () => {
-    const runtime = await runtimePromise;
-    const session = await sessionWithDestination();
-    session.mobility_snapshot = [
-      { mode: 'taxi', available: true, price: 5000, duration_min: 15, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Taxi' },
-      { mode: 'bus', available: true, price: 1200, duration_min: 35, distance_km: 5, source: 'VOY', status: 'estimated', label: 'Colectivo' }
-    ];
-    const execution = await runtime.executeVoiceTool('compare_modes', {}, session, env(), 'r2');
-    assert.equal(execution.result.cheapest.mode, 'bus');
-    assert.equal(execution.result.fastest.mode, 'taxi');
-    assert.equal(execution.result.ranking_source, 'VOY deterministic mobility snapshot');
-  });
+  test('ignores forged client estimates and compares only server-verified metadata', async () => {
+  const runtime = await runtimePromise;
+  const session = await sessionWithDestination();
+  session.mobility_snapshot = [
+    { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Colectivo' },
+    { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Uber barato' }
+  ];
+  const execution = await runtime.executeVoiceTool('compare_modes', {}, session, env(), 'r2');
+  const modes = execution.result.available.map(item => item.mode).sort();
+  assert.deepEqual(modes, ['didi', 'taxi', 'uber']);
+  assert.equal(modes.includes('bus'), false);
+  assert.equal(execution.result.available.every(item => item.price === null && item.duration_min === null && item.distance_km === null), true);
+  assert.equal(execution.result.available.every(item => item.source === 'server_territorial_provider_profile'), true);
+  assert.equal(execution.result.cheapest, null);
+  assert.equal(execution.result.fastest, null);
+  assert.equal(execution.result.numerical_ranking_available, false);
+  assert.equal(execution.result.collective_recommendations, false);
+  assert.equal(execution.result.ranking_source, 'VOY server-verified territorial metadata');
+});
 
   test('fails closed when a destination is required', async () => {
     const contracts = await contractsPromise;

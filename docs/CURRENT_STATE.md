@@ -104,3 +104,14 @@ The final release workflow is added only after all source, tests, documentation 
 8. make no source commit after candidate creation.
 
 PR #31 stays Draft, unmerged and without productive traffic until independent AUD PASS and a separate exact authorization from Simón.
+
+
+## AUD voice provenance correction — 2026-08-05
+
+- AUD block: GitHub comment `5191416935`.
+- Client-authored `mobility_snapshot` is rejected by the public Voice session contract.
+- Voice mode comparison is reconstructed only from verified server territorial provider metadata.
+- Private-app prices, durations and distances are never accepted or ranked from the client.
+- Collective/bus recommendations remain disabled and bus is excluded from Voice comparison.
+- A fresh exact-head candidate at 0% is required; candidate `cec69db3-3e4d-426e-b070-7a99d2f52d80` is superseded and must never be promoted.
+- Productive traffic and merge remain unauthorized.

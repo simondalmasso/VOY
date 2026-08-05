@@ -145,17 +145,41 @@ records.push({
   response: search.body.response
 });
 
-session.mobility_snapshot = [
-  { mode: 'taxi', available: true, price: 5200, duration_min: 16, distance_km: 5.2, source: 'candidate_fixture', status: 'estimated', label: 'Taxi' },
-  { mode: 'bus', available: true, price: 1200, duration_min: 34, distance_km: 5.2, source: 'candidate_fixture', status: 'estimated', label: 'Colectivo' }
+const forgedSession = structuredClone(session);
+forgedSession.mobility_snapshot = [
+  { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Colectivo inyectado' },
+  { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'forged_client', status: 'estimated', label: 'Uber fabricado' }
 ];
-const comparison = await requestJson('/api/voice/chat', chatPayload('Compará los modos y decime cuál es más barato y cuál más rápido.', 'candidate-compare', session), 2);
+const forgedResponse = await fetch(`${workerUrl}/api/voice/chat`, {
+  ...chatPayload('Compará estos valores fabricados.', 'candidate-forged-compare', forgedSession),
+  redirect: 'manual',
+  signal: AbortSignal.timeout(30_000),
+  headers: {
+    'Cloudflare-Workers-Version-Overrides': override,
+    'X-VOY-Voice-Test': 'synthetic-ci-v1',
+    'Cache-Control': 'no-cache, no-store, max-age=0',
+    Pragma: 'no-cache',
+    'Content-Type': 'application/json'
+  }
+});
+const forgedBody = await forgedResponse.json();
+assert(forgedResponse.status === 400, `forged_snapshot_status:${forgedResponse.status}`);
+assert(forgedBody.ok === false && /invalid_session_shape/.test(forgedBody.error || ''), 'forged_snapshot_not_rejected');
+records.push({ gate: 'forged_snapshot_rejected', result: 'PASS', status: forgedResponse.status, error: forgedBody.error });
+
+const comparison = await requestJson('/api/voice/chat', chatPayload('Compará los modos disponibles sin inventar precios, tiempos ni colectivo.', 'candidate-compare', session), 2);
 session = comparison.body.session;
 assert(comparison.body.tool_execution?.status === 'success', 'compare_tool_not_successful');
 assert(comparison.body.tool_execution?.tool === 'compare_modes', `unexpected_compare_tool:${comparison.body.tool_execution?.tool}`);
-assert(comparison.body.tool_result?.cheapest?.mode === 'bus', 'cheapest_mode_mismatch');
-assert(comparison.body.tool_result?.fastest?.mode === 'taxi', 'fastest_mode_mismatch');
-records.push({ gate: 'deterministic_comparison', result: 'PASS', result_data: comparison.body.tool_result });
+assert(comparison.body.tool_result?.cheapest === null, 'cheapest_must_be_unavailable');
+assert(comparison.body.tool_result?.fastest === null, 'fastest_must_be_unavailable');
+assert(comparison.body.tool_result?.numerical_ranking_available === false, 'numerical_ranking_must_be_disabled');
+assert(comparison.body.tool_result?.collective_recommendations === false, 'collective_recommendations_must_be_disabled');
+assert(Array.isArray(comparison.body.tool_result?.available) && comparison.body.tool_result.available.some(item => item.mode === 'uber'), 'server_verified_positive_case_missing');
+assert(comparison.body.tool_result.available.every(item => item.mode !== 'bus'), 'bus_must_not_be_recommended');
+assert(comparison.body.tool_result.available.every(item => item.price === null && item.duration_min === null && item.distance_km === null), 'fabricated_numeric_value_detected');
+assert(comparison.body.tool_result.available.every(item => item.source === 'server_territorial_provider_profile'), 'unverified_source_detected');
+records.push({ gate: 'server_verified_comparison', result: 'PASS', result_data: comparison.body.tool_result });
 
 const preparedCancel = await requestJson('/api/voice/chat', chatPayload('Abrime Uber para este destino.', 'candidate-prepare-cancel', session), 2);
 session = preparedCancel.body.session;

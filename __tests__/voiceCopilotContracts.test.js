@@ -49,6 +49,8 @@ describe('Voice Copilot closed contracts', () => {
     const contracts = await contractsPromise;
     const session = validSession(contracts);
     assert.throws(() => contracts.validateSession({ ...session, secret: 'x' }), /invalid_session_shape/);
+    assert.throws(() => contracts.validateSession({ ...session, mobility_snapshot: [{ mode: 'bus', available: true, price: 1 }] }), /invalid_session_shape/);
+    assert.equal(Object.prototype.hasOwnProperty.call(session, 'mobility_snapshot'), false);
     assert.throws(() => contracts.validateChatPayload({ message: 'hola', request_id: 'r1', session, raw_prompt: 'x' }), /invalid_chat_payload/);
   });
 

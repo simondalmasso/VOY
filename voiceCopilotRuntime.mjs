@@ -56,6 +56,28 @@ function executionRecord(name, args, requestId, beforeRevision, afterRevision, s
   };
 }
 
+function serverVerifiedMobilitySnapshot(bundle) {
+  const byMode = new Map();
+  for (const provider of providerSummary(bundle)) {
+    if (provider.verified !== true) continue;
+    const mode = provider.category === 'app' ? provider.id : provider.category;
+    if (!['uber', 'didi', 'maxim', 'cabify', 'taxi', 'remis'].includes(mode)) continue;
+    const item = {
+      mode,
+      available: provider.available === true,
+      price: null,
+      duration_min: null,
+      distance_km: null,
+      source: 'server_territorial_provider_profile',
+      status: provider.available === true ? 'verified_available' : 'verified_unavailable',
+      label: provider.name
+    };
+    const current = byMode.get(mode);
+    if (!current || (item.available && !current.available)) byMode.set(mode, item);
+  }
+  return [...byMode.values()].sort((a, b) => a.mode.localeCompare(b.mode));
+}
+
 export async function executeVoiceTool(name, rawArgs, session, env, requestId) {
   const args = validateToolCall(name, rawArgs);
   const next = clone(session);
@@ -94,24 +116,25 @@ export async function executeVoiceTool(name, rawArgs, session, env, requestId) {
     next.destination = args.place_ref;
     result = { destination: next.destination };
   } else if (name === 'estimate_modes') {
-    if (!next.destination) throw new Error('destination_required');
-    result = {
-      destination: next.destination,
-      estimates: next.mobility_snapshot,
-      calculated_by: 'VOY deterministic client adapter'
-    };
-  } else if (name === 'compare_modes') {
-    if (!next.destination) throw new Error('destination_required');
-    const available = next.mobility_snapshot.filter(item => item.available);
-    const priceRank = available.filter(item => Number.isFinite(item.price)).sort((a, b) => a.price - b.price);
-    const durationRank = available.filter(item => Number.isFinite(item.duration_min)).sort((a, b) => a.duration_min - b.duration_min);
-    result = {
-      available,
-      cheapest: priceRank[0] || null,
-      fastest: durationRank[0] || null,
-      ranking_source: 'VOY deterministic mobility snapshot'
-    };
-  } else if (name === 'list_available_providers') {
+  if (!next.destination) throw new Error('destination_required');
+  result = {
+    destination: next.destination,
+    estimates: serverVerifiedMobilitySnapshot(bundle),
+    calculated_by: 'VOY server-verified territorial metadata',
+    numerical_ranking_available: false,
+    collective_recommendations: false
+  };
+} else if (name === 'compare_modes') {
+  if (!next.destination) throw new Error('destination_required');
+  const available = serverVerifiedMobilitySnapshot(bundle).filter(item => item.available);
+  result = {
+    available,
+    cheapest: null,
+    fastest: null,
+    ranking_source: 'VOY server-verified territorial metadata',
+    numerical_ranking_available: false,
+    collective_recommendations: false
+  }  } else if (name === 'list_available_providers') {
     result = { providers: providerSummary(bundle) };
   } else if (name === 'list_nearby_stops') {
     result = {
