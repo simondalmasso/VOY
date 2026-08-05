@@ -16,7 +16,7 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 8_000 },
   use: {
-    extraHTTPHeaders: process.env.VOY_CANDIDATE_VERSION_ID && process.env.VOY_WORKER_NAME ? { 'Cloudflare-Workers-Version-Overrides': `${process.env.VOY_WORKER_NAME}=\"${process.env.VOY_CANDIDATE_VERSION_ID}\"` } : undefined,
+    extraHTTPHeaders: process.env.VOY_CANDIDATE_VERSION_ID && process.env.VOY_WORKER_NAME ? { 'Cloudflare-Workers-Version-Overrides': `${process.env.VOY_WORKER_NAME}="${process.env.VOY_CANDIDATE_VERSION_ID}"` } : undefined,
     baseURL: process.env.VOY_BASE_URL || 'http://127.0.0.1:8787',
     serviceWorkers: 'allow',
     trace: 'retain-on-failure',

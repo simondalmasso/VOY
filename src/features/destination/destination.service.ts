@@ -42,7 +42,7 @@ export async function searchDestinations(query: string, signal: AbortSignal): Pr
     `${item.name} ${item.address}`.toLocaleLowerCase('es-AR').includes(normalized)
   );
   if (local.length >= 5) return local.slice(0, 6);
-  let remote: Destination[] = [];
+  const remote: Destination[] = [];
   try {
     const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { signal, headers: { Accept: 'application/json' } });
     if (response.ok) {
