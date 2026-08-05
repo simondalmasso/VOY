@@ -21,7 +21,7 @@ describe('route API boundary', () => {
     expect(validGeometry([[-58.4, -34.6], [-60.69, -31.64]], input)).toBe(false);
   });
   test('valid upstream response is normalized and never cached publicly', async () => {
-    globalThis.fetch = async () => new Response(JSON.stringify({ code: 'Ok', routes: [{ distance: 3200, duration: 630, geometry: { coordinates: [[-60.70, -31.63], [-60.695, -31.635], [-60.69, -31.64]] } }] }), { status: 200 });
+    globalThis.fetch = (async () => new Response(JSON.stringify({ code: 'Ok', routes: [{ distance: 3200, duration: 630, geometry: { coordinates: [[-60.70, -31.63], [-60.695, -31.635], [-60.69, -31.64]] } }] }), { status: 200 })) as typeof fetch;
     const response = await handleRoute(new Request('https://voy.test/api/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: { lat: -31.63, lon: -60.7 }, destination: { lat: -31.64, lon: -60.69 }, profile: 'driving' }) }), {});
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('no-store');

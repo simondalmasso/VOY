@@ -6,7 +6,7 @@ const fares = { fare_registry: { taxi: { diurno: { bajada: 1790, ficha: 179, dis
 const route = { source: 'osrm_route' as const, distanceKm: 3.2, durationMin: 11, geometry: [{ lat: -31.63, lon: -60.70 }, { lat: -31.64, lon: -60.69 }] };
 describe('provider ranking and price truthfulness', () => {
   test('apps remain APP_ONLY and bus remains disabled', async () => {
-    globalThis.fetch = async () => new Response(JSON.stringify(fares), { status: 200 });
+    globalThis.fetch = (async () => new Response(JSON.stringify(fares), { status: 200 })) as typeof fetch;
     const apps = await providerOptions(route, 'app');
     expect(apps.map(option => option.id)).toEqual(['taxi', 'remis', 'uber', 'didi']);
     expect(apps.filter(option => option.id === 'uber' || option.id === 'didi').every(option => option.price.kind === 'app_only')).toBe(true);
