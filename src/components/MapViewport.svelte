@@ -47,7 +47,10 @@
     })();
     return () => { disposed = true; map?.remove(); map = null; };
   });
-  $: origin, destination, route, ready && queueMicrotask(sync);
+  $: {
+    const dependencies = [origin, destination, route, ready];
+    if (dependencies[3]) queueMicrotask(sync);
+  }
 </script>
 <section class="map-shell" aria-label="Mapa del viaje" data-testid="map-shell">
   <div class="map" bind:this={container}></div>
