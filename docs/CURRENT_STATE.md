@@ -11,7 +11,7 @@ CONTROL_ISSUE=30
 CANONICAL_PR=31
 CANONICAL_BRANCH=feat/voy-complete-product-master-01
 BASE_MAIN=d31f7497f963ddd761ed3392a634f8017f85ad13
-ACTIVE_AUD_BLOCK=5193183161
+ACTIVE_AUD_BLOCK=5194944748
 ORDER_ID=VOY-COMPLETE-END-TO-END-MASTER-02
 ```
 
@@ -29,10 +29,21 @@ SSR=NO
 SVELTEKIT=NO
 TAILWIND=NO
 MONOLITHIC_HTML_RUNTIME=INACTIVE
+PUBLIC_ASSET_POLICY=config/production-assets.json
 PRIMARY_VIEWPORTS=360;390;412;430
 ```
 
 MapLibre, Voice and Auth are lazy optional capabilities. Destination selection, comparison and truthful unavailable states work without map tiles, account, microphone or AI.
+
+## Public asset truth boundary
+
+- Every source file under `public/` is explicitly classified in `config/production-assets.json` and documented in `docs/data/public-asset-inventory-2026-08-05.md`.
+- Only ten current territorial JSON files, the PWA manifest/service worker, product mark and exact icon set may be copied from `public/`.
+- Only the canonical generated `index.html` and Vite-hashed JavaScript/CSS may be added by the build.
+- Source and built output fail CI on missing, duplicate, retired or unclassified files and on forbidden legacy product markers.
+- `scripts/build-static-manifest.mjs` certifies classifications instead of accepting every non-dot file.
+- Retired legacy routes return `410` before `ASSETS`, so an old link cannot fall through to legacy bytes or the canonical SPA.
+- Historical product bytes remain in Git history only and never under `public/`, `dist/client` or another Worker-served namespace.
 
 ## Product truth boundaries
 
@@ -51,7 +62,7 @@ MapLibre, Voice and Auth are lazy optional capabilities. Destination selection, 
 
 ## Destination provenance correction — 2026-08-05
 
-AUD block `5193183161` blocked the prior candidate because the runtime mixed unverifiable landmarks with incorrect addresses. The correction:
+AUD block `5193183161` blocked a prior candidate because the runtime mixed unverifiable landmarks with incorrect addresses. The correction:
 
 - replaces the runtime asset with three authoritative records only;
 - corrects Terminal de Ómnibus to `Belgrano 2910`;
@@ -64,7 +75,18 @@ AUD block `5193183161` blocked the prior candidate because the runtime mixed unv
 - makes Voice destination selection use the same strict provenance contract;
 - adds deterministic data, Voice and browser regression cases using the real runtime asset and forged legacy negatives.
 
-The previous candidate `6bb71226-01ff-4cb2-a6ff-05ff5e0ee980` is blocked and must never be promoted. A new exact-head candidate at 0% is required after final exact-head CI.
+## Legacy public surface correction — 2026-08-05
+
+AUD block `5194944748` accepted the reconciled test inventory but blocked candidate `05b66121-4218-4dfa-8b44-f59bad2aa0e4` because obsolete VOY product and diagnostic files were still public. The correction removes from the runtime source and build:
+
+- `public/VOYv2.html`;
+- `public/movilidad.html`;
+- `public/city_default.json` and `public/city_santafe.json`;
+- root `public/fares.json`;
+- `public/chaos-tests.html`;
+- the complete `public/navigator/` runtime.
+
+The Worker retires those routes and the former `VOY-Lite.html` route with an exact safe `410` response before `ASSETS`. Tests prove no retired bytes, stale bus/provider claims or alternate monolithic application can ship. The blocked candidate must never be promoted; a fresh exact-head candidate at `0%` is required after integral CI.
 
 ## Validation control plane
 
@@ -78,7 +100,7 @@ RELEASE_POLICY=.github/workflows/release-policy-check.yml
 FINAL_ZERO_TRAFFIC_CANDIDATE=.github/workflows/master-final-candidate.yml
 ```
 
-All use Bun `1.3.14`, Wrangler `4.112.0`, `bun install --frozen-lockfile`, strict typecheck, lint, deterministic tests, Vite production build, bundle budgets, generated Wrangler dry-run and clean-profile browser gates.
+All use Bun `1.3.14`, Wrangler `4.112.0`, `bun install --frozen-lockfile`, strict typecheck, lint, deterministic tests, source/build asset policy, Vite production build, bundle budgets, generated Wrangler dry-run and clean-profile browser gates.
 
 ## Public production baseline
 
@@ -102,9 +124,10 @@ The final release workflow runs only after source, tests and documentation are c
 2. reconstruct current Cloudflare versions, deployment, traffic, bindings and rollback;
 3. upload exactly one Svelte Worker version from that committed head;
 4. preserve the verified stable version at `100%` and place the new candidate at `0%`;
-5. validate Svelte root identity, authoritative city data, hashed chunks, static manifest, service worker, APIs, security/privacy, Voice/Auth boundaries, viewports and exact-version logs;
-6. require 20 consecutive rounds and at least 120 seconds;
-7. persist immutable evidence, manifest and digest;
-8. make no source commit after candidate creation.
+5. validate Svelte root identity, authoritative city data, classified static manifest, service worker, APIs, security/privacy, Voice/Auth boundaries, viewports and exact-version logs;
+6. prove every retired public path returns the exact safe `410` response on the candidate;
+7. require 20 consecutive rounds and at least 120 seconds;
+8. persist immutable evidence, manifest and digest;
+9. make no source commit after candidate creation.
 
 PR #31 stays Draft, unmerged and without productive traffic until independent AUD PASS and a separate exact authorization from Simón.
