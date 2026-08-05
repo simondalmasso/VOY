@@ -1,4 +1,4 @@
-# retry-cause: static-manifest-explicit-resolve
+# retry-cause: validated-dist-wrangler-config
 name: VOY Svelte Final Zero-Traffic Candidate
 
 on:
