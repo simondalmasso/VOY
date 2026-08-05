@@ -25,7 +25,16 @@
       }
     }, 220);
   }
-  function choose(item: Destination): void { query = item.name; results = []; status = `Destino: ${item.name}`; onSelect(item); }
+  function choose(item: Destination): void {
+    if (!item.operational || !item.verified || item.confidence !== 'authoritative') {
+      status = 'Ese resultado no tiene procedencia suficiente para calcular un viaje.';
+      return;
+    }
+    query = item.name;
+    results = [];
+    status = `Destino verificado: ${item.name}`;
+    onSelect(item);
+  }
 </script>
 <section class="search" aria-labelledby="destination-title" data-testid="destination-search">
   <label id="destination-title" for="destination-input">¿A dónde vas?</label>
@@ -37,7 +46,16 @@
   {#if results.length}
     <ul class="results" aria-label="Resultados de destino" data-testid="destination-results">
       {#each results as item (item.id)}
-        <li><button type="button" on:click={() => choose(item)}><strong>{item.name}</strong><span>{item.address || (item.verified ? 'Punto verificado' : 'Ubicación aproximada')}</span></button></li>
+        <li>
+          <button type="button" disabled={!item.operational} aria-disabled={!item.operational} on:click={() => choose(item)} data-testid={`destination-result-${item.operational ? 'verified' : 'unverified'}`}>
+            <strong>{item.name}</strong>
+            {#if item.operational && item.provenance}
+              <span>{item.address} · Fuente oficial</span>
+            {:else}
+              <span>Ubicación no verificada · No disponible para calcular</span>
+            {/if}
+          </button>
+        </li>
       {/each}
     </ul>
   {/if}
