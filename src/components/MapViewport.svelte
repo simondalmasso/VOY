@@ -29,18 +29,23 @@
       map.fitBounds(bounds, { padding: { top: 70, left: 40, right: 40, bottom: 160 }, duration: 250, maxZoom: 15 });
     }
   }
-  onMount(async () => {
-    try {
-      await import('maplibre-gl/dist/maplibre-gl.css');
-      maplibre = await import('maplibre-gl');
-      map = new maplibre.Map({
-        container, center: [-60.7087, -31.6256], zoom: 12.4, attributionControl: false,
-        style: { version: 8, sources: { carto: { type: 'raster', tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap © CARTO' } }, layers: [{ id: 'carto', type: 'raster', source: 'carto' }] }
-      });
-      map.on('load', () => { ready = true; sync(); });
-      map.on('error', () => { failed = true; });
-    } catch { failed = true; }
-    return () => map?.remove();
+  onMount(() => {
+    let disposed = false;
+    void (async () => {
+      try {
+        await import('maplibre-gl/dist/maplibre-gl.css');
+        const library = await import('maplibre-gl');
+        if (disposed) return;
+        maplibre = library;
+        map = new library.Map({
+          container, center: [-60.7087, -31.6256], zoom: 12.4, attributionControl: false,
+          style: { version: 8, sources: { carto: { type: 'raster', tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap © CARTO' } }, layers: [{ id: 'carto', type: 'raster', source: 'carto' }] }
+        });
+        map.on('load', () => { ready = true; sync(); });
+        map.on('error', () => { failed = true; });
+      } catch { if (!disposed) failed = true; }
+    })();
+    return () => { disposed = true; map?.remove(); map = null; };
   });
   $: origin, destination, route, ready && queueMicrotask(sync);
 </script>

@@ -20,7 +20,7 @@ export function validGeometry(points: Array<[number, number]>, input: RouteReque
   const near = (point: [number, number], expected: Point) => Math.abs(point[0] - expected.lon) < .02 && Math.abs(point[1] - expected.lat) < .02;
   return finiteAndInside && near(first, input.origin) && near(last, input.destination);
 }
-export async function handleRoute(request: Request, _env: Env): Promise<Response> {
+export async function handleRoute(request: Request, _env: Partial<Env> = {}): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Cache-Control': 'no-store' } });
   if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
   if (!originAllowed(request)) return json({ ok: false, error: 'origin_not_allowed' }, 403);
