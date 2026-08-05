@@ -6,10 +6,32 @@ const apiPromise = import('../voiceCopilot.mjs');
 const contractsPromise = import('../voiceCopilotContracts.mjs');
 const runtimePromise = import('../voiceCopilotRuntime.mjs');
 
+const terminal = {
+  canonicalId: 'santafe:landmark:terminal-omnibus',
+  nombre: 'Terminal de Ómnibus',
+  aliases: ['terminal'],
+  address: 'Belgrano 2910',
+  lat: -31.643533,
+  lon: -60.700503,
+  verified: true,
+  source: 'authoritative',
+  precision: 'poi',
+  verified_at: '2026-08-05',
+  provenance: {
+    status: 'authoritative',
+    issuer: 'Municipalidad de Santa Fe',
+    source_title: 'Estación Terminal de Ómnibus de Santa Fe',
+    source_url: 'https://santafeciudad.gov.ar/terminal-de-colectivos/',
+    license: 'Información pública institucional',
+    coordinate_method: 'Dirección oficial cruzada con geodato gubernamental',
+    coordinate_source_url: 'https://www.bcra.gob.ar/entidades-financieras-filiales-y-cajeros-filtros/?Provincia=SANTA+FE&Tipo=4&Tit=2&bco=AAA10'
+  }
+};
+
 const fixtures = {
   '/cities/santa-fe/profile.json': { schema_version: 1, city_id: 'santafe', name: 'Santa Fe', display_name: 'Santa Fe, Argentina', coverage_level: 'partial', coverage_notes: [], source: 'test', verified_at: '2026-07-21' },
   '/cities/santa-fe/providers.json': { schema_version: 1, city_id: 'santafe', providers: { uber: { name: 'Uber', available: true, verified: true, category: 'app' } }, taxi_companies: [], remis_companies: [] },
-  '/cities/santa-fe/transport.json': { schema_version: 1, city_id: 'santafe', landmarks: [{ canonicalId: 'santafe:terminal', nombre: 'Terminal de Ómnibus', aliases: ['terminal'], address: 'Belgrano 2910' }], bus_stops: [], bike_stations: [] },
+  '/cities/santa-fe/transport.json': { schema_version: 2, city_id: 'santafe', landmarks: [terminal], bus_stops: [], bike_stations: [] },
   '/cities/santa-fe/fares.json': { schema_version: 1, city_id: 'santafe', fare_registry: { taxi: { diurno: { bajada: 1000, ficha: 100 }, source: 'test', status: 'verified' }, remis: {}, bus: { sube: 1200 }, apps: { uber: { base: null, status: 'provider_app_only' } } }, source: 'test', verified_at: '2026-07-21', status: 'verified' },
   '/cities/santa-fe/feature_flags.json': { schema_version: 1, city_id: 'santafe', flags: { ai_copilot: false, voice_input: false, voice_output: false, voicebox_local: false } }
 };
@@ -42,6 +64,18 @@ function request(path, options = {}, ip = Math.random().toString(16).slice(2)) {
 
 async function json(response) {
   return response.json();
+}
+
+function destinationSession(contracts) {
+  const session = contracts.newSession('santafe');
+  session.destination = contracts.sanitizePlaceRef({
+    ref: terminal.canonicalId,
+    name: terminal.nombre,
+    address: terminal.address,
+    source: 'local',
+    city_id: 'santafe'
+  });
+  return session;
 }
 
 describe('Voice Copilot guarded API', () => {
@@ -113,7 +147,9 @@ describe('Voice Copilot guarded API', () => {
     let body = await json(response);
     assert.equal(body.tool_execution.tool, 'search_destination');
     assert.equal(body.tool_execution.status, 'success');
-    assert.equal(body.session.destination.name, 'Terminal de Ómnibus');
+    assert.equal(body.session.destination.ref, terminal.canonicalId);
+    assert.equal(body.session.destination.name, terminal.nombre);
+    assert.equal(body.session.destination.address, terminal.address);
     session = body.session;
     response = await api.handleVoiceRequest(request('/api/voice/chat', {
       method: 'POST',
@@ -131,12 +167,10 @@ describe('Voice Copilot guarded API', () => {
     assert.equal(body.session.turn_count, 2);
   });
 
-
   test('rejects client-authored mobility snapshots and fabricated private-app prices', async () => {
     const api = await apiPromise;
     const contracts = await contractsPromise;
-    const session = contracts.newSession('santafe');
-    session.destination = contracts.sanitizePlaceRef({ ref: 'santafe:terminal', name: 'Terminal de Ómnibus', address: 'Belgrano 2910', source: 'local', city_id: 'santafe' });
+    const session = destinationSession(contracts);
     session.mobility_snapshot = [
       { mode: 'bus', available: true, price: 1, duration_min: 1, distance_km: 1, source: 'client', status: 'estimated', label: 'Bus inyectado' },
       { mode: 'uber', available: true, price: 2, duration_min: 2, distance_km: 1, source: 'client', status: 'estimated', label: 'Uber fabricado' }
@@ -173,8 +207,7 @@ describe('Voice Copilot guarded API', () => {
     const contracts = await contractsPromise;
     const plan = { tool_calls: [{ name: 'prepare_external_provider_action', arguments: { provider: 'uber' } }] };
     const testEnv = env({ run: async (_model, input) => input.tools ? plan : { response: 'Confirmá para abrir Uber.' } });
-    const session = contracts.newSession('santafe');
-    session.destination = contracts.sanitizePlaceRef({ ref: 'santafe:terminal', name: 'Terminal de Ómnibus', address: 'Belgrano 2910', source: 'local', city_id: 'santafe' });
+    const session = destinationSession(contracts);
     let response = await api.handleVoiceRequest(request('/api/voice/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
