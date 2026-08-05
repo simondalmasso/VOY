@@ -59,6 +59,14 @@ jobs:
           if original.count(before) != 1:
               raise SystemExit('expected exactly one historical terminal assertion')
           selection.write_text(original.replace(before, after))
+
+          origin = Path('src/components/OriginControl.svelte')
+          original = origin.read_text()
+          before = '<button type="button" on:click={useManual} disabled={resolving} data-testid="origin-apply">Aplicar</button>'
+          after = '<button type="button" on:click={useManual} aria-busy={resolving} data-testid="origin-apply">Aplicar</button>'
+          if original.count(before) != 1:
+              raise SystemExit('expected exactly one disabled origin apply button')
+          origin.write_text(original.replace(before, after))
           PY
           rm -f .github/voy-master-apply.patch.gz .github/voy-master-apply.patch.part* .github/workflows/svelte-current-source-bundle.yml
           git diff --check
