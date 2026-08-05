@@ -1,3 +1,4 @@
+# retry-cause: static-manifest-explicit-resolve
 name: VOY Svelte Final Zero-Traffic Candidate
 
 on:
