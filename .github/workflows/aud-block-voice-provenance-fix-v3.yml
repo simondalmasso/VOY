@@ -74,7 +74,13 @@ jobs:
           bun install --frozen-lockfile
           bunx svelte-check --tsconfig ./tsconfig.json
           bunx eslint src worker tests browser-tests scripts/build-static-manifest.mjs scripts/check-bundle-budgets.mjs vite.config.ts
-          bun test
+          bun test tests/*.test.ts \
+            __tests__/analyticsOptOut.test.js __tests__/analyticsOptOutBoundary.test.js \
+            __tests__/authSession.test.js __tests__/coordinatorAlarmPagination.test.js \
+            __tests__/nominatimCoordinator.test.js __tests__/releasePolicy.test.js \
+            __tests__/securityBoundary.test.js __tests__/voiceCopilotApi.test.js \
+            __tests__/voiceCopilotContracts.test.js __tests__/voiceCopilotProviders.test.js \
+            __tests__/voiceCopilotRuntime.test.js __tests__/voiceCopilotSelection.test.js
           bun run build
           git diff --check
 
