@@ -1,0 +1,94 @@
+name: VOY Firebase Redirect Smoke
+
+on:
+  push:
+    branches:
+      - ops/firebase-voy-ar-redirect-evidence-01
+    paths:
+      - firebase.json
+      - .firebaserc
+      - firebase-hosting-empty/**
+      - scripts/firebase-redirect-smoke.mjs
+      - .github/workflows/firebase-voy-ar-smoke.yml
+
+permissions:
+  contents: read
+
+env:
+  VOY_FIREBASE_EVIDENCE_DIR: test-results/firebase-voy-ar
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Firebase evidence head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify redirect-only scope
+        run: |
+          set -euo pipefail
+          git diff --check 9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8..HEAD
+          node --check scripts/firebase-redirect-smoke.mjs
+          node -e "const f=require('./firebase.json'); if(f.hosting.site!=='voy-ar'||f.hosting.public!=='firebase-hosting-empty') process.exit(1); if(f.hosting.redirects.length!==2||f.hosting.redirects.some(r=>r.type!==302)) process.exit(1);"
+          node -e "const r=require('./.firebaserc'); if(r.projects.default!=='voy-ar') process.exit(1);"
+          test -z "$(find firebase-hosting-empty -type f ! -name .gitkeep -print -quit)"
+          changed="$(git diff --name-only 9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8..HEAD)"
+          if printf '%s\n' "$changed" | grep -Eq '^(src|worker|public)/'; then
+            echo 'Application/frontend/runtime source changed in redirect-only branch' >&2
+            exit 1
+          fi
+
+      - name: Install frozen browser toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: HTTP redirect contract
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOY_FIREBASE_EVIDENCE_DIR"
+          root_headers="$VOY_FIREBASE_EVIDENCE_DIR/root-headers.txt"
+          path_headers="$VOY_FIREBASE_EVIDENCE_DIR/path-query-headers.txt"
+          curl -fsS -o /dev/null -D "$root_headers" --max-redirs 0 https://voy-ar.web.app/ || status=$?
+          test "${status:-0}" = 0
+          grep -Eq '^HTTP/[^ ]+ 302' "$root_headers"
+          grep -Eiq '^location: https://voy-app\.simondalmasso44\.workers\.dev/' "$root_headers"
+          unset status
+          curl -fsS -o /dev/null -D "$path_headers" --max-redirs 0 'https://voy-ar.web.app/__voy_firebase_smoke__/nested?source=firebase-smoke&case=path-query' || status=$?
+          test "${status:-0}" = 0
+          grep -Eq '^HTTP/[^ ]+ 302' "$path_headers"
+          grep -Eiq '^location: https://voy-app\.simondalmasso44\.workers\.dev/__voy_firebase_smoke__/nested\?source=firebase-smoke&case=path-query' "$path_headers"
+
+      - name: Browser smoke desktop and mobile
+        run: node scripts/firebase-redirect-smoke.mjs
+
+      - name: Freeze deployment evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOY_FIREBASE_EVIDENCE_DIR"
+          printf '%s\n' "$GITHUB_SHA" > "$VOY_FIREBASE_EVIDENCE_DIR/exact-head.txt"
+          printf '%s\n' 'FIREBASE_SITE=voy-ar' > "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          printf '%s\n' 'REDIRECT=302' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          printf '%s\n' 'DESTINATION=https://voy-app.simondalmasso44.workers.dev/' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          printf '%s\n' 'CLOUDFLARE_TOUCH=0' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          printf '%s\n' 'FRONTEND_MOVE=0' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          printf '%s\n' 'PROXY=0' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          find "$VOY_FIREBASE_EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$VOY_FIREBASE_EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$VOY_FIREBASE_EVIDENCE_DIR/manifest.sha256" > "$VOY_FIREBASE_EVIDENCE_DIR/digest.txt"
+
+      - name: Upload immutable Firebase evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-firebase-redirect-${{ github.run_id }}
+          path: test-results/firebase-voy-ar
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
