@@ -2,28 +2,54 @@
 
 Last reconciled: 2026-08-07
 
-## Authority and terminal release status
+## Authority and active hotfix status
 
 ```text
 CANONICAL_STATE=GOOGLE_DRIVE
 REPOSITORY_WORKLOG=docs/CURRENT_STATE.md
 RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
 PRIMARY_STATE_FILE=docs/CURRENT_STATE.md
-CONTROL_ISSUE=30
+CONTROL_ISSUE=32
 CANONICAL_PRODUCT_PR=31;MERGED
+CANONICAL_HOTFIX_PR=33;OPEN_DRAFT
+HOTFIX_BASE_MAIN=ed018f3bc6f6cc276e36d8eeeb91dac2cc11d7d9
 PRODUCT_SOURCE_SHA=1f1e1d323ce8c769816c6e1b529639cbf3af98ad
 PRODUCT_MERGE_SHA=89e29622f93919829948ea2b7caed16a297a22f1
-ACTIVE_ORDER=VOY-OWNER-MASTER-COMPLETE-EVERYTHING-04
-ACTIVE_AUD_BLOCK=NONE
-AUD_RESOLUTION=5213861215
-ARQ_AUTHORIZATION=5213939139
-CONTROLLING_OWNER_ORDER=5212681430
-RELEASE_STATUS=TERMINAL_PRODUCTION_PASS
+ACTIVE_ORDER=VOY-POST-RELEASE-MAP-MOBILE-UI-HOTFIX-01
+ACTIVE_AUD_BLOCK=ISSUE_32
+PREVIOUS_RELEASE_AUD_RESOLUTION=5213861215
+PREVIOUS_RELEASE_ARQ_AUTHORIZATION=5213939139
+PREVIOUS_CONTROLLING_OWNER_ORDER=5212681430
+RELEASE_STATUS=PRODUCTION_V8_STABLE_HOTFIX_CANDIDATE_PENDING
 ```
 
-Production was promoted only after the exact product SHA, same prevalidated Cloudflare version, fresh post-rollback state, direct runtime contracts and clean-profile browser gates were reconstructed. Runtime identifiers remain current only when re-queried from Cloudflare/production or retained by immutable release evidence.
+Issue #32 is the current material workstream. Production V8 remains the runtime truth while this hotfix is built. Runtime identifiers remain current only when re-queried from Cloudflare/production or retained by immutable release evidence.
 
-## Current production
+## Active post-release hotfix #32
+
+```text
+ORDER_ID=VOY-POST-RELEASE-MAP-MOBILE-UI-HOTFIX-01
+HOTFIX_BRANCH=hotfix/voy-post-release-map-mobile-ui-01
+HOTFIX_PR=33
+SOURCE_VALIDATION_RUN_INITIAL=31162952761;SUCCESS
+RELEASE_POLICY_RUN_INITIAL=31162952762;SUCCESS
+SOURCE_VALIDATION_RUN_WITH_OPERATOR=31163149911;SUCCESS
+RELEASE_POLICY_RUN_WITH_OPERATOR=31163149962;SUCCESS
+MAP_CAUSE=MAPLIBRE_LOAD_ACCEPTED_WITHOUT_PROVING_RASTER_TILE_SUCCESS_AND_MAP_ERRORS_WERE_IGNORED
+MAP_FIX=READY_REQUIRES_STYLE_SOURCE_AND_TILES_LOADED;ERROR_OR_TIMEOUT_SHOWS_EXPLICIT_FALLBACK
+BASEMAP=CARTO_LIGHT_RASTER_SUBDOMAINS_A_B_C_D
+APP_PROVIDER_PRICE_UI=UBER_DIDI_NONE
+APP_PROVIDER_ETA=UBER_DIDI_NULL_UNLESS_PROVIDER_SPECIFIC_VERIFIED_SOURCE_EXISTS
+MOBILE_DENSITY=SELECTED_DESTINATION_AND_ORIGIN_COMPACT_WITH_48PX_CONTROLS
+CANDIDATE_TARGET=ONE_EXACT_HEAD_HOTFIX_VERSION_AT_0_PERCENT
+PRODUCTION_PROMOTION_AUTHORIZED=NO
+PRODUCTION_V8_MUST_REMAIN_100_PERCENT=YES
+NEXT_OPERATIONAL_STEP=CREATE_AND_VALIDATE_EXACT_HEAD_HOTFIX_CANDIDATE_AT_0_PERCENT_THEN_AUD_POST_HOTFIX_REVIEW
+```
+
+The deterministic browser suite now has separate basemap paths: mocked successful raster loading, forced tile failure that must expose a fallback instead of a blank ready map, and a candidate-only real-network CARTO gate. Candidate evidence also records measured destination/origin heights, first-fold map visibility and before/after screenshots. No browser Nominatim or OSRM call is introduced.
+
+## Current production baseline retained during hotfix
 
 ```text
 APPLICATION_VERSION=V8.0.0
@@ -37,9 +63,9 @@ PRE_RELEASE_DEPLOYMENT_ID=0902bb57-6240-4894-8e4e-fd78b7b5c5e4
 ROLLBACK_EXECUTED_IN_SUCCESSFUL_RETRY=NO
 ```
 
-The exact productive version was the already validated candidate `2ee28f09-1aa8-4250-bb2c-ba4684a07791`; no replacement candidate or product rebuild was created for the successful retry.
+The exact productive version remains the previously validated candidate `2ee28f09-1aa8-4250-bb2c-ba4684a07791`. The hotfix candidate operator fails closed unless fresh Cloudflare deployment state still has that exact version at 100%, no unexpected nonzero version, and public health `V8.0.0 / 1f1e1d3` before upload.
 
-## Successful release evidence — 2026-08-07
+## Successful V8 release evidence — 2026-08-07
 
 ```text
 RELEASE_RUN=31158304765;SUCCESS
@@ -62,7 +88,7 @@ ROUTE_REAL_GATE=PASS
 ROOT_BUILD_CSP_COOKIE_GATE=PASS
 ```
 
-The full candidate Voice gate also passed real Workers AI STT/tool execution, forged-session rejection, deterministic comparison without fabricated numerical ranking, cancellation, single-use external confirmation, replay rejection and forbidden-token absence.
+The full V8 candidate Voice gate also passed real Workers AI STT/tool execution, forged-session rejection, deterministic comparison without fabricated numerical ranking, cancellation, single-use external confirmation, replay rejection and forbidden-token absence.
 
 ## Observability classification
 
@@ -75,9 +101,9 @@ TAIL_EXCEPTIONS=0
 EMPTY_TAIL_IS_RUNTIME_FAILURE=NO
 ```
 
-AUD resolution `5213861215` explicitly reclassified an empty exact-version tail channel as an observability/evidence transport limitation rather than a product failure when direct runtime gates pass and no non-OK outcome or exception is captured. The successful retry therefore remained productive. No rollback was executed.
+AUD resolution `5213861215` reclassified an empty exact-version tail channel as an observability/evidence transport limitation rather than a product failure when direct runtime gates pass and no non-OK outcome or exception is captured. The hotfix candidate operator preserves that rule: non-OK outcomes/exceptions fail, while a genuinely empty tail is recorded as degraded observability and does not fabricate a runtime failure.
 
-## GitHub reconciliation
+## GitHub V8 reconciliation history
 
 ```text
 PR31=MERGED
@@ -89,10 +115,9 @@ POST_MERGE_MAIN_VALIDATION_RUN=31158923995;SUCCESS
 PR23=CLOSED_AS_INTEGRATED_BY_ANCESTRY
 PR24=CLOSED_SUPERSEDED_UNMERGED
 PR27=CLOSED_SUPERSEDED_UNMERGED
-OPEN_PRS_AFTER_CLEANUP=0
 ```
 
-The merge commit has parents `d31f7497f963ddd761ed3392a634f8017f85ad13` and exact product SHA `1f1e1d323ce8c769816c6e1b529639cbf3af98ad`, preserving release ancestry. Post-merge main validation passed source/release policy, frozen install, typecheck, lint, tests, production build/budgets, Wrangler dry-run, clean-profile local browser gates, read-only production V8 health and production browser smoke.
+The V8 merge commit preserved exact productive source ancestry. Post-merge validation passed source/release policy, frozen install, typecheck, lint, tests, build/budgets, Wrangler dry-run, clean-profile local browser gates, read-only production V8 health and production browser smoke.
 
 ## Canonical architecture
 
@@ -130,9 +155,17 @@ MapLibre, Voice and Auth are optional capabilities. Core destination selection, 
 - Bus line/stop/direction/frequency/wait/route recommendations remain disabled until current authoritative operational data exists.
 - Straight-line distance is labeled as reference and is never represented as a street/walking/cycling route.
 - Taxi/remis values are regulated estimates with source and verification date.
-- Uber and DiDi numerical price/duration/distance remain `APP_ONLY`/unavailable unless supplied by an allowed verified source; VOY does not fabricate them or numerical cheapest/fastest rankings.
+- Uber and DiDi keep internal `APP_ONLY` price truth but expose no price UI or accessible price copy; their ETA is null unless a provider-specific verified source exists. Generic route duration is not an Uber/DiDi ETA.
 - External provider actions require explicit, expiring, single-use confirmation.
 - AI does not calculate canonical routes, distances, durations, fares, availability or rankings.
+
+## Map truth boundary
+
+- CARTO raster tiles are presentation-only basemap data; they never calculate route, distance, time, fare, availability or ranking.
+- Basemap requests use documented `a`/`b`/`c`/`d.basemaps.cartocdn.com` light raster endpoints already allowed by the production CSP.
+- Map state is not `ready` merely because the style loaded. Ready requires MapLibre style loaded, basemap source loaded and visible tiles loaded.
+- A basemap error or readiness timeout produces an explicit fallback message; deterministic trip comparison remains usable.
+- Origin/destination markers and verified OSRM route geometry remain separate deterministic overlay layers.
 
 ## Voice and privacy boundaries
 
@@ -151,17 +184,15 @@ Voice uses typed allowlisted tools and the same fail-closed destination provenan
 
 ## Validation control plane
 
-Permanent product validation remains repository-defined and auditable:
-
 ```text
-BRANCH_EXACT_HEAD=.github/workflows/svelte-validation.yml
 PULL_REQUEST=.github/workflows/pr-validation.yml
 MAIN_READ_ONLY_VALIDATION=.github/workflows/deploy.yml
 RELEASE_POLICY=.github/workflows/release-policy-check.yml
-FINAL_ZERO_TRAFFIC_CANDIDATE=.github/workflows/master-final-candidate.yml
+HOTFIX_ZERO_TRAFFIC_CANDIDATE=.github/workflows/hotfix-map-mobile-candidate.yml
+HOTFIX_CANDIDATE_OPERATOR=scripts/run-hotfix-candidate.sh
 ```
 
-The successful production retry used a separately isolated operator workflow on `ops/voy-owner-v4-production-release-01`. Its repair changed only `.github/workflows/voy-owner-v4-production-release.yml`; the product SHA and candidate were unchanged. That operator is release evidence, not product source authority.
+The hotfix candidate workflow is branch-specific and does not run unless the exact branch head commit message contains `[hotfix-candidate]`. It may upload one exact-head Worker version and create a deployment containing current V8 at 100% plus the hotfix at 0%; it contains no production-promotion path.
 
 ## Rollback reference
 
@@ -175,24 +206,22 @@ CURRENT_TRAFFIC=0%
 
 This reference is not an authorization to execute a rollback. Any future production mutation requires fresh state reconstruction and the applicable ARQ/AUD/owner gates.
 
-## Terminal state
+## Hotfix safety state before candidate creation
 
 ```text
-PRODUCTION_CURRENT_HEALTH=PASS_AT_RELEASE_AND_POST_MERGE_VALIDATION
-PRODUCTION_BUILD_MATCHES_RELEASE_SOURCE=PASS
-MAIN_CONTAINS_PRODUCTIVE_SHA=PASS
-MAIN_CI=PASS_ON_PRODUCT_MERGE_AND_DOCS_RECONCILIATION
-RELEASE_POLICY=PASS
+PRODUCTION_CURRENT_HEALTH=REVERIFY_IN_CANDIDATE_PREFLIGHT
+PRODUCTION_BUILD_MATCHES_RELEASE_SOURCE=REVERIFY_IN_CANDIDATE_PREFLIGHT
+MAIN_BASE_SHA=ed018f3bc6f6cc276e36d8eeeb91dac2cc11d7d9
+PR33_SOURCE_AND_BROWSER_CI=PASS_BEFORE_FINAL_TRIGGER
+RELEASE_POLICY=PASS_BEFORE_FINAL_TRIGGER
 ROLLBACK_REFERENCE=PERSISTED
-CURRENT_STATE=RECONCILED
-GOOGLE_DRIVE=RECONCILED
+GOOGLE_DRIVE=V8_TERMINAL_STATE_READ_BEFORE_HOTFIX
 SECRETS_EXPOSED=NO
 PAYMENTS_OR_CARD_DATA=NO
 EVIDENCE_DELETED=NO
 UNAUTHORIZED_PERSISTENT_MUTATION=NO
-KNOWN_LIMITATIONS=EXACT_VERSION_TAIL_CHANNEL_DEGRADED_NO_EVENTS_NONBLOCKING
-FUTURE_NONBLOCKING_BACKLOG=VOXCPM2_AND_OPTIONAL_AUTH_EXTERNAL_CONFIGURATION
-NEXT_OPERATIONAL_STEP=NONE_FOR_CURRENT_SANTA_FE_RELEASE
+PRODUCTION_PROMOTION=PROHIBITED_PENDING_POSTFIX_AUD_PASS
+NEXT_OPERATIONAL_STEP=HOTFIX_CANDIDATE_0_PERCENT_THEN_AUD_POST_HOTFIX_REVIEW
 ```
 
-Future work must begin by reading canonical Drive, then this worklog, and re-verifying GitHub, Cloudflare and production rather than treating any runtime identifier here as indefinitely current.
+Final candidate IDs, exact final source SHA, artifact digest, real-network basemap proof and measured mobile geometry are persisted by the candidate artifact and then mirrored to issue #32, PR #33 and canonical Drive without another source commit, so the candidate remains exact-head.
