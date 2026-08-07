@@ -109,6 +109,7 @@ export function classifySourceTrust(record: Omit<MobilitySourceRecord, 'trust_st
 }
 
 export function normalizeMobilityDatabaseDiscovery(input: MobilityDatabaseDiscoveryInput): MobilitySourceRecord {
+  const hasCatalogLicenseMetadata = Boolean(input.licenseUrl || input.licenseStatus);
   const base: Omit<MobilitySourceRecord, 'trust_status'> = {
     source_id: input.sourceId,
     provider: input.provider,
@@ -116,8 +117,8 @@ export function normalizeMobilityDatabaseDiscovery(input: MobilityDatabaseDiscov
     format: input.format,
     officiality: input.catalogOfficial ? 'THIRD_PARTY_CLAIMED_OFFICIAL' : 'UNVERIFIED',
     source_url: input.sourceUrl,
-    license_url: input.licenseUrl ?? null,
-    license_status: input.licenseStatus ?? 'UNKNOWN',
+    license_url: null,
+    license_status: 'UNKNOWN',
     authentication_required: input.authenticationRequired ?? null,
     retrieved_at: input.retrievedAt,
     source_updated_at: null,
@@ -127,7 +128,7 @@ export function normalizeMobilityDatabaseDiscovery(input: MobilityDatabaseDiscov
     validator: null,
     validator_version: null,
     validation_errors: [],
-    validation_warnings: [],
+    validation_warnings: hasCatalogLicenseMetadata ? ['catalog_license_metadata_discovery_only_not_operational_evidence'] : [],
     freshness_status: 'UNKNOWN',
     coverage: { city: input.city, bbox: null },
     operational_status: 'DISCOVERY_ONLY',
