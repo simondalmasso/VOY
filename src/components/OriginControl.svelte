@@ -6,9 +6,12 @@
   let manual = '';
   let status = '';
   let resolving = false;
+  let editing = true;
   let controller: AbortController | null = null;
   let requestSequence = 0;
   const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  $: selected = label !== 'Elegí tu origen';
+  $: if (selected && !resolving) editing = false;
 
   function useLocation(): void {
     controller?.abort(); requestSequence += 1;
@@ -45,12 +48,16 @@
   }
   onDestroy(() => controller?.abort());
 </script>
-<section class="origin" aria-labelledby="origin-title" data-testid="origin-control">
-  <div><span id="origin-title">Origen</span><strong>{label}</strong></div>
-  <button type="button" class="location" on:click={useLocation} aria-label="Usar mi ubicación actual" data-testid="gps-button">Usar GPS</button>
-  <div class="manual">
-    <input bind:value={manual} autocomplete="street-address" placeholder="O escribí tu origen" aria-label="Origen manual" on:keydown={(event) => event.key === 'Enter' && useManual()} data-testid="origin-input" />
-    <button type="button" on:click={useManual} aria-busy={resolving} data-testid="origin-apply">Aplicar</button>
-  </div>
-  <p aria-live="polite">{status}</p>
+<section class="origin" class:compact={selected && !editing} aria-labelledby="origin-title" data-testid="origin-control" data-selected={selected ? 'true' : 'false'}>
+  <div class="origin-summary"><span id="origin-title">Origen</span><strong>{label}</strong></div>
+  {#if selected && !editing}
+    <button type="button" class="origin-edit" on:click={() => editing = true} data-testid="origin-edit">Cambiar</button>
+  {:else}
+    <button type="button" class="location" on:click={useLocation} aria-label="Usar mi ubicación actual" data-testid="gps-button">Usar GPS</button>
+    <div class="manual">
+      <input bind:value={manual} autocomplete="street-address" placeholder="O escribí tu origen" aria-label="Origen manual" on:keydown={(event) => event.key === 'Enter' && useManual()} data-testid="origin-input" />
+      <button type="button" on:click={useManual} aria-busy={resolving} data-testid="origin-apply">Aplicar</button>
+    </div>
+    <p aria-live="polite">{status}</p>
+  {/if}
 </section>

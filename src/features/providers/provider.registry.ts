@@ -31,7 +31,7 @@ function visibleForMode(option: ProviderOptionModel, selected: TravelMode): bool
 }
 
 export async function providerOptions(route: RouteResult | null, selectedMode: TravelMode): Promise<ProviderOptionModel[]> {
-  if (selectedMode === 'bus') return [{ id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: 0, price: { kind: 'unavailable', label: 'Sin recomendación disponible' }, detail: 'Sin recorridos, paradas, frecuencias ni espera verificables. VOY no calcula ni sugiere una línea.', external: false, rank: 99 }];
+  if (selectedMode === 'bus') return [{ id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: null, price: { kind: 'unavailable', label: 'Sin recomendación disponible' }, detail: 'Sin recorridos, paradas, frecuencias ni espera verificables. VOY no calcula ni sugiere una línea.', external: false, rank: 99 }];
   if (!route) return [];
   const { fares, providers } = await loadRegistry();
   const taxi = fares.fare_registry.taxi;
@@ -39,8 +39,8 @@ export async function providerOptions(route: RouteResult | null, selectedMode: T
   const uber = providers.providers?.uber;
   const didi = providers.providers?.didi;
   const all: ProviderOptionModel[] = [
-    { id: 'uber', name: uber?.name || 'Uber', mode: 'app', available: currentApp(uber), etaMin: route.durationMin, price: { kind: 'app_only', label: 'Precio en la app' }, detail: currentApp(uber) ? 'Disponibilidad verificada; el precio final se consulta en Uber.' : 'Disponibilidad actual no verificada.', external: true, rank: 20 },
-    { id: 'didi', name: didi?.name || 'DiDi', mode: 'app', available: currentApp(didi), etaMin: route.durationMin, price: { kind: 'app_only', label: 'Precio en la app' }, detail: currentApp(didi) ? 'Disponibilidad verificada; el precio final se consulta en DiDi.' : 'Disponibilidad actual no verificada.', external: true, rank: 21 },
+    { id: 'uber', name: uber?.name || 'Uber', mode: 'app', available: currentApp(uber), etaMin: null, price: { kind: 'app_only' }, detail: currentApp(uber) ? 'Disponibilidad verificada para abrir la app.' : 'Disponibilidad actual no verificada.', external: true, rank: 20 },
+    { id: 'didi', name: didi?.name || 'DiDi', mode: 'app', available: currentApp(didi), etaMin: null, price: { kind: 'app_only' }, detail: currentApp(didi) ? 'Disponibilidad verificada para abrir la app.' : 'Disponibilidad actual no verificada.', external: true, rank: 21 },
     { id: 'taxi', name: 'Taxi', mode: 'taxi', available: currentMeter(taxi), etaMin: route.durationMin, price: currentMeter(taxi) ? { kind: 'regulated_estimate', value: regulatedMeterFare(route.distanceKm, taxi.diurno), source: taxi.source, verifiedAt: taxi.verified_at } : { kind: 'unavailable', label: 'Tarifa no verificada' }, detail: 'Referencia diurna regulada; no reserva un vehículo y manda el taxímetro.', external: false, rank: 10 },
     { id: 'remis', name: 'Remis', mode: 'remis', available: currentMeter(remis), etaMin: route.durationMin, price: currentMeter(remis) ? { kind: 'regulated_estimate', value: regulatedMeterFare(route.distanceKm, remis.diurno), source: remis.source, verifiedAt: remis.verified_at } : { kind: 'unavailable', label: 'Tarifa no verificada' }, detail: 'Referencia diurna regulada; no reserva y la disponibilidad se confirma con el prestador.', external: false, rank: 11 },
     { id: 'walk', name: 'Caminar', mode: 'walk', available: route.distanceKm <= 8, etaMin: route.durationMin, price: { kind: 'unavailable', label: 'Sin costo monetario' }, detail: route.source === 'osrm_route' ? 'Tiempo calculado sobre una ruta peatonal.' : 'Tiempo estimado sobre distancia en línea recta; no se dibuja como recorrido.', external: false, rank: 30 },

@@ -6,11 +6,13 @@
   let query = '';
   let results: Destination[] = [];
   let status = '';
+  let selected = false;
   let controller: AbortController | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   onDestroy(() => { controller?.abort(); if (timer) clearTimeout(timer); });
   function scheduleSearch(): void {
+    selected = false;
     if (timer) clearTimeout(timer);
     controller?.abort();
     if (query.trim().length < 2) { results = []; status = ''; return; }
@@ -32,11 +34,12 @@
     }
     query = item.name;
     results = [];
+    selected = true;
     status = `Destino verificado: ${item.name}`;
     onSelect(item);
   }
 </script>
-<section class="search" aria-labelledby="destination-title" data-testid="destination-search">
+<section class="search" class:compact={selected} aria-labelledby="destination-title" data-testid="destination-search" data-selected={selected ? 'true' : 'false'}>
   <label id="destination-title" for="destination-input">¿A dónde vas?</label>
   <div class="input-wrap">
     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"/></svg>

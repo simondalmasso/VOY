@@ -1,11 +1,13 @@
-import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const evidenceDir = process.env.VOY_EVIDENCE_DIR || 'test-results/evidence/screenshots';
 mkdirSync(evidenceDir, { recursive: true });
+const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+type BasemapMode = 'mock' | 'fail' | 'real';
 
-async function deterministicApis(page: Page): Promise<{ browserExternalRequests: string[]; routeRequests: string[] }> {
+async function deterministicApis(page: Page, basemapMode: BasemapMode = 'mock'): Promise<{ browserExternalRequests: string[]; routeRequests: string[] }> {
   const browserExternalRequests: string[] = [];
   const routeRequests: string[] = [];
   page.on('request', request => {
@@ -24,7 +26,11 @@ async function deterministicApis(page: Page): Promise<{ browserExternalRequests:
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706, -31.633], [-60.7, -31.64], [-60.700503, -31.643533]] })
   }); });
-  await page.route('https://basemaps.cartocdn.com/**', route => route.abort());
+  if (basemapMode === 'mock') {
+    await page.route('https://*.basemaps.cartocdn.com/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
+  } else if (basemapMode === 'fail') {
+    await page.route('https://*.basemaps.cartocdn.com/**', route => route.abort('failed'));
+  }
   return { browserExternalRequests, routeRequests };
 }
 
@@ -44,6 +50,37 @@ async function planTrip(page: Page): Promise<void> {
   await expect(page.getByTestId('destination-provenance')).toContainText('2026-08-05');
 }
 
+async function assertMobileDensity(page: Page, testInfo: TestInfo): Promise<void> {
+  const metrics = await page.evaluate(() => {
+    const box = (id: string) => {
+      const element = document.querySelector(`[data-testid="${id}"]`);
+      if (!(element instanceof HTMLElement)) throw new Error(`missing_${id}`);
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, height: rect.height, width: rect.width };
+    };
+    const destination = box('destination-search');
+    const origin = box('origin-control');
+    const map = box('map-shell');
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      destination,
+      origin,
+      map,
+      combinedTopBlocks: destination.height + origin.height,
+      mapVisiblePx: Math.max(0, Math.min(map.bottom, innerHeight) - Math.max(map.top, 0)),
+      horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+  writeFileSync(join(evidenceDir, `${testInfo.project.name}-mobile-density.json`), `${JSON.stringify(metrics, null, 2)}\n`);
+  if (!testInfo.project.name.startsWith('mobile')) return;
+  expect(metrics.destination.height).toBeLessThanOrEqual(106);
+  expect(metrics.origin.height).toBeLessThanOrEqual(121);
+  expect(metrics.combinedTopBlocks).toBeLessThanOrEqual(226);
+  expect(metrics.map.top).toBeLessThan(metrics.viewport.height);
+  expect(metrics.mapVisiblePx).toBeGreaterThanOrEqual(120);
+  expect(metrics.horizontalOverflow).toBeLessThanOrEqual(1);
+}
+
 test('mobile-first journey is usable, truthful and accessible', async ({ page }, testInfo) => {
   const { browserExternalRequests: external, routeRequests } = await deterministicApis(page);
   await page.goto('/');
@@ -53,8 +90,17 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-initial.png`), fullPage: true });
 
   await planTrip(page);
-  await expect(page.getByTestId('provider-uber')).toContainText('Precio en la app');
-  await expect(page.getByTestId('provider-didi')).toContainText('Precio en la app');
+  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-state', 'ready');
+  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-overlay-ready', 'true');
+  for (const id of ['uber', 'didi']) {
+    const provider = page.getByTestId(`provider-${id}`);
+    await expect(provider).not.toContainText(/precio/i);
+    await expect(provider.getByText(/\d+(?:[.,]\d+)?\s*min/i)).toHaveCount(0);
+    expect((await provider.getAttribute('aria-label')) || '').not.toMatch(/precio|\d+(?:[.,]\d+)?\s*min/i);
+    expect((await provider.getAttribute('title')) || '').not.toMatch(/precio|\d+(?:[.,]\d+)?\s*min/i);
+  }
+  await expect(page.locator('body')).not.toContainText('Precio en la app');
+  await assertMobileDensity(page, testInfo);
   await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-result.png`), fullPage: true });
 
   const routeCountBeforeBus = routeRequests.length;
@@ -83,6 +129,46 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   expect(overflow).toBeLessThanOrEqual(1);
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test('basemap failure is explicit instead of a silent ready blank map', async ({ page }) => {
+  await deterministicApis(page, 'fail');
+  await page.goto('/');
+  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-state', 'fallback', { timeout: 15_000 });
+  await expect(page.getByTestId('map-fallback')).toContainText('mapa base no está disponible');
+});
+
+test('candidate real network renders CARTO basemap and trip overlays', async ({ page }, testInfo) => {
+  test.skip(process.env.VOY_REAL_BASEMAP !== '1', 'candidate-only real basemap network gate');
+  const tileResponses: Array<{ url: string; status: number; contentType: string }> = [];
+  page.on('response', response => {
+    if (/https:\/\/[a-d]\.basemaps\.cartocdn\.com\/light_all\//.test(response.url())) {
+      tileResponses.push({ url: response.url(), status: response.status(), contentType: response.headers()['content-type'] || '' });
+    }
+  });
+  const { browserExternalRequests } = await deterministicApis(page, 'real');
+  await page.goto('/');
+  await planTrip(page);
+  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-state', 'ready', { timeout: 20_000 });
+  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-overlay-ready', 'true');
+  await expect.poll(() => tileResponses.filter(item => item.status === 200 && item.contentType.includes('image')).length, { timeout: 20_000 }).toBeGreaterThan(0);
+  expect(tileResponses.filter(item => item.status >= 400), JSON.stringify(tileResponses)).toEqual([]);
+  expect(browserExternalRequests).toEqual([]);
+  writeFileSync(join(evidenceDir, `${testInfo.project.name}-real-basemap-network.json`), `${JSON.stringify(tileResponses, null, 2)}\n`);
+  await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-real-basemap.png`), fullPage: true });
+});
+
+test('hotfix baseline captures current production before candidate', async ({ page }, testInfo) => {
+  test.skip(process.env.VOY_CAPTURE_HOTFIX_BASELINE !== '1', 'hotfix-candidate workflow baseline evidence only');
+  const tileResponses: Array<{ url: string; status: number; contentType: string }> = [];
+  page.on('response', response => {
+    if (/basemaps\.cartocdn\.com/.test(response.url())) tileResponses.push({ url: response.url(), status: response.status(), contentType: response.headers()['content-type'] || '' });
+  });
+  await deterministicApis(page, 'real');
+  await page.goto('/');
+  await planTrip(page);
+  writeFileSync(join(evidenceDir, `${testInfo.project.name}-production-before-map-network.json`), `${JSON.stringify(tileResponses, null, 2)}\n`);
+  await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-production-before.png`), fullPage: true });
 });
 
 test('unverified destination remains visibly blocked even when it contains an address', async ({ page }) => {
