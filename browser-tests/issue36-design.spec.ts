@@ -64,6 +64,24 @@ test('Issue36 composition is authored for mobile and desktop instead of scaled p
   }
 });
 
+test('Issue36 mandatory design-system token contract is complete', async ({ page }) => {
+  await deterministicTripApis(page);
+  await page.goto('/');
+  const required = [
+    '--voy-canvas', '--voy-font-sans', '--voy-weight-label', '--voy-type-body', '--voy-leading-copy', '--voy-tracking-label',
+    '--voy-space-4', '--voy-radius-md', '--voy-border-default', '--voy-shadow', '--voy-motion-fast', '--voy-ease-standard',
+    '--voy-z-sheet', '--voy-content-max', '--voy-control-m'
+  ];
+  const values = await page.evaluate(names => {
+    const style = getComputedStyle(document.documentElement);
+    return Object.fromEntries(names.map(name => [name, style.getPropertyValue(name).trim()]));
+  }, required);
+  for (const name of required) expect(values[name], `${name} missing`).not.toBe('');
+  expect(values['--voy-font-sans']).toContain('system-ui');
+  expect(values['--voy-border-default']).toContain('solid');
+  expect(values['--voy-motion-fast']).toBe('160ms');
+});
+
 test('Issue36 theme choice is explicit, persistent and preserves the no-account path', async ({ page }) => {
   await deterministicTripApis(page);
   await page.goto('/');
@@ -102,6 +120,32 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
   expect(routeRequests.length).toBe(beforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
+});
+
+test('Issue36 narrow mobile mode rail signals overflow and reveals Colectivo cleanly', async ({ page }, testInfo: TestInfo) => {
+  test.skip(!['mobile-360x800', 'mobile-360x780', 'mobile-390x844'].includes(testInfo.project.name), 'narrow-mobile overflow gate');
+  await deterministicTripApis(page);
+  await page.goto('/');
+  await planTrip(page);
+  const selector = page.getByTestId('mode-selector');
+  const cue = page.getByTestId('mode-overflow-cue');
+  await expect(cue).toBeVisible();
+  const initial = await selector.evaluate(element => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, overflowX: getComputedStyle(element).overflowX }));
+  expect(initial.scrollWidth).toBeGreaterThan(initial.clientWidth);
+  expect(initial.overflowX).toBe('auto');
+  await selector.evaluate(element => { element.scrollLeft = element.scrollWidth; });
+  await expect.poll(() => selector.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  const geometry = await page.evaluate(() => {
+    const rail = document.querySelector('[data-testid="mode-selector"]');
+    const bus = document.querySelector('[data-mode="bus"]');
+    const cueNode = document.querySelector('[data-testid="mode-overflow-cue"]');
+    if (!(rail instanceof HTMLElement) || !(bus instanceof HTMLElement) || !(cueNode instanceof HTMLElement)) throw new Error('mode_overflow_subject_missing');
+    const rr = rail.getBoundingClientRect(); const br = bus.getBoundingClientRect(); const cr = cueNode.getBoundingClientRect();
+    return { railLeft: rr.left, railRight: rr.right, busLeft: br.left, busRight: br.right, cueLeft: cr.left };
+  });
+  expect(geometry.busLeft).toBeGreaterThanOrEqual(geometry.railLeft - 1);
+  expect(geometry.busRight).toBeLessThanOrEqual(geometry.cueLeft + 1);
+  await expect(page.locator('[data-mode="bus"]')).toHaveText('Colectivo');
 });
 
 test('Issue36 controls keep minimum 44px targets and 200% zoom without horizontal overflow', async ({ page }) => {
