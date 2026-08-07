@@ -1,4 +1,4 @@
-name: VOY Firebase Redirect Smoke
+name: VOY Firebase Redirect Deploy + Smoke
 
 on:
   push:
@@ -16,9 +16,12 @@ permissions:
 
 env:
   VOY_FIREBASE_EVIDENCE_DIR: test-results/firebase-voy-ar
+  FIREBASE_SERVICE_ACCOUNT_VOY_AR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VOY_AR }}
+  FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+  FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
 jobs:
-  verify:
+  deploy-and-verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -33,7 +36,7 @@ jobs:
           git diff --check 9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8..HEAD
           node --check scripts/firebase-redirect-smoke.mjs
           node -e "const f=require('./firebase.json'); if(f.hosting.site!=='voy-ar'||f.hosting.public!=='firebase-hosting-empty') process.exit(1); if(f.hosting.redirects.length!==2||f.hosting.redirects.some(r=>r.type!==302)) process.exit(1);"
-          node -e "const r=require('./.firebaserc'); if(r.projects.default!=='voy-ar') process.exit(1);"
+          node -e "const fs=require('node:fs'); const r=JSON.parse(fs.readFileSync('.firebaserc','utf8')); if(r.projects.default!=='voy-ar') process.exit(1);"
           test -z "$(find firebase-hosting-empty -type f ! -name .gitkeep -print -quit)"
           changed="$(git diff --name-only 9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8..HEAD)"
           if printf '%s\n' "$changed" | grep -Eq '^(src|worker|public)/'; then
@@ -41,13 +44,44 @@ jobs:
             exit 1
           fi
 
-      - name: Install frozen browser toolchain
+      - name: Install pinned Firebase and browser toolchain
         run: |
           set -euo pipefail
-          npm install --global bun@1.3.14
+          npm install --global firebase-tools@15.24.0 bun@1.3.14
+          test "$(firebase --version)" = '15.24.0'
+          test "$(bun --version)" = '1.3.14'
           bun install --frozen-lockfile
           git diff --exit-code -- bun.lock
           bunx playwright install --with-deps chromium
+
+      - name: Deploy redirect-only Firebase Hosting
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOY_FIREBASE_EVIDENCE_DIR"
+          auth_mode=''
+          if [ -n "${FIREBASE_SERVICE_ACCOUNT_VOY_AR:-}" ]; then
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT_VOY_AR" > "$RUNNER_TEMP/firebase-service-account.json"
+            chmod 600 "$RUNNER_TEMP/firebase-service-account.json"
+            export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json"
+            auth_mode='service-account-voy-ar'
+          elif [ -n "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+            chmod 600 "$RUNNER_TEMP/firebase-service-account.json"
+            export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json"
+            auth_mode='service-account-generic'
+          elif [ -n "${FIREBASE_TOKEN:-}" ]; then
+            auth_mode='firebase-token'
+          else
+            echo 'NO_FIREBASE_CI_CREDENTIAL_SECRET' >&2
+            exit 86
+          fi
+          printf 'AUTH_MODE=%s\n' "$auth_mode" > "$VOY_FIREBASE_EVIDENCE_DIR/firebase-auth-mode.txt"
+          if [ "$auth_mode" = 'firebase-token' ]; then
+            firebase deploy --only hosting --project voy-ar --non-interactive --token "$FIREBASE_TOKEN" 2>&1 | tee "$VOY_FIREBASE_EVIDENCE_DIR/firebase-deploy.log"
+          else
+            firebase deploy --only hosting --project voy-ar --non-interactive 2>&1 | tee "$VOY_FIREBASE_EVIDENCE_DIR/firebase-deploy.log"
+          fi
+          printf '%s\n' 'DEPLOY=PASS' > "$VOY_FIREBASE_EVIDENCE_DIR/deploy-result.txt"
 
       - name: HTTP redirect contract
         run: |
@@ -64,6 +98,7 @@ jobs:
           test "${status:-0}" = 0
           grep -Eq '^HTTP/[^ ]+ 302' "$path_headers"
           grep -Eiq '^location: https://voy-app\.simondalmasso44\.workers\.dev/__voy_firebase_smoke__/nested\?source=firebase-smoke&case=path-query' "$path_headers"
+          printf '%s\n' 'ROOT=PASS' 'PATHS=PASS' 'QUERYSTRING=PASS' > "$VOY_FIREBASE_EVIDENCE_DIR/http-result.txt"
 
       - name: Browser smoke desktop and mobile
         run: node scripts/firebase-redirect-smoke.mjs
@@ -80,6 +115,7 @@ jobs:
           printf '%s\n' 'CLOUDFLARE_TOUCH=0' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
           printf '%s\n' 'FRONTEND_MOVE=0' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
           printf '%s\n' 'PROXY=0' >> "$VOY_FIREBASE_EVIDENCE_DIR/deployment-contract.txt"
+          rm -f "$RUNNER_TEMP/firebase-service-account.json"
           find "$VOY_FIREBASE_EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$VOY_FIREBASE_EVIDENCE_DIR/manifest.sha256"
           sha256sum "$VOY_FIREBASE_EVIDENCE_DIR/manifest.sha256" > "$VOY_FIREBASE_EVIDENCE_DIR/digest.txt"
 
