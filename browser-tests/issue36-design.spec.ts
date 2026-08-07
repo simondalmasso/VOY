@@ -79,7 +79,7 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   for (const name of required) expect(values[name], `${name} missing`).not.toBe('');
   expect(values['--voy-font-sans']).toContain('system-ui');
   expect(values['--voy-border-default']).toContain('solid');
-  const motion = values['--voy-motion-fast'];
+  const motion = values['--voy-motion-fast'] ?? '';
   const motionMs = motion.endsWith('ms') ? parseFloat(motion) : motion.endsWith('s') ? parseFloat(motion) * 1000 : Number.NaN;
   expect(motionMs).toBeCloseTo(160, 3);
 });
