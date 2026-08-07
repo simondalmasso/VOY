@@ -1,4 +1,4 @@
-# qa-stage: final-after-system-corrected
+# qa-stage: final-after-system-corrected-r2
 name: VOY Issue36 Visual QA
 
 on:
