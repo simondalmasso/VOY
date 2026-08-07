@@ -55,8 +55,13 @@ jobs:
           BUILD_HASH="$GITHUB_SHA" bun run validate
           wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
 
-      - name: Full browser regression mobile and desktop
-        run: bun run test:browser
+      - name: Record local-runtime harness limitation
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOY_UI_EVIDENCE_DIR"
+          cat > "$VOY_UI_EVIDENCE_DIR/harness-note.txt" <<'EOF'
+          The repository-pinned wrangler@4.112.0 local workerd currently supports compatibility dates through 2026-07-21, while VOY requires 2026-07-27. Run 31222257698 proved source/typecheck/lint/unit/build/dry-run PASS but the generic local browser harness could not start. This visual-only block therefore validates the exact production build output with credential-free static servers and pinned Playwright, without changing Wrangler, compatibility date, runtime, Cloudflare, or application logic.
+          EOF
 
       - name: Build immutable BEFORE parent
         run: |
