@@ -12,99 +12,122 @@ RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
 DRIVE=LEGACY_READ_ONLY
 NEW_DRIVE_WRITES=NO
 ISSUE34_TERMINAL_AUD=5217823220
-ISSUE36_ORDER=OPEN_NOT_YET_MATERIAL_EXECUTION
+ISSUE36_CONTINUATION_AUD=5218359932
+ISSUE36_MATERIAL_CHECKPOINT_COMMENT=5219047168
 ```
 
-GitHub is the canonical persistent state from this checkpoint onward. The prior Google Drive Milestone A document remains historical read-only evidence and must not be updated. Detailed pre-terminal Issue #34 evidence remains preserved in Git history through `main@3f8e096b7065d41f9749e5613b329736b7301055`, Issue #34 comments `5217164821`, `5217321670`, `5217585109`, `5217823220`, and immutable Actions artifacts.
+GitHub is the canonical persistent state. Drive remains historical read-only evidence and must not receive new writes.
 
-## Issue #34 — terminal result
+## Production — unchanged during Issue #36
 
 ```text
-ISSUE34=TERMINAL_GREEN_PENDING_ONLY_ISSUE_CLOSE_AT_THIS_COMMIT
-MILESTONE_A=PASS
-AUD_PASS=5217823220
-AUDITED_SOURCE_SHA=c6aa7302784ce07415949d2b9b1335919ee2cbbd
-PR37=MERGED
-PR37_MERGE_SHA=f9cbecc6761048fc1fabb0c4135e7b5568c840c2
 PRODUCTIVE_SOURCE_SHA=c6aa7302784ce07415949d2b9b1335919ee2cbbd
 PRODUCTIVE_VERSION_ID=9273abef-69ab-451f-b2f0-ace4c8fd3bdd
 PRODUCTIVE_TRAFFIC=100%
 PRODUCTIVE_DEPLOYMENT_ID=3ef0cc0b-d344-4181-8118-a9b409e44dc6
-PREVIOUS_STABLE_VERSION_ID=2f86d708-b905-4c33-b1fe-d881467e8542
-PREVIOUS_STABLE_TRAFFIC=0%
 APPLICATION_VERSION=V8.0.0
 BUILD_HASH=c6aa730
-ROLLBACK_EXECUTED=NO
-BUS_ACTIVATION=OFF
-PHASE5=NO_FEED
-MOTIS_OTP=NOT_RUN_CONDITION_NOT_MET
-ROUTER_BACKEND_DECISION=NO_CHANGE
-COST_USD=0
-CARD_OR_BILLING_USED=NO
-SECRETS_EXPOSED=NO
-```
-
-AUD `5217823220` authorized the exact Milestone A candidate for terminal production close. EJE rechecked the audited Git/Cloudflare identity, source, bindings, candidate health, Mobility Trust contract, real map proof and product gates before changing traffic. The exact candidate `9273abef-69ab-451f-b2f0-ace4c8fd3bdd` was then promoted to 100%. The previous stable version moved to 0%. No rollback was required.
-
-## Terminal production evidence
-
-```text
-TERMINAL_OPERATOR_BRANCH=ops/issue34-terminal-close-01
-TERMINAL_OPERATOR_COMMIT=dbf0b7d8b6d029ebfc5db048c27ed1d04e80f19b
-TERMINAL_RUN=31185141780;SUCCESS
-UNIT_TESTS=196_PASS;0_FAIL
-PRODUCTION_BROWSER=53_PASS;13_SKIP
-PRODUCTION_CONVERGENCE=20_CONSECUTIVE_PASS
-PRODUCTION_CONVERGENCE_DURATION_MS=137964
-PRODUCTION_HEALTH=V8.0.0/c6aa730
-MOBILITY_TRUST_API=PASS
-BUS_LICENSE_STATUS=UNKNOWN
-BUS_OPERATIONAL_STATUS=UNAVAILABLE
 BUS_ACTIVATION=OFF
 MOBILITY_DATABASE_ROLE=DISCOVERY_ONLY
-TAIL_OBSERVABILITY=DEGRADED_NO_EVENTS
-TAIL_EXCEPTIONS=0
-TAIL_NON_OK=0
-TERMINAL_ARTIFACT_ID=8996545635
-TERMINAL_ARTIFACT_SHA256=284c250f78b875ec718af554aa989d696066b929df66ac10cc4f5df50e53f775
-TERMINAL_MANIFEST_SHA256=faf0522c76d9eabb70f439357ede304961d98e6f13bd8d70165e668b41032f27
-TERMINAL_MANIFEST_LINES=119
-TERMINAL_MANIFEST_REHASHABLE_FROM_DOWNLOADED_ZIP=117/119
-TERMINAL_ARTIFACT_PACKAGING_DEBT=2_HIDDEN_PLAYWRIGHT_LAST_RUN_FILES_OMITTED_BY_UPLOAD_ARTIFACT
-RUNTIME_EVIDENCE_FAILURE=NO
+PRODUCTION_PROMOTED_BY_ISSUE36=NO
+ISSUE36_ROLLBACK_EXECUTED=NO
 ```
 
-The terminal artifact ZIP digest independently matches GitHub artifact metadata. Two hidden Playwright `.last-run.json` files were listed by the on-runner manifest but omitted by the default `upload-artifact` hidden-file behavior, so the downloaded ZIP can independently rehash 117 of 119 manifest entries, not 119/119. This is recorded as evidence-packaging debt and is not misreported as a runtime PASS. The material production proofs—deployment state, health, trust endpoint, browser results, convergence, tests and promotion logs—are present in the artifact and passed.
+Production health was checked before and after the Issue #36 candidate operation and remained `V8.0.0/c6aa730`. Santa Fe bus remains fail-closed because no accepted authoritative GTFS/GTFS-RT feed with verified compatible feed license and freshness exists.
 
-## Post-merge GitHub validation
-
-```text
-MAIN_AFTER_PR37=f9cbecc6761048fc1fabb0c4135e7b5568c840c2
-RELEASE_POLICY_RUN=31185910160;SUCCESS
-MAIN_VALIDATION_RUN=31185913893;SUCCESS
-MAIN_LOCAL_BROWSER=PASS
-MAIN_PRODUCTION_HEALTH_READ_ONLY=PASS
-MAIN_PRODUCTION_BROWSER_SMOKE_READ_ONLY=PASS
-PRODUCTIVE_ANCESTRY_PRESERVED=YES
-```
-
-PR #37 was merged using a merge commit rather than squash/rebase so the audited and productive SHA `c6aa7302784ce07415949d2b9b1335919ee2cbbd` remains in canonical main ancestry. The first merge call was rejected only because the PR was still Draft; no repository or runtime mutation occurred. The PR was marked Ready for Review and the exact same audited head was then merged successfully.
-
-## Issue #34 data outcome
+## Issue #34 — terminal
 
 ```text
-SANTA_FE_GTFS_ACCEPTED=NO
-SANTA_FE_GTFS_RT_ACCEPTED=NO
+ISSUE34=CLOSED_COMPLETED
+AUD_PASS=5217823220
+PR37=MERGED
+PR37_MERGE_SHA=f9cbecc6761048fc1fabb0c4135e7b5568c840c2
 SANTA_FE_TRANSIT_RESULT=NO_FEED
-BUS_ACTIVATION=OFF
-MOBILITY_DATABASE=DISCOVERY_ONLY
-CATALOG_LICENSE_METADATA_IS_OPERATIONAL_AUTHORITY=NO
-MOBILITY_DATABASE_CANONICAL_LICENSE_URL=NULL
-MOBILITY_DATABASE_CANONICAL_LICENSE_STATUS=UNKNOWN
-GTFS_RT_ATTACH_WITHOUT_VERIFIED_STATIC=BLOCKED
+MOTIS_OTP=NOT_RUN_CONDITION_NOT_MET
+ROUTER_BACKEND_DECISION=NO_CHANGE
+TERMINAL_RUN=31185141780;SUCCESS
+TERMINAL_ARTIFACT_ID=8996545635
 ```
 
-No current authoritative Santa Fe Capital bus GTFS/GTFS-RT feed with independently verified compatible provider/feed license and freshness was demonstrated. Phase 5 therefore terminates as canonical `NO_FEED`; no route, stop, frequency, wait, fare or bus availability is fabricated. Because the prerequisite verified feed/use-case does not exist, Phase 6 terminates as `MOTIS_OTP=NOT_RUN_CONDITION_NOT_MET`. Phase 7 selects `NO_CHANGE`; no external routing backend is activated.
+The audited Issue #34 source remains in canonical main ancestry. No bus route, stop, frequency, wait, fare or availability is fabricated.
+
+## Issue #36 — total product redesign checkpoint
+
+```text
+ISSUE36=COMPLETE_EXACT_HEAD_CANDIDATE_0_AWAITING_AUD
+ORDER=VOY-HOVS-TOTAL-PRODUCT-REDESIGN-02
+AUD_AUTHORITY=5218359932
+BRANCH=feat/issue36-total-product-redesign-01
+PR38=OPEN_DRAFT_UNMERGED
+EXACT_HEAD=7e2edc5351eb5eb008ac2ca02e638d28d4b828c5
+MERGE_PR38=NO
+PRODUCTION_PROMOTION_AUTHORIZED=NO
+```
+
+The redesign is a composition/hierarchy reauthoring rather than a facelift. It implements `CALM_INTELLIGENCE × URBAN_SIGNAL × EDITORIAL_CLARITY`: destination search as functional hero, connected origin/destination construction, true desktop planner+map composition, contextual map, decision-first provider rows, human-readable trust/provenance, explicit theme selection with deliberate dark mode, responsive mobile composition, 48px interactive targets and reduced-motion/accessibility handling. Canonical routing, pricing, provider behavior, data trust, privacy and security semantics remain unchanged. No new runtime/provider/font dependency was introduced.
+
+## Issue #36 immutable visual evidence
+
+```text
+BEFORE_RUN=31188934572;SUCCESS
+BEFORE_ARTIFACT_ID=8997973225
+BEFORE_ARTIFACT_SHA256=7aa31507b76a7c2b7f2d0d76d9f7e2fd76ce0ad0ea92a248037bfb7f27057a83
+VISUAL_QA_PASS_1_RUN=31190764684;SUCCESS
+VISUAL_QA_PASS_1_ARTIFACT_ID=8998749589
+POLISH_PASS_1_HEAD=27200f22f5ad7c7b6d2d1d4167b79b6982d6a38e
+VISUAL_QA_PASS_2_RUN=31191383395;SUCCESS
+VISUAL_QA_PASS_2_ARTIFACT_ID=8999001664
+VISUAL_QA_PASS_2_ARTIFACT_SHA256=f67a736fd6130918bcb688fc055ef4c9185c24a32229a66e4e81663afaf48758
+POLISH_PASS_2_HEAD=105eb7cffe3f03655819502e45f74b1a21fec23a
+FINAL_AFTER_RUN=31192608499;SUCCESS
+FINAL_AFTER_ARTIFACT_ID=8999506605
+FINAL_AFTER_ARTIFACT_SHA256=9c0b3009ec954497214792b018731458d711f639f9f78fef20ee2921161e706a
+```
+
+BEFORE/AFTER cover `360x800`, `390x844`, `412x915`, `430x932`, `768x1024`, `1024x768`, `1280x800`, `1440x900`, both light/dark themes, plus representative start/search/destination/origin/modes/map/decision/unavailable/external-action/voice/offline/error/legal states.
+
+## Issue #36 exact-head regression
+
+```text
+RELEASE_POLICY_RUN=31192611375;SUCCESS
+PR_VALIDATION_RUN=31192611671;SUCCESS
+UNIT_TESTS=196_PASS;0_FAIL
+LOCAL_BROWSER=77_PASS;13_SKIP
+CANDIDATE_BROWSER=77_PASS;13_SKIP
+LOCAL_REAL_MAP_PIXEL_PROOF=6/6_PASS
+LOCAL_REAL_MAP_GEOMETRY_PROOF=6/6_PASS
+CANDIDATE_REAL_MAP_PIXEL_PROOF=6/6_PASS
+CANDIDATE_REAL_MAP_GEOMETRY_PROOF=6/6_PASS
+MAP_VISUAL_PROFILE=ISSUE36_URBAN_SIGNAL
+```
+
+A failed pre-candidate run `31191911234` exposed a stale internal pixel analyzer that still required the pre-redesign purple/blue/red overlay palette. Its artifact `8999260196` showed a non-flat real basemap while legacy color counts were zero. The gate was corrected to support the intentional Issue #36 neutral-origin + SIGNAL route/destination language while retaining structural `overlay-ready`, real geometry, route-layer and non-flat-basemap requirements. No Cloudflare version or production traffic write occurred in that failed attempt. Earlier capture/visual tooling failures were also repaired under AUD `5218359932` without runtime mutation.
+
+## Issue #36 Cloudflare exact-head candidate
+
+```text
+FINAL_CANDIDATE_RUN=31192605593;SUCCESS
+FINAL_CANDIDATE_ARTIFACT_ID=8999760313
+FINAL_CANDIDATE_ARTIFACT_SHA256=00faa02d1704ae1bf0b4b362a68f8a8f2d2fe3001400299458870697a7fcc816
+ARTIFACT_MANIFEST=167/167_REHASH_PASS
+CANDIDATE_SOURCE_SHA=7e2edc5351eb5eb008ac2ca02e638d28d4b828c5
+STABLE_VERSION_ID=9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+STABLE_TRAFFIC=100%
+CANDIDATE_VERSION_ID=5c1a7213-de5d-46a2-a98f-35238c5b809c
+CANDIDATE_TRAFFIC=0%
+CANDIDATE_DEPLOYMENT_ID=a6f5fb00-567a-4899-b902-14115f34e501
+PREVIOUS_DEPLOYMENT_ID=3ef0cc0b-d344-4181-8118-a9b409e44dc6
+STABLE_HEALTH=V8.0.0/c6aa730
+CANDIDATE_HEALTH=V8.0.0/7e2edc5
+CONVERGENCE_ROUNDS=20
+CONVERGENCE_DURATION_MS=253975
+PRODUCTION_PROMOTED=NO
+ROLLBACK_EXECUTED=NO
+OBSERVABILITY=DEGRADED_NO_EVENTS
+TAIL_EXCEPTIONS=0
+```
+
+The candidate is validated at 0% only. Production promotion and merge are not authorized at this checkpoint.
 
 ## Stable architecture and truth boundaries
 
@@ -123,7 +146,7 @@ GTFS_VALIDATOR_SHA256=19293ddd9b6f954f216d4f12054bd8a3232921751c4484339e339764a9
 MOBILITY_DATABASE=BUILD_TIME_OR_MANUAL_DISCOVERY_ONLY
 ```
 
-Permanent invariants remain:
+Permanent invariants:
 - browser does not call Nominatim, OSRM or Mobility Database directly;
 - bus stays disabled without verified source/license/freshness/validation;
 - catalog metadata cannot authorize a feed;
@@ -134,28 +157,11 @@ Permanent invariants remain:
 - audio/transcripts/exact-location history are not persistently stored;
 - VOY works without login, voice or AI.
 
-## Historical evidence index
-
-```text
-ISSUE32=CLOSED_COMPLETED
-ISSUE32_PRODUCTIVE_SOURCE=403ad4fc96f0b7138151f6267b996cd900f752c2
-ISSUE34_INITIAL_MILESTONE_COMMENT=5217164821
-ISSUE34_LICENSE_BLOCK_AUD=5217321670
-ISSUE34_CORRECTED_MILESTONE_COMMENT=5217585109
-ISSUE34_TERMINAL_AUD=5217823220
-ISSUE34_CORRECTED_CANDIDATE_RUN=31181446289
-ISSUE34_CORRECTED_CANDIDATE_ARTIFACT=8995148336
-ISSUE34_TERMINAL_PRODUCTION_RUN=31185141780
-ISSUE34_TERMINAL_ARTIFACT=8996545635
-PRE_TERMINAL_WORKLOG_COMMIT=3f8e096b7065d41f9749e5613b329736b7301055
-```
-
 ## Next authorized sequence
 
 ```text
-ISSUE34_NEXT=CLOSE_AFTER_THIS_DOC_COMMIT_VALIDATES
-ISSUE36_START_GATE=ISSUE34_MUST_BE_CLOSED_AND_NO_PARALLEL_PRODUCT_LINE
-ISSUE36_ROLE=ARQ
-ISSUE36_MATERIAL_EJE_AUTHORITY=REQUIRES_MATCHING_INDEPENDENT_AUD_PER_GLOBAL_PROJECT_RULES
-NEXT=VALIDATE_THIS_DOC_COMMIT_CLOSE_ISSUE34_THEN_RECONSTRUCT_ISSUE36_GATE
+CURRENT_CANDIDATE_PROMOTABLE=AWAITING_INDEPENDENT_AUD
+MERGE_PR38=NO
+PRODUCTION_PROMOTION_AUTHORIZED=NO
+NEXT=AUD_REVIEW_COMPLETE_EXACT_HEAD_CANDIDATE
 ```
