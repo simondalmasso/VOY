@@ -1,5 +1,6 @@
 import legacyWorker, { NominatimCoordinator } from '../worker-entry.js';
 import type { Env } from './contracts/env';
+import { handleMobilityTrust } from './routes/mobility-trust';
 import { handleRoute } from './routes/route';
 export { NominatimCoordinator };
 const API_PREFIX = '/api/';
@@ -54,6 +55,7 @@ const worker: ExportedHandler<Env> = {
     const url = new URL(request.url);
     if (isRetiredPublicPath(url.pathname)) return secure(retiredPublicAsset(), request);
     if (url.pathname === '/api/health' && request.method === 'GET') return secure(health(env), request);
+    if (url.pathname === '/api/mobility/trust') return secure(handleMobilityTrust(request), request);
     if (url.pathname === '/api/route') return secure(await handleRoute(request, env), request);
     if (url.pathname === '/api/auth/session' && request.method === 'GET' && !authConfigured(env)) {
       return secure(new Response(JSON.stringify({ ok: true, enabled: false, authenticated: false, persistent_account: false, trip_history_persisted: false }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }), request);
