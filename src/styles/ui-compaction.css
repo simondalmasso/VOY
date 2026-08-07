@@ -1,0 +1,156 @@
+/* VOY UI compaction / Apple-smooth pass.
+   Visual-only overrides loaded after issue36-polish.css. */
+
+button,
+input,
+.journey-builder,
+.message,
+.assistant-trigger,
+.provider {
+  transition:
+    background-color var(--voy-motion-base) var(--voy-ease-emphasized),
+    border-color var(--voy-motion-base) var(--voy-ease-emphasized),
+    color var(--voy-motion-base) var(--voy-ease-emphasized),
+    box-shadow var(--voy-motion-base) var(--voy-ease-emphasized),
+    transform var(--voy-motion-fast) var(--voy-ease-emphasized);
+}
+
+button {
+  min-height:40px;
+  padding-inline:15px;
+  border-radius:11px;
+  font-size:14px;
+  font-weight:var(--voy-weight-label);
+}
+button:active:not(:disabled){transform:scale(.985)}
+
+input {
+  min-height:42px;
+  height:42px;
+  padding-block:0;
+  padding-inline:12px;
+  border-radius:11px;
+}
+
+.app-shell{gap:12px}
+.journey-layout{gap:10px}
+.planner{gap:10px}
+.planner-intro{padding:3px 2px 0}
+.eyebrow{margin-bottom:4px}
+.planner-promise{font-size:clamp(21px,6vw,30px);line-height:1.04;max-width:23ch}
+
+.journey-builder{
+  border-radius:14px;
+  border-color:color-mix(in srgb,var(--voy-border) 72%,transparent);
+  box-shadow:none;
+}
+.journey-builder::before{left:23px;top:82px;bottom:46px;background:color-mix(in srgb,var(--voy-border) 72%,transparent)}
+
+.search{padding:11px 12px 8px}
+.search label{
+  margin-bottom:8px;
+  font-size:clamp(24px,6.4vw,28px);
+  line-height:1.05;
+  letter-spacing:-.035em;
+}
+.input-wrap{grid-template-columns:24px minmax(0,1fr);gap:6px}
+.input-wrap svg{width:18px;height:18px;stroke-width:1.8}
+.input-wrap input{
+  min-height:42px;
+  height:42px;
+  padding-inline:5px;
+  font-size:16px;
+}
+.search .status{margin:4px 0 0 30px;min-height:15px;line-height:15px;font-size:11px}
+.search .status:empty{display:none}
+.search::before{left:18px;top:62px;width:10px;height:10px;box-shadow:0 0 0 3px var(--voy-signal-soft)}
+.results{margin:8px -12px -8px;max-height:220px;border-radius:0 0 14px 14px}
+.results button{min-height:52px;padding:9px 12px 9px 44px}
+.results button::before{left:18px;top:16px}
+
+.origin{
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:6px;
+  padding:10px 12px 10px 42px;
+  border-top-color:color-mix(in srgb,var(--voy-border) 72%,transparent);
+}
+.origin::before{left:18px;top:24px;width:10px;height:10px;box-shadow:0 0 0 3px var(--voy-surface-2)}
+.origin-summary span{font-size:10px;line-height:13px}
+.origin strong{font-size:14px;line-height:18px}
+.origin .location,
+.origin-edit{
+  min-height:40px;
+  height:40px;
+  padding-inline:14px;
+  border-radius:11px;
+  font-size:13px;
+  font-weight:var(--voy-weight-label);
+}
+.manual{gap:6px;margin-left:-24px}
+.manual input{min-height:42px;height:42px;padding-inline:12px}
+.manual button{min-width:72px;min-height:40px;height:40px;padding-inline:14px;font-size:13px}
+.origin p{margin:0 0 0 -24px;min-height:15px;line-height:15px;font-size:11px}
+.origin p:empty{display:none}
+.origin.compact{min-height:56px;padding-block:8px}
+
+.search.compact{padding:8px 12px 6px}
+.search.compact label{margin-bottom:2px;font-size:10px;line-height:13px}
+.search.compact .input-wrap input{min-height:42px;height:42px;font-size:15px}
+.search.compact .status{margin-top:0;min-height:15px;line-height:15px}
+.search.compact::before{top:39px}
+
+.modes{gap:3px;padding:2px 10px 2px 2px}
+.modes button{min-width:40px;min-height:40px;height:40px;padding-inline:11px;font-size:13px;border-radius:10px}
+
+.message{
+  min-height:32px;
+  display:flex;
+  align-items:center;
+  padding:6px 9px 6px 25px;
+  border:1px solid color-mix(in srgb,var(--voy-border) 58%,transparent);
+  border-radius:10px;
+  background:color-mix(in srgb,var(--voy-surface) 68%,transparent);
+  font-size:12px;
+  line-height:17px;
+}
+.message::before{left:10px;top:50%;transform:translateY(-50%);width:6px;height:6px}
+
+.assistant-trigger{
+  min-height:40px;
+  height:40px;
+  padding:0 6px;
+  border:0;
+  border-top:1px solid color-mix(in srgb,var(--voy-border) 68%,transparent);
+  border-radius:0;
+  font-size:13px;
+  font-weight:var(--voy-weight-label);
+}
+
+.voice-panel{padding:12px;border-radius:14px;box-shadow:none}
+.icon-button{min-height:40px;height:40px;padding-inline:14px;border-radius:11px;font-size:13px}
+.voice-panel label{margin:10px 0 5px}
+.voice-input{gap:6px}
+.voice-input input{min-height:42px;height:42px}
+.voice-input button{min-height:40px;height:40px;padding-inline:14px;font-size:13px}
+.voice-response{margin-top:10px;padding-top:10px}
+
+.decision-empty{grid-template-columns:34px 1fr;gap:10px;padding:12px 2px}
+.decision-empty p{margin-top:3px}
+.sheet{padding:14px 14px 13px;border-radius:20px 20px 14px 14px;box-shadow:0 8px 28px rgba(11,11,10,.06)}
+.grab{margin:-4px auto 10px}
+.options{margin-top:9px}
+.provider{min-height:68px;padding:11px 0;gap:12px}
+
+@media(max-width:759px){
+  .map-shell{min-height:260px;height:clamp(260px,34dvh,340px)}
+}
+
+@media(max-width:380px){
+  .planner-promise{font-size:21px}
+  .manual{grid-template-columns:minmax(0,1fr) 72px}
+}
+
+@media(max-width:360px){
+  .search{padding-left:12px;padding-right:12px}
+  .origin{padding-right:12px}
+}
