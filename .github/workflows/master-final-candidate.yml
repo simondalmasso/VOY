@@ -1,0 +1,108 @@
+# aud-public-bundle-cleanup-final-candidate: reconciled-runtime-2026-08-05-r15
+name: VOY Svelte Final Zero-Traffic Candidate
+
+on:
+  push:
+    branches:
+      - feat/voy-complete-product-master-01
+    paths:
+      - .github/workflows/master-final-candidate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-svelte-final-zero-traffic-candidate
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_STABLE_VERSION: V7.8.0
+  EXPECTED_STABLE_HASH: 1374f09
+  EXPECTED_STABLE_VERSION_ID: b4f1833a-f2a1-4a44-b351-13ae48972c20
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  CONVERGENCE_INTERVAL_MS: '7000'
+  EVIDENCE_DIR: test-results/svelte-final-candidate
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact canonical head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact remote identity
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/feat/voy-complete-product-master-01 | awk '{print $1}')"
+          test -n "$remote_head"
+          test "$remote_head" = "$GITHUB_SHA"
+          git diff --check
+          printf '%s\n' "$remote_head" > /tmp/voy-final-remote-head.txt
+
+      - name: Install pinned frozen toolchain and browser dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Create and deeply validate exact Svelte candidate at zero traffic
+        run: bash scripts/run-master-final-candidate.sh
+
+      - name: Verify retired public routes on exact candidate
+        run: node scripts/verify-retired-candidate-assets.mjs
+
+      - name: Build immutable evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          cp /tmp/voy-final-remote-head.txt "$EVIDENCE_DIR/remote-head-at-preflight.txt" 2>/dev/null || true
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 \
+            | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload complete candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-svelte-final-candidate-${{ github.run_id }}
+          path: |
+            test-results/svelte-final-candidate
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Candidate summary
+        if: always()
+        run: |
+          {
+            echo '## VOY Svelte final zero-traffic candidate'
+            echo
+            echo "- Exact source SHA: $GITHUB_SHA"
+            echo "- Stable production version: $EXPECTED_STABLE_VERSION_ID at 100%"
+            echo "- Candidate version: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
+            echo "- Deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Retired public routes: exact-candidate negative probe required'
+            echo '- Production promoted: no'
+            if [ -f "$EVIDENCE_DIR/final-state.json" ]; then
+              echo '```json'
+              cat "$EVIDENCE_DIR/final-state.json"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

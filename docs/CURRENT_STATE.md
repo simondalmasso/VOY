@@ -1,116 +1,133 @@
-# VOY — Auditable Repository Worklog
+# VOY — Current canonical state
 
-Last updated: 2026-07-26
+Last reconstructed: 2026-08-05
 
-## Authority and purpose
-
-Google Drive is the canonical project-state, authorization and audit bus. This file is an auditable repository worklog; it is not a substitute for the current Drive mission, an AUD verdict, direct production verification or the effective Cloudflare control plane.
-
-Live runtime claims require fresh evidence. Historical candidate, deployment, traffic and binding data are labeled `LAST_VERIFIED`; unavailable current control-plane facts are labeled `CURRENT_NO_VERIFICADO`.
-
-## Current pinned repository state
-
-Verified immediately before `VOY-VOICE-DOCUMENTARY-RECONCILIATION-01` began:
+## Authority and active order
 
 ```text
-MAIN_SHA=841d9f4ecd573c32e5f9ac7238d4109812a221bf
-MAIN_DRIFT=NO
-SINGLE_OPERATIONAL_WRITER=ARQ_THIS_CHAT
-GITHUB_WORKFLOWS_IN_PROGRESS=0
-GITHUB_WORKFLOWS_QUEUED=0
+CANONICAL_STATE=GITHUB_REMOTE
+PRIMARY_STATE_FILE=docs/CURRENT_STATE.md
+CONTROL_ISSUE=30
+CANONICAL_PR=31
+CANONICAL_BRANCH=feat/voy-complete-product-master-01
+BASE_MAIN=d31f7497f963ddd761ed3392a634f8017f85ad13
+ACTIVE_AUD_BLOCK=5194944748
+ORDER_ID=VOY-COMPLETE-END-TO-END-MASTER-02
 ```
 
-Open pull requests:
+The remote branch and PR head are authoritative. Runtime identifiers are current only when re-queried from Cloudflare or production and retained as evidence. Chat, local workspaces, ZIP files and old documents are secondary.
+
+## Canonical architecture
 
 ```text
-PR_23=OPEN_DRAFT;MERGED=NO;HEAD=548165574d1f06ee44c6b898ce0afb794f67bfee
-PR_24=OPEN_DRAFT;MERGED=NO;HEAD=1abcd930af1d8319dcb178b97a687b79939b992a
+UI=SVELTE_5
+LANGUAGE=TYPESCRIPT_STRICT
+BUILD=VITE
+RUNTIME=CLOUDFLARE_WORKER_TYPESCRIPT_AND_ASSETS
+APP=SPA_PWA
+SSR=NO
+SVELTEKIT=NO
+TAILWIND=NO
+MONOLITHIC_HTML_RUNTIME=INACTIVE
+PUBLIC_ASSET_POLICY=config/production-assets.json
+PRIMARY_VIEWPORTS=360;390;412;430
 ```
 
-PR #23 is the bounded Voice Copilot implementation. PR #24 is documentation-only Google authentication planning. Neither PR is authorized for merge by this worklog or by the current documentation execution.
+MapLibre, Voice and Auth are lazy optional capabilities. Destination selection, comparison and truthful unavailable states work without map tiles, account, microphone or AI.
 
-## Public production — last verified
+## Public asset truth boundary
 
-Public verification at `2026-07-25T19:52:24.343Z` returned:
+- Every source file under `public/` is explicitly classified in `config/production-assets.json` and documented in `docs/data/public-asset-inventory-2026-08-05.md`.
+- Only ten current territorial JSON files, the PWA manifest/service worker, product mark and exact icon set may be copied from `public/`.
+- Only the canonical generated `index.html` and Vite-hashed JavaScript/CSS may be added by the build.
+- Source and built output fail CI on missing, duplicate, retired or unclassified files and on forbidden legacy product markers.
+- `scripts/build-static-manifest.mjs` certifies classifications instead of accepting every non-dot file.
+- Retired legacy routes return `410` before `ASSETS`, so an old link cannot fall through to legacy bytes or the canonical SPA.
+- Historical product bytes remain in Git history only and never under `public/`, `dist/client` or another Worker-served namespace.
+
+## Product truth boundaries
+
+- The browser never calls Nominatim or OSRM directly.
+- A destination is operational only when its runtime record includes complete authoritative per-item provenance, correct address, validated coordinates, precision and verification date.
+- Current operational Santa Fe destinations are limited to Terminal de Ómnibus, Estación Belgrano and Puente Colgante. Their source register is `docs/data/santa-fe-destination-provenance-2026-08-05.md`.
+- Worker geocode results without that provenance remain visibly unverified and disabled; they cannot trigger route, fare, comparison, map or external-provider actions.
+- Voice uses the same fail-closed destination provenance boundary and ignores unverified landmarks, stops and bike references.
+- Bus line, stop, direction, frequency, wait and route recommendations are disabled until current authoritative operational data exists.
+- Historical mixed destination data is preserved only through Git history; the old runtime blob is `35cadbb7cecffa9274c5f44311ce5d1c689550ba`.
+- Historical bus and bike arrays are archived under `docs/data/historical/` and are absent from runtime data.
+- A straight-line distance is labelled as a reference and is never drawn as a street, walking or cycling route.
+- Taxi and remis values are regulated estimates with source and verification date; they are informational and do not reserve a vehicle.
+- Uber and DiDi remain `APP_ONLY`; only verified provider actions are actionable and require explicit, expiring, single-use confirmation.
+- AI does not calculate routes, distances, durations, fares, availability or rankings.
+
+## Destination provenance correction — 2026-08-05
+
+AUD block `5193183161` blocked a prior candidate because the runtime mixed unverifiable landmarks with incorrect addresses. The correction:
+
+- replaces the runtime asset with three authoritative records only;
+- corrects Terminal de Ómnibus to `Belgrano 2910`;
+- corrects Estación Belgrano to `Bv. Gálvez 1150`;
+- assigns Puente Colgante the official decree coordinates and a non-conflicting Costanera/Laguna Setúbal descriptor;
+- rejects incomplete local records mechanically;
+- displays weaker Worker references as disabled and explicitly unverified even when an address is present;
+- blocks route, fare, map and provider actions unless the destination is authoritative;
+- exposes issuer, address and verification date in the final decision surface;
+- makes Voice destination selection use the same strict provenance contract;
+- adds deterministic data, Voice and browser regression cases using the real runtime asset and forged legacy negatives.
+
+## Legacy public surface correction — 2026-08-05
+
+AUD block `5194944748` accepted the reconciled test inventory but blocked candidate `05b66121-4218-4dfa-8b44-f59bad2aa0e4` because obsolete VOY product and diagnostic files were still public. The correction removes from the runtime source and build:
+
+- `public/VOYv2.html`;
+- `public/movilidad.html`;
+- `public/city_default.json` and `public/city_santafe.json`;
+- root `public/fares.json`;
+- `public/chaos-tests.html`;
+- the complete `public/navigator/` runtime.
+
+The Worker retires those routes and the former `VOY-Lite.html` route with an exact safe `410` response before `ASSETS`. Tests prove no retired bytes, stale bus/provider claims or alternate monolithic application can ship. The blocked candidate must never be promoted; a fresh exact-head candidate at `0%` is required after integral CI.
+
+## Validation control plane
+
+Permanent automatic workflows:
 
 ```text
-LAST_VERIFIED_PUBLIC_PRODUCTION_OK=YES
-LAST_VERIFIED_PUBLIC_APPLICATION_VERSION=V7.8.0
-LAST_VERIFIED_PUBLIC_BUILD=841d9f4
-LAST_VERIFIED_DEFAULT_AI_COPILOT=false
-LAST_VERIFIED_DEFAULT_VOICE_INPUT=false
-LAST_VERIFIED_SANTAFE_AI_COPILOT=false
-LAST_VERIFIED_SANTAFE_VOICE_INPUT=false
+BRANCH_EXACT_HEAD=.github/workflows/svelte-validation.yml
+PULL_REQUEST=.github/workflows/pr-validation.yml
+MAIN_READ_ONLY_VALIDATION=.github/workflows/deploy.yml
+RELEASE_POLICY=.github/workflows/release-policy-check.yml
+FINAL_ZERO_TRAFFIC_CANDIDATE=.github/workflows/master-final-candidate.yml
 ```
 
-The public site was reachable and served the expected VOY application. These public observations do not prove the current Cloudflare version ID, deployment ID, traffic split or binding set.
+All use Bun `1.3.14`, Wrangler `4.112.0`, `bun install --frozen-lockfile`, strict typecheck, lint, deterministic tests, source/build asset policy, Vite production build, bundle budgets, generated Wrangler dry-run and clean-profile browser gates.
 
-## Voice candidate — historical exact-head evidence
+## Public production baseline
 
-The following values were verified by the successful candidate workflow and artifact on 2026-07-23. They are historical evidence, not claims about the current Cloudflare control plane:
+The stable production version remains:
 
 ```text
-LAST_VERIFIED_VOICE_PR_HEAD=548165574d1f06ee44c6b898ce0afb794f67bfee
-LAST_VERIFIED_CANDIDATE_VERSION_ID=9ad8dbc0-0525-45d3-b299-7c43f180b241
-LAST_VERIFIED_CANDIDATE_VERSION_NUMBER=102
-LAST_VERIFIED_CANDIDATE_BUILD=5481655
-LAST_VERIFIED_CANDIDATE_DEPLOYMENT_ID=f56c2e98-7373-4642-abeb-e9b8245707db
-LAST_VERIFIED_CANDIDATE_TRAFFIC=0%
-LAST_VERIFIED_PRODUCTION_VERSION_ID=1ddc8c2d-5c44-4217-b64b-61470d0cbe08
-LAST_VERIFIED_PRODUCTION_TRAFFIC=100%
-LAST_VERIFIED_PRODUCTION_PROMOTED=NO
-LAST_VERIFIED_ROLLBACK_EXECUTED=NO
+APPLICATION_VERSION=V7.8.0
+BUILD_HASH=1374f09
+STABLE_VERSION_ID=b4f1833a-f2a1-4a44-b351-13ae48972c20
+STABLE_TRAFFIC=100%
+PRODUCTION_TRAFFIC_CHANGED=NO
 ```
 
-Last-verified candidate binding delta:
+This is the stable pre-Svelte production baseline. No productive promotion is authorized.
 
-```text
-LAST_VERIFIED_PRODUCTION_BINDING_COUNT=13
-LAST_VERIFIED_ADDITIONAL_BINDINGS=AI:ai;VOY_VOICE_TEST_MODE:plain_text
-```
+## Final candidate rule
 
-Evidence:
+The final release workflow runs only after source, tests and documentation are complete. It must:
 
-```text
-VOICE_CANDIDATE_RUN=29988844118
-VOICE_CANDIDATE_RUN_RESULT=SUCCESS
-VOICE_ARTIFACT_ID=8556305313
-VOICE_ARTIFACT_EXPIRED_AT_PREFLIGHT=NO
-VOICE_ARTIFACT_DIGEST=sha256:6934656bbadeff7dd656762f35bfbc93af615eeb6d4657b4a7b3722b9a18cddd
-VOICE_MANIFEST_DIGEST=sha256:691fbac7c907c7d6983c3b5f694ac01a0ae8eb1a1fa64d7f663236a192c1fe07
-```
+1. verify the exact remote PR head and frozen lockfile;
+2. reconstruct current Cloudflare versions, deployment, traffic, bindings and rollback;
+3. upload exactly one Svelte Worker version from that committed head;
+4. preserve the verified stable version at `100%` and place the new candidate at `0%`;
+5. validate Svelte root identity, authoritative city data, classified static manifest, service worker, APIs, security/privacy, Voice/Auth boundaries, viewports and exact-version logs;
+6. prove every retired public path returns the exact safe `410` response on the candidate;
+7. require 20 consecutive rounds and at least 120 seconds;
+8. persist immutable evidence, manifest and digest;
+9. make no source commit after candidate creation.
 
-## Current Cloudflare state
-
-No Cloudflare control-plane connector was available during the preflight. Therefore:
-
-```text
-CURRENT_CLOUDFLARE_VERSIONS=NO_VERIFICADO
-CURRENT_CLOUDFLARE_DEPLOYMENTS=NO_VERIFICADO
-CURRENT_TRAFFIC_SPLIT=NO_VERIFICADO
-CURRENT_CANDIDATE_PERSISTENCE_AT_0_PERCENT=NO_VERIFICADO
-CURRENT_EFFECTIVE_BINDINGS=NO_VERIFICADO
-CURRENT_SECRETS_DNS_KV_DO_CRON_ROUTES=NO_VERIFICADO
-```
-
-No conclusion about current candidate persistence, traffic or bindings may be inferred from historical workflow evidence alone.
-
-## Active documentation execution
-
-```text
-MISSION_ID=VOY-VOICE-NEXT-BLOCK-PREFLIGHT-01
-EXECUTION_ID=VOY-VOICE-DOCUMENTARY-RECONCILIATION-01
-BASE=main@841d9f4ecd573c32e5f9ac7238d4109812a221bf
-BRANCH=docs/voy-voice-candidate-reconciliation-v1
-FILE_SCOPE=docs/CURRENT_STATE.md;docs/voice/voice-candidate-reconciliation-v1.md
-AUD_VERDICT=PASS_WITH_FINDINGS
-MERGE_AUTHORIZED=NO
-CLOUDFLARE_ACTION_AUTHORIZED=NO
-PRODUCTION_ACTION_AUTHORIZED=NO
-```
-
-This execution may update only the two documentation paths above, run existing validation and open a Draft PR. It must not alter PR #23, PR #24, source runtime, workflows, Cloudflare, production, traffic, bindings, secrets, DNS, KV, Durable Objects, cron, routes or feature flags.
-
-## Next gate
-
-Complete existing CI, prove the diff contains exactly the two authorized documentation paths, persist execution evidence in Drive and request a post-operation AUD review. No merge, phase closure or further material action is authorized before a new matching verdict.
+PR #31 stays Draft, unmerged and without productive traffic until independent AUD PASS and a separate exact authorization from Simón.

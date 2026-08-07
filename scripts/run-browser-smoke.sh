@@ -1,36 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-PLAYWRIGHT_VERSION="1.61.1"
-WRANGLER_LOG="${WRANGLER_LOG:-test-results/wrangler-local.log}"
-mkdir -p test-results
-
-npx wrangler dev --local --port 8787 >"$WRANGLER_LOG" 2>&1 &
-WRANGLER_PID=$!
-cleanup() {
-  kill "$WRANGLER_PID" 2>/dev/null || true
-  wait "$WRANGLER_PID" 2>/dev/null || true
-}
+PORT="${VOY_PORT:-8787}"
+BASE_URL="${VOY_BASE_URL:-http://127.0.0.1:$PORT}"
+LOG="${VOY_LOCAL_SERVER_LOG:-test-results/static-preview.log}"
+mkdir -p "$(dirname "$LOG")"
+BUILD_HASH="${BUILD_HASH:-browser}" bun run build >"$LOG" 2>&1
+if [[ -n "${DEPLOY_CONFIG:-}" && -n "${CANDIDATE_CONFIG:-}" && -n "${SHORT_SHA:-}" ]]; then
+  node scripts/write-candidate-config.mjs
+fi
+BUILD_HASH="${BUILD_HASH:-browser}" VOY_PORT="$PORT" node scripts/serve-static-preview.mjs "$PORT" >>"$LOG" 2>&1 &
+PID=$!
+cleanup(){ kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
-
 for attempt in $(seq 1 60); do
-  if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
-    break
-  fi
-  if ! kill -0 "$WRANGLER_PID" 2>/dev/null; then
-    echo "Wrangler local exited before becoming healthy" >&2
-    exit 1
-  fi
-  if [ "$attempt" -eq 60 ]; then
-    echo "Timed out waiting for Wrangler local health" >&2
-    exit 1
-  fi
+  if curl --fail --silent "$BASE_URL/api/health" >/dev/null 2>&1; then break; fi
+  if ! kill -0 "$PID" 2>/dev/null; then cat "$LOG"; exit 1; fi
   sleep 1
+  if [[ "$attempt" = 60 ]]; then cat "$LOG"; exit 1; fi
 done
-
-npm exec --yes --package="@playwright/test@${PLAYWRIGHT_VERSION}" -- sh -c '
-  PLAYWRIGHT_BIN=$(command -v playwright)
-  NODE_PATH=$(cd "$(dirname "$PLAYWRIGHT_BIN")/.." && pwd)
-  export NODE_PATH
-  playwright test --config=playwright.config.js
-'
+VOY_BASE_URL="$BASE_URL" VOY_EXTERNAL_SERVER=1 bunx playwright test -c browser-tests/playwright.config.ts

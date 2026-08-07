@@ -19,8 +19,8 @@
         "https://www.ellitoral.com/area-metropolitana/santa-fe-taxis-tarifas-resolucion-municipal-transporte-publico_0_1dQulGpvOj.amp.html"
       ],
       "effective_from": "2026-07-11",
-      "verified_at": "2026-07-17",
-      "status": "verified_from_municipal_announcement"
+      "verified_at": "2026-08-04",
+      "status": "regulated_current"
     },
     "remis": {
       "diurno": {
@@ -36,8 +36,8 @@
       "source": "Resolución Municipal 365/2026",
       "source_url": "https://santafe.mitelefe.com/informacion-general/desde-este-sabado-se-actualizan-las-tarifas-del-servicio-de-remises-pid2555192",
       "effective_from": "2026-06-06",
-      "verified_at": "2026-07-17",
-      "status": "verified_from_municipal_announcement"
+      "verified_at": "2026-08-04",
+      "status": "regulated_current"
     },
     "bus": {
       "sube": 1900,
@@ -47,8 +47,8 @@
       "source": "Decreto DMM 00048/2026 - Municipalidad de Santa Fe",
       "source_url": "https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
       "effective_from": "2026-05-30",
-      "verified_at": "2026-07-17",
-      "status": "verified"
+      "verified_at": "2026-08-04",
+      "status": "regulated_current"
     },
     "apps": {
       "uber": {
@@ -58,7 +58,8 @@
         "minFare": 3000,
         "source": "Uber app estimate range",
         "updated_at": "2025-12-01",
-        "status": "stale_estimate"
+        "status": "stale_estimate",
+        "availability_price_status": "app_only"
       },
       "didi": {
         "base": 900,
@@ -67,7 +68,8 @@
         "minFare": 2500,
         "source": "DiDi app estimate range",
         "updated_at": "2025-12-01",
-        "status": "stale_estimate"
+        "status": "stale_estimate",
+        "availability_price_status": "app_only"
       },
       "maxim": {
         "base": 855,
@@ -76,7 +78,8 @@
         "minFare": 2375,
         "source": "Maxim app estimate range",
         "updated_at": "2025-12-01",
-        "status": "stale_estimate"
+        "status": "stale_estimate",
+        "availability_price_status": "unverified"
       },
       "cabify": {
         "base": 1100,
@@ -85,11 +88,12 @@
         "minFare": 3300,
         "source": "Cabify app estimate range (reference)",
         "updated_at": "2025-12-01",
-        "status": "stale_reference"
+        "status": "stale_reference",
+        "availability_price_status": "unverified"
       }
     }
   },
   "source": "Municipal resolutions and versioned VOY fare registry",
-  "verified_at": "2026-07-17",
-  "status": "verified_regulated_fares"
+  "verified_at": "2026-08-04",
+  "status": "regulated_current_private_apps_app_only"
 }

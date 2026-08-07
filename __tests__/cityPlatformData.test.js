@@ -58,6 +58,10 @@ describe('versioned city datasets', () => {
   test('_default is national_basic and Santa Fe remains partial', () => {
     assert.equal(national.profile.coverage_level, 'national_basic');
     assert.equal(santaFe.profile.coverage_level, 'partial');
+    assert.equal(santaFe.providers.providers.uber.availability_status, 'verified_current');
+    assert.equal(santaFe.providers.providers.didi.price_status, 'app_only');
+    assert.equal(santaFe.providers.providers.maxim.available, false);
+    assert.equal(santaFe.fares.fare_registry.bus.status, 'regulated_current');
   });
 
   test('all feature flags remain disabled', () => {

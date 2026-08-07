@@ -2,7 +2,7 @@ version: 1
 project: VOY
 
 authority:
-  governance: google_drive
+  governance: github
   executable_rules: github
   release_control: cloudflare_workers
   runtime_confirmation: production

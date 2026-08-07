@@ -13,16 +13,17 @@ const TELEMETRY_EVENT_NAMES = new Set(['lcp', 'js_error', 'promise_rejection']);
 const SAFE_TOKEN = /^[a-z0-9_-]{1,32}$/i;
 const SAFE_PATH = /^\/[a-zA-Z0-9/_-]{0,119}$/;
 
-const CSP_REPORT_ONLY = [
+const CSP_ENFORCED = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' https://unpkg.com",
+  "script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com",
   "style-src 'self' 'unsafe-inline' https://unpkg.com",
   "img-src 'self' data: blob: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
-  "connect-src 'self' https://router.project-osrm.org https://nominatim.openstreetmap.org https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
+  "connect-src 'self' https://router.project-osrm.org https://accounts.google.com https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org",
+  "frame-src https://accounts.google.com",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
   "manifest-src 'self'"
@@ -99,10 +100,14 @@ function applySecurityHeaders(response, request) {
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('Permissions-Policy', 'camera=(), geolocation=(self), microphone=(self)');
   headers.set('X-Frame-Options', 'DENY');
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
   const contentType = headers.get('Content-Type') || '';
   if (contentType.includes('text/html') || new URL(request.url).pathname === '/') {
-    headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY);
+    headers.set('Content-Security-Policy', CSP_ENFORCED);
+    headers.set('Content-Security-Policy-Report-Only', CSP_ENFORCED);
     const cookie = headers.get('Set-Cookie');
     if (cookie && /\bvoy_sid=/.test(cookie)) {
       const exclusionReason = analyticsExclusionReason(request);
@@ -299,6 +304,7 @@ export const securityBoundaryContract = Object.freeze({
   telemetryBodyMaxBytes: TELEMETRY_BODY_MAX_BYTES,
   maxEventsPerRequest: MAX_EVENTS_PER_REQUEST,
   sessionMaxAgeSeconds: SESSION_MAX_AGE_SECONDS,
-  cspReportOnly: CSP_REPORT_ONLY,
+  csp: CSP_ENFORCED,
+  cspReportOnly: CSP_ENFORCED,
   optOutHeaders: ['Sec-GPC', 'DNT', 'X-VOY-Test']
 });

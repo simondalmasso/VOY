@@ -19,7 +19,20 @@ export const REQUIRED_CITY_PLATFORM_ASSETS = Object.freeze([
 ]);
 
 export const REQUIRED_CITY_PLATFORM_ASSET_COUNT = 13;
+export const IMMUTABLE_CITY_PLATFORM_ASSET_COUNT = 12;
+export const RUNTIME_TRANSFORMED_ROOT_PATH = '/';
 export const REQUIRED_TERRITORIAL_COMPONENTS = Object.freeze(['profile', 'providers', 'transport', 'fares', 'feature_flags']);
+
+const REQUIRED_ROOT_CSP_TOKENS = Object.freeze([
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "connect-src 'self'",
+  'https://accounts.google.com',
+  "manifest-src 'self'"
+]);
 
 export function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -38,6 +51,10 @@ export function assertCanonicalAssetSet(definitions = REQUIRED_CITY_PLATFORM_ASS
   }
   for (const path of suppliedPaths) {
     if (!canonicalPaths.includes(path)) throw new Error(`unknown_required_asset:${path}`);
+  }
+  const immutableCount = definitions.filter(asset => asset.path !== RUNTIME_TRANSFORMED_ROOT_PATH).length;
+  if (immutableCount !== IMMUTABLE_CITY_PLATFORM_ASSET_COUNT) {
+    throw new Error(`immutable_required_asset_count:${immutableCount}`);
   }
   for (const cityId of ['_default', 'santafe']) {
     const components = definitions.filter(asset => asset.cityId === cityId).map(asset => asset.component);
@@ -109,8 +126,9 @@ export function validateAssetBody(asset, body) {
     };
   }
   if (asset.kind === 'html') {
-    const valid = /<!doctype html/i.test(text) && /<html/i.test(text) && text.includes('VOY');
-    return { bodyBytes, bodySha256, parseResult: true, schemaResult: valid, cityId: null, error: valid ? null : 'html_contract_invalid' };
+    const valid = /<!doctype html/i.test(text) && /<html\b/i.test(text) && /<head\b/i.test(text)
+      && /<body\b/i.test(text) && /<\/html>/i.test(text) && text.includes('VOY');
+    return { bodyBytes, bodySha256, parseResult: valid, schemaResult: valid, cityId: null, error: valid ? null : 'html_contract_invalid' };
   }
   if (asset.kind === 'javascript') {
     const valid = text.includes('VoyCityPlatform') && text.includes('loadCity');
@@ -119,21 +137,164 @@ export function validateAssetBody(asset, body) {
   return { bodyBytes, bodySha256, parseResult: false, schemaResult: false, cityId: null, error: 'unknown_asset_kind' };
 }
 
+function extractMeta(text, name) {
+  const pattern = new RegExp(`<meta\\s+name=["']${name}["']\\s+content=["']([^"']+)["']`, 'i');
+  return text.match(pattern)?.[1] || null;
+}
+
+function extractBuildHash(text) {
+  const meta = extractMeta(text, 'voy-build');
+  const script = text.match(/window\.VOY_BUILD_HASH\s*=\s*['"]([^'"]+)['"]/i)?.[1] || null;
+  return meta && script && meta === script ? meta : null;
+}
+
+function extractProductConfig(text) {
+  const raw = text.match(/window\.VOY_PRODUCT_CONFIG\s*=\s*({[^;]+})\s*;/)?.[1];
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function expectedRuntimeIdentity(text) {
+  return {
+    expectedBuildHash: extractBuildHash(text),
+    expectedVersion: extractMeta(text, 'voy-version')
+  };
+}
+
 export function expectedAssetManifest(sourceRoot = process.cwd()) {
   assertCanonicalAssetSet();
   return REQUIRED_CITY_PLATFORM_ASSETS.map(asset => {
     const buffer = readFileSync(resolve(sourceRoot, asset.sourcePath));
     const validation = validateAssetBody(asset, buffer);
     if (!validation.schemaResult) throw new Error(`invalid_local_required_asset:${asset.path}:${validation.error}`);
+    const runtimeIdentity = asset.path === RUNTIME_TRANSFORMED_ROOT_PATH
+      ? expectedRuntimeIdentity(buffer.toString('utf8'))
+      : { expectedBuildHash: null, expectedVersion: null };
     return {
       ...asset,
+      validationMode: asset.path === RUNTIME_TRANSFORMED_ROOT_PATH ? 'runtime-transformed-html' : 'immutable-exact',
       expectedSha256: validation.bodySha256,
-      expectedBytes: validation.bodyBytes
+      expectedBytes: validation.bodyBytes,
+      ...runtimeIdentity
     };
   });
 }
 
+function evaluateRuntimeRoot(asset, body, metadata, expected) {
+  const validation = validateAssetBody(asset, body);
+  const text = Buffer.isBuffer(body) ? body.toString('utf8') : String(body || '');
+  const observedBuildHash = extractBuildHash(text);
+  const observedVersion = extractMeta(text, 'voy-version');
+  const config = extractProductConfig(text);
+  const expectedBuildHash = String(expected.expectedBuildHash || '');
+  const expectedVersion = String(expected.expectedVersion || '');
+
+  const statusPass = metadata.status === 200;
+  const contentTypePass = String(metadata.content_type || '').toLowerCase().includes('text/html');
+  const bodyPass = validation.bodyBytes > 0;
+  const parsePass = validation.parseResult === true;
+  const schemaPass = validation.schemaResult === true;
+  const identityPass = expectedBuildHash.length >= 7
+    && observedBuildHash === expectedBuildHash
+    && observedVersion === expectedVersion
+    && text.includes('core/cityPlatform.js?v=1')
+    && text.includes('core/mobilityEngine.js?v=12')
+    && /id=["']map["']/.test(text);
+  const productShellPass = text.includes('data-voy-product-shell')
+    && text.includes('/ui/productShell.css?v=2')
+    && text.includes('window.VOY_PRODUCT_CONFIG=')
+    && text.includes('/core/productShell.js?v=2');
+  const voiceShellPass = text.includes('data-voy-voice-copilot')
+    && text.includes('/ui/voiceCopilot.css?v=1')
+    && text.includes('window.VOY_VOICE_ENABLED=true')
+    && text.includes('/core/voiceCopilot.js?v=1');
+  const privacyShellPass = Boolean(config)
+    && config.auth_enabled === false
+    && config.google_client_id === null
+    && config.voice_enabled === true
+    && config.persistent_account === false
+    && config.trip_history_persisted === false
+    && config.legal_effective_date === '2026-08-04';
+
+  const csp = String(metadata.content_security_policy || '');
+  const cspReportOnly = String(metadata.content_security_policy_report_only || '');
+  const securityHeadersPass = String(metadata.cache_control || '').toLowerCase().includes('no-store')
+    && metadata.x_content_type_options === 'nosniff'
+    && metadata.referrer_policy === 'strict-origin-when-cross-origin'
+    && metadata.permissions_policy === 'camera=(), geolocation=(self), microphone=(self)'
+    && metadata.x_frame_options === 'DENY'
+    && metadata.cross_origin_opener_policy === 'same-origin'
+    && metadata.cross_origin_resource_policy === 'same-origin'
+    && String(metadata.strict_transport_security || '').includes('max-age=31536000')
+    && csp.length > 0
+    && cspReportOnly === csp
+    && REQUIRED_ROOT_CSP_TOKENS.every(token => csp.includes(token))
+    && !/unsafe-eval|nominatim\.openstreetmap\.org/i.test(csp);
+
+  const cookie = String(metadata.set_cookie || '');
+  const sessionCookiePass = /(?:^|;\s*)voy_sid=[^;]+/i.test(cookie)
+    && /Max-Age=86400/i.test(cookie)
+    && /SameSite=Lax/i.test(cookie)
+    && /Path=\//i.test(cookie)
+    && /(?:^|;\s*)Secure(?:;|$)/i.test(cookie)
+    && /(?:^|;\s*)HttpOnly(?:;|$)/i.test(cookie);
+
+  const checks = {
+    status: statusPass,
+    content_type: contentTypePass,
+    body: bodyPass,
+    html: parsePass && schemaPass,
+    identity: identityPass,
+    product_shell: productShellPass,
+    voice_shell: voiceShellPass,
+    privacy_shell: privacyShellPass,
+    security_headers: securityHeadersPass,
+    session_cookie: sessionCookiePass
+  };
+  const failures = Object.entries(checks).filter(([, value]) => !value).map(([name]) => name);
+
+  return {
+    ...metadata,
+    path: asset.path,
+    source_path: asset.sourcePath,
+    validation_mode: 'runtime-transformed-html',
+    immutable_hash_required: false,
+    expected_source_sha256: expected.expectedSha256,
+    expected_source_bytes: expected.expectedBytes,
+    expected_build_hash: expectedBuildHash,
+    observed_build_hash: observedBuildHash,
+    expected_version: expectedVersion,
+    observed_version: observedVersion,
+    body_sha256: validation.bodySha256,
+    body_bytes: validation.bodyBytes,
+    json_parse_result: null,
+    schema_result: schemaPass,
+    city_id: null,
+    status_pass: statusPass,
+    content_type_pass: contentTypePass,
+    body_pass: bodyPass,
+    hash_pass: null,
+    city_pass: true,
+    runtime_identity_pass: identityPass,
+    product_shell_pass: productShellPass,
+    voice_shell_pass: voiceShellPass,
+    privacy_shell_pass: privacyShellPass,
+    security_headers_pass: securityHeadersPass,
+    session_cookie_pass: sessionCookiePass,
+    runtime_checks: checks,
+    validation_error: failures.length ? `runtime_root_contract:${failures.join(',')}` : null,
+    pass: failures.length === 0
+  };
+}
+
 export function evaluateRemoteAsset(asset, body, metadata, expected) {
+  if (asset.path === RUNTIME_TRANSFORMED_ROOT_PATH) {
+    return evaluateRuntimeRoot(asset, body, metadata, expected);
+  }
   const validation = validateAssetBody(asset, body);
   const statusPass = metadata.status === 200;
   const bodyPass = validation.bodyBytes > 0;
@@ -145,6 +306,8 @@ export function evaluateRemoteAsset(asset, body, metadata, expected) {
     ...metadata,
     path: asset.path,
     source_path: asset.sourcePath,
+    validation_mode: 'immutable-exact',
+    immutable_hash_required: true,
     expected_source_sha256: expected.expectedSha256,
     expected_source_bytes: expected.expectedBytes,
     body_sha256: validation.bodySha256,

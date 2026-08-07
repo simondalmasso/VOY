@@ -23,6 +23,7 @@ function loadServiceWorker(overrides = {}) {
         'voy-v7-8',
         'voy-v7-8-security-1',
         'voy-v7-8-fares-1',
+        'voy-product-complete-2026-08-04',
         'shared-map-cache'
       ];
     },
@@ -66,7 +67,7 @@ test('activation deletes only obsolete VOY caches and preserves unrelated/curren
   const runtime = loadServiceWorker();
   await dispatchLifecycle(runtime.listeners.activate);
 
-  assert.deepEqual(runtime.deleted, ['voy-v7-8', 'voy-v7-8-security-1']);
+  assert.deepEqual(runtime.deleted, ['voy-v7-8', 'voy-v7-8-security-1', 'voy-v7-8-fares-1', 'voy-product-complete-2026-08-04']);
   assert.equal(runtime.claimed, 1);
 });
 

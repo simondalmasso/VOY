@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "verified_for_architecture": "svelte-worker-v8",
+  "typescript_tests": {
+    "pattern": "tests/*.test.ts",
+    "status": "active",
+    "reason": "Current Svelte, Worker, deterministic mobility, provenance, PWA and storage contracts."
+  },
+  "legacy_javascript_tests": {
+    "active": [
+      "analyticsOptOut.test.js",
+      "analyticsOptOutBoundary.test.js",
+      "authSession.test.js",
+      "candidateRuntimeGate.test.js",
+      "coordinatorAlarmPagination.test.js",
+      "dataProvenanceCompletion.test.js",
+      "nominatimCoordinator.test.js",
+      "productionReleaseGuard.test.js",
+      "releasePolicy.test.js",
+      "securityBoundary.test.js",
+      "voiceCopilotApi.test.js",
+      "voiceCopilotContracts.test.js",
+      "voiceCopilotHtml.test.js",
+      "voiceCopilotProviders.test.js",
+      "voiceCopilotRuntime.test.js",
+      "voiceCopilotSelection.test.js"
+    ],
+    "archived": {
+      "accessibilityCompletion.test.js": "Targets removed VOY-Lite monolith; current accessibility is covered by Svelte browser gates.",
+      "appFareFreshness.test.js": "Targets removed public/core/mobilityEngine.js; current APP_ONLY truth is covered by providerRegistry and provenance tests.",
+      "browserSmoke.test.js": "Targets removed VOY-Lite monolith; replaced by Playwright Svelte mobile and desktop matrix.",
+      "cityPlatform.test.js": "Targets removed public/core/cityPlatform.js and pre-Svelte runtime.",
+      "cityPlatformData.test.js": "Targets removed public/core/cityPlatform.js and superseded city asset contract.",
+      "cityPlatformHtml.test.js": "Targets removed VOY-Lite monolith.",
+      "destinationResolution.test.js": "Targets removed public/core/destinationResolver.js; replaced by Svelte destination, Worker geocode and provenance gates.",
+      "distanceTimeCompletion.test.js": "Targets removed public/core/mobilityEngine.js; replaced by deterministic core and route Worker tests.",
+      "estimateTaxi.test.js": "Targets removed public/core/mobilityEngine.js; regulated fare logic is covered by current deterministic core tests.",
+      "fareUiSingleSource.test.js": "Targets removed VOY-Lite monolith; current fare presentation is covered by Svelte browser and provider registry tests.",
+      "geocodeWorker.test.js": "Depends on removed public/core/destinationResolver.js; current Worker boundary is covered by Nominatim, destination and browser tests.",
+      "legalAndProductShell.test.js": "Contains VOY-Lite productShell assertions; current legal surfaces are covered by Svelte browser gates and Worker responses.",
+      "multiCity.test.js": "Targets removed VOY-Lite monolith and pre-Svelte city runtime.",
+      "pwaCompletion.test.js": "Targets removed VOY-Lite shell and old icon set; replaced by current PWA unit and browser contracts.",
+      "requiredCityPlatformAssets.test.js": "Requires removed VOY-Lite and thirteen-file pre-Svelte asset set.",
+      "reviewBlockers.test.js": "Targets Destination Resolution V2 VOY-Lite runtime, including now-disabled bus and bike operational data.",
+      "santaFeFares2026.test.js": "Targets removed public/core/mobilityEngine.js; current regulated fare provenance is covered by active tests.",
+      "serviceWorkerBoundary.test.js": "Asserts obsolete cache and tile strategy; replaced by current Svelte service-worker contract.",
+      "strictCoordinates.test.js": "Targets removed public/core/destinationResolver.js; replaced by route Worker and authoritative destination geometry tests.",
+      "wideSearchGuard.test.js": "Targets removed public/core/destinationResolver.js and old click guard; current remote geocode behavior is covered by Svelte browser tests."
+    }
+  }
+}

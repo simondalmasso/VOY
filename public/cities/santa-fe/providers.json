@@ -7,80 +7,74 @@
       "available": true,
       "color": "#111111",
       "category": "app",
-      "verified": true
+      "verified": true,
+      "availability_status": "verified_current",
+      "source_url": "https://www.uber.com/global/en/r/cities/santa-fe-santa-fe-ar/",
+      "verified_at": "2026-08-04",
+      "price_status": "app_only"
     },
     "didi": {
       "name": "DiDi",
       "available": true,
       "color": "#FF6B00",
       "category": "app",
-      "verified": true
+      "verified": true,
+      "availability_status": "verified_current",
+      "source_url": "https://web.didiglobal.com/ar/ciudades/santa-fe/",
+      "verified_at": "2026-08-04",
+      "price_status": "app_only"
     },
     "maxim": {
       "name": "Maxim",
-      "available": true,
+      "available": false,
       "color": "#7C3AED",
       "category": "app",
-      "verified": true
+      "verified": false,
+      "availability_status": "unverified",
+      "verified_at": "2026-08-04",
+      "price_status": "app_only"
     },
     "cabify": {
       "name": "Cabify",
       "available": false,
       "color": "#00A99D",
       "category": "app",
-      "verified": true
+      "verified": false,
+      "availability_status": "unverified",
+      "verified_at": "2026-08-04",
+      "price_status": "app_only"
     },
     "radiotaxi": {
       "name": "Radiotaxi Santa Fe",
-      "available": true,
+      "available": false,
       "color": "#F59E0B",
       "category": "taxi",
-      "verified": true
+      "verified": false,
+      "availability_status": "reference_unverified",
+      "verified_at": "2026-08-04"
     },
     "taxiapp": {
       "name": "TaxiApp",
-      "available": true,
+      "available": false,
       "color": "#22C55E",
       "category": "taxi",
-      "verified": true
+      "verified": false,
+      "availability_status": "reference_unverified",
+      "verified_at": "2026-08-04"
     },
     "remisreal": {
       "name": "Remises Real",
-      "available": true,
+      "available": false,
       "color": "#6B7280",
       "category": "remis",
-      "verified": true
+      "verified": false,
+      "availability_status": "reference_unverified",
+      "verified_at": "2026-08-04"
     }
   },
-  "taxi_companies": [
-    {
-      "id": "radiotaxi",
-      "name": "Radiotaxi Santa Fe",
-      "whatsapp": "https://wa.link/n7u2e7",
-      "app": null,
-      "web": null,
-      "phone": null
-    },
-    {
-      "id": "taxiapp",
-      "name": "TaxiApp",
-      "whatsapp": "https://wa.link/vavbcl",
-      "app": null,
-      "web": null,
-      "phone": null
-    }
-  ],
-  "remis_companies": [
-    {
-      "id": "remisreal",
-      "name": "Remises Real",
-      "whatsapp": "https://wa.link/rqov56",
-      "app": null,
-      "web": null,
-      "phone": null
-    }
-  ],
-  "source": "VOY legacy city provider registry; source hardening pending",
-  "verified_at": null,
-  "status": "partial"
+  "taxi_companies": [],
+  "remis_companies": [],
+  "source": "Official Uber/DiDi city pages; local taxi/remis operators withheld until a current authoritative source is verified",
+  "verified_at": "2026-08-04",
+  "status": "verified_app_availability_local_operators_unverified"
 }

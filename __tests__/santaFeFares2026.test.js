@@ -91,6 +91,6 @@ test('dynamic app estimates are explicitly marked stale and never labelled munic
 });
 
 test('service worker rotates the VOY cache after fare engine changes', () => {
-  assert.match(serviceWorker, /var CACHE = 'voy-v7-8-fares-1';/);
+  assert.match(serviceWorker, /var CACHE = 'voy-product-complete-2026-08-04-v2';/);
   assert.doesNotMatch(serviceWorker, /voy-v7-8-security-1/);
 });

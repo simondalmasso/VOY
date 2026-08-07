@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import {
   REQUIRED_CITY_PLATFORM_ASSETS,
   REQUIRED_CITY_PLATFORM_ASSET_COUNT,
+  IMMUTABLE_CITY_PLATFORM_ASSET_COUNT,
   assertCanonicalAssetSet,
   expectedAssetManifest,
   evaluateRemoteAsset
@@ -129,6 +130,17 @@ function responseMetadata(response, requestedUrl, round, candidateVersionId) {
     etag: response.headers.get('etag'),
     age: response.headers.get('age'),
     cache_status: response.headers.get('cf-cache-status'),
+    cache_control: response.headers.get('cache-control'),
+    content_security_policy: response.headers.get('content-security-policy'),
+    content_security_policy_report_only: response.headers.get('content-security-policy-report-only'),
+    x_content_type_options: response.headers.get('x-content-type-options'),
+    referrer_policy: response.headers.get('referrer-policy'),
+    permissions_policy: response.headers.get('permissions-policy'),
+    x_frame_options: response.headers.get('x-frame-options'),
+    cross_origin_opener_policy: response.headers.get('cross-origin-opener-policy'),
+    cross_origin_resource_policy: response.headers.get('cross-origin-resource-policy'),
+    strict_transport_security: response.headers.get('strict-transport-security'),
+    set_cookie: response.headers.get('set-cookie'),
     cf_ray: cfRay,
     colo: cfRay?.includes('-') ? cfRay.split('-').at(-1) : null,
     version_id: candidateVersionId
@@ -162,6 +174,17 @@ async function probeCandidateAsset(workerUrl, override, candidateVersionId, roun
       etag: null,
       age: null,
       cache_status: null,
+      cache_control: null,
+      content_security_policy: null,
+      content_security_policy_report_only: null,
+      x_content_type_options: null,
+      referrer_policy: null,
+      permissions_policy: null,
+      x_frame_options: null,
+      cross_origin_opener_policy: null,
+      cross_origin_resource_policy: null,
+      strict_transport_security: null,
+      set_cookie: null,
       cf_ray: null,
       colo: null,
       path: asset.path,
@@ -197,6 +220,21 @@ function writeJson(path, value) {
 
 function appendGithubEnv(name, value, env) {
   appendFileSync(requireValue(env, 'GITHUB_ENV'), `${name}=${value}\n`);
+}
+
+function assetSummary(assetResults) {
+  const root = assetResults.find(result => result.path === '/');
+  return {
+    immutable_assets: IMMUTABLE_CITY_PLATFORM_ASSET_COUNT,
+    immutable_hash_pass: assetResults.filter(result => result.immutable_hash_required === true && result.hash_pass === true).length,
+    runtime_root_pass: root?.pass === true,
+    runtime_root_identity_pass: root?.runtime_identity_pass === true,
+    runtime_root_product_shell_pass: root?.product_shell_pass === true,
+    runtime_root_voice_shell_pass: root?.voice_shell_pass === true,
+    runtime_root_privacy_shell_pass: root?.privacy_shell_pass === true,
+    runtime_root_security_headers_pass: root?.security_headers_pass === true,
+    runtime_root_session_cookie_pass: root?.session_cookie_pass === true
+  };
 }
 
 export function convergenceSatisfied({ consecutive, startedAt, now = Date.now() }) {
@@ -281,7 +319,8 @@ export async function converge(env = process.env) {
       assets_ok: assetsOk,
       required_assets: REQUIRED_CITY_PLATFORM_ASSET_COUNT,
       passed_assets: assetResults.filter(result => result.pass).length,
-      body_hash_pass: assetResults.filter(result => result.hash_pass).length,
+      body_hash_pass: assetResults.filter(result => result.hash_pass === true).length,
+      ...assetSummary(assetResults),
       asset_statuses: Object.fromEntries(assetResults.map(result => [result.path, result.status])),
       consecutive,
       required_consecutive: REQUIRED_CONSECUTIVE_ASSET_ROUNDS,
@@ -381,7 +420,8 @@ export async function verifyFinal(env = process.env) {
     candidate_health: { version: candidateHealth.version, build_hash: candidateHealth.build_hash },
     required_assets: REQUIRED_CITY_PLATFORM_ASSET_COUNT,
     final_asset_pass: assetResults.filter(result => result.pass).length,
-    body_hash_pass: assetResults.filter(result => result.hash_pass).length,
+    body_hash_pass: assetResults.filter(result => result.hash_pass === true).length,
+    ...assetSummary(assetResults),
     convergence_rounds: convergence.consecutive,
     convergence_duration_ms: convergence.elapsed_ms,
     version_id_proof: {

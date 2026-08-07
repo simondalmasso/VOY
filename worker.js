@@ -239,6 +239,11 @@ const worker = {
       return _cors(new Response(JSON.stringify({
         ok: true, service: "voy-app", version: WORKER_VERSION, build_hash: BUILD_HASH,
         analytics: !!(env.VOY_METRICS),
+        features: {
+          voice: String(env.VOY_VOICE_ENABLED || '').toLowerCase() === 'true' && Boolean(env.AI),
+          auth: Boolean(String(env.VOY_GOOGLE_CLIENT_ID || '').trim() && String(env.VOY_AUTH_SESSION_SECRET_V1 || '').trim()),
+          core_without_login_voice_ai: true
+        },
         // Expose active filter COUNTS (not values) for verification — no PII leak.
         filters: {
           owner_ips: hcfg.owner_ips.length,
