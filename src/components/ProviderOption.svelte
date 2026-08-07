@@ -4,7 +4,7 @@
   export let option: ProviderOptionModel;
   export let onChoose: (option: ProviderOptionModel) => void;
   $: unavailable = option.price.kind === 'unavailable';
-  $: unavailableLabel = unavailable ? option.price.label : null;
+  $: unavailableLabel = option.price.kind === 'unavailable' ? option.price.label : null;
   $: priceLabel = option.price.kind === 'regulated_estimate' ? `≈ ${formatArs(option.price.value)}` : null;
   $: actionable = option.available && option.external;
   $: hasMeta = Boolean(priceLabel) || (option.available && option.etaMin !== null && option.etaMin > 0);
