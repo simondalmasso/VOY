@@ -22,6 +22,8 @@
   --voy-type-control:14px; --voy-type-body-sm:15px; --voy-type-body:16px; --voy-type-body-lg:17px;
   --voy-type-input:18px; --voy-type-metric-sm:19px; --voy-type-title-sm:21px; --voy-type-modal:28px;
   --voy-type-display-sm:30px; --voy-type-brand-lg:32px; --voy-type-display-md:34px; --voy-type-display-lg:38px; --voy-type-metric-lg:40px;
+  --voy-type-promise:clamp(22px,7vw,34px); --voy-type-search:clamp(30px,8vw,38px);
+  --voy-type-sheet:clamp(27px,8vw,34px); --voy-type-metric:clamp(30px,8vw,40px);
 
   /* LINE_HEIGHT */
   --voy-leading-brand:.92; --voy-leading-metric:.95; --voy-leading-flat:1; --voy-leading-display:1.02; --voy-leading-title:1.05;
