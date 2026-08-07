@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const modulePromise = import('../scripts/tail-runtime-proof.mjs');
 
 function event({ id = 'candidate', outcome = 'ok', url = 'https://voy.example/assets/app.js', method = 'GET', userAgent = 'HeadlessChrome', exceptions = [], response = { status: 200 } } = {}) {
-  return { scriptVersion: { id }, outcome, exceptions, event: { request: { url, method, headers: { 'user-agent': userAgent } }, ...(response === undefined ? {} : { response }) } };
+  return { scriptVersion: { id }, outcome, exceptions, event: { request: { url, method, headers: { 'user-agent': userAgent } }, ...(response == null ? {} : { response }) } };
 }
 
 function stream(records) { return records.map(record => JSON.stringify(record, null, 2)).join('\n'); }
@@ -20,7 +20,7 @@ test('accepts only headless client-canceled static assets without exceptions', a
   const gate = await modulePromise;
   const proof = gate.analyzeCandidateTail(stream([
     event(),
-    event({ outcome: 'canceled', response: undefined, url: 'https://voy.example/assets/maplibre.js' })
+    event({ outcome: 'canceled', response: null, url: 'https://voy.example/assets/maplibre.js' })
   ]), 'candidate');
   assert.equal(proof.exactEvents, 2);
   assert.equal(proof.exceptions, 0);
@@ -32,9 +32,9 @@ test('accepts only headless client-canceled static assets without exceptions', a
 test('rejects canceled API, canceled HTML, non-headless cancellation and any exception', async () => {
   const gate = await modulePromise;
   for (const record of [
-    event({ outcome: 'canceled', response: undefined, url: 'https://voy.example/api/health' }),
-    event({ outcome: 'canceled', response: undefined, url: 'https://voy.example/' }),
-    event({ outcome: 'canceled', response: undefined, userAgent: 'Mozilla/5.0' }),
+    event({ outcome: 'canceled', response: null, url: 'https://voy.example/api/health' }),
+    event({ outcome: 'canceled', response: null, url: 'https://voy.example/' }),
+    event({ outcome: 'canceled', response: null, userAgent: 'Mozilla/5.0' }),
     event({ outcome: 'exception', exceptions: [{ name: 'Error' }] })
   ]) {
     const proof = gate.analyzeCandidateTail(stream([record]), 'candidate');
