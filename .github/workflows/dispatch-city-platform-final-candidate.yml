@@ -21,13 +21,14 @@ concurrency:
 
 jobs:
   dispatch:
+    if: contains(github.event.head_commit.message, '[issue34-dispatch]')
     runs-on: ubuntu-24.04
     steps:
-      - name: Dispatch exact candidate workflow for current branch head
+      - name: Dispatch exact Issue 34 candidate workflow
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          TARGET_REF: ${{ github.ref_name }}
+          TARGET_REF: feat/issue34-mobility-trust-foundation-01
         run: |
           set -euo pipefail
           PAYLOAD=$(printf '{"ref":"%s"}' "$TARGET_REF")
