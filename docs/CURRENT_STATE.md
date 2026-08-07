@@ -8,20 +8,24 @@ Last reconciled: 2026-08-07
 CANONICAL_STATE=GOOGLE_DRIVE
 REPOSITORY_WORKLOG=docs/CURRENT_STATE.md
 RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
-MILESTONE=POST_RELEASE_MAP_MOBILE_UI_HOTFIX_PRODUCTIVE
-AUD_PASS=5215747741
-ARQ_AUTHORIZATION=5215826191
-HOTFIX_ISSUE=32
+MILESTONE=ISSUE32_TERMINAL_CLOSED_ISSUE34_GATE0_OPEN
+AUD_HOTFIX_PASS=5215747741
+ARQ_HOTFIX_AUTHORIZATION=5215826191
+AUD_POST_MERGE_CONTINUE=5216723345
+HOTFIX_ISSUE=32;CLOSED_COMPLETED
 HOTFIX_PR=33;MERGED
 HOTFIX_EXACT_HEAD=403ad4fc96f0b7138151f6267b996cd900f752c2
 HOTFIX_MERGE_SHA=8c16e8c0617dc44d9fd22cd557d47fa8542818ab
-MAIN_SHA_BEFORE_RECONCILIATION=8c16e8c0617dc44d9fd22cd557d47fa8542818ab
-RELEASE_STATUS=PRODUCTIVE_HOTFIX_VALIDATED
-ISSUE32_CLOSE_PENDING=YES_AFTER_THIS_GITHUB_RECONCILIATION
+POST_MERGE_TEST_FIX_PR=35;MERGED
+POST_MERGE_TEST_FIX_HEAD=7ecd9328299051b703b15c3375cde34f5ccbace4
+POST_MERGE_TEST_FIX_MERGE=a4e6c62bdd901d2c7fdaf2d26c01e5d45dbf9c13
+RELEASE_STATUS=PRODUCTIVE_HOTFIX_VALIDATED_AND_RECONCILED
+ISSUE32_CLOSE=COMPLETE
+ISSUE34_GATE0=PASS
 ISSUE34_RUNTIME_STARTED=NO
 ```
 
-AUD `5215747741` passed only the exact source/candidate pair. ARQ authorization `5215826191` then allowed the exact production promotion, complete runtime validation, merge and closure sequence. No different candidate or source was substituted.
+AUD `5215747741` passed only the exact hotfix source/candidate pair. ARQ authorization `5215826191` then allowed the exact production promotion, complete runtime validation and merge. A later documentation-only reconciliation exposed one nondeterministic Playwright actionability race; AUD `5216723345` independently classified it as `TEST_HARNESS_ACTIONABILITY_RACE`, with no demonstrated product regression, and authorized a test-only correction plus terminal Issue #32 closure and continuous Issue #34 Phases 1→4 through a zero-traffic candidate.
 
 ## Effective Cloudflare / production state
 
@@ -38,7 +42,9 @@ PREVIOUS_KNOWN_HEALTH=V8.0.0/1f1e1d3
 ROLLBACK_EXECUTED=NO
 ```
 
-The previous V8 version `2ee28f09-1aa8-4250-bb2c-ba4684a07791` is retained as the immediate rollback reference for this hotfix, but this record is not authorization to roll back. Any future production mutation requires a fresh state reconstruction and applicable ARQ/AUD authorization.
+Fresh post-test-fix main validation `31176350830` observed production read-only and persisted `production-health.json` with `ok=true`, `version=V8.0.0`, `build_hash=403ad4f`. No deployment or traffic mutation occurred for the test-only correction.
+
+The previous V8 version `2ee28f09-1aa8-4250-bb2c-ba4684a07791` is retained as the immediate rollback reference for this hotfix, but this record is not authorization to roll back. Any future production mutation requires fresh state reconstruction and applicable ARQ/AUD authorization.
 
 ## Productive validation evidence
 
@@ -87,6 +93,28 @@ PACKAGING_RECONCILIATION_CHECKPOINT=5215964644
 
 The original run manifest listed two hidden Playwright metadata files (`preflight-map-output/.last-run.json` and `production-browser-output/.last-run.json`). `actions/upload-artifact` was configured with `include-hidden-files:false`, so those two runner metadata files are absent from the immutable ZIP. All 106 files actually uploaded and referenced by the manifest independently hash-verify. No runtime state, test result, screenshot, pixel proof, API/Voice evidence, rollback evidence or causal-error evidence is missing. The ZIP digest exactly matches GitHub artifact metadata.
 
+## Post-merge harness correction evidence
+
+```text
+FAILED_RECONCILIATION_RUN=31171227117;FAIL
+FAILURE_CLASS=TEST_HARNESS_ACTIONABILITY_RACE
+PRODUCT_RUNTIME_REGRESSION_DEMONSTRATED=NO
+AUD_DISPOSITION=5216723345;PASS_TO_CONTINUE
+TEST_FIX_PR=35
+TEST_FIX_HEAD=7ecd9328299051b703b15c3375cde34f5ccbace4
+TEST_FIX_MERGE=a4e6c62bdd901d2c7fdaf2d26c01e5d45dbf9c13
+TEST_FIX_PR_VALIDATION=31176176432;SUCCESS
+TEST_FIX_PR_RELEASE_POLICY=31176176262;SUCCESS
+TEST_FIX_POST_MERGE_MAIN_VALIDATION=31176350830;SUCCESS
+TEST_FIX_POST_MERGE_RELEASE_POLICY=31176351184;SUCCESS
+TEST_FIX_MAIN_ARTIFACT_ID=8993028861
+TEST_FIX_MAIN_ARTIFACT_SHA256=962546367aff8d77a8c22d257ee6a96a49f46ba3f05745285c66e24a8f43cbf9
+FRESH_PRODUCTION_HEALTH=V8.0.0/403ad4f;PASS
+PRODUCTION_MUTATION=NO
+```
+
+The stale-origin test no longer uses a 400 ms/500 ms wall-clock race. It holds first and second mocked geocode responses behind explicit test-controlled gates, releases the second response only after the second click has reached the request, asserts `Segundo` wins, then releases/settles the first request and proves it cannot overwrite the latest choice. `OriginControl.svelte`, runtime code, Worker configuration, workflows and Cloudflare traffic were not changed by this correction.
+
 ## Observability classification
 
 ```text
@@ -111,9 +139,14 @@ ZERO_TRAFFIC_CANDIDATE_RUN=31167697067;SUCCESS
 POST_MERGE_RELEASE_POLICY_RUN=31170924975;SUCCESS
 POST_MERGE_MAIN_VALIDATION_RUN=31170925137;SUCCESS
 POST_MERGE_MAIN_VALIDATION_PRODUCTION_MODE=READ_ONLY
+PR35_MERGED=YES
+PR35_MERGE_SHA=a4e6c62bdd901d2c7fdaf2d26c01e5d45dbf9c13
+PR35_POST_MERGE_MAIN_VALIDATION=31176350830;SUCCESS
+PR35_POST_MERGE_RELEASE_POLICY=31176351184;SUCCESS
+ISSUE32_CLOSED=YES
 ```
 
-The merge preserved the exact audited hotfix source as a parent of `main`. The post-merge main workflow performed validation and production observation only; it did not deploy a replacement Worker version.
+The hotfix merge preserved the exact audited source as a parent of `main`. The later PR #35 was test-only and did not alter runtime source. Both post-merge main workflows performed validation and production observation only; neither deployed a replacement Worker version.
 
 ## Root cause and correction
 
@@ -122,9 +155,11 @@ MAP_CAUSE=CSS_CASCADE_MAPLIBRE_HOST_GEOMETRY;CONFIRMED
 PRE_FIX_MAPLIBRE_HOST=HEIGHT_0;POSITION_RELATIVE
 CORRECTION=CASCADE_SAFE_MAP_HOST_GEOMETRY_PLUS_RESIZE_CONTRACT
 PIXEL_GATE=FAIL_CLOSED_NONFLAT_BASEMAP_ROUTE_ORIGIN_DESTINATION
+POST_MERGE_CI_RACE_CAUSE=PLAYWRIGHT_ACTIONABILITY_VS_IMMEDIATE_MOCK_RERENDER
+POST_MERGE_CI_RACE_CORRECTION=TEST_CONTROLLED_RESPONSE_GATES
 ```
 
-The initial false-positive map gate was replaced by actual rendered-pixel evidence. HTTP 200 tile/source readiness alone is not accepted as proof of a visible map.
+The initial false-positive map gate was replaced by actual rendered-pixel evidence. HTTP 200 tile/source readiness alone is not accepted as proof of a visible map. The later CI race was not a product regression; it was removed by deterministic test synchronization.
 
 ## Canonical architecture
 
@@ -177,12 +212,15 @@ PRODUCTIVE_HOTFIX_OPERATOR_RUN=31170176391
 
 ```text
 PRODUCTIVE_HOTFIX_BLOCKER=NONE
-ISSUE32_FINAL_CLOSE=NEXT_AFTER_RECONCILIATION_CI_PASS
-ISSUE34_GATE_0=PENDING_ISSUE32_FINAL_CLOSE_AND_RECONCILIATION
+ISSUE32_FINAL_CLOSE=COMPLETE
+ISSUE34_GATE0=PASS
 ISSUE34_NEXT_ROLE=INV
 ISSUE34_PHASE1=OFFICIAL_SANTA_FE_FEEDS_LICENSE_FRESHNESS_DISCOVERY
-ISSUE34_RUNTIME_MUTATION=NOT_YET_AUTHORIZED_OR_STARTED
-DRIVE_DUPLICATE_CHECKPOINT=NO
+ISSUE34_PHASES1_TO_4=AUTHORIZED_CONTINUOUS_UNTIL_MILESTONE_A_OR_FIRST_REAL_FAILURE
+ISSUE34_BUS_ACTIVATION=OFF
+ISSUE34_TARGET=EXACT_HEAD_CANDIDATE_AT_0_PERCENT
+PRODUCTION_PROMOTION_AUTHORIZED=NO
+DRIVE_UPDATE_AT_NEXT_MATERIAL_MILESTONE=MILESTONE_A
 ```
 
-No duplicate Drive checkpoint is created for this closure. After this canonical GitHub reconciliation passes its own validation, Issue #32 may be closed and Issue #34 may begin Phase 1 as an investigation-only block; runtime implementation remains gated by Issue #34 governance.
+Issue #32 is terminally closed. Issue #34 Gate 0 is open. Under AUD `5216723345`, ARQ may sequence INV→LAB→ARQ→EJE through Phases 1→4 without intermediate AUD and must stop at Milestone A with a complete zero-traffic candidate or at the first new material real failure.
