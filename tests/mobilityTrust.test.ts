@@ -21,10 +21,24 @@ describe('mobility source trust', () => {
     expect(classifySourceTrust(source({ validation_errors: ['broken_feed'] }))).toBe('UNVERIFIED');
   });
 
-  test('Mobility Database metadata is discovery evidence, never activation authority', () => {
-    const discovery = normalizeMobilityDatabaseDiscovery({ sourceId: 'catalog:x', provider: 'X', format: 'GTFS_SCHEDULE', sourceUrl: 'https://example.test/feed', catalogOfficial: true, licenseStatus: 'VERIFIED_COMPATIBLE', retrievedAt: '2026-08-07T10:00:00Z', city: 'Santa Fe', provenanceDigest: 'sha256:x' });
+  test('Mobility Database catalog license metadata is discovery-only and cannot become canonical license evidence', () => {
+    const discovery = normalizeMobilityDatabaseDiscovery({
+      sourceId: 'catalog:x',
+      provider: 'X',
+      format: 'GTFS_SCHEDULE',
+      sourceUrl: 'https://example.test/feed',
+      licenseUrl: 'https://catalog.example.test/license',
+      licenseStatus: 'VERIFIED_COMPATIBLE',
+      catalogOfficial: true,
+      retrievedAt: '2026-08-07T10:00:00Z',
+      city: 'Santa Fe',
+      provenanceDigest: 'sha256:x'
+    });
     expect(discovery.officiality).toBe('THIRD_PARTY_CLAIMED_OFFICIAL');
     expect(discovery.operational_status).toBe('DISCOVERY_ONLY');
+    expect(discovery.license_url).toBeNull();
+    expect(discovery.license_status).toBe('UNKNOWN');
+    expect(discovery.validation_warnings).toContain('catalog_license_metadata_discovery_only_not_operational_evidence');
     expect(discovery.trust_status).toBe('DEVELOPMENT_ONLY');
   });
 
@@ -32,6 +46,8 @@ describe('mobility source trust', () => {
     expect(SANTA_FE_BUS_SOURCE.trust_status).toBe('UNAVAILABLE');
     expect(SANTA_FE_MOBILITY_TRUST_SUMMARY.bus_activation).toBeFalse();
     expect(SANTA_FE_MOBILITY_DATABASE_BIKE_DISCOVERY.operational_status).toBe('DISCOVERY_ONLY');
+    expect(SANTA_FE_MOBILITY_DATABASE_BIKE_DISCOVERY.license_status).toBe('UNKNOWN');
+    expect(SANTA_FE_MOBILITY_DATABASE_BIKE_DISCOVERY.trust_status).toBe('DEVELOPMENT_ONLY');
   });
 });
 
