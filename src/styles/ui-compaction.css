@@ -88,7 +88,7 @@ input {
 }
 .manual{gap:6px;margin-left:-24px}
 .manual input{min-height:42px;height:42px;padding-inline:12px}
-.manual button{min-width:72px;min-height:40px;height:40px;padding-inline:14px;font-size:13px}
+.manual button{min-width:82px;min-height:40px;height:40px;padding-inline:14px;font-size:13px;white-space:nowrap}
 .origin p{margin:0 0 0 -24px;min-height:15px;line-height:15px;font-size:11px}
 .origin p:empty{display:none}
 .origin.compact{min-height:56px;padding-block:8px}
@@ -147,7 +147,7 @@ input {
 
 @media(max-width:380px){
   .planner-promise{font-size:21px}
-  .manual{grid-template-columns:minmax(0,1fr) 72px}
+  .manual{grid-template-columns:minmax(0,1fr) 82px}
 }
 
 @media(max-width:360px){
