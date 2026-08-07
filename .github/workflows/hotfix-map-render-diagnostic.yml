@@ -1,0 +1,76 @@
+name: VOY blocked map render diagnostic
+
+on:
+  push:
+    branches:
+      - hotfix/voy-post-release-map-mobile-ui-01
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-blocked-map-render-diagnostic
+  cancel-in-progress: false
+
+env:
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  WORKER_NAME: voy-app
+  BLOCKED_CANDIDATE_VERSION_ID: 28e040f0-c77e-4f53-a819-24bfef113976
+  EVIDENCE_DIR: test-results/map-render-diagnostic
+
+jobs:
+  diagnose:
+    if: contains(github.event.head_commit.message, '[map-diagnostic]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout diagnostic instrumentation head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify diagnostic is read-only against blocked candidate
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$BLOCKED_CANDIDATE_VERSION_ID" = '28e040f0-c77e-4f53-a819-24bfef113976'
+          git diff --check
+
+      - name: Install pinned browser toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14
+          test "$(bun --version)" = '1.3.14'
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+
+      - name: Capture blocked candidate computed geometry
+        run: |
+          set -euo pipefail
+          VOY_MAP_DIAGNOSTIC=1 \
+          VOY_EXTERNAL_SERVER=1 \
+          VOY_BASE_URL="$WORKER_URL" \
+          VOY_WORKER_NAME="$WORKER_NAME" \
+          VOY_CANDIDATE_VERSION_ID="$BLOCKED_CANDIDATE_VERSION_ID" \
+          VOY_EVIDENCE_DIR="$EVIDENCE_DIR" \
+          VOY_OUTPUT_DIR="$EVIDENCE_DIR/output" \
+          VOY_REPORT_DIR="$EVIDENCE_DIR/report" \
+          bunx playwright test -c browser-tests/playwright.config.ts browser-tests/map-render-diagnostic.spec.ts --project=desktop-1280x800
+
+      - name: Build diagnostic manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload blocked candidate diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-blocked-map-render-diagnostic-${{ github.run_id }}
+          path: test-results/map-render-diagnostic
+          if-no-files-found: error
+          retention-days: 30
