@@ -19,8 +19,10 @@ env:
   EXPECTED_STABLE_HASH: 1f1e1d3
   EXPECTED_STABLE_VERSION_ID: 2ee28f09-1aa8-4250-bb2c-ba4684a07791
   EXPECTED_CANDIDATE_VERSION: V8.0.0
+  BLOCKED_CANDIDATE_VERSION_ID: 28e040f0-c77e-4f53-a819-24bfef113976
   CONVERGENCE_INTERVAL_MS: '7000'
   EVIDENCE_DIR: test-results/hotfix-map-mobile-candidate
+  VOY_REAL_BASEMAP: '1'
 
 jobs:
   candidate:
@@ -90,8 +92,10 @@ jobs:
             echo
             echo "- Exact source SHA: $GITHUB_SHA"
             echo "- Production V8 stable: $EXPECTED_STABLE_VERSION_ID at 100%"
+            echo "- Superseded blocked candidate: $BLOCKED_CANDIDATE_VERSION_ID"
             echo "- Hotfix candidate: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
             echo "- Candidate deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Real basemap + rendered pixel proof: mandatory pre-upload and candidate'
             echo '- Productive traffic changed: no'
             if [ -f "$EVIDENCE_DIR/final-state.json" ]; then
               echo '```json'
