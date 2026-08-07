@@ -2,9 +2,32 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const mobileBusProjects = new Set(['mobile-360x800', 'mobile-360x780', 'mobile-390x844', 'mobile-412x915']);
+const terminal = {
+  canonicalId: 'santafe:landmark:terminal-omnibus',
+  nombre: 'Terminal de Ómnibus',
+  aliases: ['terminal'],
+  verified: true,
+  source: 'authoritative',
+  precision: 'poi',
+  lat: -31.643533,
+  lon: -60.700503,
+  address: 'Belgrano 2910',
+  verified_at: '2026-08-05',
+  provenance: {
+    status: 'authoritative',
+    issuer: 'Municipalidad de Santa Fe',
+    source_title: 'Estación Terminal de Ómnibus de Santa Fe',
+    source_url: 'https://santafeciudad.gov.ar/terminal-de-colectivos/',
+    license: 'Información pública institucional; sin licencia de reutilización explícita',
+    coordinate_method: 'Dirección oficial municipal cruzada con geodato público gubernamental de la misma dirección',
+    coordinate_source_url: 'https://www.bcra.gob.ar/entidades-financieras-filiales-y-cajeros-filtros/?Provincia=SANTA+FE&Tipo=4&Tit=2&bco=AAA10'
+  }
+};
+const transport = { schema_version: 2, city_id: 'santafe', verified_at: '2026-08-05', landmarks: [terminal], bus_routes: [], bus_stops: [], bike_stations: [] };
 
 async function deterministicTripApis(page: Page): Promise<{ routeRequests: string[] }> {
   const routeRequests: string[] = [];
+  await page.route('**/cities/santa-fe/transport.json', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(transport) }));
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
     const results = q.includes('Origen BUS')
@@ -120,7 +143,10 @@ test('Issue36 BUS unavailable state stays readable and subordinate on narrow mob
   await page.goto('/');
   await planTrip(page);
   const beforeBus = routeRequests.length;
-  await page.locator('[data-mode="bus"]').click();
+  const bus = page.locator('[data-mode="bus"]');
+  await bus.scrollIntoViewIfNeeded();
+  await bus.click();
+  await expect(bus).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('provider-bus')).toBeVisible();
   expect(routeRequests.length).toBe(beforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
