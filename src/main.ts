@@ -3,6 +3,7 @@ import App from './App.svelte';
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/issue36-polish.css';
+import './styles/ui-compaction.css';
 import { recordTelemetry } from './lib/telemetry';
 
 const target = document.getElementById('app');
