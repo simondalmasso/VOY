@@ -25,10 +25,11 @@ async function capture(baseURL, stage, testCase, theme) {
       ? 'Mozilla/5.0 (Linux; Android 13; SM-A225M) AppleWebKit/537.36 Chrome/150 Mobile Safari/537.36'
       : undefined
   });
-  await page.goto(baseURL, { waitUntil: 'networkidle' });
-  await page.locator('[data-testid="destination-search"]').waitFor();
+  await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="destination-search"]').waitFor({ state: 'visible' });
+  await page.locator('[data-testid="origin-control"]').waitFor({ state: 'visible' });
   await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
-  await page.waitForTimeout(80);
+  await page.waitForTimeout(180);
 
   const metrics = await page.evaluate(() => {
     const q = selector => document.querySelector(selector);
@@ -113,6 +114,9 @@ await writeFile(join(out, 'summary.txt'), [
 
 if (failed) {
   console.error(`UI compaction gate failed: ${failures.join(', ')}`);
+  for (const entry of evidence.cases) {
+    console.error(`${entry.name}/${entry.theme} DEST_REDUCTION=${entry.destinationReduction === null ? 'n/a' : (entry.destinationReduction * 100).toFixed(1) + '%'} ORIGIN_REDUCTION=${entry.originReduction === null ? 'n/a' : (entry.originReduction * 100).toFixed(1) + '%'} BUILDER_REDUCTION=${entry.builderReduction === null ? 'n/a' : (entry.builderReduction * 100).toFixed(1) + '%'}`);
+  }
   process.exit(1);
 }
 console.log('UI_COMPACTION_GATE=PASS');
