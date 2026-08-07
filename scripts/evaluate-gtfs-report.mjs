@@ -19,7 +19,15 @@ function walk(value) {
   for (const item of Object.values(value)) walk(item);
 }
 walk(report);
-const systemErrorCount = Array.isArray(systemErrors) ? systemErrors.length : Object.keys(systemErrors ?? {}).length;
+
+function countSystemErrors(value) {
+  if (Array.isArray(value)) return value.length;
+  if (!value || typeof value !== 'object') return 0;
+  if (Array.isArray(value.notices)) return value.notices.length;
+  return Object.values(value).reduce((total, item) => total + countSystemErrors(item), 0);
+}
+
+const systemErrorCount = countSystemErrors(systemErrors);
 const totals = { ERROR: 0, WARNING: 0, INFO: 0 };
 for (const notice of notices) totals[notice.severity] += notice.count;
 const warningCodes = [...new Set(notices.filter(item => item.severity === 'WARNING').map(item => item.code))].sort();
