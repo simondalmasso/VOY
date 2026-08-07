@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const evidenceDir = process.env.VOY_EVIDENCE_DIR || 'test-results/map-render-proof';
@@ -31,7 +32,7 @@ async function planTrip(page: Page): Promise<void> {
   await expect(page.getByTestId('trip-sheet')).toBeVisible();
 }
 
-test('real map has visible host canvas basemap and trip overlay geometry', async ({ page }, testInfo) => {
+test('real map has visible host canvas basemap markers route and pixel proof', async ({ page }, testInfo) => {
   test.skip(process.env.VOY_REAL_BASEMAP !== '1', 'real-network map pixel proof gate only');
   const tileResponses: Array<{ url: string; status: number; contentType: string }> = [];
   page.on('response', response => {
@@ -49,7 +50,7 @@ test('real map has visible host canvas basemap and trip overlay geometry', async
   await expect(shell).toHaveAttribute('data-overlay-ready', 'true');
   await expect.poll(() => tileResponses.filter(item => item.status === 200 && item.contentType.includes('image')).length, { timeout: 20_000 }).toBeGreaterThan(0);
   expect(tileResponses.filter(item => item.status >= 400), JSON.stringify(tileResponses)).toEqual([]);
-  await page.waitForTimeout(650);
+  await page.waitForTimeout(700);
 
   const geometry = await page.evaluate(() => {
     const shell = document.querySelector('[data-testid="map-shell"]');
@@ -80,7 +81,17 @@ test('real map has visible host canvas basemap and trip overlay geometry', async
   });
 
   expect(geometry.geometryPass, JSON.stringify(geometry)).toBe(true);
-  writeFileSync(join(evidenceDir, `${testInfo.project.name}-map-render-geometry.json`), `${JSON.stringify({ geometry, tileResponses }, null, 2)}\n`);
-  await host.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-map-render-proof.png`) });
+  const geometryPath = join(evidenceDir, `${testInfo.project.name}-map-render-geometry.json`);
+  const imagePath = join(evidenceDir, `${testInfo.project.name}-map-render-proof.png`);
+  const pixelPath = join(evidenceDir, `${testInfo.project.name}-map-pixel-proof.json`);
+  writeFileSync(geometryPath, `${JSON.stringify({ geometry, tileResponses }, null, 2)}\n`);
+  await host.screenshot({ path: imagePath });
+  execFileSync('python3', ['scripts/analyze-map-render.py', imagePath, '--output', pixelPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const pixelProof = JSON.parse(readFileSync(pixelPath, 'utf8')) as { result: string; images?: Array<{ checks?: Record<string, boolean> }> };
+  expect(pixelProof.result, JSON.stringify(pixelProof)).toBe('PASS');
+  expect(pixelProof.images?.[0]?.checks?.basemap_non_flat).toBe(true);
+  expect(pixelProof.images?.[0]?.checks?.route_visible).toBe(true);
+  expect(pixelProof.images?.[0]?.checks?.origin_marker_visible).toBe(true);
+  expect(pixelProof.images?.[0]?.checks?.destination_marker_visible).toBe(true);
   await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-map-render-full.png`), fullPage: true });
 });
