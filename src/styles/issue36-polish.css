@@ -11,6 +11,13 @@ footer a,.back{min-width:48px;min-height:48px}
 .methodology summary{min-height:48px}
 .sheet{margin-top:-22px}
 
+/* Once destination is chosen, the functional hero yields space back to the map/decision. */
+.search.compact{padding-top:9px;padding-bottom:7px}
+.search.compact label{font-size:11px;line-height:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--voy-muted);margin-bottom:1px}
+.search.compact .input-wrap input{min-height:48px;font-size:16px}
+.search.compact .status{margin-top:1px;min-height:15px;line-height:15px}
+.search.compact::before{top:47px}
+
 @media(min-width:760px){
   .modes{overflow-x:hidden;justify-content:space-between;gap:0;padding-inline:0}
   .modes button{padding-inline:9px;font-size:13px}
