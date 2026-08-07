@@ -73,6 +73,10 @@ jobs:
           curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-version-preflight.json"
           curl -fsS --retry 3 "$WORKER_URL/api/health?preflight=$(date +%s%N)" > "$EVIDENCE_DIR/stable-health-preflight.json"
           curl -fsS --retry 3 -H "Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$CANDIDATE_VERSION_ID\"" "$WORKER_URL/api/health?candidate_preflight=$(date +%s%N)" > "$EVIDENCE_DIR/candidate-health-preflight.json"
+          cd source
+          wrangler versions view "$CANDIDATE_VERSION_ID" > "$GITHUB_WORKSPACE/$EVIDENCE_DIR/wrangler-version-view.txt" 2>&1
+          cd ..
+          grep -Eq "$PRODUCT_SHA|voy-svelte-mobile-${PRODUCT_SHA:0:12}" "$EVIDENCE_DIR/wrangler-version-view.txt"
           node <<'NODE'
           const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
           const d=JSON.parse(fs.readFileSync(`${e}/deployments-preflight.json`,'utf8')); if(d.success!==true)throw new Error('deployments_api_failed');
@@ -82,11 +86,9 @@ jobs:
           if(m.get(process.env.CANDIDATE_VERSION_ID)!==0)throw new Error('candidate_not_0');
           if(a.versions.some(v=>![process.env.STABLE_VERSION_ID,process.env.CANDIDATE_VERSION_ID].includes(v.version_id)&&Number(v.percentage)!==0))throw new Error('unexpected_nonzero_version');
           const detail=JSON.parse(fs.readFileSync(`${e}/candidate-version-preflight.json`,'utf8')); if(detail.success!==true||detail.result?.id!==process.env.CANDIDATE_VERSION_ID)throw new Error('candidate_identity_failed');
-          const meta=detail.result?.metadata||{}; const msg=String(meta.message||detail.result?.message||''); const tag=String(meta.tag||detail.result?.tag||'');
-          if(!msg.includes(process.env.PRODUCT_SHA) && !tag.includes(process.env.PRODUCT_SHA.slice(0,12))) throw new Error('candidate_source_provenance_failed');
           const s=JSON.parse(fs.readFileSync(`${e}/stable-health-preflight.json`,'utf8')); if(s.ok!==true||s.version!=='V7.8.0'||s.build_hash!=='1374f09')throw new Error('stable_health_drift');
           const c=JSON.parse(fs.readFileSync(`${e}/candidate-health-preflight.json`,'utf8')); if(c.ok!==true||c.version!=='V8.0.0'||c.build_hash!==process.env.PRODUCT_SHORT_SHA)throw new Error('candidate_health_drift');
-          fs.writeFileSync(`${e}/preflight.json`,JSON.stringify({result:'PASS',product_sha:process.env.PRODUCT_SHA,main_sha:process.env.EXPECTED_MAIN_SHA,deployment_id:a.id,stable_version_id:process.env.STABLE_VERSION_ID,stable_traffic:100,candidate_version_id:process.env.CANDIDATE_VERSION_ID,candidate_traffic:0,candidate_source_provenance:{message:msg,tag},stable_health:s,candidate_health:c,rollback_target:process.env.STABLE_VERSION_ID,checked_at:new Date().toISOString()},null,2));
+          fs.writeFileSync(`${e}/preflight.json`,JSON.stringify({result:'PASS',product_sha:process.env.PRODUCT_SHA,main_sha:process.env.EXPECTED_MAIN_SHA,deployment_id:a.id,stable_version_id:process.env.STABLE_VERSION_ID,stable_traffic:100,candidate_version_id:process.env.CANDIDATE_VERSION_ID,candidate_traffic:0,candidate_source_provenance:'wrangler_versions_view_exact_marker',stable_health:s,candidate_health:c,rollback_target:process.env.STABLE_VERSION_ID,checked_at:new Date().toISOString()},null,2));
           fs.appendFileSync(process.env.GITHUB_ENV,`PRE_DEPLOYMENT_ID=${a.id}\n`);
           NODE
           cd source
@@ -130,7 +132,6 @@ jobs:
           wrangler versions deploy "$CANDIDATE_VERSION_ID@100%" "$STABLE_VERSION_ID@0%" --message "VOY V4 AUD 5213861215 authorized production retry $PRODUCT_SHA" --yes 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/promotion.log"
           cd ..; PROMOTED=1
 
-          # Observability collector is non-fatal unless it captures an actual runtime error.
           trap - ERR
           : > "$EVIDENCE_DIR/production-tail.log"
           cd source
@@ -187,7 +188,6 @@ jobs:
           VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser-screens" VOY_OUTPUT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser-output" VOY_REPORT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser-report" bunx playwright test -c browser-tests/playwright.config.ts 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser.log"
           cd ..
 
-          # Additional deterministic request corpus after listener readiness.
           for i in $(seq 1 30); do
             curl -fsS "$WORKER_URL/api/health?obs_final=$i-$(date +%s%N)" >/dev/null
             curl -fsS "$WORKER_URL/?obs_final=$i-$(date +%s%N)" >/dev/null
