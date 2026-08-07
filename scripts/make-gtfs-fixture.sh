@@ -5,7 +5,7 @@ DIR="$(mktemp -d)"
 trap 'rm -rf "$DIR"' EXIT
 cat > "$DIR/agency.txt" <<'EOF'
 agency_id,agency_name,agency_url,agency_timezone
-fixture,VOY Fixture Transit,https://example.test,America/Argentina/Cordoba
+fixture,VOY Fixture Transit,https://www.example.com,America/Argentina/Cordoba
 EOF
 cat > "$DIR/stops.txt" <<'EOF'
 stop_id,stop_name,stop_lat,stop_lon
@@ -31,7 +31,7 @@ WK,1,1,1,1,1,1,1,20260801,20261231
 EOF
 cat > "$DIR/feed_info.txt" <<'EOF'
 feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version
-VOY Fixture Transit,https://example.test,es,20260801,20261231,issue34-fixture-v1
+VOY Fixture Transit,https://www.example.com,es,20260801,20261231,issue34-fixture-v2
 EOF
 (
   cd "$DIR"
