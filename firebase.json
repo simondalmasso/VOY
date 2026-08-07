@@ -1,0 +1,23 @@
+{
+  "hosting": {
+    "site": "voy-ar",
+    "public": "firebase-hosting-empty",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "redirects": [
+      {
+        "source": "/",
+        "destination": "https://voy-app.simondalmasso44.workers.dev/",
+        "type": 302
+      },
+      {
+        "source": "/:path*",
+        "destination": "https://voy-app.simondalmasso44.workers.dev/:path",
+        "type": 302
+      }
+    ]
+  }
+}
