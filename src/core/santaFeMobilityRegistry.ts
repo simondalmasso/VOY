@@ -22,7 +22,7 @@ const municipalBusBase: Omit<MobilitySourceRecord, 'trust_status'> = {
   freshness_status: 'UNKNOWN',
   coverage: { city: 'Santa Fe Capital, Santa Fe, Argentina', bbox: null },
   operational_status: 'UNAVAILABLE',
-  provenance_digest: 'sha256:issue34-inv-2026-08-07-santa-fe-bus-no-accepted-feed'
+  provenance_digest: 'sha256:5667305d485e0bfef81ba1c49848c9e01f15b06dfe1f3701894ceb3d46c9c5d2'
 };
 
 export const SANTA_FE_BUS_SOURCE: MobilitySourceRecord = Object.freeze({
@@ -41,7 +41,7 @@ export const SANTA_FE_MOBILITY_DATABASE_BIKE_DISCOVERY = Object.freeze(normalize
   authenticationRequired: false,
   retrievedAt: '2026-08-07T00:00:00-03:00',
   city: 'Santa Fe Capital, Santa Fe, Argentina',
-  provenanceDigest: 'sha256:mobility-database-discovery-2026-08-07-mibicitubici'
+  provenanceDigest: 'sha256:7c14a2bb166a80f5f3a8d2ac8d7a237b0a109373e0cac84546937db8eabe4cb0'
 }));
 
 export const SANTA_FE_MOBILITY_TRUST_SUMMARY = Object.freeze({
