@@ -28,7 +28,7 @@ jobs:
       - name: Verify single canonical branch head
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = 'feat/issue36-total-product-redesign-01'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/issue36-total-product-redesign-01 | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
           git diff --check
