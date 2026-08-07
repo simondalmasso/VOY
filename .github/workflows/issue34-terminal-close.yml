@@ -1,0 +1,251 @@
+name: VOY Issue34 Audited Terminal Production Close
+
+on:
+  push:
+    branches: [ops/issue34-terminal-close-01]
+    paths: [.github/workflows/issue34-terminal-close.yml]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: voy-issue34-terminal-production-close
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  PRODUCT_SHA: c6aa7302784ce07415949d2b9b1335919ee2cbbd
+  PRODUCT_SHORT_SHA: c6aa730
+  PRODUCT_BRANCH: feat/issue34-mobility-trust-foundation-01
+  EXPECTED_MAIN_SHA: 3f8e096b7065d41f9749e5613b329736b7301055
+  STABLE_VERSION_ID: 2f86d708-b905-4c33-b1fe-d881467e8542
+  CANDIDATE_VERSION_ID: 9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 403ad4f
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  AUD_COMMENT_ID: '5217823220'
+  EVIDENCE_DIR: evidence/issue34-terminal-close
+  VOY_REAL_BASEMAP: '1'
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout operator
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Checkout immutable audited source
+        uses: actions/checkout@v4
+        with:
+          ref: c6aa7302784ce07415949d2b9b1335919ee2cbbd
+          path: source
+          fetch-depth: 0
+
+      - name: Install pinned release toolchain
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          cd source
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Fresh fail-closed source Cloudflare and audited-candidate preflight
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          test "$(git -C source rev-parse HEAD)" = "$PRODUCT_SHA"
+          remote_head="$(git -C source ls-remote origin refs/heads/$PRODUCT_BRANCH | awk '{print $1}')"
+          remote_main="$(git -C source ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote_head" = "$PRODUCT_SHA"
+          test "$remote_main" = "$EXPECTED_MAIN_SHA"
+
+          cd source
+          bun run typecheck 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/typecheck-preflight.log"
+          bun run lint 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/lint-preflight.log"
+          bun run test 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/tests-preflight.log"
+          BUILD_HASH="$PRODUCT_SHORT_SHA" VOY_METRICS_PATH="$GITHUB_WORKSPACE/$EVIDENCE_DIR/build-metrics.json" bun run build 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/build-preflight.log"
+          VOY_METRICS_PATH="$GITHUB_WORKSPACE/$EVIDENCE_DIR/build-metrics.json" bun run budget 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/budget-preflight.log"
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/wrangler-dry-run.log"
+          cd ..
+
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/deployments-preflight.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$STABLE_VERSION_ID" > "$EVIDENCE_DIR/stable-version-preflight.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-version-preflight.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue34_preflight=$(date +%s%N)" > "$EVIDENCE_DIR/stable-health-preflight.json"
+          curl -fsS --retry 3 -H "Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$CANDIDATE_VERSION_ID\"" "$WORKER_URL/api/health?issue34_candidate_preflight=$(date +%s%N)" > "$EVIDENCE_DIR/candidate-health-preflight.json"
+          curl -fsS --retry 3 -H "Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$CANDIDATE_VERSION_ID\"" "$WORKER_URL/api/mobility/trust?issue34_candidate_preflight=$(date +%s%N)" > "$EVIDENCE_DIR/candidate-mobility-trust-preflight.json"
+          cd source
+          wrangler versions view "$CANDIDATE_VERSION_ID" > "$GITHUB_WORKSPACE/$EVIDENCE_DIR/candidate-version-view.txt" 2>&1
+          cd ..
+          grep -Eq "$PRODUCT_SHA|${PRODUCT_SHA:0:12}" "$EVIDENCE_DIR/candidate-version-view.txt"
+
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+          const payload=JSON.parse(fs.readFileSync(`${e}/deployments-preflight.json`,'utf8')); if(payload.success!==true)throw new Error('deployments_query_failed');
+          const list=payload.result?.deployments||payload.result||[]; const active=list[0]; if(!active||!Array.isArray(active.versions))throw new Error('active_deployment_missing');
+          const m=new Map(active.versions.map(v=>[v.version_id,Number(v.percentage)]));
+          if(m.get(process.env.STABLE_VERSION_ID)!==100)throw new Error('stable_not_100');
+          if(m.get(process.env.CANDIDATE_VERSION_ID)!==0)throw new Error('candidate_not_0');
+          if(active.versions.some(v=>![process.env.STABLE_VERSION_ID,process.env.CANDIDATE_VERSION_ID].includes(v.version_id)&&Number(v.percentage)!==0))throw new Error('unexpected_nonzero_version');
+          const s=JSON.parse(fs.readFileSync(`${e}/stable-health-preflight.json`,'utf8'));
+          const c=JSON.parse(fs.readFileSync(`${e}/candidate-health-preflight.json`,'utf8'));
+          const t=JSON.parse(fs.readFileSync(`${e}/candidate-mobility-trust-preflight.json`,'utf8'));
+          if(s.ok!==true||s.version!==process.env.EXPECTED_STABLE_VERSION||s.build_hash!==process.env.EXPECTED_STABLE_HASH)throw new Error('stable_health_drift');
+          if(c.ok!==true||c.version!==process.env.EXPECTED_CANDIDATE_VERSION||c.build_hash!==process.env.PRODUCT_SHORT_SHA)throw new Error('candidate_health_drift');
+          if(t.ok!==true||t.operational_bus_activation!==false||t.mobility_database_role!=='DISCOVERY_ONLY'||t.santa_fe?.bus_activation!==false)throw new Error('candidate_trust_contract_drift');
+          const bus=(t.santa_fe?.sources||[]).find(x=>x.source_id==='santa-fe-urban-bus-public-feed');
+          if(!bus||bus.license_status!=='UNKNOWN'||bus.operational_status!=='UNAVAILABLE')throw new Error('candidate_bus_fail_closed_drift');
+          function bindings(path){const p=JSON.parse(fs.readFileSync(path,'utf8'));if(p.success!==true)throw new Error('version_detail_failed');const list=p.result?.resources?.bindings;if(!Array.isArray(list))throw new Error('bindings_missing');return list.map(b=>`${b.name}:${b.type}`).sort();}
+          const sb=bindings(`${e}/stable-version-preflight.json`), cb=bindings(`${e}/candidate-version-preflight.json`); if(JSON.stringify(sb)!==JSON.stringify(cb))throw new Error('binding_contract_drift');
+          fs.writeFileSync(`${e}/preflight.json`,JSON.stringify({result:'PASS',aud_comment_id:process.env.AUD_COMMENT_ID,product_sha:process.env.PRODUCT_SHA,main_sha:process.env.EXPECTED_MAIN_SHA,deployment_id:active.id,stable_version_id:process.env.STABLE_VERSION_ID,stable_traffic:100,candidate_version_id:process.env.CANDIDATE_VERSION_ID,candidate_traffic:0,binding_contract:'PASS',bus_activation:false,stable_health:s,candidate_health:c,checked_at:new Date().toISOString()},null,2));
+          NODE
+
+      - name: Reconfirm candidate runtime browser and trust gates before production write
+        run: |
+          set -euo pipefail
+          cd source
+          SHORT_SHA="$PRODUCT_SHORT_SHA" WORKER_URL="$WORKER_URL" WORKER_NAME="$WORKER_NAME" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR" node scripts/mobility-trust-candidate-gate.mjs 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/mobility-trust-prewrite.log"
+          WORKER_URL="$WORKER_URL" WORKER_NAME="$WORKER_NAME" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR" node scripts/verify-retired-candidate-assets.mjs 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/retired-prewrite.log"
+          VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_REAL_BASEMAP=1 VOY_WORKER_NAME="$WORKER_NAME" VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" VOY_EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/prewrite-map-screens" VOY_OUTPUT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/prewrite-map-output" VOY_REPORT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/prewrite-map-report" bunx playwright test -c browser-tests/playwright.config.ts browser-tests/map-render-proof.spec.ts
+
+      - name: Promote exact candidate validate production and rollback once on first real failure
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          PROMOTED=0; ROLLED_BACK=0; TAIL_PID=''
+          stop_tail(){ if [ -n "${TAIL_PID:-}" ] && kill -0 "$TAIL_PID" 2>/dev/null; then kill "$TAIL_PID" 2>/dev/null || true; wait "$TAIL_PID" 2>/dev/null || true; fi; }
+          rollback_failure(){
+            local cause="$1"; trap - ERR; stop_tail; printf '%s\n' "$cause" > "$EVIDENCE_DIR/first-causal-error.txt"
+            if [ "$PROMOTED" = 1 ] && [ "$ROLLED_BACK" = 0 ]; then
+              ROLLED_BACK=1
+              cd source
+              wrangler versions deploy "$STABLE_VERSION_ID@100%" "$CANDIDATE_VERSION_ID@0%" --message "VOY issue34 single rollback after first production failure" --yes 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/rollback.log"
+              cd ..
+              for i in $(seq 1 40); do
+                curl -fsS --retry 2 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/rollback-deployments.json" || true
+                curl -fsS --retry 2 "$WORKER_URL/api/health?issue34_rollback=$i-$(date +%s%N)" > "$EVIDENCE_DIR/rollback-health.json" || true
+                if node -e 'const fs=require("fs");try{const d=JSON.parse(fs.readFileSync(process.argv[1]));const l=d.result?.deployments||d.result||[];const a=l[0];const m=new Map((a?.versions||[]).map(v=>[v.version_id,Number(v.percentage)]));const h=JSON.parse(fs.readFileSync(process.argv[2]));process.exit(m.get(process.env.STABLE_VERSION_ID)===100&&m.get(process.env.CANDIDATE_VERSION_ID)===0&&h.ok===true&&h.version===process.env.EXPECTED_STABLE_VERSION&&h.build_hash===process.env.EXPECTED_STABLE_HASH?0:1)}catch{process.exit(1)}' "$EVIDENCE_DIR/rollback-deployments.json" "$EVIDENCE_DIR/rollback-health.json"; then
+                  printf '{"result":"PASS","rollback_count":1,"verified_at":"%s"}\n' "$(date -u +%FT%TZ)" > "$EVIDENCE_DIR/rollback-result.json"; return 0
+                fi
+                sleep 5
+              done
+              printf '{"result":"FAIL","rollback_count":1,"verified_at":"%s"}\n' "$(date -u +%FT%TZ)" > "$EVIDENCE_DIR/rollback-result.json"
+            fi
+            return 1
+          }
+          on_error(){ local code=$?; rollback_failure "exit=$code line=$1 command=$2" || true; exit "$code"; }
+          trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
+
+          cd source
+          wrangler versions deploy "$CANDIDATE_VERSION_ID@100%" "$STABLE_VERSION_ID@0%" --message "VOY Issue34 AUD $AUD_COMMENT_ID exact candidate production promotion $PRODUCT_SHA" --yes 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/promotion.log"
+          cd ..; PROMOTED=1
+
+          : > "$EVIDENCE_DIR/production-tail.log"
+          cd source
+          timeout 1200s wrangler tail "$WORKER_NAME" --format json --version-id "$CANDIDATE_VERSION_ID" > "$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-tail.log" 2>&1 & TAIL_PID=$!
+          cd ..
+          sleep 5
+
+          node <<'NODE'
+          import fs from 'node:fs';
+          const e=process.env.EVIDENCE_DIR, base=process.env.WORKER_URL, api=`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${process.env.WORKER_NAME}`;
+          const auth={Authorization:`Bearer ${process.env.CLOUDFLARE_API_TOKEN}`}; const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const started=Date.now(); let consecutive=0,last=null;
+          fs.writeFileSync(`${e}/production-convergence.jsonl`,'');
+          for(let round=1;round<=80;round++){
+            let ok=false, rec={round,timestamp:new Date().toISOString(),elapsed_ms:Date.now()-started};
+            try{
+              const [dr,hr,tr,root]=await Promise.all([
+                fetch(`${api}/deployments`,{headers:auth,signal:AbortSignal.timeout(25000)}),
+                fetch(`${base}/api/health?issue34_prod=${round}-${Date.now()}`,{headers:{'Cache-Control':'no-cache, no-store'},signal:AbortSignal.timeout(25000)}),
+                fetch(`${base}/api/mobility/trust?issue34_prod=${round}-${Date.now()}`,{headers:{'Cache-Control':'no-cache, no-store'},signal:AbortSignal.timeout(25000)}),
+                fetch(`${base}/?issue34_prod=${round}-${Date.now()}`,{headers:{'Cache-Control':'no-cache, no-store'},signal:AbortSignal.timeout(25000)})
+              ]);
+              const d=await dr.json(), h=await hr.json(), t=await tr.json(); await root.arrayBuffer(); const l=d.result?.deployments||d.result||[],a=l[0],m=new Map((a?.versions||[]).map(v=>[v.version_id,Number(v.percentage)]));
+              const deploymentOk=d.success===true&&m.get(process.env.CANDIDATE_VERSION_ID)===100&&m.get(process.env.STABLE_VERSION_ID)===0&&(a.versions||[]).every(v=>[process.env.CANDIDATE_VERSION_ID,process.env.STABLE_VERSION_ID].includes(v.version_id)||Number(v.percentage)===0);
+              const healthOk=h.ok===true&&h.version===process.env.EXPECTED_CANDIDATE_VERSION&&h.build_hash===process.env.PRODUCT_SHORT_SHA;
+              const trustOk=t.ok===true&&t.operational_bus_activation===false&&t.mobility_database_role==='DISCOVERY_ONLY'&&t.santa_fe?.bus_activation===false;
+              ok=deploymentOk&&healthOk&&trustOk&&root.status===200; rec={...rec,deployment_id:a?.id||null,deployment_ok:deploymentOk,health_ok:healthOk,trust_ok:trustOk,root_ok:root.status===200,health:h};
+            }catch(err){rec.error=String(err)}
+            consecutive=ok?consecutive+1:0; rec.consecutive=consecutive; last=rec; fs.appendFileSync(`${e}/production-convergence.jsonl`,JSON.stringify(rec)+'\n');
+            if(consecutive>=20 && Date.now()-started>=120000){fs.writeFileSync(`${e}/production-convergence-proof.json`,JSON.stringify(rec,null,2));break}
+            await sleep(7000);
+          }
+          if(!last||last.consecutive<20||Date.now()-started<120000)throw new Error('production_did_not_converge');
+          NODE
+
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/deployments-production.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue34_final=$(date +%s%N)" > "$EVIDENCE_DIR/production-health.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/mobility/trust?issue34_final=$(date +%s%N)" > "$EVIDENCE_DIR/production-mobility-trust.json"
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+          const h=JSON.parse(fs.readFileSync(`${e}/production-health.json`,'utf8')); if(h.ok!==true||h.version!==process.env.EXPECTED_CANDIDATE_VERSION||h.build_hash!==process.env.PRODUCT_SHORT_SHA)throw new Error('production_health_mismatch');
+          const t=JSON.parse(fs.readFileSync(`${e}/production-mobility-trust.json`,'utf8')); if(t.ok!==true||t.operational_bus_activation!==false||t.mobility_database_role!=='DISCOVERY_ONLY'||t.santa_fe?.bus_activation!==false)throw new Error('production_trust_mismatch');
+          const bus=(t.santa_fe?.sources||[]).find(x=>x.source_id==='santa-fe-urban-bus-public-feed'); if(!bus||bus.license_status!=='UNKNOWN'||bus.operational_status!=='UNAVAILABLE')throw new Error('production_bus_not_fail_closed');
+          const d=JSON.parse(fs.readFileSync(`${e}/deployments-production.json`,'utf8')); if(d.success!==true)throw new Error('deployment_query_failed'); const l=d.result?.deployments||d.result||[],a=l[0],m=new Map((a?.versions||[]).map(v=>[v.version_id,Number(v.percentage)])); if(m.get(process.env.CANDIDATE_VERSION_ID)!==100||m.get(process.env.STABLE_VERSION_ID)!==0)throw new Error('production_traffic_mismatch');
+          fs.writeFileSync(`${e}/production-state.json`,JSON.stringify({result:'PASS',deployment_id:a.id,productive_version_id:process.env.CANDIDATE_VERSION_ID,productive_traffic:100,previous_stable_version_id:process.env.STABLE_VERSION_ID,previous_stable_traffic:0,source_sha:process.env.PRODUCT_SHA,health:h,bus_activation:false,checked_at:new Date().toISOString()},null,2));
+          NODE
+
+          cd source
+          SHORT_SHA="$PRODUCT_SHORT_SHA" WORKER_URL="$WORKER_URL" WORKER_NAME="$WORKER_NAME" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR" node scripts/mobility-trust-candidate-gate.mjs 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/mobility-trust-production.log"
+          WORKER_URL="$WORKER_URL" WORKER_NAME="$WORKER_NAME" CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR" node scripts/verify-retired-candidate-assets.mjs 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/retired-production.log"
+          VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_REAL_BASEMAP=1 VOY_WORKER_NAME="$WORKER_NAME" VOY_EVIDENCE_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser-screens" VOY_OUTPUT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser-output" VOY_REPORT_DIR="$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser-report" bunx playwright test -c browser-tests/playwright.config.ts 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/production-browser.log"
+          cd ..
+
+          stop_tail; trap - EXIT
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR; let raw=''; try{raw=fs.readFileSync(`${e}/production-tail.log`,'utf8')}catch{}
+          const lines=raw.split(/\r?\n/).filter(Boolean); let exceptions=0, nonOk=0;
+          for(const line of lines){try{const x=JSON.parse(line); const outcome=x.outcome||x.event?.outcome||x.scriptName; if(String(outcome||'').toLowerCase().includes('exception'))exceptions++; if(x.outcome&&x.outcome!=='ok')nonOk++;}catch{}}
+          if(exceptions>0||nonOk>0)throw new Error(`production_tail_failure:${exceptions}:${nonOk}`);
+          fs.writeFileSync(`${e}/tail-summary.json`,JSON.stringify({classification:lines.length?'OBSERVED_NO_FAILURE':'DEGRADED_NO_EVENTS',events:lines.length,exceptions,non_ok_outcomes:nonOk},null,2));
+          NODE
+
+      - name: Build immutable terminal evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload Issue34 terminal production evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-issue34-terminal-close-${{ github.run_id }}
+          path: evidence/issue34-terminal-close
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## VOY Issue #34 — audited terminal production close'
+            echo
+            echo "- AUD authority: $AUD_COMMENT_ID"
+            echo "- Audited source: $PRODUCT_SHA"
+            echo "- Promoted exact version: $CANDIDATE_VERSION_ID"
+            echo "- Previous stable: $STABLE_VERSION_ID"
+            echo '- Bus activation: OFF required'
+            echo '- Phase 5 terminal policy after green run: NO_FEED'
+          } >> "$GITHUB_STEP_SUMMARY"
