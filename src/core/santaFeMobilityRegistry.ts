@@ -36,7 +36,7 @@ export const SANTA_FE_MOBILITY_DATABASE_BIKE_DISCOVERY = Object.freeze(normalize
   format: 'GBFS',
   sourceUrl: 'https://www.mibicitubici.gob.ar/opendata/gbfs.json',
   licenseUrl: null,
-  licenseStatus: 'VERIFIED_COMPATIBLE',
+  licenseStatus: 'UNKNOWN',
   catalogOfficial: true,
   authenticationRequired: false,
   retrievedAt: '2026-08-07T00:00:00-03:00',
