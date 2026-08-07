@@ -1,10 +1,11 @@
 # Issue #34 — Santa Fe mobility source investigation
 
 Verified on: 2026-08-07
-Role: INV
 Scope: Santa Fe Capital, Argentina
 
-## HECHO
+## Phase 1 — INV
+
+### HECHO
 
 1. Municipalidad de Santa Fe publishes a current official `Colectivos` page at `https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/`. It states that Cuándo Pasa provides updated information about lines, routes, stops and diversions. The page does not expose a GTFS/GTFS-RT download, API contract or feed redistribution license.
 2. Municipalidad de Santa Fe publishes current bus-diversion information at `https://santafeciudad.gov.ar/desvios/` and identifies individual urban lines. This is operational web information, not a demonstrated GTFS feed.
@@ -14,21 +15,19 @@ Scope: Santa Fe Capital, Argentina
 6. Mobility Database discovery material identifies a Santa Fe `MiBiciTuBici` GBFS source with autodiscovery URL `https://www.mibicitubici.gob.ar/opendata/gbfs.json` and catalog license metadata `CC-BY-4.0`. Under Issue #34 rules, catalog metadata is discovery evidence only and cannot itself activate a source.
 7. MobilityData `gtfs-validator` release `v8.0.1` was published 2026-05-12. The canonical CLI asset is `gtfs-validator-8.0.1-cli.jar`, GitHub release digest `sha256:19293ddd9b6f954f216d4f12054bd8a3232921751c4484339e339764a91000e2`. The project documents CLI validation as `java -jar ... -i <feed.zip> -o <output>`.
 
-## INFERENCIA
+### INFERENCIA
 
 - Santa Fe clearly has current operational bus data feeding Cuándo Pasa, but no public, authoritative, reusable GTFS/GTFS-RT contract and compatible feed license was demonstrated in this investigation.
 - Therefore the safe implementation path is to build the deterministic trust/validation/discovery/fare foundation while keeping bus activation OFF.
 - The current fare decree is suitable as provenance for a future regulated-fare record only after the exact numeric fare and applicable category are extracted and verified from the official document. This phase deliberately does not guess those values.
 
-## NO_VERIFICADO
+### NO_VERIFICADO
 
 - A public municipal GTFS Schedule feed for Santa Fe Capital.
 - A public municipal GTFS-Realtime feed for Santa Fe Capital.
 - Redistribution/usage rights for any private or undocumented endpoint used by Cuándo Pasa.
 - Compatibility between any undocumented realtime source and a particular static schedule feed.
 - Any current Santa Fe bus fare amount not explicitly extracted from the official decree.
-
-## Operational decision
 
 ```text
 SANTA_FE_GTFS_ACCEPTED=NO
@@ -37,5 +36,41 @@ BUS_ACTIVATION=OFF
 CATALOG_DISCOVERY_IS_OPERATIONAL_AUTHORITY=NO
 UNDOCUMENTED_ENDPOINT_REVERSE_ENGINEERING=NO
 AI_SYNTHETIC_TRANSIT_DATA=NO
-NEXT=LAB_TRUST_SCHEMA_VALIDATOR_DISCOVERY_FARE_CONTRACTS
 ```
+
+## Phase 2 — LAB
+
+Alternatives evaluated:
+
+1. Activate bus now from municipal web/Cuándo Pasa data: rejected; no verified reusable feed contract/license.
+2. Treat Mobility Database catalog metadata as operational truth: rejected by Issue #34 trust rules.
+3. Build the deterministic trust foundation first and expose only a read-only status contract while bus remains OFF: selected.
+
+Selected LAB shape:
+- typed source trust state machine;
+- pinned canonical GTFS validator as CI/data-ingestion gate;
+- explicit warning/error/calendar/license classification;
+- GTFS-RT attachment blocked unless a compatible verified static feed exists;
+- Mobility Database adapter normalizes catalog records as `DISCOVERY_ONLY`;
+- Fare Confidence strips numeric data from APP_ONLY/stale/unproven sources;
+- no browser dependency on Mobility Database and no runtime fetch to it;
+- no public-transit operational UI activation.
+
+## Phase 3 — ARQ decision
+
+```text
+SELECTED_SLICE=DATA_TRUST_PLUS_GTFS_GATE_PLUS_MOBILITY_DATABASE_DISCOVERY_PLUS_FARE_CONFIDENCE
+RUNTIME_SURFACE=GET_/api/mobility/trust_READ_ONLY
+BUS_ACTIVATION=OFF
+FEATURE_REPLACEMENT=NONE
+CURRENT_ROUTING_GEOCODING=UNCHANGED
+PRODUCTION_PROMOTION=NOT_AUTHORIZED
+CANDIDATE_TARGET=EXACT_HEAD_AT_0_PERCENT
+MILESTONE_A=AUD_AFTER_COMPLETE_CANDIDATE
+```
+
+Reason: this is the smallest production-worthy slice that creates reusable deterministic boundaries without pretending an acceptable Santa Fe GTFS feed exists or destabilizing the working VOY core.
+
+## Phase 4 implementation boundary
+
+The branch implements the selected contracts, deterministic fixtures/tests, pinned validator pipeline, read-only trust endpoint and a Cloudflare candidate workflow. The candidate must keep the currently productive V8 source at 100%, create exactly one new exact-head version at 0%, prove unchanged product/map/security/privacy invariants, prove the new trust endpoint through a version override, persist immutable evidence, and stop at Milestone A without promotion.
