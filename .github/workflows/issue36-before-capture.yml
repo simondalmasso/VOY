@@ -1,0 +1,116 @@
+name: VOY Issue36 Immutable BEFORE Capture v2
+
+on:
+  push:
+    branches:
+      - ops/issue36-before-capture-01
+    paths:
+      - .github/workflows/issue36-before-capture.yml
+      - scripts/issue36-before-capture.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-issue36-before-capture-v2
+  cancel-in-progress: false
+
+env:
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_MAIN_SHA: ae9670d7b9ca479792af5c55a28b1033165b003c
+  EXPECTED_VERSION: V8.0.0
+  EXPECTED_BUILD_HASH: c6aa730
+  EXPECTED_PRODUCTIVE_VERSION_ID: 9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+  EXPECTED_DEPLOYMENT_ID: 3ef0cc0b-d344-4181-8118-a9b409e44dc6
+  EVIDENCE_DIR: test-results/issue36-before-v2
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout read-only capture operator
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify canonical source and causal harness identity
+        run: |
+          set -euo pipefail
+          remote_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote_main" = "$EXPECTED_MAIN_SHA"
+          test -f scripts/issue36-before-capture.mjs
+          mkdir -p "$EVIDENCE_DIR"
+          printf '%s\n' "$remote_main" > "$EVIDENCE_DIR/canonical-main-sha.txt"
+          git diff --check
+
+      - name: Install exact frozen browser toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14
+          test "$(bun --version)" = '1.3.14'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          test "$(node -p "require('./node_modules/@playwright/test/package.json').version")" = '1.61.1'
+          ./node_modules/.bin/playwright --version | tee "$EVIDENCE_DIR/playwright-cli-version.txt"
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Snapshot verified production truth
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue36_before_v2=$(date +%s%N)" > "$EVIDENCE_DIR/production-health.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/mobility/trust?issue36_before_v2=$(date +%s%N)" > "$EVIDENCE_DIR/production-mobility-trust.json"
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+          const h=JSON.parse(fs.readFileSync(`${e}/production-health.json`,'utf8'));
+          if(h.ok!==true||h.version!==process.env.EXPECTED_VERSION||h.build_hash!==process.env.EXPECTED_BUILD_HASH) throw new Error('productive_health_drift');
+          const t=JSON.parse(fs.readFileSync(`${e}/production-mobility-trust.json`,'utf8'));
+          if(t.ok!==true||t.operational_bus_activation!==false||t.mobility_database_role!=='DISCOVERY_ONLY'||t.santa_fe?.bus_activation!==false) throw new Error('productive_trust_drift');
+          fs.writeFileSync(`${e}/runtime-identity.json`,JSON.stringify({result:'PASS',canonical_main_sha:process.env.EXPECTED_MAIN_SHA,productive_version_id:process.env.EXPECTED_PRODUCTIVE_VERSION_ID,productive_deployment_id:process.env.EXPECTED_DEPLOYMENT_ID,application_version:h.version,build_hash:h.build_hash,bus_activation:false,captured_at:new Date().toISOString()},null,2));
+          NODE
+
+      - name: Capture immutable BEFORE visual matrix with repo-local Playwright
+        run: bun ./scripts/issue36-before-capture.mjs
+
+      - name: Validate complete BEFORE coverage and freeze evidence
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+          const x=JSON.parse(fs.readFileSync(`${e}/before-capture-index.json`,'utf8'));
+          const need=(viewport,scheme,state)=>{if(!x.screenshots.some(i=>i.viewport===viewport&&i.scheme===scheme&&i.state===state))throw new Error(`coverage_missing:${viewport}:${scheme}:${state}`)};
+          for(const v of ['360x800','390x844','412x915','430x932','768x1024','1024x768','1280x800','1440x900']) for(const s of ['light','dark']) for(const state of ['EMPTY_START','DECISION_SHEET_APP']) need(v,s,state);
+          for(const v of ['390x844','1440x900']) for(const s of ['light','dark']) {
+            for(const state of ['SEARCH_RESULTS','DESTINATION_SELECTED','GPS_ORIGIN','MANUAL_ORIGIN','UNAVAILABLE_DATA_BUS','EXTERNAL_CONFIRMATION','OFFLINE']) need(v,s,state);
+            for(const m of ['APP','TAXI','REMIS','WALK','BIKE','BUS']) need(v,s,`MODE_${m}`);
+          }
+          for(const s of ['light','dark']) need('390x844',s,'ERROR_UNVERIFIED_DESTINATION');
+          for(const s of ['light','dark']) for(const l of ['PRIVACY','TERMS','SOURCES','CONTACT']) need('1440x900',s,`LEGAL_${l}`);
+          const files=fs.readdirSync(`${e}/screenshots`).filter(f=>f.endsWith('.png'));
+          if(files.length<70) throw new Error(`too_few_screenshots:${files.length}`);
+          const p=JSON.parse(fs.readFileSync(`${e}/playwright-resolution.json`,'utf8'));
+          if(p.result!=='PASS'||p.version!=='1.61.1'||p.script_inside_repository!==true) throw new Error('playwright_resolution_unproven');
+          fs.writeFileSync(`${e}/coverage-summary.json`,JSON.stringify({result:'PASS',screenshot_count:files.length,viewports:8,themes:2,representative_mobile_desktop_state_matrix:'PASS',modes:6,error_and_legal:'PASS',playwright_repo_local:'PASS'},null,2));
+          NODE
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload immutable Issue36 BEFORE
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-issue36-before-v2-${{ github.run_id }}
+          path: test-results/issue36-before-v2
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          compression-level: 6
+
+      - name: Summary
+        run: |
+          echo '## VOY #36 immutable BEFORE v2' >> "$GITHUB_STEP_SUMMARY"
+          echo "- canonical main: $EXPECTED_MAIN_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- production: $EXPECTED_VERSION/$EXPECTED_BUILD_HASH" >> "$GITHUB_STEP_SUMMARY"
+          echo "- productive version: $EXPECTED_PRODUCTIVE_VERSION_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "- productive deployment: $EXPECTED_DEPLOYMENT_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo '- runtime mutation: none' >> "$GITHUB_STEP_SUMMARY"
+          cat "$EVIDENCE_DIR/coverage-summary.json" >> "$GITHUB_STEP_SUMMARY"
