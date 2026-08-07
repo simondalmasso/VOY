@@ -1,0 +1,59 @@
+name: VOY Issue36 Design System Correction
+
+on:
+  push:
+    branches:
+      - feat/issue36-total-product-redesign-01
+    paths:
+      - .github/workflows/issue36-system-correction.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voy-issue36-system-correction
+  cancel-in-progress: false
+
+jobs:
+  refactor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout correction head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify single canonical branch head
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'feat/issue36-total-product-redesign-01'
+          remote_head="$(git ls-remote origin refs/heads/feat/issue36-total-product-redesign-01 | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          git diff --check
+
+      - name: Apply guarded token refactor to global CSS
+        run: node scripts/issue36-complete-design-system.mjs
+
+      - name: Validate corrected source before commit
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          BUILD_HASH="${GITHUB_SHA:0:7}-system" bun run validate
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+          git diff --check
+          git diff -- src/styles/global.css
+
+      - name: Commit guarded global CSS refactor
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/styles/global.css
+          git diff --cached --quiet && { echo 'expected_global_css_change_missing'; exit 1; }
+          git commit -m 'style: consume issue36 design-system tokens'
+          git push origin HEAD:feat/issue36-total-product-redesign-01
