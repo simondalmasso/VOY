@@ -19,6 +19,7 @@ const records=[];
 const browser=await chromium.launch({headless:true});
 
 async function setup(page,{unverified=false}={}){
+  await page.route('**/api/health*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,version:'V8.0.0',build_hash:process.env.GITHUB_SHA||'visual',features:{voice:true,auth:false}})}));
   await page.route('**/cities/santa-fe/transport.json',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(transport)}));
   await page.route('**/api/geocode?*',async route=>{
     const q=new URL(route.request().url()).searchParams.get('q')||'';
