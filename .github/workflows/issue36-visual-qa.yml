@@ -49,19 +49,19 @@ jobs:
           set -euo pipefail
           BUILD_HASH="$GITHUB_SHA" bun run validate
           wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
-      - name: Start exact local runtime
+      - name: Start exact static preview for visual inspection
         run: |
           set -euo pipefail
-          wrangler dev --config dist/voy_app/wrangler.json --local --port 8787 > /tmp/issue36-wrangler.log 2>&1 &
-          echo $! > /tmp/issue36-wrangler.pid
+          bun run preview -- --host 127.0.0.1 --port 8787 > /tmp/issue36-preview.log 2>&1 &
+          echo $! > /tmp/issue36-preview.pid
           ready=0
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8787/api/health > /tmp/issue36-health.json; then ready=1; break; fi
-            if ! kill -0 "$(cat /tmp/issue36-wrangler.pid)" 2>/dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:8787/ > /tmp/issue36-root.html; then ready=1; break; fi
+            if ! kill -0 "$(cat /tmp/issue36-preview.pid)" 2>/dev/null; then break; fi
             sleep 1
           done
-          if [ "$ready" != 1 ]; then cat /tmp/issue36-wrangler.log; exit 1; fi
-          cat /tmp/issue36-health.json
+          if [ "$ready" != 1 ]; then cat /tmp/issue36-preview.log; exit 1; fi
+          grep -q '<div id="app"></div>' /tmp/issue36-root.html
       - name: Capture full visual state matrix
         run: bun ./scripts/issue36-visual-capture.mjs
       - name: Freeze exact-head visual evidence
@@ -69,8 +69,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$VOY_EVIDENCE_DIR"
-          cp /tmp/issue36-health.json "$VOY_EVIDENCE_DIR/local-health.json" 2>/dev/null || true
-          cp /tmp/issue36-wrangler.log "$VOY_EVIDENCE_DIR/local-runtime.log" 2>/dev/null || true
+          cp /tmp/issue36-root.html "$VOY_EVIDENCE_DIR/local-root.html" 2>/dev/null || true
+          cp /tmp/issue36-preview.log "$VOY_EVIDENCE_DIR/local-preview.log" 2>/dev/null || true
           printf '%s\n' "$GITHUB_SHA" > "$VOY_EVIDENCE_DIR/exact-head.txt"
           printf '%s\n' "$VOY_QA_STAGE" > "$VOY_EVIDENCE_DIR/stage.txt"
           find "$VOY_EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$VOY_EVIDENCE_DIR/manifest.sha256"
@@ -85,7 +85,7 @@ jobs:
           include-hidden-files: true
           retention-days: 30
           compression-level: 6
-      - name: Stop local runtime
+      - name: Stop static preview
         if: always()
         run: |
-          test ! -f /tmp/issue36-wrangler.pid || kill "$(cat /tmp/issue36-wrangler.pid)" 2>/dev/null || true
+          test ! -f /tmp/issue36-preview.pid || kill "$(cat /tmp/issue36-preview.pid)" 2>/dev/null || true
