@@ -1,4 +1,4 @@
-# qa-stage: final-after-system-corrected-tail-r4
+# qa-stage: final-after-bus-unavailable-r1
 name: VOY Issue36 Visual QA
 
 on:
@@ -8,6 +8,7 @@ on:
     paths:
       - .github/workflows/issue36-visual-qa.yml
       - scripts/issue36-visual-capture.mjs
+      - scripts/issue36-bus-visual-capture.mjs
       - scripts/serve-static-spa.mjs
 
 permissions:
@@ -66,6 +67,8 @@ jobs:
           curl -fsS http://127.0.0.1:8787/privacy | grep -q '<div id="app"></div>'
       - name: Capture full visual state matrix
         run: bun ./scripts/issue36-visual-capture.mjs
+      - name: Capture and gate BUS unavailable mobile matrix
+        run: bun ./scripts/issue36-bus-visual-capture.mjs
       - name: Freeze exact-head visual evidence
         if: always()
         run: |
