@@ -86,10 +86,15 @@ for (const [category, from, to] of [
   ['motion','.18s ease','var(--voy-motion-base) var(--voy-ease-standard)'],
   ['motion','.16s ease','var(--voy-motion-fast) var(--voy-ease-standard)'],
   ['z','z-index:1;','z-index:var(--voy-z-rail);'],
+  ['z','z-index:1}','z-index:var(--voy-z-rail)}'],
   ['z','z-index:2;','z-index:var(--voy-z-marker);'],
+  ['z','z-index:2}','z-index:var(--voy-z-marker)}'],
   ['z','z-index:3;','z-index:var(--voy-z-sheet);'],
+  ['z','z-index:3}','z-index:var(--voy-z-sheet)}'],
   ['z','z-index:30;','z-index:var(--voy-z-banner);'],
-  ['z','z-index:50;','z-index:var(--voy-z-modal);']
+  ['z','z-index:30}','z-index:var(--voy-z-banner)}'],
+  ['z','z-index:50;','z-index:var(--voy-z-modal);'],
+  ['z','z-index:50}','z-index:var(--voy-z-modal)}']
 ]) replaceAll(category, from, to);
 
 for (const category of ['weight','size','leading','tracking','border','control','motion','z']) {
