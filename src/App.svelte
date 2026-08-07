@@ -21,6 +21,7 @@
   import { providerOptions } from './features/providers/provider.registry';
   import { consumeExternalAction, createExternalAction, type ExternalAction } from './features/providers/provider.actions';
   import { health, type HealthPayload } from './lib/api';
+  import { loadPreferences, savePreferences, type Preferences } from './lib/storage';
 
   const routePath = currentRoute();
   let origin: Coordinates | null = null;
@@ -36,8 +37,31 @@
   let capabilities: HealthPayload['features'] | null = null;
   let voiceOpen = false;
   let VoiceComponent: typeof import('./components/VoiceAssistant.svelte').default | null = null;
+  let theme: Preferences['theme'] = 'system';
+  let analyticsPreference = false;
 
-  onMount(async () => { capabilities = (await health().catch(() => null))?.features || null; });
+  function applyTheme(value: Preferences['theme']): void {
+    if (value === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.dataset.theme = value;
+    dispatchEvent(new CustomEvent('voy-theme-change', { detail: value }));
+  }
+
+  function cycleTheme(): void {
+    theme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+    applyTheme(theme);
+    savePreferences({ theme, analytics: analyticsPreference });
+  }
+
+  $: themeLabel = theme === 'system' ? 'Auto' : theme === 'light' ? 'Claro' : 'Oscuro';
+
+  onMount(async () => {
+    const preferences = loadPreferences();
+    theme = preferences.theme;
+    analyticsPreference = preferences.analytics;
+    applyTheme(theme);
+    capabilities = (await health().catch(() => null))?.features || null;
+  });
+
   async function openVoice(): Promise<void> {
     VoiceComponent ||= (await import('./components/VoiceAssistant.svelte')).default;
     voiceOpen = true;
@@ -107,17 +131,40 @@
 {:else}
   <OfflineBanner />
   <main class="app-shell" data-testid="app-shell">
-    <header class="brand"><a href="/" aria-label="VOY inicio">VOY</a><span>Santa Fe</span></header>
-    <section class="controls" aria-label="Planificar viaje">
-      <DestinationSearch onSelect={setDestination} />
-      <OriginControl label={originLabel} onOrigin={setOrigin} />
-      {#if origin && selectedDestination}<ModeSelector value={mode} onChange={setMode} />{/if}
-      <StatusMessage {message} {tone} />
-      {#if capabilities?.voice && !voiceOpen}<button type="button" class="assistant-trigger" on:click={openVoice} data-testid="voice-open">Consultar al asistente</button>{/if}
-      {#if voiceOpen && VoiceComponent}<svelte:component this={VoiceComponent} onClose={() => voiceOpen = false} />{/if}
-    </section>
-    <MapViewport {origin} destination={selectedDestination?.coordinates || null} route={routeResult} />
-    {#if selectedDestination && (routeResult || options.length)}<TripDecisionSheet route={routeResult} {options} onChoose={choose} destination={selectedDestination} />{/if}
+    <header class="brand">
+      <a href="/" aria-label="VOY inicio">VOY</a>
+      <div class="brand-context"><span>Santa Fe</span><span aria-hidden="true">·</span><span>decisión urbana</span></div>
+      <button type="button" class="theme-toggle" on:click={cycleTheme} aria-label={`Tema: ${themeLabel}. Cambiar tema`} data-testid="theme-toggle"><span aria-hidden="true">◐</span><span>{themeLabel}</span></button>
+    </header>
+
+    <div class="journey-layout">
+      <section class="controls planner" aria-label="Planificar viaje">
+        <div class="planner-intro" aria-hidden="true">
+          <p class="eyebrow">Movilidad urbana · Santa Fe</p>
+          <p class="planner-promise">Cuánto cuesta. Cuánto tarda. Qué conviene.</p>
+        </div>
+        <div class="journey-builder" data-testid="journey-builder">
+          <DestinationSearch onSelect={setDestination} />
+          <OriginControl label={originLabel} onOrigin={setOrigin} />
+        </div>
+        {#if origin && selectedDestination}<ModeSelector value={mode} onChange={setMode} />{/if}
+        <StatusMessage {message} {tone} />
+        {#if capabilities?.voice && !voiceOpen}<button type="button" class="assistant-trigger" on:click={openVoice} data-testid="voice-open"><span>Asistente VOY</span><span aria-hidden="true">↗</span></button>{/if}
+        {#if voiceOpen && VoiceComponent}<svelte:component this={VoiceComponent} onClose={() => voiceOpen = false} />{/if}
+      </section>
+
+      <MapViewport {origin} destination={selectedDestination?.coordinates || null} route={routeResult} />
+
+      {#if selectedDestination && (routeResult || options.length)}
+        <TripDecisionSheet route={routeResult} {options} onChoose={choose} destination={selectedDestination} />
+      {:else}
+        <section class="decision-empty" aria-label="Comparación pendiente" data-testid="decision-empty">
+          <span class="decision-index">01</span>
+          <div><strong>Armá el viaje.</strong><p>Con origen y destino verificados, VOY ordena las opciones que puede sostener con datos.</p></div>
+        </section>
+      {/if}
+    </div>
+
     <footer><a href="/privacy">Privacidad</a><a href="/terms">Términos</a><a href="/sources">Fuentes</a><a href="/contact">Contacto</a></footer>
   </main>
   <ConfirmExternalAction {action} onConfirm={confirmAction} onCancel={() => action = null} />
