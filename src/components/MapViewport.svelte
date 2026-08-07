@@ -27,6 +27,30 @@
     'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
   ];
 
+  function darkTheme(): boolean {
+    if (typeof document === 'undefined') return false;
+    const explicit = document.documentElement.dataset.theme;
+    if (explicit === 'dark') return true;
+    if (explicit === 'light') return false;
+    return matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  function applyMapTheme(): void {
+    if (!map || !map.isStyleLoaded()) return;
+    const dark = darkTheme();
+    if (map.getLayer('voy-carto-basemap')) {
+      map.setPaintProperty('voy-carto-basemap', 'raster-brightness-min', dark ? 0.12 : 0);
+      map.setPaintProperty('voy-carto-basemap', 'raster-brightness-max', dark ? 0.58 : 1);
+      map.setPaintProperty('voy-carto-basemap', 'raster-saturation', dark ? -0.72 : 0);
+      map.setPaintProperty('voy-carto-basemap', 'raster-contrast', dark ? 0.14 : 0);
+    }
+    if (map.getLayer('voy-route-line')) map.setPaintProperty('voy-route-line', 'line-color', dark ? '#FF6847' : '#FF5A36');
+    if (map.getLayer('voy-points-circle')) {
+      map.setPaintProperty('voy-points-circle', 'circle-color', ['match', ['get', 'kind'], 'origin', dark ? '#F4F1E8' : '#0B0B0A', dark ? '#FF6847' : '#FF5A36']);
+      map.setPaintProperty('voy-points-circle', 'circle-stroke-color', dark ? '#141412' : '#FCFBF7');
+    }
+  }
+
   function failMap(): void {
     if (mapState === 'ready') return;
     mapState = 'fallback';
@@ -42,17 +66,9 @@
     const canvasRect = canvas.getBoundingClientRect();
     const hostStyle = getComputedStyle(container);
     const tolerance = 4;
-    return hostStyle.position === 'absolute'
-      && shellRect.width > 20
-      && shellRect.height > 20
-      && hostRect.width > 20
-      && hostRect.height > 20
-      && canvasRect.width > 20
-      && canvasRect.height > 20
-      && Math.abs(shellRect.width - hostRect.width) <= tolerance
-      && Math.abs(shellRect.height - hostRect.height) <= tolerance
-      && Math.abs(hostRect.width - canvasRect.width) <= tolerance
-      && Math.abs(hostRect.height - canvasRect.height) <= tolerance;
+    return hostStyle.position === 'absolute' && shellRect.width > 20 && shellRect.height > 20 && hostRect.width > 20 && hostRect.height > 20 && canvasRect.width > 20 && canvasRect.height > 20
+      && Math.abs(shellRect.width - hostRect.width) <= tolerance && Math.abs(shellRect.height - hostRect.height) <= tolerance
+      && Math.abs(hostRect.width - canvasRect.width) <= tolerance && Math.abs(hostRect.height - canvasRect.height) <= tolerance;
   }
 
   function sync(): void {
@@ -64,13 +80,14 @@
     const lineSource = map.getSource(sourceId) as import('maplibre-gl').GeoJSONSource | undefined;
     if (lineSource) lineSource.setData(lineData); else {
       map.addSource(sourceId, { type: 'geojson', data: lineData });
-      map.addLayer({ id: 'voy-route-line', type: 'line', source: sourceId, paint: { 'line-color': '#6d28d9', 'line-width': 5, 'line-opacity': 1 } });
+      map.addLayer({ id: 'voy-route-line', type: 'line', source: sourceId, paint: { 'line-color': darkTheme() ? '#FF6847' : '#FF5A36', 'line-width': 5, 'line-opacity': .94 } });
     }
     const pointSource = map.getSource(pointSourceId) as import('maplibre-gl').GeoJSONSource | undefined;
     if (pointSource) pointSource.setData(pointData); else {
       map.addSource(pointSourceId, { type: 'geojson', data: pointData });
-      map.addLayer({ id: 'voy-points-circle', type: 'circle', source: pointSourceId, paint: { 'circle-radius': 7, 'circle-color': ['match', ['get', 'kind'], 'origin', '#1565c0', '#c62828'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+      map.addLayer({ id: 'voy-points-circle', type: 'circle', source: pointSourceId, paint: { 'circle-radius': 7, 'circle-color': ['match', ['get', 'kind'], 'origin', darkTheme() ? '#F4F1E8' : '#0B0B0A', darkTheme() ? '#FF6847' : '#FF5A36'], 'circle-stroke-color': darkTheme() ? '#141412' : '#FCFBF7', 'circle-stroke-width': 2.5 } });
     }
+    applyMapTheme();
     overlayReady = points.length === 2 && (route?.source !== 'osrm_route' || Boolean(map.getLayer('voy-route-line')));
     if (points.length === 2) {
       const bounds = new maplibre.LngLatBounds();
@@ -85,6 +102,7 @@
     if (!map.isSourceLoaded(basemapSourceId) || !map.areTilesLoaded()) return;
     mapState = 'ready';
     if (readinessTimer) clearTimeout(readinessTimer);
+    applyMapTheme();
     sync();
   }
 
@@ -92,45 +110,32 @@
     if (!map || !shell) return;
     const rect = shell.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    if (Math.abs(rect.width - lastShellWidth) < 0.5 && Math.abs(rect.height - lastShellHeight) < 0.5 && hasRenderableGeometry()) {
-      markReadyIfRendered();
-      return;
-    }
-    lastShellWidth = rect.width;
-    lastShellHeight = rect.height;
+    if (Math.abs(rect.width - lastShellWidth) < .5 && Math.abs(rect.height - lastShellHeight) < .5 && hasRenderableGeometry()) { markReadyIfRendered(); return; }
+    lastShellWidth = rect.width; lastShellHeight = rect.height;
     cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(() => {
-      map?.resize();
-      requestAnimationFrame(() => {
-        markReadyIfRendered();
-        if (mapState === 'ready') sync();
-      });
-    });
+    resizeFrame = requestAnimationFrame(() => { map?.resize(); requestAnimationFrame(() => { markReadyIfRendered(); if (mapState === 'ready') sync(); }); });
   }
 
   onMount(() => {
     let disposed = false;
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    const themeListener = () => { if (!disposed) applyMapTheme(); };
+    addEventListener('voy-theme-change', themeListener);
+    media.addEventListener('change', themeListener);
     void (async () => {
       try {
         await import('maplibre-gl/dist/maplibre-gl.css');
         const library = await import('maplibre-gl');
         if (disposed) return;
         maplibre = library;
+        const dark = darkTheme();
         map = new library.Map({
-          container,
-          center: [-60.7087, -31.6256],
-          zoom: 12.4,
-          attributionControl: false,
-          style: {
-            version: 8,
-            sources: { [basemapSourceId]: { type: 'raster', tiles: basemapTiles, tileSize: 256, attribution: '© OpenStreetMap contributors · © CARTO' } },
-            layers: [{ id: 'voy-carto-basemap', type: 'raster', source: basemapSourceId }]
-          }
+          container, center: [-60.7087, -31.6256], zoom: 12.4, attributionControl: false,
+          style: { version: 8, sources: { [basemapSourceId]: { type: 'raster', tiles: basemapTiles, tileSize: 256, attribution: '© OpenStreetMap contributors · © CARTO' } }, layers: [{ id: 'voy-carto-basemap', type: 'raster', source: basemapSourceId, paint: { 'raster-brightness-min': dark ? .12 : 0, 'raster-brightness-max': dark ? .58 : 1, 'raster-saturation': dark ? -.72 : 0, 'raster-contrast': dark ? .14 : 0 } }] }
         });
-        resizeObserver = new ResizeObserver(() => { if (!disposed) resizeMapToShell(); });
-        resizeObserver.observe(shell);
+        resizeObserver = new ResizeObserver(() => { if (!disposed) resizeMapToShell(); }); resizeObserver.observe(shell);
         readinessTimer = setTimeout(() => { if (!disposed && mapState !== 'ready') failMap(); }, 12_000);
-        map.on('load', () => { if (!disposed) { resizeMapToShell(); sync(); markReadyIfRendered(); } });
+        map.on('load', () => { if (!disposed) { resizeMapToShell(); sync(); applyMapTheme(); markReadyIfRendered(); } });
         map.on('sourcedata', event => { if (!disposed && event.sourceId === basemapSourceId) markReadyIfRendered(); });
         map.on('idle', () => { if (!disposed) markReadyIfRendered(); });
         map.on('error', () => { if (!disposed && mapState !== 'ready') failMap(); });
@@ -138,23 +143,15 @@
       } catch { if (!disposed) failMap(); }
     })();
     return () => {
-      disposed = true;
-      if (readinessTimer) clearTimeout(readinessTimer);
-      resizeObserver?.disconnect();
-      resizeObserver = null;
-      cancelAnimationFrame(resizeFrame);
-      map?.remove();
-      map = null;
+      disposed = true; removeEventListener('voy-theme-change', themeListener); media.removeEventListener('change', themeListener);
+      if (readinessTimer) clearTimeout(readinessTimer); resizeObserver?.disconnect(); resizeObserver = null; cancelAnimationFrame(resizeFrame); map?.remove(); map = null;
     };
   });
-  $: {
-    const dependencies = [origin, destination, route, mapState];
-    if (dependencies[3] === 'ready') queueMicrotask(sync);
-  }
+  $: { const dependencies = [origin, destination, route, mapState]; if (dependencies[3] === 'ready') queueMicrotask(sync); }
 </script>
 <section class="map-shell" bind:this={shell} aria-label="Mapa del viaje" data-testid="map-shell" data-map-state={mapState} data-overlay-ready={overlayReady ? 'true' : 'false'}>
   <div class="voy-map-host" data-testid="map-host" bind:this={container}></div>
-  {#if mapState === 'loading'}<div class="map-placeholder">Cargando mapa…</div>{/if}
+  {#if mapState === 'loading'}<div class="map-placeholder">Cargando contexto del viaje…</div>{/if}
   {#if mapState === 'fallback'}<div class="map-placeholder" data-testid="map-fallback">El mapa base no está disponible. La comparación verificable sigue funcionando.</div>{/if}
   {#if mapState === 'ready'}<span class="map-credit">© OpenStreetMap · © CARTO</span>{/if}
   {#if route?.source === 'straight_line_estimate'}<p class="map-truth" data-testid="map-truth">Referencia en línea recta: no representa calles, ciclovías ni un recorrido.</p>{/if}
