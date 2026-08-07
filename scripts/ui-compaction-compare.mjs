@@ -17,14 +17,16 @@ await mkdir(join(out, 'after'), { recursive: true });
 const browser = await chromium.launch({ headless: true });
 
 async function capture(baseURL, stage, testCase, theme) {
-  const page = await browser.newPage({
+  const context = await browser.newContext({
     viewport: { width: testCase.width, height: testCase.height },
     isMobile: testCase.mobile,
     hasTouch: testCase.mobile,
+    serviceWorkers: 'block',
     userAgent: testCase.mobile
       ? 'Mozilla/5.0 (Linux; Android 13; SM-A225M) AppleWebKit/537.36 Chrome/150 Mobile Safari/537.36'
       : undefined
   });
+  const page = await context.newPage();
   await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="destination-search"]').waitFor({ state: 'visible' });
   await page.locator('[data-testid="origin-control"]').waitFor({ state: 'visible' });
@@ -65,7 +67,7 @@ async function capture(baseURL, stage, testCase, theme) {
   });
 
   await page.screenshot({ path: join(out, stage, `${testCase.name}-${theme}.png`), fullPage: true });
-  await page.close();
+  await context.close();
   return metrics;
 }
 
