@@ -1,0 +1,101 @@
+name: VOY post-release map/mobile hotfix candidate
+
+on:
+  push:
+    branches:
+      - hotfix/voy-post-release-map-mobile-ui-01
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-post-release-map-mobile-hotfix-candidate
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 1f1e1d3
+  EXPECTED_STABLE_VERSION_ID: 2ee28f09-1aa8-4250-bb2c-ba4684a07791
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  CONVERGENCE_INTERVAL_MS: '7000'
+  EVIDENCE_DIR: test-results/hotfix-map-mobile-candidate
+
+jobs:
+  candidate:
+    if: contains(github.event.head_commit.message, '[hotfix-candidate]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact hotfix head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact remote identity and production-write scope
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/hotfix/voy-post-release-map-mobile-ui-01 | awk '{print $1}')"
+          test -n "$remote_head"
+          test "$remote_head" = "$GITHUB_SHA"
+          git diff --check
+          printf '%s\n' "$remote_head" > /tmp/voy-hotfix-remote-head.txt
+
+      - name: Install pinned frozen toolchain and browser dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Validate exact hotfix and create zero-traffic candidate
+        run: bash scripts/run-hotfix-candidate.sh
+
+      - name: Build immutable evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          cp /tmp/voy-hotfix-remote-head.txt "$EVIDENCE_DIR/remote-head-at-preflight.txt" 2>/dev/null || true
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 \
+            | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload complete hotfix candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-post-release-map-mobile-hotfix-${{ github.run_id }}
+          path: test-results/hotfix-map-mobile-candidate
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Candidate summary
+        if: always()
+        run: |
+          {
+            echo '## VOY post-release map/mobile UI hotfix candidate'
+            echo
+            echo "- Exact source SHA: $GITHUB_SHA"
+            echo "- Production V8 stable: $EXPECTED_STABLE_VERSION_ID at 100%"
+            echo "- Hotfix candidate: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
+            echo "- Candidate deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Productive traffic changed: no'
+            if [ -f "$EVIDENCE_DIR/final-state.json" ]; then
+              echo '```json'
+              cat "$EVIDENCE_DIR/final-state.json"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
