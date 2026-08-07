@@ -6,12 +6,17 @@
   export let origin: Coordinates | null;
   export let destination: Coordinates | null;
   export let route: RouteResult | null;
+  let shell: HTMLElement;
   let container: HTMLDivElement;
   let map: import('maplibre-gl').Map | null = null;
   let maplibre: typeof import('maplibre-gl') | null = null;
   let mapState: 'loading' | 'ready' | 'fallback' = 'loading';
   let overlayReady = false;
   let readinessTimer: ReturnType<typeof setTimeout> | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+  let resizeFrame = 0;
+  let lastShellWidth = 0;
+  let lastShellHeight = 0;
   const sourceId = 'voy-route';
   const pointSourceId = 'voy-points';
   const basemapSourceId = 'voy-basemap';
@@ -27,8 +32,31 @@
     mapState = 'fallback';
     if (readinessTimer) clearTimeout(readinessTimer);
   }
+
+  function hasRenderableGeometry(): boolean {
+    if (!shell || !container) return false;
+    const canvas = container.querySelector('.maplibregl-canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) return false;
+    const shellRect = shell.getBoundingClientRect();
+    const hostRect = container.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const hostStyle = getComputedStyle(container);
+    const tolerance = 4;
+    return hostStyle.position === 'absolute'
+      && shellRect.width > 20
+      && shellRect.height > 20
+      && hostRect.width > 20
+      && hostRect.height > 20
+      && canvasRect.width > 20
+      && canvasRect.height > 20
+      && Math.abs(shellRect.width - hostRect.width) <= tolerance
+      && Math.abs(shellRect.height - hostRect.height) <= tolerance
+      && Math.abs(hostRect.width - canvasRect.width) <= tolerance
+      && Math.abs(hostRect.height - canvasRect.height) <= tolerance;
+  }
+
   function sync(): void {
-    if (!map || !maplibre || !map.isStyleLoaded()) return;
+    if (!map || !maplibre || !map.isStyleLoaded() || !hasRenderableGeometry()) return;
     const coordinates = route?.source === 'osrm_route' ? route.geometry.map(point => [point.lon, point.lat]) : [];
     const lineData: FeatureCollection = { type: 'FeatureCollection', features: coordinates.length >= 2 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } }] : [] };
     const points = [origin, destination].filter((point): point is Coordinates => Boolean(point));
@@ -36,7 +64,7 @@
     const lineSource = map.getSource(sourceId) as import('maplibre-gl').GeoJSONSource | undefined;
     if (lineSource) lineSource.setData(lineData); else {
       map.addSource(sourceId, { type: 'geojson', data: lineData });
-      map.addLayer({ id: 'voy-route-line', type: 'line', source: sourceId, paint: { 'line-color': '#111827', 'line-width': 4, 'line-opacity': 0.85 } });
+      map.addLayer({ id: 'voy-route-line', type: 'line', source: sourceId, paint: { 'line-color': '#6d28d9', 'line-width': 5, 'line-opacity': 1 } });
     }
     const pointSource = map.getSource(pointSourceId) as import('maplibre-gl').GeoJSONSource | undefined;
     if (pointSource) pointSource.setData(pointData); else {
@@ -51,13 +79,35 @@
       map.fitBounds(bounds, { padding: { top: 54, left: 32, right: 32, bottom: 96 }, duration: reducedMotion ? 0 : 250, maxZoom: 15 });
     }
   }
+
   function markReadyIfRendered(): void {
-    if (!map || mapState === 'fallback' || !map.isStyleLoaded()) return;
+    if (!map || mapState === 'fallback' || !map.isStyleLoaded() || !hasRenderableGeometry()) return;
     if (!map.isSourceLoaded(basemapSourceId) || !map.areTilesLoaded()) return;
     mapState = 'ready';
     if (readinessTimer) clearTimeout(readinessTimer);
     sync();
   }
+
+  function resizeMapToShell(): void {
+    if (!map || !shell) return;
+    const rect = shell.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    if (Math.abs(rect.width - lastShellWidth) < 0.5 && Math.abs(rect.height - lastShellHeight) < 0.5 && hasRenderableGeometry()) {
+      markReadyIfRendered();
+      return;
+    }
+    lastShellWidth = rect.width;
+    lastShellHeight = rect.height;
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      map?.resize();
+      requestAnimationFrame(() => {
+        markReadyIfRendered();
+        if (mapState === 'ready') sync();
+      });
+    });
+  }
+
   onMount(() => {
     let disposed = false;
     void (async () => {
@@ -77,16 +127,22 @@
             layers: [{ id: 'voy-carto-basemap', type: 'raster', source: basemapSourceId }]
           }
         });
+        resizeObserver = new ResizeObserver(() => { if (!disposed) resizeMapToShell(); });
+        resizeObserver.observe(shell);
         readinessTimer = setTimeout(() => { if (!disposed && mapState !== 'ready') failMap(); }, 12_000);
-        map.on('load', () => { if (!disposed) { sync(); markReadyIfRendered(); } });
+        map.on('load', () => { if (!disposed) { resizeMapToShell(); sync(); markReadyIfRendered(); } });
         map.on('sourcedata', event => { if (!disposed && event.sourceId === basemapSourceId) markReadyIfRendered(); });
         map.on('idle', () => { if (!disposed) markReadyIfRendered(); });
         map.on('error', () => { if (!disposed && mapState !== 'ready') failMap(); });
+        requestAnimationFrame(() => { if (!disposed) resizeMapToShell(); });
       } catch { if (!disposed) failMap(); }
     })();
     return () => {
       disposed = true;
       if (readinessTimer) clearTimeout(readinessTimer);
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      cancelAnimationFrame(resizeFrame);
       map?.remove();
       map = null;
     };
@@ -96,8 +152,8 @@
     if (dependencies[3] === 'ready') queueMicrotask(sync);
   }
 </script>
-<section class="map-shell" aria-label="Mapa del viaje" data-testid="map-shell" data-map-state={mapState} data-overlay-ready={overlayReady ? 'true' : 'false'}>
-  <div class="map" bind:this={container}></div>
+<section class="map-shell" bind:this={shell} aria-label="Mapa del viaje" data-testid="map-shell" data-map-state={mapState} data-overlay-ready={overlayReady ? 'true' : 'false'}>
+  <div class="voy-map-host" data-testid="map-host" bind:this={container}></div>
   {#if mapState === 'loading'}<div class="map-placeholder">Cargando mapa…</div>{/if}
   {#if mapState === 'fallback'}<div class="map-placeholder" data-testid="map-fallback">El mapa base no está disponible. La comparación verificable sigue funcionando.</div>{/if}
   {#if mapState === 'ready'}<span class="map-credit">© OpenStreetMap · © CARTO</span>{/if}
