@@ -233,18 +233,49 @@ test('rotation keeps the primary decision reachable', async ({ page }, testInfo)
 });
 
 test('stale origin requests cannot overwrite the latest choice', async ({ page }) => {
+  let releaseFirst!: () => void;
+  let releaseSecond!: () => void;
+  let markFirstSeen!: () => void;
+  let markSecondSeen!: () => void;
+  let markFirstSettled!: () => void;
+  const firstGate = new Promise<void>(resolve => { releaseFirst = resolve; });
+  const secondGate = new Promise<void>(resolve => { releaseSecond = resolve; });
+  const firstSeen = new Promise<void>(resolve => { markFirstSeen = resolve; });
+  const secondSeen = new Promise<void>(resolve => { markSecondSeen = resolve; });
+  const firstSettled = new Promise<void>(resolve => { markFirstSettled = resolve; });
+
   await page.route('**/api/geocode?*', async route => {
     const query = new URL(route.request().url()).searchParams.get('q') || '';
-    if (query === 'Primero') await new Promise(resolve => setTimeout(resolve, 400));
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: query === 'Primero' ? -31.63 : -31.64, lon: -60.7 }] }) }).catch(() => undefined);
+    if (query === 'Primero') {
+      markFirstSeen();
+      await firstGate;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: -31.63, lon: -60.7 }] }) }).catch(() => undefined);
+      markFirstSettled();
+      return;
+    }
+    if (query === 'Segundo') {
+      markSecondSeen();
+      await secondGate;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: -31.64, lon: -60.7 }] }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) });
   });
+
   await page.goto('/');
   await page.getByTestId('origin-input').fill('Primero');
   await page.getByTestId('origin-apply').click();
+  await firstSeen;
+
   await page.getByTestId('origin-input').fill('Segundo');
-  await page.getByTestId('origin-apply').click();
+  const secondClick = page.getByTestId('origin-apply').click();
+  await secondSeen;
+  releaseSecond();
+  await secondClick;
   await expect(page.getByTestId('origin-control')).toContainText('Segundo');
-  await page.waitForTimeout(500);
+
+  releaseFirst();
+  await firstSettled;
   await expect(page.getByTestId('origin-control')).not.toContainText('Primero');
 });
 
