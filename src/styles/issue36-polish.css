@@ -1,14 +1,16 @@
 /* Issue #36 — evidence-driven polish passes. Loaded after global.css. */
-button{min-height:48px}
+button{min-height:var(--voy-control-m)}
 .brand{grid-template-columns:auto minmax(0,1fr) auto;min-width:0}
 .brand-context,.journey-layout,.planner,.journey-builder,.search,.origin,.sheet{min-width:0}
-.theme-toggle{height:48px;min-height:48px}
-.origin .location,.origin-edit{height:48px;min-height:48px}
-.modes{max-width:100%;min-width:0;overscroll-behavior-inline:contain;scroll-snap-type:x proximity}
-.modes button{min-width:48px;min-height:48px;padding-inline:11px;scroll-snap-align:start}
-.assistant-trigger{min-height:48px}
-footer a,.back{min-width:48px;min-height:48px}
-.methodology summary{min-height:48px}
+.theme-toggle{height:var(--voy-control-m);min-height:var(--voy-control-m)}
+.origin .location,.origin-edit{height:var(--voy-control-m);min-height:var(--voy-control-m)}
+.modes-frame{position:relative;max-width:100%;min-width:0}
+.modes{max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity;scroll-padding-inline-end:var(--voy-space-12);padding-right:var(--voy-space-12)}
+.modes button{min-width:var(--voy-control-m);min-height:var(--voy-control-m);padding-inline:11px;scroll-snap-align:start}
+.modes-overflow-cue{position:absolute;z-index:var(--voy-z-marker);right:0;top:0;bottom:var(--voy-border-width);width:var(--voy-space-12);display:flex;align-items:center;justify-content:flex-end;padding-right:var(--voy-space-2);pointer-events:none;color:var(--voy-signal);font-size:var(--voy-type-label);font-weight:var(--voy-weight-heavy);background:linear-gradient(90deg,transparent 0%,var(--voy-surface) 58%)}
+.assistant-trigger{min-height:var(--voy-control-m)}
+footer a,.back{min-width:var(--voy-control-m);min-height:var(--voy-control-m)}
+.methodology summary{min-height:var(--voy-control-m)}
 .sheet{margin-top:-22px}
 
 /* Pass 2: let narrow grids shrink their form controls instead of honoring min-content width. */
@@ -18,25 +20,26 @@ footer a,.back{min-width:48px;min-height:48px}
 
 /* Once destination is chosen, the functional hero yields space back to the map/decision. */
 .search.compact{padding-top:9px;padding-bottom:7px}
-.search.compact label{font-size:11px;line-height:16px;letter-spacing:.08em;text-transform:uppercase;color:var(--voy-muted);margin-bottom:1px}
-.search.compact .input-wrap input{min-height:48px;font-size:16px}
-.search.compact .status{margin-top:1px;min-height:15px;line-height:15px}
+.search.compact label{font-size:var(--voy-type-eyebrow);line-height:var(--voy-leading-16);letter-spacing:var(--voy-tracking-label);text-transform:uppercase;color:var(--voy-muted);margin-bottom:1px}
+.search.compact .input-wrap input{min-height:var(--voy-control-m);font-size:var(--voy-type-body)}
+.search.compact .status{margin-top:1px;min-height:var(--voy-leading-15);line-height:var(--voy-leading-15)}
 .search.compact::before{top:47px}
 
 @media(min-width:760px){
-  .modes{overflow-x:hidden;justify-content:space-between;gap:0;padding-inline:0}
-  .modes button{min-width:48px;padding-inline:8px;font-size:13px}
+  .modes{overflow-x:hidden;justify-content:space-between;gap:0;padding-inline:0;scroll-padding-inline-end:0}
+  .modes button{min-width:var(--voy-control-m);padding-inline:8px;font-size:var(--voy-type-label)}
+  .modes-overflow-cue{display:none}
 }
 
 @media(max-width:380px){
   .brand{gap:10px}
-  .theme-toggle{width:48px;min-width:48px;padding:0;gap:0}
+  .theme-toggle{width:var(--voy-control-m);min-width:var(--voy-control-m);padding:0;gap:0}
   .theme-toggle span:last-child{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-  .planner-promise{font-size:21px;max-width:21ch}
+  .planner-promise{font-size:var(--voy-type-title-sm);max-width:21ch}
   .manual{grid-template-columns:minmax(0,1fr) 76px}
   .modes button{padding-inline:10px}
   .provider{grid-template-columns:minmax(0,1fr) minmax(92px,auto);gap:10px}
-  .provider-meta>strong{font-size:30px}
+  .provider-meta>strong{font-size:var(--voy-type-display-sm)}
   .sheet header{gap:10px}
 }
 
