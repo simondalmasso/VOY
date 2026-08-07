@@ -73,8 +73,8 @@ test('persist blocked-candidate map host and canvas geometry', async ({ page }, 
     });
     let webgl2 = false;
     let webgl = false;
-    try { webgl2 = canvas.getContext('webgl2') !== null; } catch {}
-    try { webgl = canvas.getContext('webgl') !== null || canvas.getContext('experimental-webgl') !== null; } catch {}
+    try { webgl2 = canvas.getContext('webgl2') !== null; } catch { webgl2 = false; }
+    try { webgl = canvas.getContext('webgl') !== null || canvas.getContext('experimental-webgl') !== null; } catch { webgl = false; }
     return {
       subject: {
         blockedSourceSha: 'f09d849497490b2a544808ab8ad9c38b35199e39',
