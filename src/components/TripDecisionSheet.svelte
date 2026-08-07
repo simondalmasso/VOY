@@ -7,6 +7,11 @@
   export let options: ProviderOptionModel[];
   export let onChoose: (option: ProviderOptionModel) => void;
   export let destination: Destination;
+  const months = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+  $: verifiedDate = destination.verifiedAt || '';
+  $: verifiedLabel = /^\d{4}-\d{2}-\d{2}$/.test(verifiedDate)
+    ? `${verifiedDate.slice(8,10)} ${months[Number(verifiedDate.slice(5,7)) - 1]}`
+    : 'FECHA NO DISPONIBLE';
 </script>
 <section class="sheet" aria-labelledby="decision-title" data-testid="trip-sheet">
   <div class="grab" aria-hidden="true"></div>
@@ -18,11 +23,16 @@
       <p><strong>Sin cálculo</strong><span>datos insuficientes</span></p>
     {/if}
   </header>
-  <p class="ranking-note" data-testid="destination-provenance">
-    Destino autoritativo · {destination.address} · {destination.provenance?.issuer || 'Fuente institucional'} · verificado {destination.verifiedAt || 'sin fecha'}.
+  <p class="ranking-note trust-line" data-testid="destination-provenance">
+    <span aria-hidden="true">✓</span>
+    <span>Verificado · {destination.provenance?.issuer || 'Fuente institucional'} · <time datetime={verifiedDate}>{verifiedLabel}<span class="sr-only"> · {verifiedDate}</span></time></span>
   </p>
-  <p class="ranking-note">Orden determinista por modo seleccionado. Las apps sin precio comparable no reciben un valor inventado.</p>
+  <p class="ranking-note destination-address">{destination.address}</p>
   <div class="options" role="list" aria-live="polite">
     {#each options as option (option.id)}<ProviderOption {option} {onChoose} />{/each}
   </div>
+  <details class="methodology">
+    <summary>Cómo comparamos</summary>
+    <p>El orden es determinista según el modo elegido. Si un precio, tiempo o dato no puede verificarse, VOY no lo inventa.</p>
+  </details>
 </section>
