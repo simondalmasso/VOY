@@ -1,4 +1,4 @@
-# qa-stage: visual-pass-1
+# qa-stage: visual-pass-2
 name: VOY Issue36 Visual QA
 
 on:
@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  VOY_QA_STAGE: visual-pass-1
+  VOY_QA_STAGE: visual-pass-2
   VOY_BASE_URL: http://127.0.0.1:8787
   VOY_EVIDENCE_DIR: test-results/issue36-visual
 
