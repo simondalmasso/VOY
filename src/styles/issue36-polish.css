@@ -1,0 +1,37 @@
+/* Issue #36 — evidence-driven polish pass 1. Loaded after global.css. */
+button{min-height:48px}
+.brand{grid-template-columns:auto minmax(0,1fr) auto;min-width:0}
+.brand-context,.journey-layout,.planner,.journey-builder,.search,.origin,.sheet{min-width:0}
+.theme-toggle{height:48px;min-height:48px}
+.origin .location,.origin-edit{height:48px;min-height:48px}
+.modes{max-width:100%;min-width:0;overscroll-behavior-inline:contain;scroll-snap-type:x proximity}
+.modes button{min-height:48px;padding-inline:11px;scroll-snap-align:start}
+.assistant-trigger{min-height:48px}
+footer a,.back{min-width:48px;min-height:48px}
+.methodology summary{min-height:48px}
+.sheet{margin-top:-22px}
+
+@media(min-width:760px){
+  .modes{overflow-x:hidden;justify-content:space-between;gap:0;padding-inline:0}
+  .modes button{padding-inline:9px;font-size:13px}
+}
+
+@media(max-width:380px){
+  .brand{gap:10px}
+  .theme-toggle{width:48px;min-width:48px;padding:0;gap:0}
+  .theme-toggle span:last-child{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .planner-promise{font-size:21px;max-width:21ch}
+  .manual{grid-template-columns:minmax(0,1fr) 76px}
+  .manual input{min-width:0}
+  .modes button{padding-inline:10px}
+  .provider{grid-template-columns:minmax(0,1fr) minmax(92px,auto);gap:10px}
+  .provider-meta>strong{font-size:30px}
+  .sheet header{gap:10px}
+}
+
+@media(max-width:360px){
+  .app-shell{padding-left:14px;padding-right:14px}
+  .search{padding-left:14px;padding-right:14px}
+  .origin{padding-right:14px}
+  .sheet{margin-left:-2px;margin-right:-2px;padding-left:15px;padding-right:15px}
+}
