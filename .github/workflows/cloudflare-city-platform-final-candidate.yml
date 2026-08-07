@@ -1,10 +1,10 @@
-name: VOY City Platform Exact Final Candidate
+name: VOY Issue34 Mobility Trust Exact Candidate
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - feat/voy-city-platform-v1
+      - feat/issue34-mobility-trust-foundation-01
     paths:
       - .github/workflows/cloudflare-city-platform-final-candidate.yml
 
@@ -12,84 +12,108 @@ permissions:
   contents: read
 
 concurrency:
-  group: voy-city-platform-exact-final-candidate
+  group: voy-issue34-mobility-trust-candidate
   cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 403ad4f
+  EXPECTED_STABLE_VERSION_ID: 2f86d708-b905-4c33-b1fe-d881467e8542
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  CONVERGENCE_INTERVAL_MS: '7000'
+  EVIDENCE_DIR: test-results/issue34-mobility-trust-candidate
+  VOY_REAL_BASEMAP: '1'
 
 jobs:
   candidate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 90
     env:
-      WORKER_NAME: voy-app
-      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
-      EXPECTED_PRODUCTION_VERSION: V7.8.0
-      EXPECTED_PRODUCTION_HASH: 4a8b91e
-      EXPECTED_STABLE_VERSION_ID: 9508254e-6bbe-48ee-a126-d57d405b70a6
-      EXPECTED_FAILED_CANDIDATE_VERSION_ID: aec70bcf-d02c-416a-b9f5-be4d83b34b32
-      EXPECTED_SOURCE_ROOT: ${{ github.workspace }}
-      CONVERGENCE_INTERVAL_MS: 7000
-      EVIDENCE_DIR: test-results/exact-final-candidate
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
     steps:
-      - name: Checkout exact repair head
+      - name: Checkout exact Issue 34 head
         uses: actions/checkout@v4
         with:
-          ref: feat/voy-city-platform-v1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Install frozen toolchain
+      - name: Verify exact remote identity
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/feat/issue34-mobility-trust-foundation-01 | awk '{print $1}')"
+          test -n "$remote_head"
+          test "$remote_head" = "$GITHUB_SHA"
+          git diff --check
+          mkdir -p "$EVIDENCE_DIR"
+          printf '%s\n' "$remote_head" > "$EVIDENCE_DIR/remote-head-at-preflight.txt"
+
+      - name: Install pinned frozen toolchain and browser dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng zip
           npm install --global bun@1.3.14 wrangler@4.112.0
-          test "$(bun --version)" = "1.3.14"
-          test "$(wrangler --version | awk '{print $1}')" = "4.112.0"
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
           bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
 
-      - name: Install Chromium 1.61.1
-        run: npx --yes --package=@playwright/test@1.61.1 playwright install --with-deps chromium
+      - name: Canonical pinned GTFS validator gate
+        run: |
+          set -euo pipefail
+          bash -n scripts/make-gtfs-fixture.sh scripts/run-gtfs-validator-gate.sh
+          node --check scripts/evaluate-gtfs-report.mjs scripts/mobility-trust-candidate-gate.mjs
+          bash scripts/make-gtfs-fixture.sh /tmp/voy-issue34-fixture.zip | tee "$EVIDENCE_DIR/gtfs-fixture.sha256"
+          bash scripts/run-gtfs-validator-gate.sh /tmp/voy-issue34-fixture.zip "$EVIDENCE_DIR/gtfs-validator"
 
-      - name: Validate and create exact repaired candidate at zero traffic
-        run: bash scripts/run-city-platform-repaired-candidate.sh
+      - name: Validate exact head and create zero-traffic candidate
+        run: bash scripts/run-hotfix-candidate.sh
 
-      - name: Build evidence manifest
+      - name: Validate mobility trust candidate contract
+        run: |
+          set -euo pipefail
+          CANDIDATE_VERSION_ID="$(node -p "JSON.parse(require('fs').readFileSync('$EVIDENCE_DIR/final-state.json','utf8')).candidate_version_id")"
+          export CANDIDATE_VERSION_ID
+          node scripts/mobility-trust-candidate-gate.mjs
+
+      - name: Build immutable evidence manifest
         if: always()
         run: |
           set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
           find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 \
-            | sort -z | xargs -0 sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+            | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
           sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
 
-      - name: Upload exact repaired candidate evidence
+      - name: Upload Issue 34 candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: voy-city-platform-repaired-candidate-${{ github.run_id }}
-          path: |
-            test-results/exact-final-candidate
-            test-results/evidence
-            playwright-report
+          name: voy-issue34-mobility-trust-${{ github.run_id }}
+          path: test-results/issue34-mobility-trust-candidate
           if-no-files-found: error
           retention-days: 30
+          compression-level: 6
 
       - name: Candidate summary
         if: always()
         run: |
           {
-            echo '## VOY City Platform repaired exact-head candidate'
+            echo '## VOY Issue #34 — Mobility Trust Milestone A candidate'
             echo
             echo "- Exact source SHA: $GITHUB_SHA"
-            echo "- Stable version: ${EXPECTED_STABLE_VERSION_ID} at 100%"
-            echo "- New candidate version: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
-            echo "- Deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
-            echo '- Required assets: 13'
-            echo '- Required consecutive rounds: 20'
-            echo '- Minimum convergence duration: 120 seconds'
+            echo "- Stable production: $EXPECTED_STABLE_VERSION_ID at 100%"
+            echo "- Candidate version: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
+            echo "- Candidate deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Santa Fe bus activation: OFF'
+            echo '- Mobility Database: discovery-only'
+            echo '- GTFS validator: v8.0.1 pinned by SHA-256'
             echo '- Production promoted: no'
-            echo '- Additional rollback: no'
             if [ -f "$EVIDENCE_DIR/final-state.json" ]; then
               echo '```json'
               cat "$EVIDENCE_DIR/final-state.json"
