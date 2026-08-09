@@ -96,17 +96,17 @@
       manualOriginOpen = false;
       return true;
     }
-    const collapsed = nextCollapsedSnap(sheetSnap);
-    if (routeReady && collapsed) {
-      sheetSnap = collapsed;
-      return true;
-    }
     if (action) {
       action = null;
       return true;
     }
     if (voiceOpen) {
       voiceOpen = false;
+      return true;
+    }
+    const collapsed = nextCollapsedSnap(sheetSnap);
+    if (routeReady && collapsed) {
+      sheetSnap = collapsed;
       return true;
     }
     return false;
