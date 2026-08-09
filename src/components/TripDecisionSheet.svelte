@@ -16,6 +16,7 @@
   let dragging = false;
   let dragStart = 0;
   let dragOffset = 0;
+  let suppressClick = false;
 
   $: verifiedDate = destination.verifiedAt || '';
   $: verifiedLabel = /^\d{4}-\d{2}-\d{2}$/.test(verifiedDate)
@@ -32,12 +33,17 @@
   }
 
   function cycle(): void {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     if (snap === 'expanded') collapse();
     else expand();
   }
 
   function startDrag(event: PointerEvent): void {
     dragging = true;
+    suppressClick = false;
     dragStart = event.clientY;
     dragOffset = 0;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
@@ -53,6 +59,7 @@
     const delta = dragOffset;
     dragging = false;
     dragOffset = 0;
+    if (Math.abs(delta) >= 8) suppressClick = true;
     if (delta <= -42) expand();
     else if (delta >= 42) collapse();
   }
