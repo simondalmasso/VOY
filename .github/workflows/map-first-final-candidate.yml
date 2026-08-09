@@ -45,12 +45,13 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/map-first-interaction-01 | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          test "$(cat .map-first-candidate-ready)" = 'MAP_FIRST_FINAL_READY_5229384435'
+          test "$(cat .map-first-candidate-ready)" = 'MAP_FIRST_FINAL_READY_5229384435_R2'
           git diff --check
           mkdir -p "$EVIDENCE_DIR"
           printf '%s\n' "$remote_head" > "$EVIDENCE_DIR/exact-head.txt"
           printf '%s\n' 'PRIOR_AUD_PASS=5228862173' > "$EVIDENCE_DIR/authority.txt"
           printf '%s\n' 'AUD_TARGETED_CORRECTION=5229384435' >> "$EVIDENCE_DIR/authority.txt"
+          printf '%s\n' 'AUD_RESUME_GATE=5229525690' >> "$EVIDENCE_DIR/authority.txt"
           printf '%s\n' 'PRODUCTION_PROMOTION_AUTHORIZED=NO' >> "$EVIDENCE_DIR/authority.txt"
           printf '%s\n' 'MERGE_AUTHORIZED=NO' >> "$EVIDENCE_DIR/authority.txt"
 
