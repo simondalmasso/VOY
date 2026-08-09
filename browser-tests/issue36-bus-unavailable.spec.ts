@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
-const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const mobileBusProjects = new Set(['mobile-360x800', 'mobile-360x780', 'mobile-390x844', 'mobile-412x915']);
 const terminal = {
   canonicalId: 'santafe:landmark:terminal-omnibus',
@@ -44,8 +44,13 @@ async function deterministicTripApis(page: Page): Promise<{ routeRequests: strin
 }
 
 async function planTrip(page: Page): Promise<void> {
-  await page.getByTestId('origin-input').fill('Origen BUS');
-  await page.getByTestId('origin-apply').click();
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
+  await page.getByTestId('origin-manual-trigger').click();
+  const originInput = page.getByTestId('origin-input');
+  await expect(originInput).toBeFocused();
+  await originInput.fill('Origen BUS');
+  await originInput.press('Enter');
   await expect(page.getByTestId('origin-control')).toContainText('Plaza 25 de Mayo');
   await page.getByTestId('destination-input').fill('Terminal');
   const destination = page.getByTestId('destination-result-verified').first();
