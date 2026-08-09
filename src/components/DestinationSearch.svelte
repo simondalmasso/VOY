@@ -2,52 +2,110 @@
   import { onDestroy } from 'svelte';
   import type { Destination } from '../features/destination/destination.types';
   import { searchDestinations } from '../features/destination/destination.service';
+
   export let onSelect: (destination: Destination) => void;
+  export let dismissToken = 0;
+  export let onFocusState: (focused: boolean) => void = () => undefined;
+  export let onResultsState: (open: boolean) => void = () => undefined;
+
   let query = '';
   let results: Destination[] = [];
   let status = '';
   let selected = false;
   let controller: AbortController | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let input: HTMLInputElement;
+  let seenDismissToken = dismissToken;
 
-  onDestroy(() => { controller?.abort(); if (timer) clearTimeout(timer); });
+  onDestroy(() => {
+    controller?.abort();
+    if (timer) clearTimeout(timer);
+  });
+
+  $: if (dismissToken !== seenDismissToken) {
+    seenDismissToken = dismissToken;
+    results = [];
+    onResultsState(false);
+    onFocusState(false);
+    input?.blur();
+  }
+
+  function closeResults(keepFocus = true): void {
+    results = [];
+    onResultsState(false);
+    if (!keepFocus) {
+      onFocusState(false);
+      input?.blur();
+    }
+  }
+
   function scheduleSearch(): void {
     selected = false;
     if (timer) clearTimeout(timer);
     controller?.abort();
-    if (query.trim().length < 2) { results = []; status = ''; return; }
+    if (query.trim().length < 2) {
+      results = [];
+      status = '';
+      onResultsState(false);
+      return;
+    }
     status = 'Buscando…';
     timer = setTimeout(async () => {
       controller = new AbortController();
       try {
         results = await searchDestinations(query, controller.signal);
+        onResultsState(results.length > 0);
         status = results.length ? `${results.length} resultados` : 'No encontramos un resultado dentro de la cobertura.';
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) status = 'No pudimos completar la búsqueda. Probá otra vez.';
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          results = [];
+          onResultsState(false);
+          status = 'No pudimos completar la búsqueda. Probá otra vez.';
+        }
       }
     }, 220);
   }
+
   function choose(item: Destination): void {
     if (!item.operational || !item.verified || item.confidence !== 'authoritative') {
       status = 'Ese resultado no tiene procedencia suficiente para calcular un viaje.';
       return;
     }
     query = item.name;
-    results = [];
     selected = true;
     status = `Destino verificado: ${item.name}`;
+    closeResults(false);
     onSelect(item);
   }
+
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') closeResults(false);
+  }
 </script>
-<section class="search" class:compact={selected} aria-labelledby="destination-title" data-testid="destination-search" data-selected={selected ? 'true' : 'false'}>
+
+<section class="search" class:compact={selected} aria-labelledby="destination-title" data-testid="destination-search" data-selected={selected ? 'true' : 'false'} data-results-open={results.length ? 'true' : 'false'}>
   <label id="destination-title" for="destination-input">¿A dónde vas?</label>
   <div class="input-wrap">
     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"/></svg>
-    <input id="destination-input" autocomplete="street-address" inputmode="search" bind:value={query} on:input={scheduleSearch} placeholder="Lugar o dirección" data-testid="destination-input" />
+    <input
+      id="destination-input"
+      bind:this={input}
+      autocomplete="street-address"
+      inputmode="search"
+      bind:value={query}
+      on:input={scheduleSearch}
+      on:focus={() => onFocusState(true)}
+      on:blur={() => onFocusState(false)}
+      on:keydown={handleKeydown}
+      placeholder="Lugar o dirección"
+      data-testid="destination-input"
+      aria-expanded={results.length > 0}
+      aria-controls="destination-results"
+    />
   </div>
   <p class="status" aria-live="polite">{status}</p>
   {#if results.length}
-    <ul class="results" aria-label="Resultados de destino" data-testid="destination-results">
+    <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results">
       {#each results as item (item.id)}
         <li>
           <button type="button" disabled={!item.operational} aria-disabled={!item.operational} on:click={() => choose(item)} data-testid={`destination-result-${item.operational ? 'verified' : 'unverified'}`}>
