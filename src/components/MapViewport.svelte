@@ -3,9 +3,14 @@
   import type { FeatureCollection } from 'geojson';
   import type { Coordinates } from '../core/coordinates';
   import type { RouteResult } from '../features/trip/trip.types';
+  import type { MapPadding } from '../app/interaction';
+
   export let origin: Coordinates | null;
   export let destination: Coordinates | null;
   export let route: RouteResult | null;
+  export let cameraPadding: MapPadding = { top: 54, left: 32, right: 32, bottom: 96 };
+  export let interactionEnabled = true;
+
   let shell: HTMLElement;
   let container: HTMLDivElement;
   let map: import('maplibre-gl').Map | null = null;
@@ -17,6 +22,8 @@
   let resizeFrame = 0;
   let lastShellWidth = 0;
   let lastShellHeight = 0;
+  let lastFitSignature = '';
+  let cameraFitCount = 0;
   const sourceId = 'voy-route';
   const pointSourceId = 'voy-points';
   const basemapSourceId = 'voy-basemap';
@@ -51,6 +58,25 @@
     }
   }
 
+  function syncInteraction(): void {
+    if (!map) return;
+    if (interactionEnabled) {
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+      map.boxZoom.enable();
+      map.keyboard.enable();
+      map.doubleClickZoom.enable();
+      map.touchZoomRotate.enable();
+    } else {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.boxZoom.disable();
+      map.keyboard.disable();
+      map.doubleClickZoom.disable();
+      map.touchZoomRotate.disable();
+    }
+  }
+
   function failMap(): void {
     if (mapState === 'ready') return;
     mapState = 'fallback';
@@ -71,6 +97,29 @@
       && Math.abs(hostRect.width - canvasRect.width) <= tolerance && Math.abs(hostRect.height - canvasRect.height) <= tolerance;
   }
 
+  function normalizedPadding(): MapPadding {
+    if (!shell) return cameraPadding;
+    const rect = shell.getBoundingClientRect();
+    const verticalBudget = Math.max(80, rect.height - 80);
+    const horizontalBudget = Math.max(80, rect.width - 80);
+    const verticalTotal = cameraPadding.top + cameraPadding.bottom;
+    const horizontalTotal = cameraPadding.left + cameraPadding.right;
+    const verticalScale = verticalTotal > verticalBudget ? verticalBudget / verticalTotal : 1;
+    const horizontalScale = horizontalTotal > horizontalBudget ? horizontalBudget / horizontalTotal : 1;
+    return {
+      top: Math.round(cameraPadding.top * verticalScale),
+      bottom: Math.round(cameraPadding.bottom * verticalScale),
+      left: Math.round(cameraPadding.left * horizontalScale),
+      right: Math.round(cameraPadding.right * horizontalScale)
+    };
+  }
+
+  function fitSignature(points: Coordinates[], padding: MapPadding): string {
+    const pointKey = points.map(point => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join('|');
+    const routeKey = `${route?.source || 'none'}:${route?.geometry?.length || 0}`;
+    return `${pointKey}:${routeKey}:${padding.top},${padding.right},${padding.bottom},${padding.left}`;
+  }
+
   function sync(): void {
     if (!map || !maplibre || !map.isStyleLoaded() || !hasRenderableGeometry()) return;
     const coordinates = route?.source === 'osrm_route' ? route.geometry.map(point => [point.lon, point.lat]) : [];
@@ -88,12 +137,19 @@
       map.addLayer({ id: 'voy-points-circle', type: 'circle', source: pointSourceId, paint: { 'circle-radius': 7, 'circle-color': ['match', ['get', 'kind'], 'origin', darkTheme() ? '#F4F1E8' : '#0B0B0A', darkTheme() ? '#FF6847' : '#FF5A36'], 'circle-stroke-color': darkTheme() ? '#141412' : '#FCFBF7', 'circle-stroke-width': 2.5 } });
     }
     applyMapTheme();
+    syncInteraction();
     overlayReady = points.length === 2 && (route?.source !== 'osrm_route' || Boolean(map.getLayer('voy-route-line')));
     if (points.length === 2) {
-      const bounds = new maplibre.LngLatBounds();
-      for (const point of points) bounds.extend([point.lon, point.lat]);
-      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      map.fitBounds(bounds, { padding: { top: 54, left: 32, right: 32, bottom: 96 }, duration: reducedMotion ? 0 : 250, maxZoom: 15 });
+      const padding = normalizedPadding();
+      const signature = fitSignature(points, padding);
+      if (signature !== lastFitSignature) {
+        lastFitSignature = signature;
+        const bounds = new maplibre.LngLatBounds();
+        for (const point of points) bounds.extend([point.lon, point.lat]);
+        const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        cameraFitCount += 1;
+        map.fitBounds(bounds, { padding, duration: reducedMotion ? 0 : 220, maxZoom: 15 });
+      }
     }
   }
 
@@ -103,6 +159,7 @@
     mapState = 'ready';
     if (readinessTimer) clearTimeout(readinessTimer);
     applyMapTheme();
+    syncInteraction();
     sync();
   }
 
@@ -111,7 +168,8 @@
     const rect = shell.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     if (Math.abs(rect.width - lastShellWidth) < .5 && Math.abs(rect.height - lastShellHeight) < .5 && hasRenderableGeometry()) { markReadyIfRendered(); return; }
-    lastShellWidth = rect.width; lastShellHeight = rect.height;
+    lastShellWidth = rect.width;
+    lastShellHeight = rect.height;
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => { map?.resize(); requestAnimationFrame(() => { markReadyIfRendered(); if (mapState === 'ready') sync(); }); });
   }
@@ -130,10 +188,15 @@
         maplibre = library;
         const dark = darkTheme();
         map = new library.Map({
-          container, center: [-60.7087, -31.6256], zoom: 12.4, attributionControl: false,
+          container,
+          center: [-60.7087, -31.6256],
+          zoom: 12.4,
+          attributionControl: false,
           style: { version: 8, sources: { [basemapSourceId]: { type: 'raster', tiles: basemapTiles, tileSize: 256, attribution: '© OpenStreetMap contributors · © CARTO' } }, layers: [{ id: 'voy-carto-basemap', type: 'raster', source: basemapSourceId, paint: { 'raster-brightness-min': dark ? .12 : 0, 'raster-brightness-max': dark ? .58 : 1, 'raster-saturation': dark ? -.72 : 0, 'raster-contrast': dark ? .14 : 0 } }] }
         });
-        resizeObserver = new ResizeObserver(() => { if (!disposed) resizeMapToShell(); }); resizeObserver.observe(shell);
+        syncInteraction();
+        resizeObserver = new ResizeObserver(() => { if (!disposed) resizeMapToShell(); });
+        resizeObserver.observe(shell);
         readinessTimer = setTimeout(() => { if (!disposed && mapState !== 'ready') failMap(); }, 12_000);
         map.on('load', () => { if (!disposed) { resizeMapToShell(); sync(); applyMapTheme(); markReadyIfRendered(); } });
         map.on('sourcedata', event => { if (!disposed && event.sourceId === basemapSourceId) markReadyIfRendered(); });
@@ -143,13 +206,38 @@
       } catch { if (!disposed) failMap(); }
     })();
     return () => {
-      disposed = true; removeEventListener('voy-theme-change', themeListener); media.removeEventListener('change', themeListener);
-      if (readinessTimer) clearTimeout(readinessTimer); resizeObserver?.disconnect(); resizeObserver = null; cancelAnimationFrame(resizeFrame); map?.remove(); map = null;
+      disposed = true;
+      removeEventListener('voy-theme-change', themeListener);
+      media.removeEventListener('change', themeListener);
+      if (readinessTimer) clearTimeout(readinessTimer);
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      cancelAnimationFrame(resizeFrame);
+      map?.remove();
+      map = null;
     };
   });
-  $: { const dependencies = [origin, destination, route, mapState]; if (dependencies[3] === 'ready') queueMicrotask(sync); }
+
+  $: {
+    const dependencies = [origin, destination, route, mapState, cameraPadding.top, cameraPadding.right, cameraPadding.bottom, cameraPadding.left];
+    if (dependencies[3] === 'ready') queueMicrotask(sync);
+  }
+  $: {
+    const enabled = interactionEnabled;
+    if (map) queueMicrotask(() => { if (enabled === interactionEnabled) syncInteraction(); });
+  }
 </script>
-<section class="map-shell" bind:this={shell} aria-label="Mapa del viaje" data-testid="map-shell" data-map-state={mapState} data-overlay-ready={overlayReady ? 'true' : 'false'}>
+
+<section
+  class="map-shell"
+  bind:this={shell}
+  aria-label="Mapa del viaje"
+  data-testid="map-shell"
+  data-map-state={mapState}
+  data-overlay-ready={overlayReady ? 'true' : 'false'}
+  data-map-interaction={interactionEnabled ? 'enabled' : 'disabled'}
+  data-camera-fit-count={cameraFitCount}
+>
   <div class="voy-map-host" data-testid="map-host" bind:this={container}></div>
   {#if mapState === 'loading'}<div class="map-placeholder">Cargando contexto del viaje…</div>{/if}
   {#if mapState === 'fallback'}<div class="map-placeholder" data-testid="map-fallback">El mapa base no está disponible. La comparación verificable sigue funcionando.</div>{/if}
