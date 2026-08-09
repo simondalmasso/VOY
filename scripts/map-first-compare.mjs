@@ -46,10 +46,24 @@ async function createContext(testCase) {
   return context;
 }
 
-async function planTrip(page) {
-  await page.getByTestId('origin-input').fill('Origen evidencia');
-  await page.getByTestId('origin-apply').click();
-  await page.getByTestId('origin-control').waitFor({ state: 'visible' });
+async function assertAfterInitialOriginContract(page) {
+  if (await page.getByTestId('origin-input').count() !== 0) throw new Error('after_initial_origin_input_must_be_absent');
+  if (await page.getByTestId('origin-apply').count() !== 0) throw new Error('after_initial_origin_apply_must_be_absent');
+  await page.getByTestId('origin-manual-trigger').waitFor({ state: 'visible' });
+}
+
+async function planTrip(page, stage) {
+  if (stage === 'after') {
+    await page.getByTestId('origin-manual-trigger').click();
+    const input = page.getByTestId('origin-input');
+    await input.waitFor({ state: 'visible' });
+    await input.fill('Origen evidencia');
+    await input.press('Enter');
+  } else {
+    await page.getByTestId('origin-input').fill('Origen evidencia');
+    await page.getByTestId('origin-apply').click();
+  }
+  await page.waitForFunction(() => document.querySelector('[data-testid="origin-control"]')?.getAttribute('data-selected') === 'true', null, { timeout: 8_000 });
   await page.getByTestId('destination-input').fill('Terminal');
   const result = page.getByTestId('destination-result-verified').first();
   await result.waitFor({ state: 'visible' });
@@ -104,9 +118,10 @@ async function capture(baseURL, stage, testCase, theme) {
   await page.waitForFunction(() => document.querySelector('[data-testid="map-shell"]')?.getAttribute('data-map-state') !== 'loading', null, { timeout: 12_000 }).catch(() => undefined);
   const mapUsableMs = Date.now() - started;
   await page.waitForTimeout(120);
+  if (stage === 'after') await assertAfterInitialOriginContract(page);
   const initial = await metrics(page);
   await page.screenshot({ path: join(out, stage, `${testCase.name}-${theme}-initial.png`), fullPage: true });
-  await planTrip(page);
+  await planTrip(page, stage);
   await page.waitForTimeout(120);
   const trip = await metrics(page);
   await page.screenshot({ path: join(out, stage, `${testCase.name}-${theme}-trip.png`), fullPage: true });
