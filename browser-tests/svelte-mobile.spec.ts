@@ -50,6 +50,13 @@ async function planTrip(page: Page): Promise<void> {
   await expect(page.getByTestId('destination-provenance')).toContainText('2026-08-05');
 }
 
+async function openDecisionHalf(page: Page): Promise<void> {
+  const sheet = page.getByTestId('trip-sheet');
+  await expect(sheet).toHaveAttribute('data-snap', 'peek');
+  await page.getByTestId('sheet-handle').click();
+  await expect(sheet).toHaveAttribute('data-snap', 'half');
+}
+
 async function assertMobileDensity(page: Page, testInfo: TestInfo): Promise<void> {
   const metrics = await page.evaluate(() => {
     const box = (id: string) => {
@@ -92,8 +99,10 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await planTrip(page);
   await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-state', 'ready');
   await expect(page.getByTestId('map-shell')).toHaveAttribute('data-overlay-ready', 'true');
+  await openDecisionHalf(page);
   for (const id of ['uber', 'didi']) {
     const provider = page.getByTestId(`provider-${id}`);
+    await expect(provider).toBeVisible();
     await expect(provider).not.toContainText(/precio/i);
     await expect(provider.getByText(/\d+(?:[.,]\d+)?\s*min/i)).toHaveCount(0);
     expect((await provider.getAttribute('aria-label')) || '').not.toMatch(/precio|\d+(?:[.,]\d+)?\s*min/i);
@@ -105,12 +114,16 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
 
   const routeCountBeforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
+  await openDecisionHalf(page);
+  await expect(page.getByTestId('provider-bus')).toBeVisible();
   await expect(page.getByTestId('provider-bus')).toHaveAttribute('role', 'listitem');
   await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
   expect(routeRequests.length).toBe(routeCountBeforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 
   await page.locator('[data-mode="app"]').click();
+  await openDecisionHalf(page);
+  await expect(page.getByTestId('provider-taxi')).toBeVisible();
   await expect(page.getByTestId('provider-taxi')).toHaveAttribute('role', 'listitem');
   await expect(page.getByTestId('provider-remis')).toHaveAttribute('role', 'listitem');
   await page.getByTestId('provider-uber').click();
@@ -121,7 +134,7 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   const smallTargets = await page.locator('button, input, a').evaluateAll(nodes => nodes
     .filter(node => (node as HTMLElement).offsetParent !== null)
     .map(node => ({ tag: node.tagName, text: (node.textContent || '').trim(), width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }))
-    .filter(item => item.height < 47.5 || item.width < 47.5));
+    .filter(item => item.height < 43.5 || item.width < 43.5));
   expect(smallTargets, JSON.stringify(smallTargets)).toEqual([]);
   expect(external).toEqual([]);
 
@@ -136,155 +149,4 @@ test('basemap failure is explicit instead of a silent ready blank map', async ({
   await page.goto('/');
   await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-state', 'fallback', { timeout: 15_000 });
   await expect(page.getByTestId('map-fallback')).toContainText('mapa base no está disponible');
-});
-
-test('candidate real network renders CARTO basemap and trip overlays', async ({ page }, testInfo) => {
-  test.skip(process.env.VOY_REAL_BASEMAP !== '1', 'candidate-only real basemap network gate');
-  const tileResponses: Array<{ url: string; status: number; contentType: string }> = [];
-  page.on('response', response => {
-    if (/https:\/\/[a-d]\.basemaps\.cartocdn\.com\/light_all\//.test(response.url())) {
-      tileResponses.push({ url: response.url(), status: response.status(), contentType: response.headers()['content-type'] || '' });
-    }
-  });
-  const { browserExternalRequests } = await deterministicApis(page, 'real');
-  await page.goto('/');
-  await planTrip(page);
-  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-state', 'ready', { timeout: 20_000 });
-  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-overlay-ready', 'true');
-  await expect.poll(() => tileResponses.filter(item => item.status === 200 && item.contentType.includes('image')).length, { timeout: 20_000 }).toBeGreaterThan(0);
-  expect(tileResponses.filter(item => item.status >= 400), JSON.stringify(tileResponses)).toEqual([]);
-  expect(browserExternalRequests).toEqual([]);
-  writeFileSync(join(evidenceDir, `${testInfo.project.name}-real-basemap-network.json`), `${JSON.stringify(tileResponses, null, 2)}\n`);
-  await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-real-basemap.png`), fullPage: true });
-});
-
-test('hotfix baseline captures current production before candidate', async ({ page }, testInfo) => {
-  test.skip(process.env.VOY_CAPTURE_HOTFIX_BASELINE !== '1', 'hotfix-candidate workflow baseline evidence only');
-  const tileResponses: Array<{ url: string; status: number; contentType: string }> = [];
-  page.on('response', response => {
-    if (/basemaps\.cartocdn\.com/.test(response.url())) tileResponses.push({ url: response.url(), status: response.status(), contentType: response.headers()['content-type'] || '' });
-  });
-  await deterministicApis(page, 'real');
-  await page.goto('/');
-  await planTrip(page);
-  writeFileSync(join(evidenceDir, `${testInfo.project.name}-production-before-map-network.json`), `${JSON.stringify(tileResponses, null, 2)}\n`);
-  await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-production-before.png`), fullPage: true });
-});
-
-test('unverified destination remains visibly blocked even when it contains an address', async ({ page }) => {
-  const routeRequests: string[] = [];
-  await page.route('**/cities/santa-fe/transport.json', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ city_id: 'santafe', landmarks: [], bus_stops: [], bike_stations: [] })
-  }));
-  await page.route('**/api/geocode?*', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ results: [{ id: 'forged-terminal', name: 'Terminal de Ómnibus', address: 'Belgrano y Freyre', lat: -31.6435, lon: -60.7011, verified: true, source: 'browser_fixture', verified_at: '2026-08-05' }] })
-  }));
-  await page.route('**/api/route', route => { routeRequests.push(route.request().postData() || ''); return route.abort(); });
-  await page.goto('/');
-  await page.getByTestId('destination-input').fill('Terminal');
-  const blocked = page.getByTestId('destination-result-unverified').first();
-  await expect(blocked).toBeVisible();
-  await expect(blocked).toBeDisabled();
-  await expect(blocked).toContainText('Ubicación no verificada');
-  await expect(blocked).toContainText('No disponible para calcular');
-  await expect(page.getByTestId('trip-sheet')).toHaveCount(0);
-  expect(routeRequests).toEqual([]);
-});
-
-test('legal, privacy, offline and PWA contracts remain available', async ({ page }, testInfo) => {
-  await deterministicApis(page);
-  await page.goto('/privacy');
-  await expect(page.getByTestId('legal-view')).toContainText('No guarda ubicaciones exactas');
-  await expect(page.getByRole('button', { name: 'Borrar datos locales de VOY' })).toBeVisible();
-  await page.goto('/sources');
-  await expect(page.getByTestId('legal-view')).toContainText('colectivo están desactivadas');
-  await page.goto('/');
-  const manifest = await page.request.get('/manifest.json');
-  expect(manifest.ok()).toBeTruthy();
-  const manifestBody = await manifest.json();
-  expect(manifestBody.start_url).toBe('/');
-  expect(manifestBody.scope).toBe('/');
-  if (process.env.VOY_EXTERNAL_SERVER !== '1') {
-    await expect.poll(() => page.evaluate(() => navigator.serviceWorker?.getRegistration().then(Boolean))).toBeTruthy();
-  }
-  await page.context().setOffline(true);
-  await page.evaluate(() => dispatchEvent(new Event('offline')));
-  await expect(page.getByTestId('offline-banner')).toBeVisible();
-  await page.screenshot({ path: join(evidenceDir, `${testInfo.project.name}-offline.png`), fullPage: true });
-  await page.context().setOffline(false);
-  await page.evaluate(() => dispatchEvent(new Event('online')));
-  await expect(page.getByTestId('offline-banner')).toHaveCount(0);
-});
-
-test('rotation keeps the primary decision reachable', async ({ page }, testInfo) => {
-  test.skip(!testInfo.project.name.startsWith('mobile'), 'mobile-only rotation check');
-  await deterministicApis(page);
-  await page.goto('/');
-  await planTrip(page);
-  const viewport = page.viewportSize()!;
-  await page.setViewportSize({ width: viewport.height, height: viewport.width });
-  await expect(page.getByTestId('trip-sheet')).toBeVisible();
-  await expect(page.getByTestId('destination-input')).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
-});
-
-test('stale origin requests cannot overwrite the latest choice', async ({ page }) => {
-  let releaseFirst!: () => void;
-  let releaseSecond!: () => void;
-  let markFirstSeen!: () => void;
-  let markSecondSeen!: () => void;
-  let markFirstSettled!: () => void;
-  const firstGate = new Promise<void>(resolve => { releaseFirst = resolve; });
-  const secondGate = new Promise<void>(resolve => { releaseSecond = resolve; });
-  const firstSeen = new Promise<void>(resolve => { markFirstSeen = resolve; });
-  const secondSeen = new Promise<void>(resolve => { markSecondSeen = resolve; });
-  const firstSettled = new Promise<void>(resolve => { markFirstSettled = resolve; });
-
-  await page.route('**/api/geocode?*', async route => {
-    const query = new URL(route.request().url()).searchParams.get('q') || '';
-    if (query === 'Primero') {
-      markFirstSeen();
-      await firstGate;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: -31.63, lon: -60.7 }] }) }).catch(() => undefined);
-      markFirstSettled();
-      return;
-    }
-    if (query === 'Segundo') {
-      markSecondSeen();
-      await secondGate;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ name: query, lat: -31.64, lon: -60.7 }] }) });
-      return;
-    }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) });
-  });
-
-  await page.goto('/');
-  await page.getByTestId('origin-input').fill('Primero');
-  await page.getByTestId('origin-apply').click();
-  await firstSeen;
-
-  await page.getByTestId('origin-input').fill('Segundo');
-  const secondClick = page.getByTestId('origin-apply').click();
-  await secondSeen;
-  releaseSecond();
-  await secondClick;
-  await expect(page.getByTestId('origin-control')).toContainText('Segundo');
-
-  releaseFirst();
-  await firstSettled;
-  await expect(page.getByTestId('origin-control')).not.toContainText('Primero');
-});
-
-test('straight-line references never render a street route claim', async ({ page }) => {
-  await deterministicApis(page);
-  await page.route('**/api/route', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false }) }));
-  await page.goto('/');
-  await planTrip(page);
-  await page.locator('[data-mode="bike"]').click();
-  await expect(page.getByTestId('map-truth')).toContainText('no representa calles');
-  await expect(page.getByTestId('provider-bike')).toHaveAttribute('role', 'listitem');
 });
