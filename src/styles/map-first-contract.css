@@ -1,4 +1,24 @@
 /* Interaction-contract overrides kept separate from the visual composition layer. */
+
+/* POLISH PASS 1 — evidence-driven hierarchy/contrast corrections.
+   - keep decision sheet an opaque instrument over any basemap;
+   - remove duplicate selected-destination status;
+   - reduce mode-rail chrome while preserving 44px targets and overflow affordance. */
+.map-first-layout>.sheet{
+  background:var(--voy-surface);
+  color:var(--voy-ink);
+  isolation:isolate;
+  opacity:1;
+}
+.search[data-selected="true"] .status{display:none}
+.map-first-layout .modes{
+  border:0;
+  background:color-mix(in srgb,var(--voy-surface) 90%,transparent);
+  box-shadow:none;
+}
+.map-first-layout .modes button:not(.active){background:transparent}
+.map-first-layout .modes button.active{box-shadow:none}
+
 @media(max-width:759px){
   .map-first-layout .input-wrap input,
   .map-first-layout .manual input{min-height:44px;height:44px}
@@ -19,4 +39,7 @@
 
   .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.planner,
   .map-first-layout[data-interaction-state="SEARCH_RESULTS"]>.planner{max-height:72%}
+
+  .map-first-layout .modes{border-radius:10px;padding:2px;gap:2px}
+  .map-first-layout .modes button{padding-inline:11px}
 }
