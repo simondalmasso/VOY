@@ -28,7 +28,7 @@ async function planTrip(page: Page): Promise<void> {
   await expect(page.getByTestId('trip-sheet')).toBeVisible();
 }
 
-test('Issue36 composition is authored for mobile and desktop instead of scaled phone UI', async ({ page }, testInfo: TestInfo) => {
+test('Issue36 composition follows the audited map-first amendment on mobile and desktop', async ({ page }, testInfo: TestInfo) => {
   await deterministicTripApis(page);
   await page.goto('/');
   const metrics = await page.evaluate(() => {
@@ -48,19 +48,22 @@ test('Issue36 composition is authored for mobile and desktop instead of scaled p
     };
   });
   expect(metrics.overflow).toBeLessThanOrEqual(1);
-  expect(metrics.searchLabelSize).toBeGreaterThanOrEqual(28);
+  expect(metrics.searchLabelSize).toBeGreaterThanOrEqual(22);
   if (testInfo.project.name.startsWith('desktop')) {
     expect(metrics.shell.width).toBeGreaterThan(1000);
-    expect(metrics.planner.width).toBeGreaterThanOrEqual(360);
+    expect(metrics.planner.width).toBeGreaterThanOrEqual(350);
     expect(metrics.planner.width).toBeLessThanOrEqual(430);
     expect(metrics.map.width).toBeGreaterThan(metrics.planner.width);
     expect(metrics.map.height).toBeGreaterThanOrEqual(560);
-    expect(Math.abs(metrics.planner.left - metrics.decision.left)).toBeLessThanOrEqual(2);
     expect(metrics.map.left).toBeGreaterThan(metrics.planner.right);
+    expect(metrics.decision.left).toBeGreaterThanOrEqual(metrics.map.left);
+    expect(metrics.decision.right).toBeLessThanOrEqual(metrics.map.right + 1);
   } else {
-    expect(metrics.planner.top).toBeLessThan(metrics.map.top);
-    expect(metrics.map.top).toBeLessThan(metrics.decision.top);
-    expect(metrics.map.height).toBeGreaterThanOrEqual(180);
+    expect(metrics.map.top).toBeLessThanOrEqual(metrics.planner.top);
+    expect(metrics.map.bottom).toBeGreaterThanOrEqual(metrics.decision.bottom - 1);
+    expect(metrics.map.height).toBeGreaterThanOrEqual(620);
+    expect(metrics.planner.left).toBeGreaterThanOrEqual(metrics.map.left);
+    expect(metrics.planner.right).toBeLessThanOrEqual(metrics.map.right);
   }
 });
 
