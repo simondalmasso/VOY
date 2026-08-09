@@ -16,13 +16,15 @@ MAP_FIRST_AMENDMENT=5224435211
 MAP_FIRST_AUD_PASS=5228862173
 TARGETED_ORIGIN_CORRECTION=5229384435
 AUD_RESUME_GATE=5229525690
+MAP_FIRST_FINAL_AUD=5229717689
+MAP_FIRST_FINAL_AUD_RESULT=PASS_NEW_CANDIDATE_0_RECONCILED
 INTERMEDIATE_AUD=NO
 MERGE_AUTHORIZED=NO
 PRODUCTION_PROMOTION_AUTHORIZED=NO
 ISSUE_39=NO
 ```
 
-GitHub remains the canonical persistent state. Production truth has priority over branch state. The targeted map-first origin correction has been validated as a new Cloudflare candidate at zero traffic; it has not been merged or promoted.
+GitHub remains the canonical persistent state. Production truth has priority over branch state. The targeted map-first origin correction has been validated as a new Cloudflare candidate at zero traffic, independently audited PASS, and has not been merged or promoted.
 
 ## Production — unchanged by targeted correction
 
@@ -205,6 +207,26 @@ Permanent invariants remain:
 - audio/transcripts/exact-location history are not persistently stored;
 - VOY works without login, voice or AI.
 
+## Final independent AUD checkpoint
+
+Issue #36 comment `5229717689` independently reviewed the new zero-traffic candidate and returned:
+
+```text
+AUD_RESULT=PASS_NEW_CANDIDATE_0_RECONCILED
+AUD_COMMENT=5229717689
+AUD_CANDIDATE_SOURCE_SHA=0f76877e445a481137925fb62bfb1620454fe2b8
+AUD_CANDIDATE_VERSION_ID=6f526066-67a5-4782-95fd-4ec387dc72fe
+AUD_CANDIDATE_TRAFFIC=0%
+AUD_STABLE_VERSION_ID=9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+AUD_STABLE_TRAFFIC=100%
+MERGE=NO
+PRODUCTION_PROMOTION=NO
+ROLLBACK=NO
+ISSUE_39=NO
+```
+
+No repository-driven Cloudflare mutation was found after final candidate run `31293524692`; the Map-First candidate workflow still has that run as its newest execution, and alternate production/candidate workflows have older latest runs. Direct Cloudflare control-plane state outside repository-driven automation remains subject to runtime re-verification before any future material action.
+
 ## Historical anchors
 
 ```text
@@ -215,6 +237,7 @@ ISSUE36_MAP_FIRST_AMENDMENT=5224435211
 ISSUE36_MAP_FIRST_AUD_PASS=5228862173
 ISSUE36_TARGETED_ORIGIN_CORRECTION=5229384435
 ISSUE36_AUD_RESUME_GATE=5229525690
+ISSUE36_MAP_FIRST_FINAL_AUD=5229717689
 HISTORICAL_CANDIDATE_VERSION_ID=1610c90d-c06c-48b4-af9c-54979990f124
 HISTORICAL_CANDIDATE_ROLE=HISTORICAL_EVIDENCE_ONLY
 ```
@@ -224,9 +247,10 @@ HISTORICAL_CANDIDATE_ROLE=HISTORICAL_EVIDENCE_ONLY
 ```text
 TARGETED_ORIGIN_CORRECTION=COMPLETE
 NEW_MAP_FIRST_CANDIDATE_0_PERCENT=VALIDATED
+INDEPENDENT_AUD=PASS_NEW_CANDIDATE_0_RECONCILED
 MERGE=NO
 PRODUCTION_PROMOTION=NO
 ROLLBACK=NO
 ISSUE_39=NO
-NEXT=AUD_FINAL_REVIEW_OF_NEW_CANDIDATE_0
+NEXT=ARQ_AUTHORIZATION_BOUNDARY
 ```
