@@ -55,6 +55,7 @@ async function planTrip(page) {
   await result.waitFor({ state: 'visible' });
   await result.click();
   await page.getByTestId('trip-sheet').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.querySelector('[data-testid="map-shell"]')?.getAttribute('data-overlay-ready') === 'true', null, { timeout: 8_000 });
 }
 
 async function metrics(page) {
@@ -106,7 +107,7 @@ async function capture(baseURL, stage, testCase, theme) {
   const initial = await metrics(page);
   await page.screenshot({ path: join(out, stage, `${testCase.name}-${theme}-initial.png`), fullPage: true });
   await planTrip(page);
-  await page.waitForTimeout(260);
+  await page.waitForTimeout(120);
   const trip = await metrics(page);
   await page.screenshot({ path: join(out, stage, `${testCase.name}-${theme}-trip.png`), fullPage: true });
   await context.close();
