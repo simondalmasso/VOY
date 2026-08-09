@@ -258,7 +258,6 @@
 
   function choose(option: ProviderOptionModel): void {
     if (!origin || !hasOperationalDestination(selectedDestination) || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
-    sheetSnap = 'peek';
     action = createExternalAction(option.id, origin, selectedDestination.coordinates);
   }
 
