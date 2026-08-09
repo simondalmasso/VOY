@@ -17,7 +17,19 @@
   box-shadow:none;
 }
 .map-first-layout .modes button:not(.active){background:transparent}
-.map-first-layout .modes button.active{box-shadow:none}
+
+/* POLISH PASS 2 — glance hierarchy and optical density.
+   Active mode reads as selection rather than CTA; peek keeps the destination readable;
+   narrow initial strip stops pretending truncated explanatory copy is useful. */
+.map-first-layout .modes button.active{
+  background:var(--voy-surface-2);
+  color:var(--voy-ink);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--voy-border) 82%,transparent);
+}
+.map-first-layout .sheet[data-snap="peek"] h2{
+  max-width:none;
+  letter-spacing:-.035em;
+}
 
 @media(max-width:759px){
   .map-first-layout .input-wrap input,
@@ -42,4 +54,10 @@
 
   .map-first-layout .modes{border-radius:10px;padding:2px;gap:2px}
   .map-first-layout .modes button{padding-inline:11px}
+  .map-first-layout .sheet[data-snap="peek"] h2{font-size:20px}
+}
+
+@media(max-width:390px){
+  .map-first-layout>.decision-empty p{display:none}
+  .map-first-layout>.decision-empty{align-items:center}
 }
