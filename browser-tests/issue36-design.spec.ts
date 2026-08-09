@@ -18,8 +18,13 @@ async function deterministicTripApis(page: Page): Promise<{ routeRequests: strin
 }
 
 async function planTrip(page: Page): Promise<void> {
-  await page.getByTestId('origin-input').fill('Origen diseño');
-  await page.getByTestId('origin-apply').click();
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
+  await page.getByTestId('origin-manual-trigger').click();
+  const originInput = page.getByTestId('origin-input');
+  await expect(originInput).toBeFocused();
+  await originInput.fill('Origen diseño');
+  await originInput.press('Enter');
   await expect(page.getByTestId('origin-control')).toContainText('Plaza 25 de Mayo');
   await page.getByTestId('destination-input').fill('Terminal');
   const destination = page.getByTestId('destination-result-verified').first();
