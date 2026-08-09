@@ -1,0 +1,83 @@
+name: VOY Map-First Before After
+
+on:
+  push:
+    branches:
+      - feat/map-first-interaction-01
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.3.14
+  BEFORE_SHA: bf6c4fd36eafcdab78e7e0ce33f99696541f553c
+  VOY_MAP_FIRST_EVIDENCE_DIR: test-results/map-first-evidence
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install frozen browser toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@${BUN_VERSION}
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Build immutable before and exact-head after
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/voy-map-first-before "$BEFORE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/voy-map-first-before/node_modules
+          (cd /tmp/voy-map-first-before && BUILD_HASH="${BEFORE_SHA::7}" bun run build)
+          BUILD_HASH="${GITHUB_SHA::7}" bun run build
+
+      - name: Serve both immutable builds
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8786 --bind 127.0.0.1 --directory /tmp/voy-map-first-before/dist/client > /tmp/voy-before-http.log 2>&1 &
+          python3 -m http.server 8787 --bind 127.0.0.1 --directory dist/client > /tmp/voy-after-http.log 2>&1 &
+          for port in 8786 8787; do
+            ready=0
+            for i in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:${port}/" >/dev/null; then ready=1; break; fi
+              sleep 1
+            done
+            test "$ready" = 1
+          done
+
+      - name: Capture equivalent before-after and performance evidence
+        env:
+          VOY_BEFORE_URL: http://127.0.0.1:8786
+          VOY_AFTER_URL: http://127.0.0.1:8787
+          VOY_BEFORE_SHA: ${{ env.BEFORE_SHA }}
+        run: node scripts/map-first-compare.mjs
+
+      - name: Freeze immutable evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOY_MAP_FIRST_EVIDENCE_DIR"
+          cp /tmp/voy-before-http.log "$VOY_MAP_FIRST_EVIDENCE_DIR/before-http.log" || true
+          cp /tmp/voy-after-http.log "$VOY_MAP_FIRST_EVIDENCE_DIR/after-http.log" || true
+          printf '%s\n' "BEFORE_SHA=$BEFORE_SHA" > "$VOY_MAP_FIRST_EVIDENCE_DIR/identity.txt"
+          printf '%s\n' "AFTER_SHA=$GITHUB_SHA" >> "$VOY_MAP_FIRST_EVIDENCE_DIR/identity.txt"
+          printf '%s\n' "RUN=$GITHUB_RUN_ID" >> "$VOY_MAP_FIRST_EVIDENCE_DIR/identity.txt"
+          find "$VOY_MAP_FIRST_EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$VOY_MAP_FIRST_EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$VOY_MAP_FIRST_EVIDENCE_DIR/manifest.sha256" > "$VOY_MAP_FIRST_EVIDENCE_DIR/digest.txt"
+
+      - name: Upload immutable before-after evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-map-first-before-after-${{ github.run_id }}
+          path: test-results/map-first-evidence
+          if-no-files-found: error
+          retention-days: 30
