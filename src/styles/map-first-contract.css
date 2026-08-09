@@ -1,5 +1,21 @@
 /* Interaction-contract overrides kept separate from the visual composition layer. */
 
+/* Accessibility wins over visual compaction when dimensions conflict.
+   Keep the compact optical treatment, but every interactive control retains a
+   real >=44px hit area on mobile and desktop. */
+.app-shell button{min-height:44px}
+.app-shell input{min-height:44px;height:44px}
+.app-shell .search.compact .input-wrap input,
+.app-shell .search .input-wrap input,
+.app-shell .manual input{min-height:44px;height:44px}
+.app-shell .origin .location,
+.app-shell .origin-edit,
+.app-shell .manual button,
+.app-shell .modes button,
+.app-shell .assistant-trigger,
+.app-shell .icon-button,
+.app-shell .voice-input button{min-height:44px;height:44px}
+
 /* POLISH PASS 1 — evidence-driven hierarchy/contrast corrections.
    - keep decision sheet an opaque instrument over any basemap;
    - remove duplicate selected-destination status;
@@ -32,9 +48,6 @@
 }
 
 @media(max-width:759px){
-  .map-first-layout .input-wrap input,
-  .map-first-layout .manual input{min-height:44px;height:44px}
-
   .map-first-layout[data-interaction-state="IDLE"] .message{display:none}
 
   .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.sheet,
