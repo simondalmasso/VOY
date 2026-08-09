@@ -1,6 +1,6 @@
 # VOY — Current canonical state
 
-Last reconciled: 2026-08-07
+Last reconciled: 2026-08-09
 
 ## Authority and source of truth
 
@@ -11,151 +11,214 @@ REPOSITORY_WORKLOG=docs/CURRENT_STATE.md
 RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
 DRIVE=LEGACY_READ_ONLY
 NEW_DRIVE_WRITES=NO
-ISSUE34_TERMINAL_AUD=5217823220
-ISSUE36_ORDER=OPEN_NOT_YET_MATERIAL_EXECUTION
+ISSUE36_ORDER=VOY-HOVS-TOTAL-PRODUCT-REDESIGN-02
+MAP_FIRST_AMENDMENT=5224435211
+MAP_FIRST_AUD_PASS=5228862173
+INTERMEDIATE_AUD=NO
+MERGE_AUTHORIZED=NO
+PRODUCTION_PROMOTION_AUTHORIZED=NO
 ```
 
-GitHub is the canonical persistent state from this checkpoint onward. The prior Google Drive Milestone A document remains historical read-only evidence and must not be updated. Detailed pre-terminal Issue #34 evidence remains preserved in Git history through `main@3f8e096b7065d41f9749e5613b329736b7301055`, Issue #34 comments `5217164821`, `5217321670`, `5217585109`, `5217823220`, and immutable Actions artifacts.
+GitHub remains the canonical persistent state. Production truth has priority over branch state. The map-first implementation completed as an auditable Cloudflare candidate at zero traffic; it has not been merged or promoted.
 
-## Issue #34 — terminal result
+## Production — unchanged
 
 ```text
-ISSUE34=TERMINAL_GREEN_PENDING_ONLY_ISSUE_CLOSE_AT_THIS_COMMIT
-MILESTONE_A=PASS
-AUD_PASS=5217823220
-AUDITED_SOURCE_SHA=c6aa7302784ce07415949d2b9b1335919ee2cbbd
-PR37=MERGED
-PR37_MERGE_SHA=f9cbecc6761048fc1fabb0c4135e7b5568c840c2
 PRODUCTIVE_SOURCE_SHA=c6aa7302784ce07415949d2b9b1335919ee2cbbd
 PRODUCTIVE_VERSION_ID=9273abef-69ab-451f-b2f0-ace4c8fd3bdd
 PRODUCTIVE_TRAFFIC=100%
-PRODUCTIVE_DEPLOYMENT_ID=3ef0cc0b-d344-4181-8118-a9b409e44dc6
-PREVIOUS_STABLE_VERSION_ID=2f86d708-b905-4c33-b1fe-d881467e8542
-PREVIOUS_STABLE_TRAFFIC=0%
 APPLICATION_VERSION=V8.0.0
-BUILD_HASH=c6aa730
-ROLLBACK_EXECUTED=NO
-BUS_ACTIVATION=OFF
-PHASE5=NO_FEED
-MOTIS_OTP=NOT_RUN_CONDITION_NOT_MET
-ROUTER_BACKEND_DECISION=NO_CHANGE
-COST_USD=0
-CARD_OR_BILLING_USED=NO
-SECRETS_EXPOSED=NO
-```
-
-AUD `5217823220` authorized the exact Milestone A candidate for terminal production close. EJE rechecked the audited Git/Cloudflare identity, source, bindings, candidate health, Mobility Trust contract, real map proof and product gates before changing traffic. The exact candidate `9273abef-69ab-451f-b2f0-ace4c8fd3bdd` was then promoted to 100%. The previous stable version moved to 0%. No rollback was required.
-
-## Terminal production evidence
-
-```text
-TERMINAL_OPERATOR_BRANCH=ops/issue34-terminal-close-01
-TERMINAL_OPERATOR_COMMIT=dbf0b7d8b6d029ebfc5db048c27ed1d04e80f19b
-TERMINAL_RUN=31185141780;SUCCESS
-UNIT_TESTS=196_PASS;0_FAIL
-PRODUCTION_BROWSER=53_PASS;13_SKIP
-PRODUCTION_CONVERGENCE=20_CONSECUTIVE_PASS
-PRODUCTION_CONVERGENCE_DURATION_MS=137964
-PRODUCTION_HEALTH=V8.0.0/c6aa730
-MOBILITY_TRUST_API=PASS
-BUS_LICENSE_STATUS=UNKNOWN
-BUS_OPERATIONAL_STATUS=UNAVAILABLE
+PRODUCTIVE_BUILD_HASH=c6aa730
 BUS_ACTIVATION=OFF
 MOBILITY_DATABASE_ROLE=DISCOVERY_ONLY
-TAIL_OBSERVABILITY=DEGRADED_NO_EVENTS
-TAIL_EXCEPTIONS=0
+MAP_FIRST_PROMOTED=NO
+ROLLBACK_EXECUTED=NO
+```
+
+Production health was verified immediately before and after the candidate operation as `V8.0.0/c6aa730`. The final Cloudflare split leaves the existing stable version at 100% and the new map-first candidate at 0%.
+
+## Issue #36 — map-first material checkpoint
+
+```text
+IMPLEMENTATION_BASE=bf6c4fd36eafcdab78e7e0ce33f99696541f553c
+BRANCH=feat/map-first-interaction-01
+CANDIDATE_SOURCE_SHA=a2ed6f6cca2e3f5b999c21eac104bfbf4ad8c5d9
+CANDIDATE_VERSION_ID=1610c90d-c06c-48b4-af9c-54979990f124
+CANDIDATE_VERSION_NUMBER=130
+CANDIDATE_TRAFFIC=0%
+CANDIDATE_DEPLOYMENT_ID=bce377be-d4d9-4f10-af80-840acd9821ea
+PREVIOUS_DEPLOYMENT_ID=20f2e1c3-e705-43e2-9974-c8a01dbbe4ca
+STABLE_VERSION_ID=9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+STABLE_TRAFFIC=100%
+STABLE_HEALTH=V8.0.0/c6aa730
+CANDIDATE_HEALTH=V8.0.0/a2ed6f6
+PRODUCTION_PROMOTED=NO
+ROLLBACK_EXECUTED=NO
+```
+
+The map-first amendment introduces a coordinated interaction state model rather than independent component-owned visual state. Search, origin, map, progressive decision sheet, confirmation, voice, browser Back/Escape and mobile keyboard behavior are coordinated centrally. Canonical fare, routing, provider, data, privacy and trust semantics were not moved into UI logic.
+
+## Interaction / map-first contract
+
+Implemented and gated states:
+
+```text
+IDLE
+SEARCH_FOCUSED
+SEARCH_RESULTS
+DESTINATION_SELECTED
+ORIGIN_REQUIRED
+ORIGIN_READY
+ROUTE_LOADING
+ROUTE_READY
+DECISION_PEEK
+DECISION_HALF
+DECISION_EXPANDED
+EXTERNAL_CONFIRMATION
+VOICE_ACTIVE
+OFFLINE
+ERROR_RECOVERABLE
+```
+
+Verified properties:
+- Search/results are the primary transient layer and remain dismissible with Back/Escape.
+- Manual origin is recoverable after location permission denial.
+- Geolocation is never requested automatically on load.
+- Decision sheet uses `peek / half / expanded` snaps.
+- Map camera padding follows stable snap state; dragging the sheet does not continuously recenter the map.
+- Provider confirmation does not reset the map and temporarily owns interaction hierarchy.
+- Initial mobile map-first geometry preserves the required unobscured usable-map budget.
+- Mobile keyboard/search removes competing sheet chrome without accidental horizontal overflow.
+- Real interactive hit areas remain at least 44px despite compact optical styling.
+- `prefers-reduced-motion` removes map-first transition timing.
+
+Coverage ledger: `docs/design/MAP_FIRST_COVERAGE.md`.
+
+## Two explicit polish passes
+
+```text
+POLISH_PASS_1=f7fdd3889c0700d13fd9fef20c3ee34090a2aa51
+POLISH_PASS_2=b83d274f53d5e0323ae027db30d74c33c4ad5084
+```
+
+Pass 1 hardened decision-sheet contrast over real basemaps, removed redundant selected-destination status and reduced mode-rail chrome. Pass 2 refined active-mode hierarchy, peek destination readability and narrow initial-strip density. Later regression found and corrected a real 44px target violation without weakening the accessibility gate.
+
+## Regression and before/after evidence
+
+Final pre-candidate product/harness head: `8d2ddaa21f8b7eb753b21f7a6bcf944546a82f9b`.
+
+```text
+MAP_FIRST_QA_RUN=31287404549;SUCCESS
+MAP_FIRST_BROWSER_RUN=31287404517;SUCCESS
+MAP_FIRST_BEFORE_AFTER_RUN=31287404531;SUCCESS
+MAP_FIRST_FULL_REGRESSION_RUN=31287404525;SUCCESS
+UNIT_TESTS=204_PASS;0_FAIL
+FULL_BROWSER=83_PASS;25_SKIP
+TYPECHECK=PASS
+LINT=PASS
+BUILD=PASS
+ASSET_POLICY=PASS
+BUNDLE_BUDGET=PASS
+WRANGLER_DRY_RUN=PASS
+```
+
+Immutable BEFORE/AFTER:
+
+```text
+BEFORE_SHA=bf6c4fd36eafcdab78e7e0ce33f99696541f553c
+AFTER_SHA=8d2ddaa21f8b7eb753b21f7a6bcf944546a82f9b
+CASES=6
+FAILURES=NONE
+BEFORE_AFTER_ARTIFACT_ID=9030288145
+BEFORE_AFTER_ARTIFACT_SHA256=ce1f0ffeee732312687eb861208f4c17d96c21dc7ad69524d02f41bbfaf4f668
+BEFORE_AFTER_MANIFEST_SHA256=b5dc96cf603eae99d5d396419172ec723026fbf0f31ab26d4bc2d8d1d3df73e7
+BEFORE_AFTER_MANIFEST_REHASH=29/29_PASS
+FULL_REGRESSION_ARTIFACT_ID=9030312038
+FULL_REGRESSION_ARTIFACT_SHA256=e05094bc641282f3c6db60485e4121bf76415d22c4ecd419692d86676d26bce0
+```
+
+The final candidate pipeline repeated exact-head local regression after the release marker and passed `89 browser tests / 25 skipped` before candidate creation, then passed the same `89 / 25` against the exact Cloudflare candidate with real map/browser gates.
+
+## Cloudflare final candidate evidence
+
+```text
+FINAL_CANDIDATE_RUN=31287544694;SUCCESS
+FINAL_CANDIDATE_ARTIFACT_ID=9030441782
+FINAL_CANDIDATE_ARTIFACT_SHA256=3c633808e8407e45d1d61bb699dfb8f632763f5def59a1577d921e9c4b94a664
+FINAL_CANDIDATE_MANIFEST_SHA256=ee31bc5f3086571567d8fc193fc3b97c73366349465a81ebd5f72560e4043219
+FINAL_CANDIDATE_MANIFEST_REHASH=131/131_PASS
+BINDING_PARITY=16/16_PASS
+CONVERGENCE_ROUNDS=20
+CONVERGENCE_DURATION_MS=157765
+LOCAL_REAL_MAP_PIXEL_PROOF=6/6_PASS
+LOCAL_REAL_MAP_GEOMETRY_PROOF=6/6_PASS
+CANDIDATE_REAL_MAP_PIXEL_PROOF=6/6_PASS
+CANDIDATE_REAL_MAP_GEOMETRY_PROOF=6/6_PASS
+BASEMAP_VISIBLE=YES
+ORIGIN_MARKER_VISIBLE=YES
+DESTINATION_MARKER_VISIBLE=YES
+ROUTE_VISIBLE=YES
+OBSERVABILITY=PASS
+EXACT_VERSION_TAIL_EVENTS=1635
 TAIL_NON_OK=0
-TERMINAL_ARTIFACT_ID=8996545635
-TERMINAL_ARTIFACT_SHA256=284c250f78b875ec718af554aa989d696066b929df66ac10cc4f5df50e53f775
-TERMINAL_MANIFEST_SHA256=faf0522c76d9eabb70f439357ede304961d98e6f13bd8d70165e668b41032f27
-TERMINAL_MANIFEST_LINES=119
-TERMINAL_MANIFEST_REHASHABLE_FROM_DOWNLOADED_ZIP=117/119
-TERMINAL_ARTIFACT_PACKAGING_DEBT=2_HIDDEN_PLAYWRIGHT_LAST_RUN_FILES_OMITTED_BY_UPLOAD_ARTIFACT
-RUNTIME_EVIDENCE_FAILURE=NO
+TAIL_EXCEPTIONS=0
+BENIGN_CLIENT_CANCELLATIONS=0
 ```
 
-The terminal artifact ZIP digest independently matches GitHub artifact metadata. Two hidden Playwright `.last-run.json` files were listed by the on-runner manifest but omitted by the default `upload-artifact` hidden-file behavior, so the downloaded ZIP can independently rehash 117 of 119 manifest entries, not 119/119. This is recorded as evidence-packaging debt and is not misreported as a runtime PASS. The material production proofs—deployment state, health, trust endpoint, browser results, convergence, tests and promotion logs—are present in the artifact and passed.
+The downloaded candidate artifact independently matches GitHub artifact metadata and all 131 manifest entries rehash successfully. The candidate health is `V8.0.0/a2ed6f6`; the stable production health remains `V8.0.0/c6aa730`.
 
-## Post-merge GitHub validation
+The first candidate attempt (`31287155158`) failed before any Cloudflare version upload because the inherited candidate script selected a named production-baseline browser test that was missing from the repository. That internal harness failure was corrected by restoring the intended read-only baseline test; the candidate script itself was not weakened. No Cloudflare mutation occurred in the failed attempt.
+
+## Performance snapshot
+
+No new production dependency, animation framework, heavy UI framework or map engine was added.
 
 ```text
-MAIN_AFTER_PR37=f9cbecc6761048fc1fabb0c4135e7b5568c840c2
-RELEASE_POLICY_RUN=31185910160;SUCCESS
-MAIN_VALIDATION_RUN=31185913893;SUCCESS
-MAIN_LOCAL_BROWSER=PASS
-MAIN_PRODUCTION_HEALTH_READ_ONLY=PASS
-MAIN_PRODUCTION_BROWSER_SMOKE_READ_ONLY=PASS
-PRODUCTIVE_ANCESTRY_PRESERVED=YES
+PRODUCTION_DEPENDENCIES=2
+CRITICAL_JS_GZIP=18018_B
+INITIAL_CSS_GZIP=17268_B
+LAZY_MAP_GZIP=217320_B
+LAZY_VOICE_GZIP=17610_B
 ```
 
-PR #37 was merged using a merge commit rather than squash/rebase so the audited and productive SHA `c6aa7302784ce07415949d2b9b1335919ee2cbbd` remains in canonical main ancestry. The first merge call was rejected only because the PR was still Draft; no repository or runtime mutation occurred. The PR was marked Ready for Review and the exact same audited head was then merged successfully.
+BEFORE/AFTER controlled captures recorded JS/CSS transfer, LCP, observed event duration, CLS, long tasks and map usable time. All six light/dark mobile/desktop cases passed the configured regression thresholds with no horizontal overflow.
 
-## Issue #34 data outcome
-
-```text
-SANTA_FE_GTFS_ACCEPTED=NO
-SANTA_FE_GTFS_RT_ACCEPTED=NO
-SANTA_FE_TRANSIT_RESULT=NO_FEED
-BUS_ACTIVATION=OFF
-MOBILITY_DATABASE=DISCOVERY_ONLY
-CATALOG_LICENSE_METADATA_IS_OPERATIONAL_AUTHORITY=NO
-MOBILITY_DATABASE_CANONICAL_LICENSE_URL=NULL
-MOBILITY_DATABASE_CANONICAL_LICENSE_STATUS=UNKNOWN
-GTFS_RT_ATTACH_WITHOUT_VERIFIED_STATIC=BLOCKED
-```
-
-No current authoritative Santa Fe Capital bus GTFS/GTFS-RT feed with independently verified compatible provider/feed license and freshness was demonstrated. Phase 5 therefore terminates as canonical `NO_FEED`; no route, stop, frequency, wait, fare or bus availability is fabricated. Because the prerequisite verified feed/use-case does not exist, Phase 6 terminates as `MOTIS_OTP=NOT_RUN_CONDITION_NOT_MET`. Phase 7 selects `NO_CHANGE`; no external routing backend is activated.
-
-## Stable architecture and truth boundaries
+## Mobility truth after candidate operation
 
 ```text
-UI=SVELTE_5
-LANGUAGE=TYPESCRIPT_STRICT
-BUILD=VITE
-RUNTIME=CLOUDFLARE_WORKER_TYPESCRIPT_AND_ASSETS
-APP=SPA_PWA
-SSR=NO
-SVELTEKIT=NO
-TAILWIND=NO
-MOBILITY_DATA_TRUST=DETERMINISTIC_TYPED_CONTRACTS
+MOBILITY_TRUST_API=PASS
+SANTA_FE_BUS_ACTIVATION=OFF
+BUS_REASON=NO_ACCEPTED_AUTHORITATIVE_GTFS_WITH_VERIFIED_LICENSE_AND_FRESHNESS
+MOBILITY_DATABASE_ROLE=DISCOVERY_ONLY
 GTFS_VALIDATOR=MobilityData_gtfs-validator_v8.0.1
 GTFS_VALIDATOR_SHA256=19293ddd9b6f954f216d4f12054bd8a3232921751c4484339e339764a91000e2
-MOBILITY_DATABASE=BUILD_TIME_OR_MANUAL_DISCOVERY_ONLY
 ```
 
 Permanent invariants remain:
 - browser does not call Nominatim, OSRM or Mobility Database directly;
-- bus stays disabled without verified source/license/freshness/validation;
-- catalog metadata cannot authorize a feed;
-- GTFS-RT cannot attach without compatible verified-current static GTFS;
+- BUS stays disabled without verified source/license/freshness/validation;
 - APP_ONLY providers expose no fabricated numeric fare;
 - AI does not calculate canonical routes, fares, times, availability or rankings;
 - external actions require explicit expiring single-use confirmation;
 - audio/transcripts/exact-location history are not persistently stored;
 - VOY works without login, voice or AI.
 
-## Historical evidence index
+## Historical anchors
 
 ```text
-ISSUE32=CLOSED_COMPLETED
-ISSUE32_PRODUCTIVE_SOURCE=403ad4fc96f0b7138151f6267b996cd900f752c2
-ISSUE34_INITIAL_MILESTONE_COMMENT=5217164821
-ISSUE34_LICENSE_BLOCK_AUD=5217321670
-ISSUE34_CORRECTED_MILESTONE_COMMENT=5217585109
 ISSUE34_TERMINAL_AUD=5217823220
-ISSUE34_CORRECTED_CANDIDATE_RUN=31181446289
-ISSUE34_CORRECTED_CANDIDATE_ARTIFACT=8995148336
-ISSUE34_TERMINAL_PRODUCTION_RUN=31185141780
-ISSUE34_TERMINAL_ARTIFACT=8996545635
-PRE_TERMINAL_WORKLOG_COMMIT=3f8e096b7065d41f9749e5613b329736b7301055
+ISSUE34_PR37_MERGE_SHA=f9cbecc6761048fc1fabb0c4135e7b5568c840c2
+ISSUE36_AUDITED_DESIGN_HEAD=27c5f0395241d5eff9fac0202f1e7ded9cc24d31
+ISSUE36_MAP_FIRST_AMENDMENT=5224435211
+ISSUE36_MAP_FIRST_AUD_PASS=5228862173
 ```
 
 ## Next authorized sequence
 
 ```text
-ISSUE34_NEXT=CLOSE_AFTER_THIS_DOC_COMMIT_VALIDATES
-ISSUE36_START_GATE=ISSUE34_MUST_BE_CLOSED_AND_NO_PARALLEL_PRODUCT_LINE
-ISSUE36_ROLE=ARQ
-ISSUE36_MATERIAL_EJE_AUTHORITY=REQUIRES_MATCHING_INDEPENDENT_AUD_PER_GLOBAL_PROJECT_RULES
-NEXT=VALIDATE_THIS_DOC_COMMIT_CLOSE_ISSUE34_THEN_RECONSTRUCT_ISSUE36_GATE
+MAP_FIRST_IMPLEMENTATION=COMPLETE
+MAP_FIRST_CANDIDATE_0_PERCENT=VALIDATED
+MERGE=NO
+PRODUCTION_PROMOTION=NO
+NEXT=AUD_MATERIAL_MAP_FIRST_REVIEW
 ```
