@@ -3,6 +3,8 @@
   .map-first-layout .input-wrap input,
   .map-first-layout .manual input{min-height:44px;height:44px}
 
+  .map-first-layout[data-interaction-state="IDLE"] .message{display:none}
+
   .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.sheet,
   .map-first-layout[data-interaction-state="SEARCH_RESULTS"]>.sheet,
   .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.decision-empty,
