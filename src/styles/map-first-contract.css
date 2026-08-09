@@ -1,0 +1,20 @@
+/* Interaction-contract overrides kept separate from the visual composition layer. */
+@media(max-width:759px){
+  .map-first-layout .input-wrap input,
+  .map-first-layout .manual input{min-height:44px;height:44px}
+
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.sheet,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"]>.sheet,
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.decision-empty,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"]>.decision-empty{visibility:hidden;pointer-events:none}
+
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"] .modes,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"] .modes,
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"] .message,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"] .message,
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"] .assistant-trigger,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"] .assistant-trigger{display:none}
+
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"]>.planner,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"]>.planner{max-height:72%}
+}
