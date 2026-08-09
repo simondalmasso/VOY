@@ -1,0 +1,63 @@
+name: VOY Map-First QA
+
+on:
+  push:
+    branches:
+      - feat/map-first-interaction-01
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.3.14
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install frozen toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@${BUN_VERSION}
+          test "$(bun --version)" = "${BUN_VERSION}"
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+
+      - name: Validate source and deterministic contracts
+        run: |
+          set -euo pipefail
+          bun run typecheck
+          bun run lint
+          bun run assets:source
+          bun run test
+          BUILD_HASH="${GITHUB_SHA::7}" bun run build
+          bun run assets:build
+          bun run budget
+
+      - name: Wrangler dry run
+        run: bunx wrangler deploy --dry-run --outdir .wrangler-map-first-dry-run
+
+      - name: Freeze validation summary
+        if: always()
+        run: |
+          mkdir -p test-results/map-first-qa
+          printf '%s\n' "EXACT_HEAD=$GITHUB_SHA" > test-results/map-first-qa/summary.txt
+          printf '%s\n' "BASE=bf6c4fd36eafcdab78e7e0ce33f99696541f553c" >> test-results/map-first-qa/summary.txt
+          printf '%s\n' "RUN=$GITHUB_RUN_ID" >> test-results/map-first-qa/summary.txt
+          git diff --check bf6c4fd36eafcdab78e7e0ce33f99696541f553c..HEAD >> test-results/map-first-qa/diff-check.txt 2>&1 || true
+          find test-results/map-first-qa -type f ! -name manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > test-results/map-first-qa/manifest.sha256
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-map-first-qa-${{ github.run_id }}
+          path: test-results/map-first-qa
+          if-no-files-found: error
+          retention-days: 30
