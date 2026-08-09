@@ -28,6 +28,13 @@ async function planTrip(page: Page): Promise<void> {
   await expect(page.getByTestId('trip-sheet')).toBeVisible();
 }
 
+async function openDecisionHalf(page: Page): Promise<void> {
+  const sheet = page.getByTestId('trip-sheet');
+  await expect(sheet).toHaveAttribute('data-snap', 'peek');
+  await page.getByTestId('sheet-handle').click();
+  await expect(sheet).toHaveAttribute('data-snap', 'half');
+}
+
 test('Issue36 composition follows the audited map-first amendment on mobile and desktop', async ({ page }, testInfo: TestInfo) => {
   await deterministicTripApis(page);
   await page.goto('/');
@@ -112,6 +119,7 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   await expect(provenance).toContainText('Municipalidad de Santa Fe');
   await expect(provenance).toContainText('2026-08-05');
   await expect(page.getByTestId('trip-sheet')).not.toContainText('Destino autoritativo');
+  await openDecisionHalf(page);
   const taxiPrice = page.getByTestId('provider-taxi').locator('.provider-meta > strong');
   await expect(taxiPrice).toBeVisible();
   expect(parseFloat(await taxiPrice.evaluate(node => getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(30);
@@ -122,6 +130,8 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   }
   const beforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
+  await openDecisionHalf(page);
+  await expect(page.getByTestId('provider-bus')).toBeVisible();
   await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
   expect(routeRequests.length).toBe(beforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
@@ -138,18 +148,18 @@ test('Issue36 narrow mobile mode rail signals overflow and reveals Colectivo cle
   const initial = await selector.evaluate(element => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, overflowX: getComputedStyle(element).overflowX }));
   expect(initial.scrollWidth).toBeGreaterThan(initial.clientWidth);
   expect(initial.overflowX).toBe('auto');
-  await selector.evaluate(element => { element.scrollLeft = element.scrollWidth; });
+  await selector.evaluate(element => { element.scrollLeft = element.scrollWidth; element.dispatchEvent(new Event('scroll')); });
   await expect.poll(() => selector.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  await expect(cue).toHaveCount(0);
   const geometry = await page.evaluate(() => {
     const rail = document.querySelector('[data-testid="mode-selector"]');
     const bus = document.querySelector('[data-mode="bus"]');
-    const cueNode = document.querySelector('[data-testid="mode-overflow-cue"]');
-    if (!(rail instanceof HTMLElement) || !(bus instanceof HTMLElement) || !(cueNode instanceof HTMLElement)) throw new Error('mode_overflow_subject_missing');
-    const rr = rail.getBoundingClientRect(); const br = bus.getBoundingClientRect(); const cr = cueNode.getBoundingClientRect();
-    return { railLeft: rr.left, railRight: rr.right, busLeft: br.left, busRight: br.right, cueLeft: cr.left };
+    if (!(rail instanceof HTMLElement) || !(bus instanceof HTMLElement)) throw new Error('mode_overflow_subject_missing');
+    const rr = rail.getBoundingClientRect(); const br = bus.getBoundingClientRect();
+    return { railLeft: rr.left, railRight: rr.right, busLeft: br.left, busRight: br.right };
   });
   expect(geometry.busLeft).toBeGreaterThanOrEqual(geometry.railLeft - 1);
-  expect(geometry.busRight).toBeLessThanOrEqual(geometry.cueLeft + 1);
+  expect(geometry.busRight).toBeLessThanOrEqual(geometry.railRight + 1);
   await expect(page.locator('[data-mode="bus"]')).toHaveText('Colectivo');
 });
 
