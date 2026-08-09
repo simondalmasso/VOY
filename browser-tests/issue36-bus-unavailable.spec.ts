@@ -37,11 +37,7 @@ async function deterministicTripApis(page: Page): Promise<{ routeRequests: strin
   });
   await page.route('**/api/route', route => {
     routeRequests.push(route.request().postData() || '');
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706, -31.633], [-60.7, -31.64], [-60.700503, -31.643533]] })
-    });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706, -31.633], [-60.7, -31.64], [-60.700503, -31.643533]] }) });
   });
   await page.route('https://*.basemaps.cartocdn.com/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: tilePng }));
   return { routeRequests };
@@ -56,6 +52,13 @@ async function planTrip(page: Page): Promise<void> {
   await expect(destination).toContainText('Terminal de Ómnibus');
   await destination.click();
   await expect(page.getByTestId('trip-sheet')).toBeVisible();
+}
+
+async function openDecisionHalf(page: Page): Promise<void> {
+  const sheet = page.getByTestId('trip-sheet');
+  await expect(sheet).toHaveAttribute('data-snap', 'peek');
+  await page.getByTestId('sheet-handle').click();
+  await expect(sheet).toHaveAttribute('data-snap', 'half');
 }
 
 async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
@@ -147,6 +150,7 @@ test('Issue36 BUS unavailable state stays readable and subordinate on narrow mob
   await bus.scrollIntoViewIfNeeded();
   await bus.click();
   await expect(bus).toHaveAttribute('aria-pressed', 'true');
+  await openDecisionHalf(page);
   await expect(page.getByTestId('provider-bus')).toBeVisible();
   expect(routeRequests.length).toBe(beforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
