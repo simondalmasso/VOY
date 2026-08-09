@@ -13,9 +13,13 @@ async function deterministicApis(page: Page): Promise<void> {
 }
 
 async function planTrip(page: Page): Promise<void> {
-  await page.getByTestId('origin-input').fill('Origen map-first');
-  await page.getByTestId('origin-apply').click();
+  await page.getByTestId('origin-manual-trigger').click();
+  const originInput = page.getByTestId('origin-input');
+  await expect(originInput).toBeFocused();
+  await originInput.fill('Origen map-first');
+  await originInput.press('Enter');
   await expect(page.getByTestId('origin-control')).toContainText('Plaza 25 de Mayo');
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
   await page.getByTestId('destination-input').fill('Terminal');
   const destination = page.getByTestId('destination-result-verified').first();
   await expect(destination).toContainText('Terminal de Ómnibus');
@@ -47,6 +51,10 @@ test('MAP-FIRST initial mobile viewport keeps at least 55% unobscured usable map
   await deterministicApis(page);
   await page.goto('/');
   await expect(page.getByTestId('map-shell')).toBeVisible();
+  await expect(page.getByTestId('gps-button')).toBeVisible();
+  await expect(page.getByTestId('origin-manual-trigger')).toBeVisible();
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
   const metric = await page.evaluate(() => {
     const viewport = { width: innerWidth, height: innerHeight };
     const map = document.querySelector('[data-testid="map-shell"]') as HTMLElement | null;
@@ -90,6 +98,35 @@ test('search owns one transient layer, keeps map interactive, and Escape restore
   await expect(page.getByTestId('map-first-layout')).not.toHaveAttribute('data-interaction-state', 'SEARCH_RESULTS');
 });
 
+test('manual origin is hidden initially, opens explicitly, and Escape/Back restore trigger focus', async ({ page }) => {
+  await deterministicApis(page);
+  await page.goto('/');
+  const trigger = page.getByTestId('origin-manual-trigger');
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
+  await expect(trigger).toBeVisible();
+
+  await trigger.click();
+  await expect(page.getByTestId('origin-input')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await expect(page.getByTestId('origin-input')).toBeFocused();
+  await page.evaluate(() => history.back());
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  const input = page.getByTestId('origin-input');
+  await input.fill('Origen map-first');
+  await input.press('Enter');
+  await expect(page.getByTestId('origin-control')).toContainText('Plaza 25 de Mayo');
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
+});
+
 test('location is never requested on load and permission denial progressively exposes manual origin', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __voyGpsCalls: number }).__voyGpsCalls = 0;
@@ -103,11 +140,14 @@ test('location is never requested on load and permission denial progressively ex
   await deterministicApis(page);
   await page.goto('/');
   expect(await page.evaluate(() => (window as unknown as { __voyGpsCalls: number }).__voyGpsCalls)).toBe(0);
+  await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
   await page.getByTestId('gps-button').click();
   expect(await page.evaluate(() => (window as unknown as { __voyGpsCalls: number }).__voyGpsCalls)).toBe(1);
   await expect(page.getByTestId('origin-control')).toHaveAttribute('data-location-state', 'denied');
   await expect(page.getByTestId('origin-control')).toContainText('Podés ingresar el origen manualmente');
   await expect(page.getByTestId('origin-input')).toBeFocused();
+  await expect(page.getByTestId('origin-apply')).toHaveCount(0);
 });
 
 test('decision sheet snaps progressively and map camera does not recenter during drag', async ({ page }) => {
@@ -153,6 +193,7 @@ test('browser Back collapses transient sheet states before navigation', async ({
   await expect(page.getByTestId('origin-input')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
+  await expect(page.getByTestId('origin-edit')).toBeFocused();
 });
 
 test('search focus on critical mobile sizes keeps input usable and removes sheet competition', async ({ page }, testInfo: TestInfo) => {

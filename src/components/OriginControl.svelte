@@ -10,11 +10,12 @@
   let manual = '';
   let status = '';
   let resolving = false;
-  let editing = true;
+  let editing = false;
   let controller: AbortController | null = null;
   let requestSequence = 0;
   let manualInput: HTMLInputElement;
   let editButton: HTMLButtonElement;
+  let manualTrigger: HTMLButtonElement;
   let seenDismissToken = dismissToken;
   let locationState: 'idle' | 'requesting' | 'available' | 'denied' | 'error' = 'idle';
   const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -23,10 +24,16 @@
   $: if (selected && !resolving) editing = false;
   $: if (dismissToken !== seenDismissToken) {
     seenDismissToken = dismissToken;
+    editing = false;
     onManualState(false);
     manualInput?.blur();
-    if (selected) editing = false;
-    queueMicrotask(() => editButton?.focus());
+    queueMicrotask(() => (selected ? editButton : manualTrigger)?.focus());
+  }
+
+  function openManual(): void {
+    editing = true;
+    onManualState(true);
+    queueMicrotask(() => manualInput?.focus());
   }
 
   function useLocation(): void {
@@ -37,7 +44,7 @@
     if (!navigator.geolocation) {
       locationState = 'error';
       status = 'Este navegador no ofrece ubicación. Ingresá un origen manual.';
-      queueMicrotask(() => manualInput?.focus());
+      openManual();
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -51,16 +58,13 @@
         locationState = 'available';
         onOrigin(coordinates, `Ubicación actual · ±${Math.round(position.coords.accuracy)} m`);
         status = '';
+        editing = false;
         onManualState(false);
       },
       () => {
         locationState = 'denied';
         status = 'No pudimos usar tu ubicación. Podés ingresar el origen manualmente.';
-        editing = true;
-        queueMicrotask(() => {
-          manualInput?.focus();
-          onManualState(true);
-        });
+        openManual();
       },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 }
     );
@@ -87,6 +91,7 @@
       if (!response.ok || !first || !coordinates || !isInsideSantaFe(coordinates)) throw new Error('not_found');
       onOrigin(coordinates, first.name || first.display_name || query);
       status = '';
+      editing = false;
       onManualState(false);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -96,28 +101,37 @@
     }
   }
 
+  function onManualKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    void useManual();
+  }
+
   onDestroy(() => controller?.abort());
 </script>
 
 <section class="origin" class:compact={selected && !editing} aria-labelledby="origin-title" data-testid="origin-control" data-selected={selected ? 'true' : 'false'} data-location-state={locationState}>
   <div class="origin-summary"><span id="origin-title">Origen</span><strong>{label}</strong></div>
   {#if selected && !editing}
-    <button bind:this={editButton} type="button" class="origin-edit" on:click={() => { editing = true; queueMicrotask(() => manualInput?.focus()); }} data-testid="origin-edit">Cambiar</button>
-  {:else}
-    <button type="button" class="location" on:click={useLocation} aria-label="Usar mi ubicación actual" aria-busy={locationState === 'requesting'} data-testid="gps-button">Usar mi ubicación</button>
+    <button bind:this={editButton} type="button" class="origin-edit" on:click={openManual} data-testid="origin-edit">Cambiar</button>
+  {:else if editing}
     <div class="manual">
       <input
         bind:this={manualInput}
         bind:value={manual}
         autocomplete="street-address"
-        placeholder="O escribí tu origen"
+        placeholder="Escribí tu origen"
         aria-label="Origen manual"
         on:focus={() => onManualState(true)}
-        on:blur={() => onManualState(false)}
-        on:keydown={(event) => event.key === 'Enter' && useManual()}
+        on:keydown={onManualKeydown}
         data-testid="origin-input"
       />
-      <button type="button" on:click={useManual} aria-busy={resolving} data-testid="origin-apply">Aplicar</button>
+    </div>
+    <p aria-live="polite">{status}</p>
+  {:else}
+    <div class="manual">
+      <button type="button" class="location" on:click={useLocation} aria-label="Usar mi ubicación actual" aria-busy={locationState === 'requesting'} data-testid="gps-button">Usar mi ubicación</button>
+      <button bind:this={manualTrigger} type="button" class="origin-edit" on:click={openManual} data-testid="origin-manual-trigger">Definir origen</button>
     </div>
     <p aria-live="polite">{status}</p>
   {/if}
