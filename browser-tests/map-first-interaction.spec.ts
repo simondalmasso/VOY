@@ -28,6 +28,20 @@ async function cameraFitCount(page: Page): Promise<number> {
   return Number(await page.getByTestId('map-shell').getAttribute('data-camera-fit-count') || '0');
 }
 
+async function stableCameraFitCount(page: Page): Promise<number> {
+  let previous = -1;
+  let stableSamples = 0;
+  for (let sample = 0; sample < 12; sample += 1) {
+    await page.waitForTimeout(200);
+    const current = await cameraFitCount(page);
+    if (current === previous) stableSamples += 1;
+    else stableSamples = 0;
+    previous = current;
+    if (current > 0 && stableSamples >= 3) return current;
+  }
+  throw new Error(`camera_fit_never_stabilized:${previous}`);
+}
+
 test('MAP-FIRST initial mobile viewport keeps at least 55% unobscured usable map area', async ({ page }, testInfo: TestInfo) => {
   test.skip(!['mobile-360x800','mobile-390x844'].includes(testInfo.project.name), 'critical mobile occlusion gate');
   await deterministicApis(page);
@@ -160,11 +174,11 @@ test('opening an external provider does not reset camera and disables map only f
   await planTrip(page);
   await page.getByTestId('sheet-handle').click();
   await expect(page.getByTestId('trip-sheet')).toHaveAttribute('data-snap','half');
-  await page.waitForTimeout(260);
-  const before = await cameraFitCount(page);
+  const before = await stableCameraFitCount(page);
   await page.getByTestId('provider-uber').click();
   await expect(page.getByTestId('external-confirmation')).toBeVisible();
   await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-interaction','disabled');
+  await page.waitForTimeout(400);
   expect(await cameraFitCount(page)).toBe(before);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('external-confirmation')).toHaveCount(0);
