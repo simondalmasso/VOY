@@ -1,0 +1,73 @@
+name: VOY Map-First Full Regression
+
+on:
+  push:
+    branches:
+      - feat/map-first-interaction-01
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.3.14
+  VOY_EVIDENCE_DIR: test-results/map-first-full-regression/screens
+  VOY_OUTPUT_DIR: test-results/map-first-full-regression/browser-output
+  VOY_REPORT_DIR: test-results/map-first-full-regression/browser-report
+  VOY_LOCAL_SERVER_LOG: test-results/map-first-full-regression/static-preview.log
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install frozen toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@${BUN_VERSION}
+          test "$(bun --version)" = "${BUN_VERSION}"
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Full deterministic source regression
+        run: |
+          set -euo pipefail
+          bun run typecheck
+          bun run lint
+          bun run assets:source
+          bun run test
+          BUILD_HASH="${GITHUB_SHA::7}" VOY_METRICS_PATH=test-results/map-first-full-regression/build-metrics.json bun run build
+          bun run assets:build
+          VOY_METRICS_PATH=test-results/map-first-full-regression/build-metrics.json bun run budget
+          bunx wrangler deploy --dry-run --outdir .wrangler-map-first-full-dry-run
+
+      - name: Full browser regression on exact client build
+        run: |
+          set -euo pipefail
+          BUILD_HASH="${GITHUB_SHA::7}" bash scripts/run-browser-smoke.sh 2>&1 | tee test-results/map-first-full-regression/browser.log
+
+      - name: Freeze regression manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/map-first-full-regression
+          printf '%s\n' "EXACT_HEAD=$GITHUB_SHA" > test-results/map-first-full-regression/identity.txt
+          printf '%s\n' "BASE=bf6c4fd36eafcdab78e7e0ce33f99696541f553c" >> test-results/map-first-full-regression/identity.txt
+          printf '%s\n' "RUN=$GITHUB_RUN_ID" >> test-results/map-first-full-regression/identity.txt
+          find test-results/map-first-full-regression -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > test-results/map-first-full-regression/manifest.sha256
+          sha256sum test-results/map-first-full-regression/manifest.sha256 > test-results/map-first-full-regression/digest.txt
+
+      - name: Upload regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-map-first-full-regression-${{ github.run_id }}
+          path: test-results/map-first-full-regression
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30

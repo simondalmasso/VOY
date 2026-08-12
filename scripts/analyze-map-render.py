@@ -16,9 +16,18 @@ BLOCKED_REFERENCE = {
     "unique_colors": 417,
     "mean_edge_gradient": 0.218492,
 }
-ROUTE_RGB = (109, 40, 217)       # #6d28d9
-ORIGIN_RGB = (21, 101, 192)      # #1565c0
-DESTINATION_RGB = (198, 40, 40)  # #c62828
+
+# Pixel proof supports both the pre-#36 map language and the intentionally re-authored
+# Issue #36 language. Structural browser assertions separately require map readiness,
+# overlay readiness, real route geometry and a loaded route layer. Pixel checks prove
+# those overlays are actually painted rather than only existing in the style graph.
+LEGACY_ROUTE_RGB = (109, 40, 217)       # #6d28d9
+LEGACY_ORIGIN_RGB = (21, 101, 192)      # #1565c0
+LEGACY_DESTINATION_RGB = (198, 40, 40)  # #c62828
+ISSUE36_SIGNAL_LIGHT_RGB = (255, 90, 54)   # #FF5A36
+ISSUE36_SIGNAL_DARK_RGB = (255, 104, 71)   # #FF6847
+ISSUE36_ORIGIN_LIGHT_RGB = (11, 11, 10)    # #0B0B0A
+ISSUE36_ORIGIN_DARK_RGB = (244, 241, 232)  # #F4F1E8
 
 
 def decode_png(path: Path):
@@ -87,7 +96,8 @@ def analyze(path: Path, tolerance: int = 34):
     grays = []
     edge_total = 0.0
     edge_count = 0
-    route_pixels = origin_pixels = destination_pixels = 0
+    legacy_route_pixels = legacy_origin_pixels = legacy_destination_pixels = 0
+    issue36_signal_pixels = issue36_origin_light_pixels = issue36_origin_dark_pixels = 0
 
     def near(rgb, target):
         return all(abs(rgb[channel] - target[channel]) <= tolerance for channel in range(3))
@@ -103,9 +113,12 @@ def analyze(path: Path, tolerance: int = 34):
             gray = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
             grays.append(gray)
             current_gray_row.append(gray)
-            route_pixels += int(near(rgb, ROUTE_RGB))
-            origin_pixels += int(near(rgb, ORIGIN_RGB))
-            destination_pixels += int(near(rgb, DESTINATION_RGB))
+            legacy_route_pixels += int(near(rgb, LEGACY_ROUTE_RGB))
+            legacy_origin_pixels += int(near(rgb, LEGACY_ORIGIN_RGB))
+            legacy_destination_pixels += int(near(rgb, LEGACY_DESTINATION_RGB))
+            issue36_signal_pixels += int(near(rgb, ISSUE36_SIGNAL_LIGHT_RGB) or near(rgb, ISSUE36_SIGNAL_DARK_RGB))
+            issue36_origin_light_pixels += int(near(rgb, ISSUE36_ORIGIN_LIGHT_RGB))
+            issue36_origin_dark_pixels += int(near(rgb, ISSUE36_ORIGIN_DARK_RGB))
             if len(current_gray_row) > 1:
                 edge_total += abs(current_gray_row[-1] - current_gray_row[-2])
                 edge_count += 1
@@ -128,33 +141,51 @@ def analyze(path: Path, tolerance: int = 34):
         "entropy_bits_min": 1.5,
         "unique_colors_min": 128,
         "mean_edge_gradient_min": 0.35,
-        "route_color_pixels_min": 35,
-        "origin_color_pixels_min": 25,
-        "destination_color_pixels_min": 25,
+        "legacy_route_color_pixels_min": 35,
+        "legacy_origin_color_pixels_min": 25,
+        "legacy_destination_color_pixels_min": 25,
+        # The Issue #36 route and destination deliberately share SIGNAL. The real-map
+        # browser gate separately proves route geometry + both point features; requiring
+        # >=100 signal pixels here proves the shared visual language is painted.
+        "issue36_signal_pixels_min": 100,
+        "issue36_origin_pixels_min": 25,
     }
+    basemap_non_flat = stddev >= thresholds["gray_stddev_min"] and entropy >= thresholds["entropy_bits_min"] and unique_colors >= thresholds["unique_colors_min"] and mean_edge >= thresholds["mean_edge_gradient_min"]
+    legacy_overlay = (
+        legacy_route_pixels >= thresholds["legacy_route_color_pixels_min"]
+        and legacy_origin_pixels >= thresholds["legacy_origin_color_pixels_min"]
+        and legacy_destination_pixels >= thresholds["legacy_destination_color_pixels_min"]
+    )
+    issue36_origin_pixels = max(issue36_origin_light_pixels, issue36_origin_dark_pixels)
+    issue36_overlay = issue36_signal_pixels >= thresholds["issue36_signal_pixels_min"] and issue36_origin_pixels >= thresholds["issue36_origin_pixels_min"]
+    profile = "LEGACY" if legacy_overlay else ("ISSUE36_URBAN_SIGNAL" if issue36_overlay else "UNRESOLVED")
     checks = {
-        "basemap_non_flat": stddev >= thresholds["gray_stddev_min"] and entropy >= thresholds["entropy_bits_min"] and unique_colors >= thresholds["unique_colors_min"] and mean_edge >= thresholds["mean_edge_gradient_min"],
-        "route_visible": route_pixels >= thresholds["route_color_pixels_min"],
-        "origin_marker_visible": origin_pixels >= thresholds["origin_color_pixels_min"],
-        "destination_marker_visible": destination_pixels >= thresholds["destination_color_pixels_min"],
+        "basemap_non_flat": basemap_non_flat,
+        "route_visible": legacy_route_pixels >= thresholds["legacy_route_color_pixels_min"] if profile == "LEGACY" else issue36_signal_pixels >= thresholds["issue36_signal_pixels_min"],
+        "origin_marker_visible": legacy_origin_pixels >= thresholds["legacy_origin_color_pixels_min"] if profile == "LEGACY" else issue36_origin_pixels >= thresholds["issue36_origin_pixels_min"],
+        "destination_marker_visible": legacy_destination_pixels >= thresholds["legacy_destination_color_pixels_min"] if profile == "LEGACY" else issue36_signal_pixels >= thresholds["issue36_signal_pixels_min"],
     }
     return {
         "file": str(path),
         "width": width,
         "height": height,
         "pixels_analyzed": pixel_count,
+        "visual_profile": profile,
         "gray_stddev": round(stddev, 6),
         "gray_variance": round(variance, 6),
         "entropy_bits": round(entropy, 6),
         "unique_colors": unique_colors,
         "mean_edge_gradient": round(mean_edge, 6),
-        "route_color_pixels": route_pixels,
-        "origin_color_pixels": origin_pixels,
-        "destination_color_pixels": destination_pixels,
+        "legacy_route_color_pixels": legacy_route_pixels,
+        "legacy_origin_color_pixels": legacy_origin_pixels,
+        "legacy_destination_color_pixels": legacy_destination_pixels,
+        "issue36_signal_pixels": issue36_signal_pixels,
+        "issue36_origin_light_pixels": issue36_origin_light_pixels,
+        "issue36_origin_dark_pixels": issue36_origin_dark_pixels,
         "thresholds": thresholds,
         "checks": checks,
         "blocked_reference": BLOCKED_REFERENCE,
-        "pass": all(checks.values()),
+        "pass": profile != "UNRESOLVED" and all(checks.values()),
     }
 
 

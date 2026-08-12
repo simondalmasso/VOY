@@ -1,0 +1,243 @@
+/* VOY map-first interaction layer.
+   Loaded after the compact Issue #36 visual pass. The map remains the operational
+   canvas; planner/search/sheet are temporary instruments over it. */
+
+:root{
+  --voy-map-first-motion:180ms;
+  --voy-map-first-sheet-motion:220ms;
+  --voy-map-first-ease:cubic-bezier(.2,.8,.2,1);
+}
+
+.map-first-layout{position:relative;isolation:isolate}
+.map-first-layout .map-shell{z-index:1}
+.map-first-layout .planner{z-index:20}
+.map-first-layout .sheet,.map-first-layout .decision-empty{z-index:30}
+
+.sheet-handle{
+  position:absolute;
+  top:0;
+  left:50%;
+  width:72px;
+  min-height:44px;
+  height:44px;
+  margin-left:-36px;
+  padding:0;
+  display:grid;
+  place-items:start center;
+  background:transparent;
+  color:var(--voy-muted);
+  border:0;
+  border-radius:0;
+  z-index:2;
+  touch-action:none;
+}
+.sheet-handle:hover,.sheet-handle:focus-visible{background:transparent}
+.sheet-handle .grab{display:block;margin:10px 0 0;width:36px;height:3px;background:var(--voy-border);border-radius:99px}
+.sheet-content{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.sheet{
+  --voy-sheet-drag:0px;
+  transform:translateY(var(--voy-sheet-drag));
+  transition:height var(--voy-map-first-sheet-motion) var(--voy-map-first-ease),transform var(--voy-map-first-motion) var(--voy-map-first-ease),box-shadow var(--voy-map-first-motion) var(--voy-map-first-ease);
+  will-change:height;
+}
+.sheet.dragging{transition:none;will-change:transform}
+
+@media(max-width:759px){
+  .app-shell{
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 14px);
+    gap:8px;
+  }
+  .brand{min-height:48px;padding-inline:4px;gap:10px}
+  .brand-context{display:none}
+  .theme-toggle{min-width:72px;height:44px;min-height:44px}
+
+  .map-first-layout{
+    display:grid;
+    grid-template:1fr / 1fr;
+    width:100%;
+    height:calc(100dvh - 74px - env(safe-area-inset-top));
+    min-height:620px;
+    max-height:calc(100dvh - 74px - env(safe-area-inset-top));
+    overflow:hidden;
+    border-radius:20px;
+    background:var(--voy-surface-2);
+  }
+
+  .map-first-layout>.map-shell{
+    grid-area:1/1;
+    width:100%;
+    height:100%;
+    min-height:0;
+    margin:0;
+    border-radius:20px;
+    border-color:color-mix(in srgb,var(--voy-border) 60%,transparent);
+  }
+
+  .map-first-layout>.planner{
+    grid-area:1/1;
+    align-self:start;
+    width:auto;
+    margin:10px;
+    display:grid;
+    gap:7px;
+    pointer-events:none;
+    max-height:52%;
+  }
+  .map-first-layout>.planner>*{pointer-events:auto}
+  .planner-intro{display:none}
+
+  .journey-builder{
+    background:color-mix(in srgb,var(--voy-surface) 96%,transparent);
+    border-color:color-mix(in srgb,var(--voy-border) 72%,transparent);
+    box-shadow:0 8px 28px rgba(11,11,10,.06);
+  }
+  [data-theme="dark"] .journey-builder{background:color-mix(in srgb,var(--voy-surface) 97%,transparent);box-shadow:0 8px 30px rgba(0,0,0,.2)}
+
+  .search,.origin{transition:padding var(--voy-map-first-motion) var(--voy-map-first-ease),opacity var(--voy-map-first-motion) var(--voy-map-first-ease)}
+  .search label{font-size:clamp(22px,6vw,27px)}
+  .search .results{max-height:min(34dvh,250px);overscroll-behavior:contain}
+
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"] .origin,
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"] .origin{display:none}
+  .map-first-layout[data-interaction-state="SEARCH_RESULTS"] .journey-builder::before,
+  .map-first-layout[data-interaction-state="SEARCH_FOCUSED"] .journey-builder::before{display:none}
+
+  .origin .location,.origin-edit,.manual button,.modes button,.assistant-trigger{min-height:44px;height:44px}
+  .origin .location{white-space:nowrap}
+  .manual input,.input-wrap input{min-height:42px;height:42px}
+
+  .modes{
+    width:max-content;
+    max-width:100%;
+    padding:3px;
+    border:1px solid color-mix(in srgb,var(--voy-border) 70%,transparent);
+    border-radius:12px;
+    background:color-mix(in srgb,var(--voy-surface) 94%,transparent);
+  }
+  .modes button{min-width:44px;padding-inline:12px}
+
+  .message{
+    width:fit-content;
+    max-width:100%;
+    min-height:30px;
+    padding:5px 9px 5px 24px;
+    background:color-mix(in srgb,var(--voy-surface) 92%,transparent);
+    border-color:color-mix(in srgb,var(--voy-border) 55%,transparent);
+    backdrop-filter:none;
+  }
+  .assistant-trigger{
+    width:fit-content;
+    min-width:150px;
+    padding-inline:10px;
+    border:1px solid color-mix(in srgb,var(--voy-border) 65%,transparent);
+    border-radius:11px;
+    background:color-mix(in srgb,var(--voy-surface) 92%,transparent);
+  }
+
+  .map-first-layout>.decision-empty{
+    grid-area:1/1;
+    align-self:end;
+    width:auto;
+    margin:0 10px 10px;
+    padding:8px 10px;
+    grid-template-columns:24px minmax(0,1fr);
+    gap:7px;
+    border:1px solid color-mix(in srgb,var(--voy-border) 58%,transparent);
+    border-radius:12px;
+    background:color-mix(in srgb,var(--voy-surface) 92%,transparent);
+    box-shadow:none;
+  }
+  .decision-empty p{font-size:11px;line-height:15px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .decision-empty strong{font-size:13px;line-height:17px}
+
+  .map-first-layout>.sheet{
+    grid-area:1/1;
+    align-self:end;
+    width:100%;
+    margin:0;
+    padding:34px 14px max(13px,env(safe-area-inset-bottom));
+    border-radius:22px 22px 0 0;
+    border-left:1px solid color-mix(in srgb,var(--voy-border) 64%,transparent);
+    border-right:1px solid color-mix(in srgb,var(--voy-border) 64%,transparent);
+    border-bottom:0;
+    box-shadow:0 -12px 34px rgba(11,11,10,.08);
+    overflow:hidden;
+  }
+  .sheet[data-snap="peek"]{height:154px}
+  .sheet[data-snap="half"]{height:46%}
+  .sheet[data-snap="expanded"]{height:78%}
+  .sheet-content{height:100%;padding-right:2px}
+  .sheet[data-snap="peek"] .options,
+  .sheet[data-snap="peek"] .methodology,
+  .sheet[data-snap="peek"] .destination-address{display:none}
+  .sheet[data-snap="peek"] header{align-items:center}
+  .sheet[data-snap="peek"] h2{font-size:22px;margin:1px 0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sheet[data-snap="peek"] header p strong{font-size:18px}
+  .sheet[data-snap="peek"] .ranking-note{margin-bottom:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .map-first-layout[data-keyboard-open="true"][data-interaction-state="SEARCH_FOCUSED"]>.sheet,
+  .map-first-layout[data-keyboard-open="true"][data-interaction-state="SEARCH_RESULTS"]>.sheet,
+  .map-first-layout[data-keyboard-open="true"]>.decision-empty{visibility:hidden;pointer-events:none}
+  .map-first-layout[data-keyboard-open="true"]>.planner{max-height:72%}
+  .map-first-layout[data-keyboard-open="true"] .modes,
+  .map-first-layout[data-keyboard-open="true"] .assistant-trigger{display:none}
+
+  .map-credit{z-index:2}
+  .map-truth{z-index:2;left:auto;right:10px;max-width:min(62%,330px);bottom:10px}
+  .sheet~.map-truth{bottom:166px}
+
+  footer{padding-inline:4px;gap:12px;overflow-x:auto;white-space:nowrap}
+}
+
+@media(min-width:760px){
+  .map-first-layout{
+    display:grid;
+    grid-template-columns:minmax(350px,410px) minmax(0,1fr);
+    grid-template-rows:minmax(600px,calc(100dvh - 150px));
+    grid-template-areas:"planner map";
+    gap:14px;
+    align-items:stretch;
+  }
+  .map-first-layout>.planner{grid-area:planner;align-self:start;max-height:100%;overflow:visible}
+  .map-first-layout>.map-shell{
+    grid-area:map;
+    width:100%;
+    height:100%;
+    min-height:600px;
+    border-radius:20px;
+  }
+  .map-first-layout>.sheet{
+    grid-area:map;
+    align-self:end;
+    justify-self:stretch;
+    width:auto;
+    margin:0 14px 14px;
+    padding:34px 18px 16px;
+    border-radius:20px;
+    overflow:hidden;
+    z-index:30;
+  }
+  .sheet[data-snap="peek"]{height:158px}
+  .sheet[data-snap="half"]{height:44%}
+  .sheet[data-snap="expanded"]{height:72%}
+  .sheet-content{height:100%}
+  .sheet[data-snap="peek"] .options,
+  .sheet[data-snap="peek"] .methodology,
+  .sheet[data-snap="peek"] .destination-address{display:none}
+  .map-first-layout>.decision-empty{
+    grid-area:map;
+    align-self:end;
+    justify-self:start;
+    width:min(420px,calc(100% - 28px));
+    margin:14px;
+    padding:10px 12px;
+    border:1px solid color-mix(in srgb,var(--voy-border) 58%,transparent);
+    border-radius:12px;
+    background:color-mix(in srgb,var(--voy-surface) 92%,transparent);
+    z-index:20;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .sheet,.search,.origin,.map-first-layout *{scroll-behavior:auto!important;transition-duration:0ms!important;animation-duration:0ms!important}
+}

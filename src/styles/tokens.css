@@ -1,8 +1,87 @@
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #151515; background: #f7f6f2; font-synthesis: none;
-  --surface: #fff; --surface-soft: #f0efe9; --ink: #151515; --muted: #67655f;
-  --border: #d9d7cf; --accent: #151515; --danger: #a12222; --success: #176b42;
-  --radius: 18px; --shadow: 0 8px 28px rgba(22,22,20,.08);
+  color-scheme:light;
+
+  /* TYPE */
+  --voy-font-sans:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-family:var(--voy-font-sans);
+  font-synthesis:none;
+
+  /* COLOR */
+  --voy-canvas:#F2F0E8; --voy-surface:#FCFBF7; --voy-surface-2:#E9E6DD;
+  --voy-ink:#0B0B0A; --voy-ink-soft:#32312D; --voy-muted:#706D64; --voy-border:#D4D0C5;
+  --voy-signal:#FF5A36; --voy-signal-soft:#FFE2D9;
+  --voy-success:#126A48; --voy-success-soft:#DCEDE5; --voy-warning:#986000; --voy-warning-soft:#F8E7BF;
+  --voy-danger:#B32820; --voy-danger-soft:#F5DDDA; --voy-focus:#256DFF;
+
+  /* FONT_WEIGHT */
+  --voy-weight-regular:500; --voy-weight-label:650; --voy-weight-result:680; --voy-weight-bold:700;
+  --voy-weight-display:720; --voy-weight-strong:750; --voy-weight-metric:760; --voy-weight-heavy:800; --voy-weight-black:900;
+
+  /* FONT_SIZE */
+  --voy-type-overline:10px; --voy-type-eyebrow:11px; --voy-type-caption:12px; --voy-type-label:13px;
+  --voy-type-control:14px; --voy-type-body-sm:15px; --voy-type-body:16px; --voy-type-body-lg:17px;
+  --voy-type-input:18px; --voy-type-metric-sm:19px; --voy-type-title-sm:21px; --voy-type-modal:28px;
+  --voy-type-display-sm:30px; --voy-type-brand-lg:32px; --voy-type-display-md:34px; --voy-type-display-lg:38px; --voy-type-metric-lg:40px;
+  --voy-type-promise:clamp(22px,7vw,34px); --voy-type-search:clamp(30px,8vw,38px);
+  --voy-type-sheet:clamp(27px,8vw,34px); --voy-type-metric:clamp(30px,8vw,40px);
+
+  /* LINE_HEIGHT */
+  --voy-leading-brand:.92; --voy-leading-metric:.95; --voy-leading-flat:1; --voy-leading-display:1.02; --voy-leading-title:1.05;
+  --voy-leading-12:12px; --voy-leading-14:14px; --voy-leading-15:15px; --voy-leading-16:16px; --voy-leading-17:17px;
+  --voy-leading-18:18px; --voy-leading-19:19px; --voy-leading-20:20px; --voy-leading-21:21px; --voy-leading-22:22px; --voy-leading-23:23px;
+  --voy-leading-snug:1.35; --voy-leading-copy:1.5; --voy-leading-reading:1.65;
+
+  /* TRACKING */
+  --voy-tracking-brand:-.06em; --voy-tracking-display:-.045em; --voy-tracking-dialog:-.035em; --voy-tracking-title:-.02em;
+  --voy-tracking-input:-.01em; --voy-tracking-context:.02em; --voy-tracking-label:.08em; --voy-tracking-kicker:.09em; --voy-tracking-eyebrow:.1em;
+
+  /* SPACE */
+  --voy-space-1:4px; --voy-space-2:8px; --voy-space-3:12px; --voy-space-4:16px; --voy-space-5:20px;
+  --voy-space-6:24px; --voy-space-8:32px; --voy-space-10:40px; --voy-space-12:48px; --voy-space-16:64px; --voy-space-20:80px; --voy-space-24:96px;
+
+  /* RADIUS */
+  --voy-radius-xs:6px; --voy-radius-sm:10px; --voy-radius-md:14px; --voy-radius-lg:20px; --voy-radius-xl:28px; --voy-radius-pill:999px;
+
+  /* BORDER */
+  --voy-border-width:1px; --voy-border-style:solid;
+  --voy-border-default:var(--voy-border-width) var(--voy-border-style) var(--voy-border);
+  --voy-border-strong:2px var(--voy-border-style) var(--voy-ink);
+  --voy-focus-ring:3px solid var(--voy-focus);
+
+  /* SHADOW */
+  --voy-shadow:0 12px 40px rgba(11,11,10,.08);
+
+  /* MOTION_DURATION + MOTION_EASING */
+  --voy-motion-fast:160ms; --voy-motion-base:180ms;
+  --voy-ease-standard:ease; --voy-ease-emphasized:cubic-bezier(.2,.8,.2,1);
+
+  /* Z_INDEX */
+  --voy-z-rail:1; --voy-z-marker:2; --voy-z-sheet:3; --voy-z-banner:30; --voy-z-modal:50;
+
+  /* CONTENT_WIDTH */
+  --voy-content-max:1440px; --voy-planner:410px;
+
+  /* CONTROL_HEIGHT */
+  --voy-control-s:40px; --voy-control-m:48px; --voy-control-l:56px; --voy-control-hero:58px; --voy-control-result:68px;
+
+  --surface:var(--voy-surface); --surface-soft:var(--voy-surface-2); --ink:var(--voy-ink); --muted:var(--voy-muted);
+  --border:var(--voy-border); --accent:var(--voy-ink); --danger:var(--voy-danger); --success:var(--voy-success); --radius:var(--voy-radius-md); --shadow:var(--voy-shadow);
 }
-@media (prefers-color-scheme: dark) { :root { color:#f4f4ef; background:#0d0d0c; --surface:#171716; --surface-soft:#232321; --ink:#f4f4ef; --muted:#aaa79f; --border:#383732; --accent:#f4f4ef; --shadow:none; } }
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --voy-canvas:#0B0B0A; --voy-surface:#141412; --voy-surface-2:#20201D;
+  --voy-ink:#F4F1E8; --voy-ink-soft:#D2CFC6; --voy-muted:#9E9A90; --voy-border:#34332E;
+  --voy-signal:#FF6847; --voy-signal-soft:#49231B; --voy-success:#69C39B; --voy-success-soft:#153729;
+  --voy-warning:#E5B45B; --voy-warning-soft:#3D3017; --voy-danger:#FF8176; --voy-danger-soft:#48201D; --voy-focus:#73A6FF;
+  --voy-shadow:0 16px 48px rgba(0,0,0,.28);
+}
+@media (prefers-color-scheme:dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme:dark;
+    --voy-canvas:#0B0B0A; --voy-surface:#141412; --voy-surface-2:#20201D;
+    --voy-ink:#F4F1E8; --voy-ink-soft:#D2CFC6; --voy-muted:#9E9A90; --voy-border:#34332E;
+    --voy-signal:#FF6847; --voy-signal-soft:#49231B; --voy-success:#69C39B; --voy-success-soft:#153729;
+    --voy-warning:#E5B45B; --voy-warning-soft:#3D3017; --voy-danger:#FF8176; --voy-danger-soft:#48201D; --voy-focus:#73A6FF;
+    --voy-shadow:0 16px 48px rgba(0,0,0,.28);
+  }
+}
