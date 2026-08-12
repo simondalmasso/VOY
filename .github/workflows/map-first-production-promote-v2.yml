@@ -1,0 +1,368 @@
+name: VOY Map-First Production Promotion V2
+
+on:
+  push:
+    branches:
+      - ops/map-first-production-promote-20260812
+    paths:
+      - .map-first-production-promote-ready-v2
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-map-first-production-promotion-v2
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      CANDIDATE_SOURCE_SHA: 796c9355cc22a2e197ee719a15b506b5a3cb22b3
+      CANDIDATE_SHORT_SHA: 796c935
+      CANDIDATE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+      STABLE_VERSION_ID: 9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+      EXPECTED_STABLE_VERSION: V8.0.0
+      EXPECTED_STABLE_HASH: c6aa730
+      EXPECTED_CANDIDATE_VERSION: V8.0.0
+      EXPECTED_MAIN_SHA: 9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8
+      EXPECTED_FEATURE_HEAD: b3cb9a0d1f0d47cadaef983291f26b801d82a536
+      CONVERGENCE_INTERVAL_MS: '7000'
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout promotion control commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fail-closed authority and lineage preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .map-first-production-promote-ready-v2)" = "MAP_FIRST_PRODUCTION_PROMOTE_V2_20260812_002c464c"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_ops="$(git ls-remote origin refs/heads/ops/map-first-production-promote-20260812 | awk '{print $1}')"
+          test "$remote_ops" = "$GITHUB_SHA"
+          git fetch --no-tags origin \
+            refs/heads/main:refs/remotes/origin/main \
+            refs/heads/feat/map-first-interaction-01:refs/remotes/origin/feat/map-first-interaction-01
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse refs/remotes/origin/feat/map-first-interaction-01)" = "$EXPECTED_FEATURE_HEAD"
+          git merge-base --is-ancestor "$CANDIDATE_SOURCE_SHA" refs/remotes/origin/feat/map-first-interaction-01
+          disallowed="$(git diff --name-only "$CANDIDATE_SOURCE_SHA"..refs/remotes/origin/feat/map-first-interaction-01 | grep -Ev '^(docs/|$)' || true)"
+          test -z "$disallowed"
+          printf '%s\n' \
+            "PRODUCTION_PROMOTION_AUTHORIZED=YES" \
+            "CANDIDATE_SOURCE_SHA=$CANDIDATE_SOURCE_SHA" \
+            "CANDIDATE_VERSION_ID=$CANDIDATE_VERSION_ID" \
+            "STABLE_VERSION_ID=$STABLE_VERSION_ID" \
+            "EXPECTED_MAIN_SHA=$EXPECTED_MAIN_SHA" \
+            > promotion-authority.txt
+
+      - name: Checkout immutable candidate source
+        uses: actions/checkout@v4
+        with:
+          ref: 796c9355cc22a2e197ee719a15b506b5a3cb22b3
+          path: source
+          fetch-depth: 0
+
+      - name: Install pinned frozen toolchain
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Revalidate immutable source before production write
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SOURCE_SHA"
+          node scripts/verify-release-policy.mjs
+          git diff --check
+          mkdir -p test-results/map-first-production-promote
+          bun run typecheck
+          bun run lint
+          bun run assets:source
+          bun run test
+          BUILD_HASH="$CANDIDATE_SHORT_SHA" VOY_METRICS_PATH=test-results/map-first-production-promote/build-metrics.json bun run build
+          bun run assets:build
+          VOY_METRICS_PATH=test-results/map-first-production-promote/build-metrics.json bun run budget
+          STATIC_ROOT="" SHORT_SHA="$CANDIDATE_SHORT_SHA" EXPECTED_CANDIDATE_VERSION="$EXPECTED_CANDIDATE_VERSION" STATIC_MANIFEST_PATH=test-results/map-first-production-promote/static-manifest.json node scripts/build-static-manifest.mjs
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+
+      - name: Verify live split binding parity and candidate convergence
+        working-directory: source
+        shell: bash
+        env:
+          EVIDENCE_DIR: test-results/map-first-production-promote
+          STATIC_MANIFEST_PATH: test-results/map-first-production-promote/static-manifest.json
+          SHORT_SHA: 796c935
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?missing CLOUDFLARE_API_TOKEN}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?missing CLOUDFLARE_ACCOUNT_ID}"
+          export STABLE_VERSION_ID CANDIDATE_VERSION_ID EXPECTED_STABLE_VERSION EXPECTED_STABLE_HASH EXPECTED_CANDIDATE_VERSION WORKER_NAME WORKER_URL CONVERGENCE_INTERVAL_MS EVIDENCE_DIR STATIC_MANIFEST_PATH SHORT_SHA
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$STABLE_VERSION_ID" > /tmp/stable-version.json
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$CANDIDATE_VERSION_ID" > /tmp/candidate-version.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          function bindings(path){
+            const p=JSON.parse(fs.readFileSync(path,'utf8'));
+            if(p.success!==true) throw new Error('version_detail_failed');
+            const list=p.result?.resources?.bindings;
+            if(!Array.isArray(list)) throw new Error('bindings_missing');
+            return list.map(b=>({name:b.name,type:b.type})).sort((a,b)=>`${a.name}:${a.type}`.localeCompare(`${b.name}:${b.type}`));
+          }
+          const stable=bindings('/tmp/stable-version.json');
+          const candidate=bindings('/tmp/candidate-version.json');
+          const left=stable.map(x=>`${x.name}:${x.type}`), right=candidate.map(x=>`${x.name}:${x.type}`);
+          if(JSON.stringify(left)!==JSON.stringify(right)) throw new Error(`binding_contract_drift:${JSON.stringify({stable:left,candidate:right})}`);
+          fs.writeFileSync(`${process.env.EVIDENCE_DIR}/pre-promotion-binding-parity.json`,JSON.stringify({result:'PASS',stable_binding_count:stable.length,candidate_binding_count:candidate.length,stable,candidate},null,2));
+          NODE
+          node scripts/svelte-candidate-gate.mjs converge
+
+      - name: Fresh candidate browser preflight
+        working-directory: source
+        shell: bash
+        env:
+          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
+          VOY_EXTERNAL_SERVER: '1'
+          VOY_REAL_BASEMAP: '1'
+          VOY_WORKER_NAME: voy-app
+          VOY_CANDIDATE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+          VOY_EVIDENCE_DIR: test-results/map-first-production-promote/preflight-browser-screens
+          VOY_OUTPUT_DIR: test-results/map-first-production-promote/preflight-browser-output
+          VOY_REPORT_DIR: test-results/map-first-production-promote/preflight-browser-report
+        run: bunx playwright test -c browser-tests/playwright.config.ts
+
+      - name: Promote exact candidate and verify public production
+        working-directory: source
+        shell: bash
+        env:
+          EVIDENCE_DIR: test-results/map-first-production-promote
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          promotion_attempted=0
+          rollback_attempted=0
+          tail_pid=''
+
+          stop_tail() {
+            if [[ -n "$tail_pid" ]] && kill -0 "$tail_pid" 2>/dev/null; then
+              kill "$tail_pid" 2>/dev/null || true
+              wait "$tail_pid" 2>/dev/null || true
+            fi
+          }
+
+          verify_restored_stable() {
+            local api_root="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+            for round in 1 2 3; do
+              curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/deployments" > /tmp/rollback-deployments.json
+              curl -fsS --retry 3 "$WORKER_URL/api/health?rollback_verify=$round-$(date +%s%N)" > /tmp/rollback-health.json
+              node <<'NODE'
+              const fs=require('node:fs');
+              const p=JSON.parse(fs.readFileSync('/tmp/rollback-deployments.json','utf8'));
+              const deployments=p.result?.deployments||p.result||[]; const active=deployments[0];
+              if(!active||!Array.isArray(active.versions)) throw new Error('rollback_active_missing');
+              const stable=active.versions.find(v=>v.version_id===process.env.STABLE_VERSION_ID);
+              const candidate=active.versions.find(v=>v.version_id===process.env.CANDIDATE_VERSION_ID);
+              if(!stable||Number(stable.percentage)!==100) throw new Error('rollback_stable_not_100');
+              if(candidate&&Number(candidate.percentage)!==0) throw new Error('rollback_candidate_not_0');
+              const h=JSON.parse(fs.readFileSync('/tmp/rollback-health.json','utf8'));
+              if(h.ok!==true||h.version!==process.env.EXPECTED_STABLE_VERSION||h.build_hash!==process.env.EXPECTED_STABLE_HASH) throw new Error('rollback_health_mismatch');
+              NODE
+              sleep 3
+            done
+          }
+
+          rollback_on_error() {
+            rc=$?
+            trap - ERR
+            stop_tail
+            if [[ "$promotion_attempted" == '1' && "$rollback_attempted" == '0' ]]; then
+              rollback_attempted=1
+              echo "POST_PROMOTION_FAILURE: attempting single authorized rollback" | tee "$EVIDENCE_DIR/rollback.log"
+              if wrangler versions deploy "$STABLE_VERSION_ID@100%" "$CANDIDATE_VERSION_ID@0%" --message "VOY Map-First automatic rollback after failed production validation" --yes | tee -a "$EVIDENCE_DIR/rollback.log"; then
+                if verify_restored_stable; then
+                  echo "ROLLBACK_VERIFIED=YES" | tee -a "$EVIDENCE_DIR/rollback.log"
+                else
+                  echo "EMERGENCY=ROLLBACK_VERIFICATION_FAILED" | tee -a "$EVIDENCE_DIR/rollback.log"
+                  exit 99
+                fi
+              else
+                echo "EMERGENCY=ROLLBACK_WRITE_FAILED" | tee -a "$EVIDENCE_DIR/rollback.log"
+                exit 98
+              fi
+            fi
+            exit "$rc"
+          }
+          trap rollback_on_error ERR
+
+          api_root="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/deployments" > "$EVIDENCE_DIR/deployments-immediately-before.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?immediately_before=$(date +%s%N)" > "$EVIDENCE_DIR/health-immediately-before.json"
+          node <<'NODE'
+          const fs=require('node:fs');
+          const p=JSON.parse(fs.readFileSync(`${process.env.EVIDENCE_DIR}/deployments-immediately-before.json`,'utf8'));
+          const list=p.result?.deployments||p.result||[]; const active=list[0];
+          if(!active||!Array.isArray(active.versions)) throw new Error('active_deployment_missing');
+          const stable=active.versions.find(v=>v.version_id===process.env.STABLE_VERSION_ID);
+          const candidate=active.versions.find(v=>v.version_id===process.env.CANDIDATE_VERSION_ID);
+          if(!stable||Number(stable.percentage)!==100||!candidate||Number(candidate.percentage)!==0) throw new Error('pre_promotion_split_drift');
+          if(active.versions.some(v=>v.version_id!==process.env.STABLE_VERSION_ID&&v.version_id!==process.env.CANDIDATE_VERSION_ID&&Number(v.percentage)!==0)) throw new Error('unexpected_nonzero_version');
+          const h=JSON.parse(fs.readFileSync(`${process.env.EVIDENCE_DIR}/health-immediately-before.json`,'utf8'));
+          if(h.ok!==true||h.version!==process.env.EXPECTED_STABLE_VERSION||h.build_hash!==process.env.EXPECTED_STABLE_HASH) throw new Error('pre_promotion_health_drift');
+          NODE
+
+          promotion_attempted=1
+          wrangler versions deploy "$STABLE_VERSION_ID@0%" "$CANDIDATE_VERSION_ID@100%" --message "VOY Map-First production promotion source $CANDIDATE_SOURCE_SHA" --yes | tee "$EVIDENCE_DIR/production-promotion.log"
+
+          start_ms=$(date +%s%3N)
+          consecutive=0
+          final_deployment_id=''
+          : > "$EVIDENCE_DIR/production-convergence.jsonl"
+          for round in $(seq 1 60); do
+            ok=0
+            if curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/deployments" > /tmp/prod-deployments.json \
+              && curl -fsS --retry 3 "$WORKER_URL/api/health?prod_converge=$round-$(date +%s%N)" > /tmp/prod-health.json; then
+              if node <<'NODE'
+              const fs=require('node:fs');
+              const p=JSON.parse(fs.readFileSync('/tmp/prod-deployments.json','utf8'));
+              const list=p.result?.deployments||p.result||[]; const active=list[0];
+              if(!active||!Array.isArray(active.versions)) process.exit(2);
+              const stable=active.versions.find(v=>v.version_id===process.env.STABLE_VERSION_ID);
+              const candidate=active.versions.find(v=>v.version_id===process.env.CANDIDATE_VERSION_ID);
+              if(!candidate||Number(candidate.percentage)!==100) process.exit(3);
+              if(stable&&Number(stable.percentage)!==0) process.exit(4);
+              const h=JSON.parse(fs.readFileSync('/tmp/prod-health.json','utf8'));
+              if(h.ok!==true||h.version!==process.env.EXPECTED_CANDIDATE_VERSION||h.build_hash!==process.env.CANDIDATE_SHORT_SHA) process.exit(5);
+              NODE
+              then ok=1; fi
+            fi
+            if [[ "$ok" == '1' ]]; then consecutive=$((consecutive+1)); else consecutive=0; fi
+            elapsed=$(( $(date +%s%3N) - start_ms ))
+            final_deployment_id="$(node -e "try{const p=require('/tmp/prod-deployments.json'); const a=(p.result&&p.result.deployments)||p.result||[]; process.stdout.write((a[0]&&a[0].id)||'')}catch{}")"
+            printf '{"round":%d,"elapsed_ms":%d,"ok":%s,"consecutive":%d,"deployment_id":"%s"}\n' "$round" "$elapsed" "$([[ "$ok" == '1' ]] && echo true || echo false)" "$consecutive" "$final_deployment_id" >> "$EVIDENCE_DIR/production-convergence.jsonl"
+            if (( consecutive >= 20 && elapsed >= 120000 )); then break; fi
+            sleep 7
+          done
+          elapsed=$(( $(date +%s%3N) - start_ms ))
+          if (( consecutive < 20 || elapsed < 120000 )); then
+            echo "production_convergence_failed consecutive=$consecutive elapsed_ms=$elapsed" >&2
+            false
+          fi
+
+          timeout 1200s wrangler tail "$WORKER_NAME" --format json --version-id "$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/production-tail.log" 2>&1 &
+          tail_pid=$!
+          sleep 5
+
+          VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_REAL_BASEMAP=1 \
+            VOY_EVIDENCE_DIR="$EVIDENCE_DIR/production-browser-screens" \
+            VOY_OUTPUT_DIR="$EVIDENCE_DIR/production-browser-output" \
+            VOY_REPORT_DIR="$EVIDENCE_DIR/production-browser-report" \
+            bunx playwright test -c browser-tests/playwright.config.ts | tee "$EVIDENCE_DIR/production-browser.log"
+
+          curl -fsS --retry 3 "$WORKER_URL/api/health?production_final=$(date +%s%N)" > "$EVIDENCE_DIR/production-health-final.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/mobility/trust?production_final=$(date +%s%N)" > "$EVIDENCE_DIR/production-mobility-trust-final.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/deployments" > "$EVIDENCE_DIR/deployments-final.json"
+          stop_tail
+          tail_pid=''
+
+          export FINAL_DEPLOYMENT_ID="$final_deployment_id" FINAL_CONSECUTIVE="$consecutive" FINAL_ELAPSED="$elapsed"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { analyzeCandidateTail } from './scripts/tail-runtime-proof.mjs';
+          const e=process.env.EVIDENCE_DIR;
+          const health=JSON.parse(fs.readFileSync(`${e}/production-health-final.json`,'utf8'));
+          if(health.ok!==true||health.version!==process.env.EXPECTED_CANDIDATE_VERSION||health.build_hash!==process.env.CANDIDATE_SHORT_SHA) throw new Error('final_production_health_mismatch');
+          const trust=JSON.parse(fs.readFileSync(`${e}/production-mobility-trust-final.json`,'utf8'));
+          if(trust.ok!==true||trust.operational_bus_activation!==false||trust.santa_fe?.bus_activation!==false||trust.mobility_database_role!=='DISCOVERY_ONLY') throw new Error('final_mobility_trust_drift');
+          const dp=JSON.parse(fs.readFileSync(`${e}/deployments-final.json`,'utf8'));
+          const list=dp.result?.deployments||dp.result||[]; const active=list[0];
+          const stable=active?.versions?.find(v=>v.version_id===process.env.STABLE_VERSION_ID);
+          const candidate=active?.versions?.find(v=>v.version_id===process.env.CANDIDATE_VERSION_ID);
+          if(!candidate||Number(candidate.percentage)!==100||(stable&&Number(stable.percentage)!==0)) throw new Error('final_control_plane_mismatch');
+          const tail=analyzeCandidateTail(fs.readFileSync(`${e}/production-tail.log`,'utf8'),process.env.CANDIDATE_VERSION_ID);
+          if(tail.exactEvents<1||tail.nonOkOutcomes.length||tail.exceptions) throw new Error(`production_tail_failed:${JSON.stringify(tail)}`);
+          fs.writeFileSync(`${e}/production-tail-proof.json`,JSON.stringify({result:'PASS',...tail},null,2));
+          fs.writeFileSync(`${e}/production-final-state.json`,JSON.stringify({
+            result:'PASS',
+            source_sha:process.env.CANDIDATE_SOURCE_SHA,
+            production_version_id:process.env.CANDIDATE_VERSION_ID,
+            production_build_hash:process.env.CANDIDATE_SHORT_SHA,
+            previous_stable_version_id:process.env.STABLE_VERSION_ID,
+            production_traffic:100,
+            previous_stable_traffic:0,
+            deployment_id:process.env.FINAL_DEPLOYMENT_ID,
+            convergence_rounds:Number(process.env.FINAL_CONSECUTIVE),
+            convergence_duration_ms:Number(process.env.FINAL_ELAPSED),
+            bus_activation:false,
+            rollback_executed:false,
+            verified_at:new Date().toISOString()
+          },null,2));
+          NODE
+
+          printf 'FINAL_DEPLOYMENT_ID=%s\nFINAL_CONSECUTIVE=%s\nFINAL_ELAPSED=%s\n' "$final_deployment_id" "$consecutive" "$elapsed" >> "$GITHUB_ENV"
+          promotion_attempted=2
+          trap - ERR
+
+      - name: Build immutable promotion evidence manifest
+        if: always()
+        working-directory: source
+        shell: bash
+        env:
+          EVIDENCE_DIR: test-results/map-first-production-promote
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          cp ../promotion-authority.txt "$EVIDENCE_DIR/promotion-authority.txt" || true
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload production promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-map-first-production-promotion-v2-${{ github.run_id }}
+          path: source/test-results/map-first-production-promote
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          overwrite: false
+
+      - name: Promotion summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## VOY Map-First production promotion V2'
+            echo
+            echo '- Candidate source: `796c9355cc22a2e197ee719a15b506b5a3cb22b3`'
+            echo '- Candidate Worker version: `002c464c-15fa-42f3-a762-0214a1dc5cf3`'
+            echo '- Previous stable Worker version: `9273abef-69ab-451f-b2f0-ace4c8fd3bdd`'
+            echo '- Fail-closed: one rollback attempt on any post-promotion validation failure.'
+            if [[ -f source/test-results/map-first-production-promote/production-final-state.json ]]; then
+              echo '```json'
+              cat source/test-results/map-first-production-promote/production-final-state.json
+              echo '```'
+            fi
+            if [[ -f source/test-results/map-first-production-promote/rollback.log ]]; then
+              echo '```text'
+              cat source/test-results/map-first-production-promote/rollback.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
