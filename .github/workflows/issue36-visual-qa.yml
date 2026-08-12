@@ -1,0 +1,96 @@
+# qa-stage: final-after-bus-unavailable-r2
+name: VOY Issue36 Visual QA
+
+on:
+  push:
+    branches:
+      - feat/issue36-total-product-redesign-01
+    paths:
+      - .github/workflows/issue36-visual-qa.yml
+      - scripts/issue36-visual-capture.mjs
+      - scripts/issue36-bus-visual-capture.mjs
+      - scripts/serve-static-spa.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-issue36-visual-qa
+  cancel-in-progress: true
+
+env:
+  VOY_QA_STAGE: final-after
+  VOY_BASE_URL: http://127.0.0.1:8787
+  VOY_EVIDENCE_DIR: test-results/issue36-visual
+
+jobs:
+  visual-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - name: Checkout exact design head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact branch and clean source
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = 'feat/issue36-total-product-redesign-01'
+          git diff --check
+      - name: Install pinned frozen toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+      - name: Complete source regression before visual QA
+        run: |
+          set -euo pipefail
+          BUILD_HASH="$GITHUB_SHA" bun run validate
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+      - name: Start credential-free static SPA for visual inspection
+        run: |
+          set -euo pipefail
+          node ./scripts/serve-static-spa.mjs > /tmp/issue36-static.log 2>&1 &
+          echo $! > /tmp/issue36-static.pid
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/ > /tmp/issue36-root.html; then ready=1; break; fi
+            if ! kill -0 "$(cat /tmp/issue36-static.pid)" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then cat /tmp/issue36-static.log; exit 1; fi
+          grep -q '<div id="app"></div>' /tmp/issue36-root.html
+          curl -fsS http://127.0.0.1:8787/privacy | grep -q '<div id="app"></div>'
+      - name: Capture full visual state matrix
+        run: bun ./scripts/issue36-visual-capture.mjs
+      - name: Capture and gate BUS unavailable mobile matrix
+        run: bun ./scripts/issue36-bus-visual-capture.mjs
+      - name: Freeze exact-head visual evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$VOY_EVIDENCE_DIR"
+          cp /tmp/issue36-root.html "$VOY_EVIDENCE_DIR/local-root.html" 2>/dev/null || true
+          cp /tmp/issue36-static.log "$VOY_EVIDENCE_DIR/local-static.log" 2>/dev/null || true
+          printf '%s\n' "$GITHUB_SHA" > "$VOY_EVIDENCE_DIR/exact-head.txt"
+          printf '%s\n' "$VOY_QA_STAGE" > "$VOY_EVIDENCE_DIR/stage.txt"
+          find "$VOY_EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$VOY_EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$VOY_EVIDENCE_DIR/manifest.sha256" > "$VOY_EVIDENCE_DIR/digest.txt"
+      - name: Upload visual QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-issue36-${{ env.VOY_QA_STAGE }}-${{ github.run_id }}
+          path: test-results/issue36-visual
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          compression-level: 6
+      - name: Stop static SPA server
+        if: always()
+        run: |
+          test ! -f /tmp/issue36-static.pid || kill "$(cat /tmp/issue36-static.pid)" 2>/dev/null || true

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { inspectDeployment, convergenceSatisfied, extractTailProof } from './svelte-candidate-gate.mjs';
+import { inspectDeployment, convergenceSatisfied } from './svelte-candidate-gate.mjs';
+import { analyzeCandidateTail } from './tail-runtime-proof.mjs';
 
 const required = name => { const value = process.env[name]; if (!value) throw new Error(`missing_environment:${name}`); return value; };
 const evidence = required('EVIDENCE_DIR');
@@ -64,16 +65,8 @@ if (blockedCandidateId && deployment.active.versions.some(version => version.ver
 const proof = JSON.parse(readFileSync(`${evidence}/convergence-proof.json`, 'utf8'));
 if (!convergenceSatisfied(proof.consecutive, proof.elapsed_ms)) throw new Error('convergence_proof_invalid');
 const tailText = existsSync(`${evidence}/candidate-tail.log`) ? readFileSync(`${evidence}/candidate-tail.log`, 'utf8') : '';
-const tail = extractTailProof(tailText, candidateId);
-let exceptions = 0;
-for (const line of tailText.split(/\r?\n/)) {
-  if (!line.trim().startsWith('{')) continue;
-  try {
-    const event = JSON.parse(line);
-    if (Array.isArray(event.exceptions)) exceptions += event.exceptions.length;
-  } catch {}
-}
-if (tail.nonOkOutcomes.length > 0 || exceptions > 0) throw new Error('tail_runtime_failure');
+const tail = analyzeCandidateTail(tailText, candidateId);
+if (tail.nonOkOutcomes.length > 0 || tail.exceptions > 0) throw new Error('tail_runtime_failure');
 const observability = tail.exactEvents > 0 ? 'PASS' : 'DEGRADED_NO_EVENTS';
 const state = {
   result: 'PASS',
@@ -105,7 +98,9 @@ const state = {
   exact_version_tail_events: tail.exactEvents,
   observed_version_ids: tail.observedVersionIds,
   non_ok_tail_outcomes: tail.nonOkOutcomes,
-  tail_exceptions: exceptions,
+  tail_exceptions: tail.exceptions,
+  benign_client_cancellations: tail.benignClientCancellations,
+  benign_client_cancellation_paths: tail.benignClientCancellationPaths,
   production_promoted: false,
   rollback_executed: false,
   verified_at: new Date().toISOString()

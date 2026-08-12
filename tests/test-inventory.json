@@ -18,6 +18,7 @@
       "productionReleaseGuard.test.js",
       "releasePolicy.test.js",
       "securityBoundary.test.js",
+      "tailRuntimeProof.test.js",
       "voiceCopilotApi.test.js",
       "voiceCopilotContracts.test.js",
       "voiceCopilotHtml.test.js",

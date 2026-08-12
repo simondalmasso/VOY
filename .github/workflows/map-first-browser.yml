@@ -1,0 +1,73 @@
+name: VOY Map-First Browser
+
+on:
+  push:
+    branches:
+      - feat/map-first-interaction-01
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.3.14
+  VOY_OUTPUT_DIR: ../test-results/map-first-browser
+  VOY_REPORT_DIR: ../test-results/map-first-browser-report
+
+jobs:
+  interaction:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install frozen browser toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@${BUN_VERSION}
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Build exact head
+        run: BUILD_HASH="${GITHUB_SHA::7}" bun run build
+
+      - name: Serve immutable client build
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8787 --bind 127.0.0.1 --directory dist/client > /tmp/voy-map-first-http.log 2>&1 &
+          echo $! > /tmp/voy-map-first-http.pid
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8787/ >/dev/null && exit 0; sleep 1; done
+          cat /tmp/voy-map-first-http.log
+          exit 1
+
+      - name: Run map-first browser contract
+        env:
+          VOY_EXTERNAL_SERVER: '1'
+          VOY_BASE_URL: http://127.0.0.1:8787
+        run: bunx playwright test browser-tests/map-first-interaction.spec.ts -c browser-tests/playwright.config.ts
+
+      - name: Freeze browser evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/map-first-browser-evidence
+          cp /tmp/voy-map-first-http.log test-results/map-first-browser-evidence/http.log || true
+          printf '%s\n' "EXACT_HEAD=$GITHUB_SHA" > test-results/map-first-browser-evidence/summary.txt
+          printf '%s\n' "BASE=bf6c4fd36eafcdab78e7e0ce33f99696541f553c" >> test-results/map-first-browser-evidence/summary.txt
+          printf '%s\n' "RUN=$GITHUB_RUN_ID" >> test-results/map-first-browser-evidence/summary.txt
+          find test-results/map-first-browser-evidence test-results/map-first-browser -type f ! -name manifest.sha256 -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum > test-results/map-first-browser-evidence/manifest.sha256
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-map-first-browser-${{ github.run_id }}
+          path: |
+            test-results/map-first-browser-evidence
+            test-results/map-first-browser
+            test-results/map-first-browser-report
+          if-no-files-found: error
+          retention-days: 30
