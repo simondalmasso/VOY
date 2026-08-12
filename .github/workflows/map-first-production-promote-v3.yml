@@ -1,0 +1,191 @@
+name: VOY Map-First Production Promotion V3
+
+on:
+  push:
+    branches:
+      - ops/map-first-production-promote-20260812
+    paths:
+      - .map-first-production-promote-ready-v3
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-map-first-production-promotion-v3
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      CANDIDATE_SOURCE_SHA: 796c9355cc22a2e197ee719a15b506b5a3cb22b3
+      CANDIDATE_SHORT_SHA: 796c935
+      CANDIDATE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+      STABLE_VERSION_ID: 9273abef-69ab-451f-b2f0-ace4c8fd3bdd
+      EXPECTED_STABLE_VERSION: V8.0.0
+      EXPECTED_STABLE_HASH: c6aa730
+      EXPECTED_CANDIDATE_VERSION: V8.0.0
+      EXPECTED_MAIN_SHA: 9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8
+      EXPECTED_FEATURE_HEAD: b3cb9a0d1f0d47cadaef983291f26b801d82a536
+      EVIDENCE_DIR: test-results/map-first-production-promote-v3
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout promotion control commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fail-closed authority lineage and script syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .map-first-production-promote-ready-v3)" = "MAP_FIRST_PRODUCTION_PROMOTE_V3_20260812_002c464c"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git ls-remote origin refs/heads/ops/map-first-production-promote-20260812 | awk '{print $1}')" = "$GITHUB_SHA"
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main refs/heads/feat/map-first-interaction-01:refs/remotes/origin/feat/map-first-interaction-01
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse refs/remotes/origin/feat/map-first-interaction-01)" = "$EXPECTED_FEATURE_HEAD"
+          git merge-base --is-ancestor "$CANDIDATE_SOURCE_SHA" refs/remotes/origin/feat/map-first-interaction-01
+          test -z "$(git diff --name-only "$CANDIDATE_SOURCE_SHA"..refs/remotes/origin/feat/map-first-interaction-01 | grep -Ev '^(docs/|$)' || true)"
+          bash -n scripts/map-first-production-promote-v3.sh
+          printf '%s\n' "RUN_31649501071=PREWRITE_GATES_PASS_PROMOTION_HARNESS_PARSE_FAIL_NO_WRITE" > promotion-authority.txt
+          printf '%s\n' "PRODUCTION_PROMOTION_AUTHORIZED=YES" "CANDIDATE_SOURCE_SHA=$CANDIDATE_SOURCE_SHA" "CANDIDATE_VERSION_ID=$CANDIDATE_VERSION_ID" "STABLE_VERSION_ID=$STABLE_VERSION_ID" >> promotion-authority.txt
+
+      - name: Checkout immutable candidate source
+        uses: actions/checkout@v4
+        with:
+          ref: 796c9355cc22a2e197ee719a15b506b5a3cb22b3
+          path: source
+          fetch-depth: 0
+
+      - name: Install pinned frozen toolchain
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Revalidate immutable product source
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SOURCE_SHA"
+          node scripts/verify-release-policy.mjs
+          git diff --check
+          mkdir -p "$EVIDENCE_DIR"
+          bun run typecheck
+          bun run lint
+          bun run assets:source
+          bun run test
+          BUILD_HASH="$CANDIDATE_SHORT_SHA" VOY_METRICS_PATH="$EVIDENCE_DIR/build-metrics.json" bun run build
+          bun run assets:build
+          VOY_METRICS_PATH="$EVIDENCE_DIR/build-metrics.json" bun run budget
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+
+      - name: Fresh live preflight exact split health and binding parity
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?missing CLOUDFLARE_API_TOKEN}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?missing CLOUDFLARE_ACCOUNT_ID}"
+          api_root="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          mkdir -p "$EVIDENCE_DIR"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/deployments" > "$EVIDENCE_DIR/deployments-preflight.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?preflight_stable=$(date +%s%N)" > "$EVIDENCE_DIR/health-stable-preflight.json"
+          curl -fsS --retry 3 -H "Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$CANDIDATE_VERSION_ID\"" "$WORKER_URL/api/health?preflight_candidate=$(date +%s%N)" > "$EVIDENCE_DIR/health-candidate-preflight.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/versions/$STABLE_VERSION_ID" > "$EVIDENCE_DIR/stable-version-preflight.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/versions/$CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-version-preflight.json"
+          node -e 'const fs=require("fs"),e=process.env.EVIDENCE_DIR;const p=JSON.parse(fs.readFileSync(`${e}/deployments-preflight.json`));const a=(p.result?.deployments||p.result||[])[0];if(!a||!Array.isArray(a.versions))throw Error("active_missing");const s=a.versions.find(v=>v.version_id===process.env.STABLE_VERSION_ID),c=a.versions.find(v=>v.version_id===process.env.CANDIDATE_VERSION_ID);if(!s||Number(s.percentage)!==100||!c||Number(c.percentage)!==0)throw Error("split_drift");if(a.versions.some(v=>v.version_id!==process.env.STABLE_VERSION_ID&&v.version_id!==process.env.CANDIDATE_VERSION_ID&&Number(v.percentage)!==0))throw Error("unexpected_nonzero_version");const hs=JSON.parse(fs.readFileSync(`${e}/health-stable-preflight.json`)),hc=JSON.parse(fs.readFileSync(`${e}/health-candidate-preflight.json`));if(hs.ok!==true||hs.version!==process.env.EXPECTED_STABLE_VERSION||hs.build_hash!==process.env.EXPECTED_STABLE_HASH)throw Error("stable_health_drift");if(hc.ok!==true||hc.version!==process.env.EXPECTED_CANDIDATE_VERSION||hc.build_hash!==process.env.CANDIDATE_SHORT_SHA)throw Error("candidate_health_drift");function b(f){const q=JSON.parse(fs.readFileSync(f));if(q.success!==true)throw Error("version_query_failed");return (q.result?.resources?.bindings||[]).map(x=>`${x.name}:${x.type}`).sort()}const sb=b(`${e}/stable-version-preflight.json`),cb=b(`${e}/candidate-version-preflight.json`);if(JSON.stringify(sb)!==JSON.stringify(cb))throw Error("binding_drift");fs.writeFileSync(`${e}/preflight-summary.json`,JSON.stringify({result:"PASS",deployment_id:a.id,stable_traffic:100,candidate_traffic:0,binding_count:sb.length,stable_health:hs,candidate_health:hc},null,2));'
+
+      - name: Fresh candidate browser preflight
+        working-directory: source
+        shell: bash
+        env:
+          VOY_BASE_URL: https://voy-app.simondalmasso44.workers.dev
+          VOY_EXTERNAL_SERVER: '1'
+          VOY_REAL_BASEMAP: '1'
+          VOY_WORKER_NAME: voy-app
+          VOY_CANDIDATE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+          VOY_EVIDENCE_DIR: test-results/map-first-production-promote-v3/preflight-browser-screens
+          VOY_OUTPUT_DIR: test-results/map-first-production-promote-v3/preflight-browser-output
+          VOY_REPORT_DIR: test-results/map-first-production-promote-v3/preflight-browser-report
+        run: bunx playwright test -c browser-tests/playwright.config.ts
+
+      - name: Promote exact Map-First candidate to production
+        id: promote
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_root="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api_root/deployments" > "$EVIDENCE_DIR/deployments-immediately-before.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?immediately_before=$(date +%s%N)" > "$EVIDENCE_DIR/health-immediately-before.json"
+          node -e 'const fs=require("fs"),e=process.env.EVIDENCE_DIR;const p=JSON.parse(fs.readFileSync(`${e}/deployments-immediately-before.json`));const a=(p.result?.deployments||p.result||[])[0];const s=a?.versions?.find(v=>v.version_id===process.env.STABLE_VERSION_ID),c=a?.versions?.find(v=>v.version_id===process.env.CANDIDATE_VERSION_ID);if(!s||Number(s.percentage)!==100||!c||Number(c.percentage)!==0)throw Error("prewrite_split_drift");const h=JSON.parse(fs.readFileSync(`${e}/health-immediately-before.json`));if(h.ok!==true||h.version!==process.env.EXPECTED_STABLE_VERSION||h.build_hash!==process.env.EXPECTED_STABLE_HASH)throw Error("prewrite_health_drift");'
+          printf '%s\n' "PROMOTION_COMMAND_ATTEMPTED=YES" > "$EVIDENCE_DIR/promotion-command-attempted.txt"
+          wrangler versions deploy "$STABLE_VERSION_ID@0%" "$CANDIDATE_VERSION_ID@100%" --message "VOY Map-First production promotion source $CANDIDATE_SOURCE_SHA" --yes | tee "$EVIDENCE_DIR/production-promotion.log"
+
+      - name: Verify promoted production or execute single rollback
+        if: ${{ always() && steps.promote.outcome != 'skipped' }}
+        shell: bash
+        env:
+          SOURCE_DIR: source
+          EVIDENCE_DIR: test-results/map-first-production-promote-v3
+        run: bash scripts/map-first-production-promote-v3.sh verify-or-rollback
+
+      - name: Build immutable evidence manifest
+        if: always()
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          cp ../promotion-authority.txt "$EVIDENCE_DIR/promotion-authority.txt" || true
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload production promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-map-first-production-promotion-v3-${{ github.run_id }}
+          path: source/test-results/map-first-production-promote-v3
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          overwrite: false
+
+      - name: Promotion summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## VOY Map-First production promotion V3'
+            echo
+            echo '- Source: `796c9355cc22a2e197ee719a15b506b5a3cb22b3`'
+            echo '- Worker version: `002c464c-15fa-42f3-a762-0214a1dc5cf3`'
+            echo '- Previous stable: `9273abef-69ab-451f-b2f0-ace4c8fd3bdd`'
+            if [[ -f source/test-results/map-first-production-promote-v3/production-final-state.json ]]; then
+              echo '```json'
+              cat source/test-results/map-first-production-promote-v3/production-final-state.json
+              echo '```'
+            fi
+            if [[ -f source/test-results/map-first-production-promote-v3/rollback.log ]]; then
+              echo '```text'
+              cat source/test-results/map-first-production-promote-v3/rollback.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
