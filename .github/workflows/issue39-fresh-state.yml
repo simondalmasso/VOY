@@ -1,0 +1,156 @@
+name: VOY Issue39 Fresh Live State
+
+on:
+  push:
+    branches:
+      - audit/issue39-global-adversarial-20260812
+    paths:
+      - .issue39-fresh-state-ready
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-issue39-fresh-state
+  cancel-in-progress: false
+
+jobs:
+  freeze-live-state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      EXPECTED_MAIN_SHA: 4c7b36b8690f8aaa0582e7b118dd7274befa559d
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      EVIDENCE_DIR: test-results/issue39-fresh-state
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout exact audit head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Prove authority and no main drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .issue39-fresh-state-ready)" = 'ISSUE39_FRESH_STATE_READ_ONLY_V1'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote_main" = "$EXPECTED_MAIN_SHA"
+          printf 'AUDIT_HEAD=%s\nMAIN_SHA=%s\n' "$GITHUB_SHA" "$remote_main" > issue39-authority.txt
+
+      - name: Read effective Cloudflare and production state only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/deployments.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue39=$(date +%s%N)" > "$EVIDENCE_DIR/health.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/mobility/trust?issue39=$(date +%s%N)" > "$EVIDENCE_DIR/mobility-trust.json"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const dir=process.env.EVIDENCE_DIR;
+          const dp=JSON.parse(fs.readFileSync(`${dir}/deployments.json`,'utf8'));
+          const list=dp.result?.deployments||dp.result||[];
+          const active=list[0];
+          if(!active || !Array.isArray(active.versions)) throw new Error('invalid_active_deployment');
+          const health=JSON.parse(fs.readFileSync(`${dir}/health.json`,'utf8'));
+          const trust=JSON.parse(fs.readFileSync(`${dir}/mobility-trust.json`,'utf8'));
+          if(health.ok!==true) throw new Error('production_health_not_ok');
+          const versions=active.versions.map(v=>({version_id:v.version_id,percentage:Number(v.percentage)}));
+          const live=versions.find(v=>v.percentage===100);
+          if(!live) throw new Error('no_single_100_percent_version');
+          const out={
+            result:'PASS',
+            main_sha:process.env.EXPECTED_MAIN_SHA,
+            deployment_id:active.id||null,
+            versions,
+            production_version_id:live.version_id,
+            health:{version:health.version,build_hash:health.build_hash,features:health.features||null},
+            mobility:{bus_activation:trust.operational_bus_activation??trust.santa_fe?.bus_activation??null,mobility_database_role:trust.mobility_database_role??null},
+            verified_at:new Date().toISOString()
+          };
+          fs.writeFileSync(`${dir}/frozen-live-state.json`,JSON.stringify(out,null,2));
+          console.log(`LIVE_DEPLOYMENT_ID=${out.deployment_id}`);
+          console.log(`LIVE_VERSION_ID=${out.production_version_id}`);
+          console.log(`LIVE_BUILD_HASH=${out.health.build_hash}`);
+          console.log(`LIVE_APP_VERSION=${out.health.version}`);
+          console.log(`LIVE_AUTH=${String(out.health.features?.auth)}`);
+          console.log(`LIVE_VOICE=${String(out.health.features?.voice)}`);
+          console.log(`LIVE_BUS=${String(out.mobility.bus_activation)}`);
+          console.log(`MOBILITY_DATABASE_ROLE=${String(out.mobility.mobility_database_role)}`);
+          NODE
+          active_version="$(node -e "const p=require('./$EVIDENCE_DIR/frozen-live-state.json');process.stdout.write(p.production_version_id)")"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$active_version" > "$EVIDENCE_DIR/active-version.json"
+
+      - name: Probe public routing and legacy reachability read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          probe() {
+            local name="$1" method="$2" path="$3"
+            local headers="$EVIDENCE_DIR/${name}.headers" body="$EVIDENCE_DIR/${name}.body"
+            status="$(curl -sS --retry 2 -X "$method" -D "$headers" -o "$body" -w '%{http_code}' "$WORKER_URL$path")"
+            printf '%s=%s\n' "$name" "$status" | tee -a "$EVIDENCE_DIR/statuses.txt"
+          }
+          probe retired_voy_lite GET /voy-lite.html
+          probe retired_movilidad GET /movilidad.html
+          probe retired_navigator GET /navigator
+          probe legacy_events_options OPTIONS /api/events
+          probe legacy_telemetry_options OPTIONS /api/telemetry
+          probe geocode_invalid GET '/api/geocode?q='
+          probe auth_session GET /api/auth/session
+          probe service_worker GET /sw.js
+          probe city_fares GET /cities/santa-fe/fares.json
+          probe city_profile GET /cities/santa-fe/profile.json
+          probe city_transport GET /cities/santa-fe/transport.json
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const dir=process.env.EVIDENCE_DIR;
+          const pairs=Object.fromEntries(fs.readFileSync(`${dir}/statuses.txt`,'utf8').trim().split(/\n+/).map(x=>x.split('=')));
+          for(const p of ['retired_voy_lite','retired_movilidad','retired_navigator']) if(pairs[p]!=='410') throw new Error(`retired_path_reachable:${p}:${pairs[p]}`);
+          if(!['200','204'].includes(pairs.legacy_events_options)) throw new Error(`legacy_events_unexpected:${pairs.legacy_events_options}`);
+          if(!['200','204'].includes(pairs.legacy_telemetry_options)) throw new Error(`legacy_telemetry_unexpected:${pairs.legacy_telemetry_options}`);
+          if(!['400','422'].includes(pairs.geocode_invalid)) throw new Error(`geocode_invalid_unexpected:${pairs.geocode_invalid}`);
+          if(pairs.service_worker!=='200') throw new Error('service_worker_unreachable');
+          const summary={result:'PASS',statuses:pairs,legacy_api_wrapper_reachable:true,retired_named_assets_reachable:false};
+          fs.writeFileSync(`${dir}/runtime-reachability.json`,JSON.stringify(summary,null,2));
+          NODE
+
+      - name: Security and cache header snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /api/health /sw.js /cities/santa-fe/fares.json; do
+            safe="$(printf '%s' "$path" | sed 's#[^A-Za-z0-9]#_#g')"
+            curl -fsSI --retry 2 "$WORKER_URL$path" > "$EVIDENCE_DIR/headers-${safe}.txt"
+          done
+          grep -qi '^content-security-policy:' "$EVIDENCE_DIR/headers-_.txt"
+          grep -qi '^strict-transport-security:' "$EVIDENCE_DIR/headers-_.txt"
+          grep -qi '^cache-control:.*no-store' "$EVIDENCE_DIR/headers-_api_health.txt"
+
+      - name: Build evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          cp issue39-authority.txt "$EVIDENCE_DIR/authority.txt" || true
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload read-only state evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-issue39-fresh-state-${{ github.run_id }}
+          path: test-results/issue39-fresh-state
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
