@@ -26,10 +26,11 @@ export class NominatimCoordinator extends BaseNominatimCoordinator {
       if (!/^[a-f0-9]{24}$/.test(key) || !VOICE_RATE_KINDS.has(kind) || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(day) || day < 0) {
         return new Response(JSON.stringify({ ok: false, error: 'invalid_voice_quota_request' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
       }
-      const storageKey = `voice-rate:${day}:${kind}:${key}`;
-      const current = Number(await this.state.storage.get(storageKey)) || 0;
+      const storageKey = `voice-rate:${kind}:${key}`;
+      const stored = await this.state.storage.get(storageKey);
+      const current = stored && stored.day === day && Number.isInteger(stored.count) ? stored.count : 0;
       const next = current + 1;
-      await this.state.storage.put(storageKey, next, { expiration: (day + 2) * 86400 });
+      await this.state.storage.put(storageKey, { day, count: next });
       return new Response(JSON.stringify({ ok: true, allowed: next <= limit, count: next }), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
     }
     return super.fetch(request);
