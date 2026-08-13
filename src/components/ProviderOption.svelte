@@ -21,7 +21,7 @@
       <small>{option.detail}</small>
       {#if unavailableLabel}<span class="provider-unavailable-state">{unavailableLabel}</span>{/if}
     </span>
-    {#if hasMeta}<span class="provider-meta">{#if priceLabel}<strong>{priceLabel}</strong>{/if}{#if option.available && option.etaMin !== null && option.etaMin > 0}<small>{option.etaMin} min</small>{/if}</span>{/if}
+    {#if hasMeta}<span class="provider-meta">{#if priceLabel}<strong>{priceLabel}</strong>{/if}{#if option.available && option.etaMin !== null && option.etaMin > 0}<small>≈ {option.etaMin} min de viaje</small>{/if}</span>{/if}
   </article>
 {/if}
 
