@@ -5,29 +5,18 @@
   "name": "Santa Fe",
   "display_name": "Santa Fe, Argentina",
   "country": "AR",
-  "center": [
-    -60.7087,
-    -31.6256
-  ],
+  "center": [-60.7087, -31.6256],
   "zoom": 13,
-  "bbox": {
-    "minLat": -31.67,
-    "maxLat": -31.57,
-    "minLon": -60.75,
-    "maxLon": -60.65
-  },
+  "bbox": { "minLat": -31.67, "maxLat": -31.57, "minLon": -60.75, "maxLon": -60.65 },
   "viewbox": "-60.75,-31.67,-60.65,-31.57",
-  "recent_center": [
-    -60.7,
-    -31.61
-  ],
+  "recent_center": [-60.7, -31.61],
   "timezone": "America/Argentina/Cordoba",
   "coverage_level": "partial",
   "coverage_notes": [
     "Tarifas reguladas verificadas y fechadas; precios de apps privadas se consultan en cada app.",
-    "Uber y DiDi verificados como disponibles en Santa Fe al 2026-08-04.",
+    "Uber y DiDi verificados como disponibles en Santa Fe al 2026-08-04; la disponibilidad vuelve a estado no verificado cuando supera la ventana interna de frescura.",
     "Maxim y Cabify no se presentan como disponibilidad actual sin verificación.",
-    "Paradas y estaciones curadas; cualquier falta de trazabilidad se muestra como cobertura parcial del componente."
+    "Destinos institucionales: cobertura parcial y trazable. Recorridos, paradas, frecuencias de colectivo y estaciones de bicicleta no están disponibles operacionalmente sin una fuente vigente aceptada."
   ],
   "source": "VOY curated Santa Fe profile with official municipal and provider sources",
   "verified_at": "2026-08-04"
