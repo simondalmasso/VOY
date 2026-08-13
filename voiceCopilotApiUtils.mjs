@@ -1,7 +1,7 @@
 import { VOICE_LIMITS, boundedString } from './voiceCopilotContracts.mjs';
 
 export const VOICE_TEST_HEADER = 'synthetic-ci-v1';
-const rateBuckets = new Map();
+const testRateBuckets = new Map();
 const MAX_RATE_BUCKETS = 2000;
 
 export function voiceMode(request, env = {}) {
@@ -19,7 +19,6 @@ export function voiceOriginAllowed(request) {
   const origin = request.headers.get('Origin');
   return !origin || origin === new URL(request.url).origin;
 }
-
 
 export function voiceJson(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -53,19 +52,44 @@ async function clientKey(request) {
   return [...digest].slice(0, 12).map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function voiceRateAllowed(request, kind, limit) {
-  const now = Date.now();
-  if (rateBuckets.size > MAX_RATE_BUCKETS) {
-    for (const [key, bucket] of rateBuckets) {
-      if (bucket.expires_at <= now) rateBuckets.delete(key);
+function testRateAllowed(key, kind, day, limit, now) {
+  if (testRateBuckets.size > MAX_RATE_BUCKETS) {
+    for (const [bucketKey, bucket] of testRateBuckets) {
+      if (bucket.expires_at <= now) testRateBuckets.delete(bucketKey);
     }
   }
-  const day = Math.floor(now / 86_400_000);
-  const key = `${await clientKey(request)}:${kind}:${day}`;
-  const bucket = rateBuckets.get(key) || { count: 0, expires_at: (day + 1) * 86_400_000 };
+  const bucketKey = `${key}:${kind}:${day}`;
+  const bucket = testRateBuckets.get(bucketKey) || { count: 0, expires_at: (day + 1) * 86_400_000 };
   bucket.count += 1;
-  rateBuckets.set(key, bucket);
+  testRateBuckets.set(bucketKey, bucket);
   return bucket.count <= limit;
+}
+
+export async function voiceRateAllowed(request, env, kind, limit) {
+  const now = Date.now();
+  const day = Math.floor(now / 86_400_000);
+  const key = await clientKey(request);
+  if (env?.NOMINATIM_COORDINATOR) {
+    try {
+      const coordinatorId = env.NOMINATIM_COORDINATOR.idFromName('nominatim-global');
+      const coordinator = env.NOMINATIM_COORDINATOR.get(coordinatorId);
+      const response = await coordinator.fetch('https://nominatim-coordinator.internal/voice-quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, kind, day, limit })
+      });
+      if (!response.ok) return false;
+      const result = await response.json();
+      return result?.ok === true && result?.allowed === true;
+    } catch {
+      return false;
+    }
+  }
+  // Synthetic CI may not construct the production Durable Object binding. Keep
+  // an isolate-local test-only limiter so tests remain deterministic; product
+  // mode fails closed when the global coordinator is unavailable.
+  if (env?.VOY_VOICE_TEST_MODE === 'true') return testRateAllowed(key, kind, day, limit, now);
+  return false;
 }
 
 export async function boundedRequestText(request, maxBytes = VOICE_LIMITS.maxContextBytes) {
@@ -76,4 +100,4 @@ export async function boundedRequestText(request, maxBytes = VOICE_LIMITS.maxCon
   return text;
 }
 
-export const __voiceApiUtilsTest = Object.freeze({ rateBuckets, clientKey });
+export const __voiceApiUtilsTest = Object.freeze({ rateBuckets: testRateBuckets, clientKey, testRateAllowed });
