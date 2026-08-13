@@ -140,20 +140,28 @@ V4 separated control-plane traffic from edge propagation, armed a single rollbac
 - Audio, transcripts and exact-location history are not persistently stored.
 - VOY works without login, voice or AI.
 
-## GitHub reconciliation
+## GitHub reconciliation — complete
 
 ```text
 PRODUCTION_FIRST=COMPLETE
 PRODUCTION_RECONCILIATION_DOC=docs/MAP_FIRST_PRODUCTION_RECONCILIATION_20260812.md
 PRODUCTION_CHECKPOINT_ISSUE36=5274097115
-MAP_FIRST_PR=40
-PR40_INITIAL_CONFLICT=docs/CURRENT_STATE.md_ONLY
+INITIAL_MAP_FIRST_PR=40;SUPERSEDED_BY_CONFLICT_RESOLUTION
+PR40_CONFLICT=docs/CURRENT_STATE.md_ONLY
 PRODUCT_CONFLICT=NO
+RECONCILIATION_PR=41;MERGED
+RECONCILIATION_TREE_COMMIT=ca7a39825f54555f5469f39b6c9a4a4390c0fc07
+MAIN_MAP_FIRST_MERGE_SHA=9475b26445f45490abd69576cce514c7c651fa9e
+MAIN_POST_MERGE_VALIDATION_RUN=31652416764;SUCCESS
+MAIN_POST_MERGE_RELEASE_POLICY_RUN=31652416812;SUCCESS
+POST_MERGE_PRODUCTION_HEALTH_READ_ONLY=PASS
+POST_MERGE_PRODUCTION_BROWSER_READ_ONLY=PASS
+SECOND_PRODUCTION_DEPLOY_AFTER_MERGE=NO
 MAIN_PRE_RECONCILIATION_SHA=9aa6ad7bc6aafeefc99fcdf1325a8f22a39337c8
-MAP_FIRST_FEATURE_HEAD=a1393939732bea4115ccfa985ff19d17a8f755b0
+MAP_FIRST_FEATURE_HEAD_AT_RECONCILIATION=a1393939732bea4115ccfa985ff19d17a8f755b0
 ```
 
-The only divergence from `main` that conflicts with the Map-First branch is this worklog file. Main-only commits since the common base changed only `docs/CURRENT_STATE.md`; no main-only product/runtime file is missing from the Map-First tree.
+Main-only commits before reconciliation changed only `docs/CURRENT_STATE.md`; no main-only product/runtime file was missing from the Map-First tree. The conflict was resolved with an explicit two-parent merge tree preserving the full Map-First product, followed by PR #41. Main validation after merge rechecked release policy, deterministic build/dry-run, local browser, production health and production browser without issuing a Cloudflare write.
 
 ## Historical anchors
 
@@ -171,6 +179,7 @@ HISTORICAL_PRE_TARGETED_CANDIDATE_VERSION_ID=1610c90d-c06c-48b4-af9c-54979990f12
 ## Next step
 
 ```text
-NEXT=COMPLETE_GITHUB_MAIN_RECONCILIATION_WITHOUT_SECOND_PRODUCTION_DEPLOY
+MAP_FIRST_PRODUCTION_RECONCILIATION=COMPLETE
+NEXT=OWNER_VISUAL_REVIEW_OF_LIVE_MAP_FIRST_OR_NEW_SEPARATELY_AUTHORIZED_BLOCK
 ISSUE_39=DO_NOT_START_IN_THIS_BLOCK
 ```
