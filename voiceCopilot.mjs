@@ -22,7 +22,7 @@ import {
 import { handleVoiceChat } from './voiceCopilotConversation.mjs';
 
 async function handleTranscription(request, env) {
-  if (!(await voiceRateAllowed(request, 'stt', VOICE_LIMITS.maxDailyStt))) {
+  if (!(await voiceRateAllowed(request, env, 'stt', VOICE_LIMITS.maxDailyStt))) {
     throw new Error('stt_rate_limited');
   }
   const declaredLength = Number(request.headers.get('content-length') || 0);
