@@ -99,7 +99,7 @@ function selectToolCall(plan, message, session) {
 }
 
 export async function handleVoiceChat(request, env) {
-  if (!(await voiceRateAllowed(request, 'chat', VOICE_LIMITS.maxDailyChat))) {
+  if (!(await voiceRateAllowed(request, env, 'chat', VOICE_LIMITS.maxDailyChat))) {
     throw new Error('chat_rate_limited');
   }
   const raw = await boundedRequestText(request);
@@ -187,8 +187,6 @@ export async function handleVoiceChat(request, env) {
         : 'No pude completar esa operación de VOY. No se aplicó ningún cambio.';
     }
   } else {
-    // Free model text never becomes an action claim. Without a successful typed
-    // tool, only a bounded, deterministic conversational response is emitted.
     responseText = conversationOnlyResponse(payload.message, session);
   }
 
