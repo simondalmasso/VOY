@@ -4,6 +4,8 @@ interface Point { lat: number; lon: number }
 interface RouteRequest { origin: Point; destination: Point; profile: Profile }
 interface OsrmPayload { code?: string; routes?: Array<{ distance?: unknown; duration?: unknown; geometry?: { coordinates?: unknown } }> }
 const BBOX = Object.freeze({ minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 });
+export const ROUTE_COORD_PRECISION = 4;
+const ROUTE_ENDPOINT_TOLERANCE_DEGREES = 0.002;
 const memoryCache = new Map<string, { expires: number; body: string }>();
 function finite(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value); }
 function inside(point: Point): boolean { return finite(point.lat) && finite(point.lon) && point.lat >= BBOX.minLat && point.lat <= BBOX.maxLat && point.lon >= BBOX.minLon && point.lon <= BBOX.maxLon; }
@@ -25,11 +27,15 @@ async function readRequest(request: Request): Promise<RouteRequest | null> {
     return inside(result.origin) && inside(result.destination) ? result : null;
   } catch { return null; }
 }
-function cacheKey(value: RouteRequest): string { const round = (number: number) => number.toFixed(4); return `${value.profile}:${round(value.origin.lat)},${round(value.origin.lon)}:${round(value.destination.lat)},${round(value.destination.lon)}`; }
+function canonicalNumber(value: number): number { return Number(value.toFixed(ROUTE_COORD_PRECISION)); }
+export function canonicalRouteRequest(value: RouteRequest): RouteRequest {
+  return { profile: value.profile, origin: { lat: canonicalNumber(value.origin.lat), lon: canonicalNumber(value.origin.lon) }, destination: { lat: canonicalNumber(value.destination.lat), lon: canonicalNumber(value.destination.lon) } };
+}
+function cacheKey(value: RouteRequest): string { return `${value.profile}:${value.origin.lat.toFixed(ROUTE_COORD_PRECISION)},${value.origin.lon.toFixed(ROUTE_COORD_PRECISION)}:${value.destination.lat.toFixed(ROUTE_COORD_PRECISION)},${value.destination.lon.toFixed(ROUTE_COORD_PRECISION)}`; }
 export function validGeometry(points: Array<[number, number]>, input: RouteRequest): boolean {
   if (points.length < 2 || points.length > 20_000) return false; const first = points[0]; const last = points.at(-1); if (!first || !last) return false;
   const finiteAndInside = points.every(point => Array.isArray(point) && point.length === 2 && finite(point[0]) && finite(point[1]) && inside({ lat: point[1], lon: point[0] }));
-  const near = (point: [number, number], expected: Point) => Math.abs(point[0] - expected.lon) < .02 && Math.abs(point[1] - expected.lat) < .02;
+  const near = (point: [number, number], expected: Point) => Math.abs(point[0] - expected.lon) < ROUTE_ENDPOINT_TOLERANCE_DEGREES && Math.abs(point[1] - expected.lat) < ROUTE_ENDPOINT_TOLERANCE_DEGREES;
   return finiteAndInside && near(first, input.origin) && near(last, input.destination);
 }
 function parseCoordinates(value: unknown): Array<[number, number]> {
@@ -45,11 +51,12 @@ export async function handleRoute(request: Request, _env: Partial<Env> = {}): Pr
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Cache-Control': 'no-store' } });
   if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
   if (!originAllowed(request)) return json({ ok: false, error: 'origin_not_allowed' }, 403);
-  const input = await readRequest(request); if (!input) return json({ ok: false, error: 'invalid_route_request' }, 400);
-  const key = cacheKey(input); const cached = memoryCache.get(key); if (cached && cached.expires > Date.now()) return new Response(cached.body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-VOY-Route-Cache': 'isolate-rounded-hit' } });
+  const rawInput = await readRequest(request); if (!rawInput) return json({ ok: false, error: 'invalid_route_request' }, 400);
+  const input = canonicalRouteRequest(rawInput);
+  const key = cacheKey(input); const cached = memoryCache.get(key); if (cached && cached.expires > Date.now()) return new Response(cached.body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-VOY-Route-Cache': 'isolate-canonical-hit' } });
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const url = `https://router.project-osrm.org/route/v1/${input.profile}/${input.origin.lon},${input.origin.lat};${input.destination.lon},${input.destination.lat}?overview=full&geometries=geojson&steps=false`;
+    const url = `https://router.project-osrm.org/route/v1/${input.profile}/${input.origin.lon.toFixed(ROUTE_COORD_PRECISION)},${input.origin.lat.toFixed(ROUTE_COORD_PRECISION)};${input.destination.lon.toFixed(ROUTE_COORD_PRECISION)},${input.destination.lat.toFixed(ROUTE_COORD_PRECISION)}?overview=full&geometries=geojson&steps=false`;
     const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json', 'User-Agent': 'VOY/8.0 mobility routing proxy' } });
     if (!response.ok) return json({ ok: false, error: 'route_upstream_unavailable', fallback: 'straight_line_estimate' }, 503);
     const payload = await response.json() as OsrmPayload; const route = payload.routes?.[0]; const coordinates = parseCoordinates(route?.geometry?.coordinates); const distance = route?.distance; const duration = route?.duration;
