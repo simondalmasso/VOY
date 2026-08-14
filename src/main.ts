@@ -7,6 +7,7 @@ import './styles/ui-compaction.css';
 import './styles/map-first.css';
 import './styles/map-first-contract.css';
 import './styles/voy-identity.css';
+import './styles/voy-identity-contract.css';
 import { recordTelemetry } from './lib/telemetry';
 
 const target = document.getElementById('app');
