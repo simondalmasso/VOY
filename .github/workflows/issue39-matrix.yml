@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: voy-issue39-matrix
+  group: voy-issue39-matrix-final-v3
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(cat .issue39-matrix-ready)" = 'ISSUE39_MATRIX_V2'
+          test "$(cat .issue39-matrix-ready)" = 'ISSUE39_MATRIX_V3'
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/audit/issue39-global-adversarial-20260812 | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
