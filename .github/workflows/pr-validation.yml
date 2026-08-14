@@ -14,7 +14,7 @@ concurrency:
 jobs:
   validate-svelte:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 75
     env:
       BUILD_HASH: ${{ github.event.pull_request.head.sha }}
       VOY_METRICS_PATH: test-results/build-metrics.json
@@ -60,6 +60,32 @@ jobs:
         env:
           WRANGLER_LOG: none
         run: bash scripts/run-browser-smoke.sh
+      - name: Issue39 nine-viewport matrix
+        if: ${{ github.event.pull_request.number == 42 }}
+        shell: bash
+        run: |
+          set +e
+          mkdir -p test-results/issue39-matrix-meta
+          VOY_OUTPUT_DIR=test-results/issue39-pr-matrix VOY_REPORT_DIR=playwright-report-issue39-pr bunx playwright test -c browser-tests/issue39.playwright.config.ts --reporter=json > test-results/issue39-matrix-meta/playwright.json
+          status=$?
+          set -e
+          MATRIX_STATUS="$status" node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const report=JSON.parse(fs.readFileSync('test-results/issue39-matrix-meta/playwright.json','utf8'));
+          const failures=[];
+          const walk=(suite,trail=[])=>{
+            const next=[...trail,...(suite.title?[suite.title]:[])];
+            for(const spec of suite.specs||[]) for(const test of spec.tests||[]) for(const result of test.results||[]){
+              if(['failed','timedOut','interrupted'].includes(result.status)) failures.push({title:[...next,spec.title].filter(Boolean).join(' > '),project:test.projectName||'',status:result.status,error:String(result.error?.message||result.errors?.[0]?.message||'unknown_failure').split('\n').slice(0,12).join('\n')});
+            }
+            for(const child of suite.suites||[]) walk(child,next);
+          };
+          for(const suite of report.suites||[]) walk(suite,[]);
+          fs.writeFileSync('test-results/issue39-matrix-meta/failures.json',JSON.stringify({status:Number(process.env.MATRIX_STATUS),failure_count:failures.length,failures},null,2));
+          console.log(`ISSUE39_MATRIX_FAILURE_COUNT=${failures.length}`);
+          for(const [i,f] of failures.entries()) console.log(`FAILURE_${i+1}=${f.project} :: ${f.title}\n${f.error}`);
+          NODE
+          exit "$status"
       - name: Upload PR evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -68,6 +94,7 @@ jobs:
           path: |
             test-results
             playwright-report-pr
+            playwright-report-issue39-pr
             dist/client/index.html
             dist/client/.vite/manifest.json
             dist/voy_app/wrangler.json
