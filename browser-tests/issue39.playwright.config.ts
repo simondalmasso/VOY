@@ -20,7 +20,8 @@ export default defineConfig({
     /map-first-interaction\.spec\.ts/,
     /issue36-design\.spec\.ts/,
     /svelte-mobile\.spec\.ts/,
-    /issue39-ux\.spec\.ts/
+    /issue39-ux\.spec\.ts/,
+    /issue39-visual-identity\.spec\.ts/
   ],
   outputDir: process.env.VOY_OUTPUT_DIR || '../test-results/issue39-browser',
   reporter: [['list'], ['html', { outputFolder: process.env.VOY_REPORT_DIR || '../playwright-report-issue39', open: 'never' }]],
