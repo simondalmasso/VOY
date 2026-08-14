@@ -73,7 +73,7 @@ test('keyboard-sized mobile viewport keeps destination input usable without shee
   await expect(page.getByTestId('trip-sheet')).toBeHidden();
   const geometry = await input.boundingBox();
   if (!geometry) throw new Error('destination_input_geometry_missing');
-  expect(geometry.top).toBeGreaterThanOrEqual(0);
-  expect(geometry.bottom).toBeLessThanOrEqual(Math.min(500, initial.height));
+  expect(geometry.y).toBeGreaterThanOrEqual(0);
+  expect(geometry.y + geometry.height).toBeLessThanOrEqual(Math.min(500, initial.height));
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 });
