@@ -189,6 +189,13 @@
   footer{padding-inline:4px;gap:12px;overflow-x:auto;white-space:nowrap}
 }
 
+@media(max-width:379px){
+  .map-first-layout>.decision-empty{
+    margin-inline:12px;
+    padding-block:3px;
+  }
+}
+
 @media(min-width:760px){
   .map-first-layout{
     display:grid;
