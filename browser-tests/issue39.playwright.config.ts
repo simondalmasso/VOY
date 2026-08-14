@@ -13,6 +13,7 @@ const viewports = [
 ] as const;
 
 const externalCandidate = process.env.VOY_EXTERNAL_SERVER === '1';
+const localBaseUrl = 'http://127.0.0.1:8791';
 
 export default defineConfig({
   testDir: '.',
@@ -27,11 +28,13 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: process.env.VOY_REPORT_DIR || '../playwright-report-issue39', open: 'never' }]],
   timeout: 45_000,
   expect: { timeout: 8_000 },
-  workers: 2,
+  fullyParallel: false,
+  workers: 1,
+  retries: 0,
   use: {
     extraHTTPHeaders: process.env.VOY_CANDIDATE_VERSION_ID && process.env.VOY_WORKER_NAME ? { 'Cloudflare-Workers-Version-Overrides': `${process.env.VOY_WORKER_NAME}="${process.env.VOY_CANDIDATE_VERSION_ID}"` } : undefined,
-    baseURL: process.env.VOY_BASE_URL || 'http://127.0.0.1:8787',
-    serviceWorkers: externalCandidate ? 'block' : 'allow',
+    baseURL: process.env.VOY_BASE_URL || localBaseUrl,
+    serviceWorkers: 'block',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off'
@@ -48,8 +51,8 @@ export default defineConfig({
     }
   })),
   webServer: externalCandidate ? undefined : {
-    command: 'BUILD_HASH=issue39-browser bun run build && wrangler dev --local --port 8787',
-    url: 'http://127.0.0.1:8787/api/health',
+    command: 'BUILD_HASH=issue39-browser bun run build && wrangler dev --local --port 8791',
+    url: `${localBaseUrl}/api/health`,
     timeout: 120_000,
     reuseExistingServer: false,
     stdout: 'pipe',
