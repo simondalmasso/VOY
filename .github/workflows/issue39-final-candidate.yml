@@ -1,0 +1,180 @@
+name: VOY Issue39 Final Candidate 0
+
+on:
+  push:
+    branches:
+      - audit/issue39-global-adversarial-20260812
+    paths:
+      - .issue39-candidate-ready
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-issue39-final-candidate
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_MAIN_SHA: 4c7b36b8690f8aaa0582e7b118dd7274befa559d
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 796c935
+  EXPECTED_STABLE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  CONVERGENCE_INTERVAL_MS: '7000'
+  EVIDENCE_DIR: test-results/issue39-final-candidate
+  VOY_REAL_BASEMAP: '1'
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact Issue39 source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Gate authority exact branch and frozen main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .issue39-candidate-ready)" = 'ISSUE39_FINAL_CANDIDATE_V1'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/audit/issue39-global-adversarial-20260812 | awk '{print $1}')"
+          remote_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          test "$remote_main" = "$EXPECTED_MAIN_SHA"
+          git diff --check
+          mkdir -p "$EVIDENCE_DIR"
+          printf 'AUD_PASS_TO_RESUME=5288893154\nVISUAL_DIRECTIVE=5288808652\nSOURCE_SHA=%s\nMAIN_SHA=%s\nMERGE_AUTHORIZED=NO\nPRODUCTION_PROMOTION_AUTHORIZED=NO\n' "$GITHUB_SHA" "$remote_main" > "$EVIDENCE_DIR/authority.txt"
+
+      - name: Install pinned frozen toolchain and Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          npm install --global bun@1.3.14 wrangler@4.122.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.122.0'
+          bun install --frozen-lockfile
+          bun audit
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Release policy and exact-source deterministic preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs | tee "$EVIDENCE_DIR/release-policy.json"
+          bun run validate 2>&1 | tee "$EVIDENCE_DIR/pre-candidate-validate.log"
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify 2>&1 | tee "$EVIDENCE_DIR/pre-candidate-wrangler-dry-run.log"
+
+      - name: Fresh fail-closed Cloudflare and production preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/preflight-deployments.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$EXPECTED_STABLE_VERSION_ID" > "$EVIDENCE_DIR/preflight-stable-version.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue39_candidate_preflight=$(date +%s%N)" > "$EVIDENCE_DIR/preflight-production-health.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const e=process.env.EVIDENCE_DIR;
+          const deployments=JSON.parse(fs.readFileSync(`${e}/preflight-deployments.json`,'utf8'));
+          if(deployments.success!==true) throw new Error('preflight_deployments_query_failed');
+          const list=deployments.result?.deployments||deployments.result||[];
+          const active=list[0];
+          if(!active||!Array.isArray(active.versions)) throw new Error('preflight_active_deployment_missing');
+          const stable=active.versions.find(v=>v.version_id===process.env.EXPECTED_STABLE_VERSION_ID);
+          if(!stable||Number(stable.percentage)!==100) throw new Error('preflight_stable_identity_or_traffic_changed');
+          const unexpected=active.versions.filter(v=>v.version_id!==process.env.EXPECTED_STABLE_VERSION_ID&&Number(v.percentage)!==0);
+          if(unexpected.length) throw new Error('preflight_unexpected_nonzero_version');
+          const health=JSON.parse(fs.readFileSync(`${e}/preflight-production-health.json`,'utf8'));
+          if(health.ok!==true||health.version!==process.env.EXPECTED_STABLE_VERSION||health.build_hash!==process.env.EXPECTED_STABLE_HASH) throw new Error('preflight_production_health_changed');
+          const detail=JSON.parse(fs.readFileSync(`${e}/preflight-stable-version.json`,'utf8'));
+          if(detail.success!==true) throw new Error('preflight_stable_version_query_failed');
+          const bindings=detail.result?.resources?.bindings;
+          if(!Array.isArray(bindings)) throw new Error('preflight_stable_bindings_missing');
+          const safeBindings=bindings.map(b=>({name:b.name,type:b.type})).sort((a,b)=>`${a.name}:${a.type}`.localeCompare(`${b.name}:${b.type}`));
+          const out={result:'PASS',deployment_id:active.id,stable_version_id:stable.version_id,stable_traffic:100,other_versions:active.versions.filter(v=>v.version_id!==stable.version_id).map(v=>({version_id:v.version_id,percentage:Number(v.percentage)})),health:{version:health.version,build_hash:health.build_hash},stable_binding_count:safeBindings.length,stable_bindings:safeBindings,checked_at:new Date().toISOString()};
+          fs.writeFileSync(`${e}/fresh-preflight.json`,JSON.stringify(out,null,2)+'\n');
+          console.log(JSON.stringify(out));
+          NODE
+
+      - name: Create and validate zero-traffic candidate
+        shell: bash
+        run: bash scripts/run-hotfix-candidate.sh
+
+      - name: Issue39 candidate nine-viewport matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CANDIDATE_VERSION_ID:-}"
+          VOY_BASE_URL="$WORKER_URL" \
+          VOY_EXTERNAL_SERVER=1 \
+          VOY_WORKER_NAME="$WORKER_NAME" \
+          VOY_CANDIDATE_VERSION_ID="$CANDIDATE_VERSION_ID" \
+          VOY_OUTPUT_DIR="$EVIDENCE_DIR/issue39-candidate-matrix-output" \
+          VOY_REPORT_DIR="$EVIDENCE_DIR/issue39-candidate-matrix-report" \
+          bunx playwright test -c browser-tests/issue39.playwright.config.ts 2>&1 | tee "$EVIDENCE_DIR/issue39-candidate-matrix.log"
+
+      - name: Final production unchanged check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue39_candidate_final=$(date +%s%N)" > "$EVIDENCE_DIR/final-production-health.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const e=process.env.EVIDENCE_DIR;
+          const h=JSON.parse(fs.readFileSync(`${e}/final-production-health.json`,'utf8'));
+          if(h.ok!==true||h.version!==process.env.EXPECTED_STABLE_VERSION||h.build_hash!==process.env.EXPECTED_STABLE_HASH) throw new Error('production_changed_after_issue39_candidate');
+          console.log('PRODUCTION_UNCHANGED=YES');
+          NODE
+
+      - name: Build immutable evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload complete Issue39 candidate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: voy-issue39-final-candidate-${{ github.run_id }}
+          path: test-results/issue39-final-candidate
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Candidate summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## VOY Issue39 final candidate 0%'
+            echo
+            echo "- Exact source SHA: $GITHUB_SHA"
+            echo "- AUD resume pass: 5288893154"
+            echo "- Visual directive: 5288808652"
+            echo "- Stable: $EXPECTED_STABLE_VERSION_ID at 100%"
+            echo "- Candidate: ${CANDIDATE_VERSION_ID:-unresolved} at 0%"
+            echo "- Candidate deployment: ${CANDIDATE_DEPLOYMENT_ID:-unresolved}"
+            echo '- Merge: no'
+            echo '- Production promotion: no'
+            if [ -f "$EVIDENCE_DIR/final-state.json" ]; then
+              echo '```json'
+              cat "$EVIDENCE_DIR/final-state.json"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
