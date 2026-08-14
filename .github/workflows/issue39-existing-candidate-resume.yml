@@ -1,0 +1,299 @@
+name: VOY Issue39 Existing Candidate Resume
+
+on:
+  push:
+    branches:
+      - audit/issue39-global-adversarial-20260812
+    paths:
+      - .issue39-existing-candidate-resume-ready
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-issue39-existing-candidate-resume
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_MAIN_SHA: 4c7b36b8690f8aaa0582e7b118dd7274befa559d
+  CANDIDATE_SOURCE_SHA: 48a9ed2817ab6cdd7a8c8a2e1a62f9c231a495e1
+  EXPECTED_STABLE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+  EXPECTED_CANDIDATE_VERSION_ID: 94384215-f057-4641-b453-4364bb1d851c
+  EXPECTED_DEPLOYMENT_ID: 0294e009-da2f-4f72-a336-c721483e6d73
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 796c935
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  EXPECTED_CANDIDATE_HASH: 48a9ed
+  EVIDENCE_DIR: test-results/issue39-existing-candidate-resume
+
+jobs:
+  validate-existing-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CANDIDATE_VERSION_ID: 94384215-f057-4641-b453-4364bb1d851c
+      STABLE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+      SHORT_SHA: 48a9ed
+      VOICE_SAMPLE_WAV: test-results/issue39-existing-candidate-resume/voice-sample-es-ar.wav
+    steps:
+      - name: Checkout validation head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Prove validation-only lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .issue39-existing-candidate-resume-ready)" = 'ISSUE39_EXISTING_CANDIDATE_RESUME_V1'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/audit/issue39-global-adversarial-20260812 | awk '{print $1}')"
+          remote_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          test "$remote_main" = "$EXPECTED_MAIN_SHA"
+          git merge-base --is-ancestor "$CANDIDATE_SOURCE_SHA" HEAD
+          changed="$(git diff --name-only "$CANDIDATE_SOURCE_SHA"..HEAD | sort)"
+          expected="$(printf '%s\n' '.github/workflows/issue39-existing-candidate-resume.yml' '.issue39-existing-candidate-resume-ready' | sort)"
+          test "$changed" = "$expected"
+          mkdir -p "$EVIDENCE_DIR"
+          printf 'AUD_PASS_TO_RESUME=5288893154\nVISUAL_DIRECTIVE=5288808652\nCANDIDATE_SOURCE_SHA=%s\nVALIDATION_HEAD=%s\nMAIN_SHA=%s\nPOST_CANDIDATE_RUNTIME_DRIFT=NO\nMERGE_AUTHORIZED=NO\nPRODUCTION_PROMOTION_AUTHORIZED=NO\n' "$CANDIDATE_SOURCE_SHA" "$GITHUB_SHA" "$remote_main" > "$EVIDENCE_DIR/authority.txt"
+
+      - name: Fresh fail-closed live candidate preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/deployments-before.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$EXPECTED_STABLE_VERSION_ID" > "$EVIDENCE_DIR/stable-version.json"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/versions/$EXPECTED_CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-version.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue39_resume_preflight=$(date +%s%N)" > "$EVIDENCE_DIR/production-health-before.json"
+          curl -fsS --retry 3 -H "Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$EXPECTED_CANDIDATE_VERSION_ID\"" "$WORKER_URL/api/health?issue39_resume_candidate=$(date +%s%N)" > "$EVIDENCE_DIR/candidate-health-before.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const e=process.env.EVIDENCE_DIR;
+          const deployments=JSON.parse(fs.readFileSync(`${e}/deployments-before.json`,'utf8'));
+          if(deployments.success!==true) throw new Error('deployments_query_failed');
+          const list=deployments.result?.deployments||deployments.result||[];
+          const active=list[0];
+          if(!active||active.id!==process.env.EXPECTED_DEPLOYMENT_ID||!Array.isArray(active.versions)) throw new Error(`active_deployment_drift:${active?.id||'missing'}`);
+          const byId=new Map(active.versions.map(v=>[v.version_id,Number(v.percentage)]));
+          if(byId.get(process.env.EXPECTED_STABLE_VERSION_ID)!==100) throw new Error('stable_not_100');
+          if(byId.get(process.env.EXPECTED_CANDIDATE_VERSION_ID)!==0) throw new Error('candidate_not_0');
+          if(active.versions.some(v=>![process.env.EXPECTED_STABLE_VERSION_ID,process.env.EXPECTED_CANDIDATE_VERSION_ID].includes(v.version_id)&&Number(v.percentage)!==0)) throw new Error('unexpected_nonzero_version');
+          const prod=JSON.parse(fs.readFileSync(`${e}/production-health-before.json`,'utf8'));
+          const cand=JSON.parse(fs.readFileSync(`${e}/candidate-health-before.json`,'utf8'));
+          if(prod.ok!==true||prod.version!==process.env.EXPECTED_STABLE_VERSION||prod.build_hash!==process.env.EXPECTED_STABLE_HASH) throw new Error(`production_health_drift:${JSON.stringify({ok:prod.ok,version:prod.version,build_hash:prod.build_hash})}`);
+          if(cand.ok!==true||cand.version!==process.env.EXPECTED_CANDIDATE_VERSION||cand.build_hash!==process.env.EXPECTED_CANDIDATE_HASH) throw new Error(`candidate_health_drift:${JSON.stringify({ok:cand.ok,version:cand.version,build_hash:cand.build_hash})}`);
+          const stable=JSON.parse(fs.readFileSync(`${e}/stable-version.json`,'utf8'));
+          const candidate=JSON.parse(fs.readFileSync(`${e}/candidate-version.json`,'utf8'));
+          if(stable.success!==true||candidate.success!==true) throw new Error('version_detail_query_failed');
+          const bindings=p=>{const list=p.result?.resources?.bindings;if(!Array.isArray(list))throw new Error('bindings_missing');return list.map(b=>`${b.name}:${b.type}`).sort()};
+          const sb=bindings(stable), cb=bindings(candidate);
+          if(JSON.stringify(sb)!==JSON.stringify(cb)) throw new Error(`binding_drift:${JSON.stringify({stable:sb,candidate:cb})}`);
+          const out={result:'PASS',deployment_id:active.id,stable_version_id:process.env.EXPECTED_STABLE_VERSION_ID,stable_traffic:100,candidate_version_id:process.env.EXPECTED_CANDIDATE_VERSION_ID,candidate_traffic:0,stable_health:{version:prod.version,build_hash:prod.build_hash},candidate_health:{version:cand.version,build_hash:cand.build_hash},binding_parity:true,binding_count:sb.length,checked_at:new Date().toISOString()};
+          fs.writeFileSync(`${e}/fresh-preflight.json`,JSON.stringify(out,null,2)+'\n');
+          console.log(JSON.stringify(out));
+          NODE
+
+      - name: Install pinned frozen validation toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          npm install --global bun@1.3.14 wrangler@4.122.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.122.0'
+          bun install --frozen-lockfile
+          bun audit
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+          espeak-ng -v es -s 125 -w "$VOICE_SAMPLE_WAV" 'Hola VOY quiero ir a la terminal de omnibus'
+          sha256sum "$VOICE_SAMPLE_WAV" > "$EVIDENCE_DIR/voice-sample.sha256"
+
+      - name: Deterministic contracts and generic candidate API
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs | tee "$EVIDENCE_DIR/release-policy.json"
+          bun run validate 2>&1 | tee "$EVIDENCE_DIR/validate.log"
+          WORKER_URL="$WORKER_URL" WORKER_NAME="$WORKER_NAME" CANDIDATE_VERSION_ID="$EXPECTED_CANDIDATE_VERSION_ID" SHORT_SHA="$EXPECTED_CANDIDATE_HASH" EVIDENCE_DIR="$EVIDENCE_DIR" node scripts/svelte-candidate-api-gate.mjs 2>&1 | tee "$EVIDENCE_DIR/api-gate.log"
+
+      - name: Start exact candidate tail
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup timeout 3600s wrangler tail "$WORKER_NAME" --format json --version-id "$EXPECTED_CANDIDATE_VERSION_ID" > "$EVIDENCE_DIR/candidate-tail.log" 2>&1 &
+          echo $! > "$EVIDENCE_DIR/tail.pid"
+          sleep 5
+
+      - name: Voice live gate with quota fail-closed classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const base=process.env.WORKER_URL.replace(/\/$/,'');
+          const worker=process.env.WORKER_NAME;
+          const candidate=process.env.EXPECTED_CANDIDATE_VERSION_ID;
+          const out=process.env.EVIDENCE_DIR;
+          const override=`${worker}="${candidate}"`;
+          const audio=fs.readFileSync(process.env.VOICE_SAMPLE_WAV);
+          const common={'Cloudflare-Workers-Version-Overrides':override,'X-VOY-Voice-Test':'synthetic-ci-resume-v1','Cache-Control':'no-cache, no-store, max-age=0',Pragma:'no-cache'};
+          const assert=(c,m)=>{if(!c)throw new Error(m)};
+          async function raw(path,options={}){const r=await fetch(`${base}${path}`,{...options,redirect:'manual',signal:AbortSignal.timeout(options.timeoutMs||90000),headers:{...common,...(options.headers||{})}});const text=await r.text();let body;try{body=JSON.parse(text)}catch{throw new Error(`invalid_json:${path}:${r.status}:${text.slice(0,180)}`)}return{r,body}}
+          async function ok(path,options={}){const x=await raw(path,options);assert(x.r.ok&&x.body.ok===true,`api_failure:${path}:${x.r.status}:${x.body.error||'unknown'}`);return x.body}
+          const records=[];
+          const caps=await ok('/api/voice/capabilities');
+          assert(caps.enabled===true,'voice_not_enabled');
+          assert(caps.audio_persisted===false&&caps.transcript_logged===false,'voice_privacy_contract_failed');
+          records.push({gate:'capabilities',result:'PASS',providers:caps.providers});
+          let session=(await ok('/api/voice/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({city_id:'santafe'})})).session;
+          assert(session?.city_id==='santafe','session_city_mismatch');
+          records.push({gate:'session',result:'PASS'});
+          const stt=await raw('/api/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav','Content-Length':String(audio.byteLength)},body:audio,timeoutMs:120000});
+          let sttClassification;
+          if(stt.r.status===200&&stt.body.ok===true){assert(typeof stt.body.transcript==='string'&&stt.body.transcript.trim().length>=4,'empty_real_transcript');assert(stt.body.audio_persisted===false&&stt.body.transcript_logged===false,'stt_privacy_contract_failed');sttClassification='STT_HAPPY_PATH_PASS';}
+          else if(stt.r.status===429&&stt.body.ok===false&&stt.body.error==='stt_rate_limited'){sttClassification='STT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';}
+          else throw new Error(`unexpected_stt_result:${stt.r.status}:${stt.body.error||'unknown'}`);
+          records.push({gate:'real_stt',result:sttClassification,status:stt.r.status,provider:stt.body.provider||null});
+          const chatPayload=(message,request_id,s)=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,request_id,session:s,client_context:{online:true,voice_output:true,locale:'es-AR',capability_flags:{ai_copilot:true,voice_input:true,voice_output:true,voicebox_local:false}}})});
+          async function chat(message,id,s){const x=await raw('/api/voice/chat',chatPayload(message,id,s));if(x.r.status===429&&x.body.ok===false&&x.body.error==='chat_rate_limited')return{limited:true,...x};assert(x.r.ok&&x.body.ok===true,`chat_failure:${id}:${x.r.status}:${x.body.error||'unknown'}`);return{limited:false,...x}}
+          const search=await chat('Quiero ir a la terminal.','resume-search',session);
+          let chatClassification='CHAT_HAPPY_PATH_PASS';
+          if(search.limited){chatClassification='CHAT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';records.push({gate:'conversation_and_tools',result:chatClassification,status:429});}
+          else{
+            session=search.body.session;
+            assert(search.body.tool_execution?.status==='success'&&search.body.tool_execution?.tool==='search_destination','search_tool_failed');
+            assert(session?.destination?.city_id==='santafe','destination_not_resolved');
+            assert(search.body.no_action_claim_without_tool_success===true,'no_action_claim_contract_missing');
+            const compare=await chat('Compará los modos disponibles sin inventar precios, tiempos ni colectivo.','resume-compare',session);
+            if(compare.limited){chatClassification='CHAT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';records.push({gate:'conversation_and_tools',result:chatClassification,status:429});}
+            else{
+              session=compare.body.session;
+              assert(compare.body.tool_execution?.tool==='compare_modes'&&compare.body.tool_execution?.status==='success','compare_tool_failed');
+              assert(compare.body.tool_result?.cheapest===null&&compare.body.tool_result?.fastest===null,'numerical_ranking_leak');
+              assert(compare.body.tool_result?.numerical_ranking_available===false&&compare.body.tool_result?.collective_recommendations===false,'ranking_truth_boundary_failed');
+              assert(Array.isArray(compare.body.tool_result?.available)&&compare.body.tool_result.available.every(x=>x.mode!=='bus'&&x.price===null&&x.duration_min===null&&x.distance_km===null&&x.source==='server_territorial_provider_profile'),'comparison_truth_boundary_failed');
+              const prepare=await chat('Abrime Uber para este destino.','resume-prepare',session);
+              if(prepare.limited){chatClassification='CHAT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';records.push({gate:'conversation_and_tools',result:chatClassification,status:429});}
+              else{
+                session=prepare.body.session;
+                const token=prepare.body.tool_result?.token;
+                assert(prepare.body.tool_execution?.tool==='prepare_external_provider_action'&&prepare.body.tool_result?.confirmation_required===true,'confirmation_prepare_failed');
+                assert(typeof token==='string'&&token.length>10&&prepare.body.tool_result?.url===undefined,'confirmation_precondition_failed');
+                const confirm=await raw('/api/voice/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,session})});
+                assert(confirm.r.ok&&confirm.body.ok===true&&confirm.body.external_action?.confirmed===true,'confirmation_failed');
+                assert(/^https:\/\//.test(confirm.body.external_action?.url||''),'confirmed_url_invalid');
+                const replay=await raw('/api/voice/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,session:confirm.body.session})});
+                assert(replay.r.status===409&&replay.body.ok===false,'confirmation_replay_not_rejected');
+                records.push({gate:'conversation_and_tools',result:'PASS',search_tool:'search_destination',compare_tool:'compare_modes'});
+                records.push({gate:'single_use_confirmation',result:'PASS',provider:confirm.body.external_action.provider,url_host:new URL(confirm.body.external_action.url).hostname,replay_status:replay.r.status});
+              }
+            }
+          }
+          const output={result:'PASS',candidate_version_id:candidate,stt_classification:sttClassification,chat_classification:chatClassification,gates:records,checked_at:new Date().toISOString()};
+          fs.writeFileSync(`${out}/voice-resume-gate.json`,JSON.stringify(output,null,2)+'\n');
+          console.log(JSON.stringify(output));
+          NODE
+
+      - name: Candidate full clean-profile browser and real-map proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_REAL_BASEMAP=1 VOY_WORKER_NAME="$WORKER_NAME" VOY_CANDIDATE_VERSION_ID="$EXPECTED_CANDIDATE_VERSION_ID" VOY_EVIDENCE_DIR="$EVIDENCE_DIR/candidate-browser-screens" VOY_OUTPUT_DIR="$EVIDENCE_DIR/candidate-browser-output" VOY_REPORT_DIR="$EVIDENCE_DIR/candidate-browser-report" bunx playwright test -c browser-tests/playwright.config.ts 2>&1 | tee "$EVIDENCE_DIR/candidate-browser.log"
+
+      - name: Candidate Issue39 nine-viewport UX and visual matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          VOY_BASE_URL="$WORKER_URL" VOY_EXTERNAL_SERVER=1 VOY_REAL_BASEMAP=1 VOY_WORKER_NAME="$WORKER_NAME" VOY_CANDIDATE_VERSION_ID="$EXPECTED_CANDIDATE_VERSION_ID" VOY_OUTPUT_DIR="$EVIDENCE_DIR/issue39-candidate-matrix-output" VOY_REPORT_DIR="$EVIDENCE_DIR/issue39-candidate-matrix-report" bunx playwright test -c browser-tests/issue39.playwright.config.ts 2>&1 | tee "$EVIDENCE_DIR/issue39-candidate-matrix.log"
+
+      - name: Stop tail and require clean exact-version observability
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "$EVIDENCE_DIR/tail.pid" ]; then
+            pid="$(cat "$EVIDENCE_DIR/tail.pid")"
+            if kill -0 "$pid" 2>/dev/null; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+          fi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { analyzeCandidateTail } from './scripts/tail-runtime-proof.mjs';
+          const e=process.env.EVIDENCE_DIR;
+          const text=fs.existsSync(`${e}/candidate-tail.log`)?fs.readFileSync(`${e}/candidate-tail.log`,'utf8'):'';
+          const tail=analyzeCandidateTail(text,process.env.EXPECTED_CANDIDATE_VERSION_ID);
+          if(tail.nonOkOutcomes.length||tail.exceptions>0) throw new Error(`tail_runtime_failure:${JSON.stringify(tail)}`);
+          if(tail.exactEvents<1) throw new Error('tail_no_exact_candidate_events');
+          fs.writeFileSync(`${e}/tail-proof.json`,JSON.stringify({result:'PASS',...tail},null,2)+'\n');
+          console.log(JSON.stringify(tail));
+          NODE
+
+      - name: Final fresh state proves production unchanged and candidate still zero
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"
+          curl -fsS --retry 3 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API_ROOT/deployments" > "$EVIDENCE_DIR/deployments-after.json"
+          curl -fsS --retry 3 "$WORKER_URL/api/health?issue39_resume_final=$(date +%s%N)" > "$EVIDENCE_DIR/production-health-after.json"
+          curl -fsS --retry 3 -H "Cloudflare-Workers-Version-Overrides: $WORKER_NAME=\"$EXPECTED_CANDIDATE_VERSION_ID\"" "$WORKER_URL/api/health?issue39_resume_candidate_final=$(date +%s%N)" > "$EVIDENCE_DIR/candidate-health-after.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const e=process.env.EVIDENCE_DIR;
+          const dp=JSON.parse(fs.readFileSync(`${e}/deployments-after.json`,'utf8'));
+          const list=dp.result?.deployments||dp.result||[];
+          const active=list[0];
+          if(dp.success!==true||!active||active.id!==process.env.EXPECTED_DEPLOYMENT_ID) throw new Error('final_deployment_drift');
+          const byId=new Map((active.versions||[]).map(v=>[v.version_id,Number(v.percentage)]));
+          if(byId.get(process.env.EXPECTED_STABLE_VERSION_ID)!==100||byId.get(process.env.EXPECTED_CANDIDATE_VERSION_ID)!==0) throw new Error('final_traffic_drift');
+          const prod=JSON.parse(fs.readFileSync(`${e}/production-health-after.json`,'utf8'));
+          const cand=JSON.parse(fs.readFileSync(`${e}/candidate-health-after.json`,'utf8'));
+          if(prod.ok!==true||prod.version!==process.env.EXPECTED_STABLE_VERSION||prod.build_hash!==process.env.EXPECTED_STABLE_HASH) throw new Error('final_production_health_drift');
+          if(cand.ok!==true||cand.version!==process.env.EXPECTED_CANDIDATE_VERSION||cand.build_hash!==process.env.EXPECTED_CANDIDATE_HASH) throw new Error('final_candidate_health_drift');
+          const out={result:'PASS',deployment_id:active.id,stable_version_id:process.env.EXPECTED_STABLE_VERSION_ID,stable_traffic:100,candidate_version_id:process.env.EXPECTED_CANDIDATE_VERSION_ID,candidate_traffic:0,production_unchanged:true,checked_at:new Date().toISOString()};
+          fs.writeFileSync(`${e}/final-live-state.json`,JSON.stringify(out,null,2)+'\n');
+          console.log(JSON.stringify(out));
+          NODE
+
+      - name: Build immutable evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload resume evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: voy-issue39-existing-candidate-resume-${{ github.run_id }}
+          path: test-results/issue39-existing-candidate-resume
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Resume summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## VOY Issue39 existing candidate resume'
+            echo
+            echo "- Candidate runtime source: $CANDIDATE_SOURCE_SHA"
+            echo "- Validation head: $GITHUB_SHA"
+            echo "- Stable: $EXPECTED_STABLE_VERSION_ID @100%"
+            echo "- Candidate: $EXPECTED_CANDIDATE_VERSION_ID @0%"
+            echo "- Deployment: $EXPECTED_DEPLOYMENT_ID"
+            echo '- Merge: no'
+            echo '- Production promotion: no'
+            [ -f "$EVIDENCE_DIR/voice-resume-gate.json" ] && { echo '```json'; cat "$EVIDENCE_DIR/voice-resume-gate.json"; echo '```'; }
+            [ -f "$EVIDENCE_DIR/final-live-state.json" ] && { echo '```json'; cat "$EVIDENCE_DIR/final-live-state.json"; echo '```'; }
+          } >> "$GITHUB_STEP_SUMMARY"
