@@ -190,7 +190,7 @@
 }
 
 @media(max-width:379px){
-  .map-first-layout>.decision-empty{
+  .app-shell[data-visual-system="voy-wayfinding-v1"] .map-first-layout>.decision-empty{
     margin-inline:12px;
     padding-block:3px;
   }
