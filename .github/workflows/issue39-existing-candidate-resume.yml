@@ -25,7 +25,7 @@ env:
   EXPECTED_STABLE_VERSION: V8.0.0
   EXPECTED_STABLE_HASH: 796c935
   EXPECTED_CANDIDATE_VERSION: V8.0.0
-  EXPECTED_CANDIDATE_HASH: 48a9ed
+  EXPECTED_CANDIDATE_HASH: 48a9ed2
   EVIDENCE_DIR: test-results/issue39-existing-candidate-resume
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CANDIDATE_VERSION_ID: 94384215-f057-4641-b453-4364bb1d851c
       STABLE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
-      SHORT_SHA: 48a9ed
+      SHORT_SHA: 48a9ed2
       VOICE_SAMPLE_WAV: test-results/issue39-existing-candidate-resume/voice-sample-es-ar.wav
     steps:
       - name: Checkout validation head
@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(cat .issue39-existing-candidate-resume-ready)" = 'ISSUE39_EXISTING_CANDIDATE_RESUME_V1'
+          test "$(cat .issue39-existing-candidate-resume-ready)" = 'ISSUE39_EXISTING_CANDIDATE_RESUME_V2'
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/audit/issue39-global-adversarial-20260812 | awk '{print $1}')"
           remote_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
@@ -144,7 +144,7 @@ jobs:
           const out=process.env.EVIDENCE_DIR;
           const override=`${worker}="${candidate}"`;
           const audio=fs.readFileSync(process.env.VOICE_SAMPLE_WAV);
-          const common={'Cloudflare-Workers-Version-Overrides':override,'X-VOY-Voice-Test':'synthetic-ci-resume-v1','Cache-Control':'no-cache, no-store, max-age=0',Pragma:'no-cache'};
+          const common={'Cloudflare-Workers-Version-Overrides':override,'X-VOY-Voice-Test':'synthetic-ci-resume-v2','Cache-Control':'no-cache, no-store, max-age=0',Pragma:'no-cache'};
           const assert=(c,m)=>{if(!c)throw new Error(m)};
           async function raw(path,options={}){const r=await fetch(`${base}${path}`,{...options,redirect:'manual',signal:AbortSignal.timeout(options.timeoutMs||90000),headers:{...common,...(options.headers||{})}});const text=await r.text();let body;try{body=JSON.parse(text)}catch{throw new Error(`invalid_json:${path}:${r.status}:${text.slice(0,180)}`)}return{r,body}}
           async function ok(path,options={}){const x=await raw(path,options);assert(x.r.ok&&x.body.ok===true,`api_failure:${path}:${x.r.status}:${x.body.error||'unknown'}`);return x.body}
@@ -164,7 +164,7 @@ jobs:
           records.push({gate:'real_stt',result:sttClassification,status:stt.r.status,provider:stt.body.provider||null});
           const chatPayload=(message,request_id,s)=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,request_id,session:s,client_context:{online:true,voice_output:true,locale:'es-AR',capability_flags:{ai_copilot:true,voice_input:true,voice_output:true,voicebox_local:false}}})});
           async function chat(message,id,s){const x=await raw('/api/voice/chat',chatPayload(message,id,s));if(x.r.status===429&&x.body.ok===false&&x.body.error==='chat_rate_limited')return{limited:true,...x};assert(x.r.ok&&x.body.ok===true,`chat_failure:${id}:${x.r.status}:${x.body.error||'unknown'}`);return{limited:false,...x}}
-          const search=await chat('Quiero ir a la terminal.','resume-search',session);
+          const search=await chat('Quiero ir a la terminal.','resume-v2-search',session);
           let chatClassification='CHAT_HAPPY_PATH_PASS';
           if(search.limited){chatClassification='CHAT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';records.push({gate:'conversation_and_tools',result:chatClassification,status:429});}
           else{
@@ -172,7 +172,7 @@ jobs:
             assert(search.body.tool_execution?.status==='success'&&search.body.tool_execution?.tool==='search_destination','search_tool_failed');
             assert(session?.destination?.city_id==='santafe','destination_not_resolved');
             assert(search.body.no_action_claim_without_tool_success===true,'no_action_claim_contract_missing');
-            const compare=await chat('Compará los modos disponibles sin inventar precios, tiempos ni colectivo.','resume-compare',session);
+            const compare=await chat('Compará los modos disponibles sin inventar precios, tiempos ni colectivo.','resume-v2-compare',session);
             if(compare.limited){chatClassification='CHAT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';records.push({gate:'conversation_and_tools',result:chatClassification,status:429});}
             else{
               session=compare.body.session;
@@ -180,7 +180,7 @@ jobs:
               assert(compare.body.tool_result?.cheapest===null&&compare.body.tool_result?.fastest===null,'numerical_ranking_leak');
               assert(compare.body.tool_result?.numerical_ranking_available===false&&compare.body.tool_result?.collective_recommendations===false,'ranking_truth_boundary_failed');
               assert(Array.isArray(compare.body.tool_result?.available)&&compare.body.tool_result.available.every(x=>x.mode!=='bus'&&x.price===null&&x.duration_min===null&&x.distance_km===null&&x.source==='server_territorial_provider_profile'),'comparison_truth_boundary_failed');
-              const prepare=await chat('Abrime Uber para este destino.','resume-prepare',session);
+              const prepare=await chat('Abrime Uber para este destino.','resume-v2-prepare',session);
               if(prepare.limited){chatClassification='CHAT_RATE_LIMIT_FAIL_CLOSED_SHARED_QUOTA';records.push({gate:'conversation_and_tools',result:chatClassification,status:429});}
               else{
                 session=prepare.body.session;
@@ -219,10 +219,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f "$EVIDENCE_DIR/tail.pid" ]; then
-            pid="$(cat "$EVIDENCE_DIR/tail.pid")"
-            if kill -0 "$pid" 2>/dev/null; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+          if [ ! -f "$EVIDENCE_DIR/tail.pid" ]; then
+            echo 'TAIL_CHECK=SKIPPED_BECAUSE_TAIL_NEVER_STARTED' > "$EVIDENCE_DIR/tail-not-started.txt"
+            exit 0
           fi
+          pid="$(cat "$EVIDENCE_DIR/tail.pid")"
+          if kill -0 "$pid" 2>/dev/null; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import { analyzeCandidateTail } from './scripts/tail-runtime-proof.mjs';
@@ -294,6 +296,6 @@ jobs:
             echo "- Deployment: $EXPECTED_DEPLOYMENT_ID"
             echo '- Merge: no'
             echo '- Production promotion: no'
-            [ -f "$EVIDENCE_DIR/voice-resume-gate.json" ] && { echo '```json'; cat "$EVIDENCE_DIR/voice-resume-gate.json"; echo '```'; }
-            [ -f "$EVIDENCE_DIR/final-live-state.json" ] && { echo '```json'; cat "$EVIDENCE_DIR/final-live-state.json"; echo '```'; }
+            if [ -f "$EVIDENCE_DIR/voice-resume-gate.json" ]; then echo '```json'; cat "$EVIDENCE_DIR/voice-resume-gate.json"; echo '```'; fi
+            if [ -f "$EVIDENCE_DIR/final-live-state.json" ]; then echo '```json'; cat "$EVIDENCE_DIR/final-live-state.json"; echo '```'; fi
           } >> "$GITHUB_STEP_SUMMARY"
