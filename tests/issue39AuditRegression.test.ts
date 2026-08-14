@@ -3,17 +3,21 @@ import { readFileSync } from 'node:fs';
 import { canonicalRouteRequest, ROUTE_COORD_PRECISION, validGeometry } from '../worker/routes/route';
 import { PROVIDER_AVAILABILITY_MAX_AGE_DAYS, providerAvailabilityCurrent } from '../src/features/providers/provider.registry';
 
-const json = (path: string): Record<string, any> => JSON.parse(readFileSync(path, 'utf8'));
+type JsonObject = Record<string, unknown>;
+const json = (path: string): JsonObject => JSON.parse(readFileSync(path, 'utf8')) as JsonObject;
+const object = (value: unknown): JsonObject => (value && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : {});
 
 describe('Issue39 adversarial regression gates', () => {
   test('private app fare metadata cannot expose stale numeric coefficients', () => {
     const fares = json('public/cities/santa-fe/fares.json');
+    const apps = object(object(fares.fare_registry).apps);
     const forbidden = new Set(['base', 'km', 'min', 'minFare', 'amount', 'price', 'fare']);
-    for (const [provider, record] of Object.entries<any>(fares.fare_registry.apps)) {
+    for (const [provider, value] of Object.entries(apps)) {
+      const record = object(value);
       expect(record.availability_price_status, provider).toBeTruthy();
-      expect(['stale_estimate', 'stale_reference', 'provider_app_only', 'unverified'].includes(record.status), provider).toBe(true);
-      for (const [key, value] of Object.entries(record)) {
-        expect(forbidden.has(key) && typeof value === 'number', `${provider}.${key} leaked numeric private-app fare`).toBe(false);
+      expect(['stale_estimate', 'stale_reference', 'provider_app_only', 'unverified'].includes(String(record.status)), provider).toBe(true);
+      for (const [key, field] of Object.entries(record)) {
+        expect(forbidden.has(key) && typeof field === 'number', `${provider}.${key} leaked numeric private-app fare`).toBe(false);
       }
     }
   });
@@ -23,7 +27,7 @@ describe('Issue39 adversarial regression gates', () => {
     const transport = json('public/cities/santa-fe/transport.json');
     expect(transport.bus_stops).toEqual([]);
     expect(transport.bike_stations).toEqual([]);
-    const notes = profile.coverage_notes.join(' ').toLowerCase();
+    const notes = Array.isArray(profile.coverage_notes) ? profile.coverage_notes.map(String).join(' ').toLowerCase() : '';
     expect(notes).toContain('no están disponibles operacionalmente');
     expect(notes).not.toContain('paradas y estaciones curadas');
   });
