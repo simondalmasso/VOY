@@ -24,7 +24,8 @@
       "voiceCopilotHtml.test.js",
       "voiceCopilotProviders.test.js",
       "voiceCopilotRuntime.test.js",
-      "voiceCopilotSelection.test.js"
+      "voiceCopilotSelection.test.js",
+      "voiceGlobalRateLimit.test.js"
     ],
     "archived": {
       "accessibilityCompletion.test.js": "Targets removed VOY-Lite monolith; current accessibility is covered by Svelte browser gates.",
