@@ -1,0 +1,40 @@
+/* VOY Wayfinding contract corrections.
+   These selectors intentionally outrank the inherited Issue36 composition layer
+   while preserving its accessibility and hierarchy thresholds. */
+
+:root[data-theme="dark"]{
+  --voy-signal:#FF6847;
+}
+
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --voy-signal:#FF6847;
+  }
+}
+
+.map-first-layout .modes{
+  border:1px solid var(--voy-border);
+  border-left:3px solid var(--voy-wayfinding);
+  border-radius:3px 14px 3px 3px;
+  padding:0;
+  gap:0;
+}
+
+.map-first-layout>.sheet{
+  border:1px solid var(--voy-border);
+  border-left:3px solid var(--voy-route);
+}
+
+@media(max-width:759px){
+  .map-first-layout .search label{
+    font-size:clamp(22px,6vw,26px);
+  }
+
+  .map-first-layout>.sheet{
+    border-left:3px solid var(--voy-route);
+  }
+
+  .map-first-layout .provider-meta>strong{
+    font-size:clamp(30px,7.8vw,34px);
+  }
+}
