@@ -279,18 +279,18 @@
   <LegalView route={routePath} />
 {:else}
   <OfflineBanner />
-  <main class="app-shell" data-testid="app-shell" data-interaction-state={interactionState}>
+  <main class="app-shell" data-testid="app-shell" data-interaction-state={interactionState} data-visual-system="voy-wayfinding-v1">
     <header class="brand">
-      <a href="/" aria-label="VOY inicio">VOY</a>
-      <div class="brand-context"><span>Santa Fe</span><span aria-hidden="true">·</span><span>decisión urbana</span></div>
+      <a href="/" aria-label="VOY inicio"><span class="brand-word">VOY</span><span class="brand-route" aria-hidden="true">↗</span></a>
+      <div class="brand-context"><span>Santa Fe</span><span aria-hidden="true">/</span><span>decisión urbana</span></div>
       <button type="button" class="theme-toggle" on:click={cycleTheme} aria-label={`Tema: ${themeLabel}. Cambiar tema`} data-testid="theme-toggle"><span aria-hidden="true">◐</span><span>{themeLabel}</span></button>
     </header>
 
     <div class="journey-layout map-first-layout" data-testid="map-first-layout" data-interaction-state={interactionState} data-sheet-snap={effectiveSheetSnap} data-keyboard-open={keyboardOpen ? 'true' : 'false'}>
       <section class="controls planner" aria-label="Planificar viaje">
         <div class="planner-intro" aria-hidden="true">
-          <p class="eyebrow">Movilidad urbana · Santa Fe</p>
-          <p class="planner-promise">Cuánto cuesta. Cuánto tarda. Qué conviene.</p>
+          <p class="eyebrow">VOY / Santa Fe / mapa primero</p>
+          <p class="planner-promise">Elegí destino. VOY ordena lo que puede verificar.</p>
         </div>
         <div class="journey-builder" data-testid="journey-builder">
           <DestinationSearch

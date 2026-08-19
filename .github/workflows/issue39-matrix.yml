@@ -1,0 +1,114 @@
+name: VOY Issue39 Exact-Head Matrix
+
+on:
+  push:
+    branches:
+      - audit/issue39-global-adversarial-20260812
+    paths:
+      - .issue39-matrix-ready
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-issue39-matrix-final-v4
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      VOY_OUTPUT_DIR: test-results/issue39-matrix
+      VOY_REPORT_DIR: playwright-report-issue39
+    steps:
+      - name: Checkout exact audit head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Gate authority and exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .issue39-matrix-ready)" = 'ISSUE39_MATRIX_V4'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/audit/issue39-global-adversarial-20260812 | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          printf 'AUD_PASS_TO_RESUME=5288893154\nVISUAL_DIRECTIVE=5288808652\nMERGE_AUTHORIZED=NO\nPRODUCTION_PROMOTION_AUTHORIZED=NO\n' > issue39-matrix-authority.txt
+      - name: Install frozen audited toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.122.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.122.0'
+          bun install --frozen-lockfile
+          bun audit
+          bunx playwright install --with-deps chromium
+      - name: Deterministic validation and dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs
+          bun run validate
+          wrangler deploy --dry-run --outdir /tmp/issue39-matrix-wrangler
+          git diff --check
+      - name: Nine-viewport visual and interaction matrix
+        shell: bash
+        run: |
+          set +e
+          mkdir -p test-results/issue39-matrix-meta
+          bunx playwright test -c browser-tests/issue39.playwright.config.ts --reporter=json > test-results/issue39-matrix-meta/playwright.json
+          status=$?
+          set -e
+          MATRIX_STATUS="$status" node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path='test-results/issue39-matrix-meta/playwright.json';
+          const report=JSON.parse(fs.readFileSync(path,'utf8'));
+          const failures=[];
+          const walk=(suite,trail=[])=>{
+            const next=[...trail,...(suite.title?[suite.title]:[])];
+            for(const spec of suite.specs||[]){
+              for(const test of spec.tests||[]){
+                for(const result of test.results||[]){
+                  if(result.status==='failed'||result.status==='timedOut'||result.status==='interrupted'){
+                    failures.push({title:[...next,spec.title].filter(Boolean).join(' > '),project:test.projectName||'',status:result.status,error:String(result.error?.message||result.errors?.[0]?.message||'unknown_failure').split('\n').slice(0,12).join('\n')});
+                  }
+                }
+              }
+            }
+            for(const child of suite.suites||[]) walk(child,next);
+          };
+          for(const suite of report.suites||[]) walk(suite,[]);
+          const summary={status:Number(process.env.MATRIX_STATUS),failure_count:failures.length,failures};
+          fs.writeFileSync('test-results/issue39-matrix-meta/failures.json',JSON.stringify(summary,null,2));
+          console.log(`ISSUE39_MATRIX_FAILURE_COUNT=${failures.length}`);
+          for(const [i,f] of failures.entries()) console.log(`FAILURE_${i+1}=${f.project} :: ${f.title}\n${f.error}`);
+          NODE
+          exit "$status"
+      - name: Evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/issue39-matrix-meta
+          cp issue39-matrix-authority.txt test-results/issue39-matrix-meta/authority.txt || true
+          printf '%s\n' "$GITHUB_SHA" > test-results/issue39-matrix-meta/exact-head.txt
+          : > test-results/issue39-matrix-meta/manifest.sha256
+          for root in test-results playwright-report-issue39; do
+            if [ -d "$root" ]; then
+              find "$root" -type f ! -path '*/issue39-matrix-meta/manifest.sha256' ! -path '*/issue39-matrix-meta/digest.txt' -print0 | sort -z | xargs -0 -r sha256sum >> test-results/issue39-matrix-meta/manifest.sha256
+            fi
+          done
+          sha256sum test-results/issue39-matrix-meta/manifest.sha256 > test-results/issue39-matrix-meta/digest.txt
+      - name: Upload matrix evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: voy-issue39-matrix-${{ github.run_id }}
+          path: |
+            test-results
+            playwright-report-issue39
+          if-no-files-found: error
+          retention-days: 30

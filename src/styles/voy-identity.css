@@ -1,0 +1,460 @@
+/* VOY Wayfinding v1
+   Product language: urban wayfinding instruments over a map, not ride-hail chrome.
+   Structural traits: directional spine, asymmetric/notched surfaces, route dock,
+   signal bars and compact evidence labels. No external imagery or font dependency. */
+
+:root{
+  --voy-canvas:#F3F0E6;
+  --voy-surface:#FFFCF5;
+  --voy-surface-2:#E8ECE6;
+  --voy-ink:#17243A;
+  --voy-ink-soft:#34435A;
+  --voy-muted:#66706F;
+  --voy-border:#C9CEC6;
+  --voy-signal:#E65335;
+  --voy-signal-soft:#FFE1D7;
+  --voy-route:#6557C9;
+  --voy-route-soft:#E6E2FA;
+  --voy-wayfinding:#167B78;
+  --voy-wayfinding-soft:#D9EFEB;
+  --voy-focus:#225CE5;
+  --voy-shadow:0 14px 34px rgba(23,36,58,.12);
+  --voy-wayfinding-cut:22px;
+  --voy-wayfinding-line:3px;
+  --voy-wayfinding-grid:8px;
+}
+
+:root[data-theme="dark"]{
+  --voy-canvas:#101821;
+  --voy-surface:#182431;
+  --voy-surface-2:#22313D;
+  --voy-ink:#F5F0E4;
+  --voy-ink-soft:#D6DDD9;
+  --voy-muted:#9AABA8;
+  --voy-border:#3A4A53;
+  --voy-signal:#FF7657;
+  --voy-signal-soft:#512C25;
+  --voy-route:#A89AF5;
+  --voy-route-soft:#302D50;
+  --voy-wayfinding:#69C7BF;
+  --voy-wayfinding-soft:#173B3B;
+  --voy-focus:#8CB4FF;
+  --voy-shadow:0 18px 44px rgba(0,0,0,.32);
+}
+
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --voy-canvas:#101821;
+    --voy-surface:#182431;
+    --voy-surface-2:#22313D;
+    --voy-ink:#F5F0E4;
+    --voy-ink-soft:#D6DDD9;
+    --voy-muted:#9AABA8;
+    --voy-border:#3A4A53;
+    --voy-signal:#FF7657;
+    --voy-signal-soft:#512C25;
+    --voy-route:#A89AF5;
+    --voy-route-soft:#302D50;
+    --voy-wayfinding:#69C7BF;
+    --voy-wayfinding-soft:#173B3B;
+    --voy-focus:#8CB4FF;
+    --voy-shadow:0 18px 44px rgba(0,0,0,.32);
+  }
+}
+
+body{
+  background:
+    linear-gradient(90deg,color-mix(in srgb,var(--voy-border) 28%,transparent) 1px,transparent 1px) 0 0/64px 64px,
+    linear-gradient(color-mix(in srgb,var(--voy-border) 20%,transparent) 1px,transparent 1px) 0 0/64px 64px,
+    var(--voy-canvas);
+}
+
+.app-shell[data-visual-system="voy-wayfinding-v1"]{
+  --voy-radius-lg:12px;
+  --voy-radius-xl:16px;
+}
+
+.brand{
+  border-top:var(--voy-wayfinding-line) solid var(--voy-ink);
+  padding-top:7px;
+}
+.brand>a{
+  width:max-content;
+  min-width:92px;
+  padding:0 10px 0 12px;
+  gap:9px;
+  background:var(--voy-ink);
+  color:var(--voy-surface);
+  border-radius:2px 14px 2px 2px;
+  letter-spacing:-.055em;
+}
+.brand-word{display:inline-block}
+.brand-route{
+  display:inline-grid;
+  width:24px;
+  height:24px;
+  place-items:center;
+  border-left:1px solid color-mix(in srgb,var(--voy-surface) 38%,transparent);
+  color:var(--voy-signal);
+  font-size:18px;
+  line-height:1;
+}
+.brand-context{
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  font-size:10px;
+  font-weight:750;
+}
+.theme-toggle{
+  border:0;
+  border-bottom:2px solid var(--voy-border);
+  border-radius:0;
+  background:transparent;
+}
+.theme-toggle:hover{border-bottom-color:var(--voy-wayfinding);background:transparent}
+
+.map-first-layout{
+  --voy-frame-border:color-mix(in srgb,var(--voy-border) 78%,transparent);
+}
+
+.planner-intro{
+  position:relative;
+  padding:10px 14px 14px 18px;
+  border-left:var(--voy-wayfinding-line) solid var(--voy-wayfinding);
+}
+.planner-intro::after{
+  content:"";
+  position:absolute;
+  left:-3px;
+  bottom:0;
+  width:28px;
+  height:3px;
+  background:var(--voy-signal);
+}
+.eyebrow{color:var(--voy-wayfinding);letter-spacing:.13em}
+.planner-promise{
+  max-width:24ch;
+  font-size:clamp(23px,4vw,31px);
+  letter-spacing:-.035em;
+}
+
+.journey-builder{
+  overflow:visible;
+  border:1px solid var(--voy-frame-border);
+  border-left:var(--voy-wayfinding-line) solid var(--voy-route);
+  border-radius:3px 22px 3px 3px;
+  box-shadow:0 9px 0 color-mix(in srgb,var(--voy-route-soft) 68%,transparent);
+}
+.journey-builder::before{
+  left:25px;
+  top:108px;
+  bottom:57px;
+  width:var(--voy-wayfinding-line);
+  background:linear-gradient(var(--voy-signal) 0 34%,var(--voy-border) 34% 66%,var(--voy-wayfinding) 66%);
+}
+.journey-builder::after{
+  content:"";
+  position:absolute;
+  top:-1px;
+  right:-1px;
+  width:var(--voy-wayfinding-cut);
+  height:var(--voy-wayfinding-cut);
+  background:linear-gradient(45deg,transparent 49%,var(--voy-border) 50% 53%,var(--voy-canvas) 54%);
+  pointer-events:none;
+}
+.search{padding:17px 18px 12px 20px}
+.search::before,.origin::before{
+  left:18px;
+  width:14px;
+  height:14px;
+  border-radius:2px;
+  transform:rotate(45deg);
+}
+.search::before{
+  top:67px;
+  background:var(--voy-signal);
+  box-shadow:0 0 0 3px var(--voy-signal-soft);
+}
+.origin::before{
+  left:18px;
+  background:var(--voy-wayfinding);
+  box-shadow:0 0 0 3px var(--voy-wayfinding-soft);
+}
+.search label{
+  margin-left:28px;
+  font-size:clamp(24px,5vw,32px);
+  letter-spacing:-.035em;
+}
+.input-wrap{
+  grid-template-columns:24px 1fr;
+  margin-left:2px;
+}
+.input-wrap svg{stroke:var(--voy-route);width:18px;height:18px}
+.input-wrap input{
+  border-bottom:2px solid var(--voy-border);
+  font-weight:620;
+}
+.input-wrap input:focus{border-bottom-color:var(--voy-route)}
+.search .status{margin-left:31px}
+.results{
+  margin-left:-20px;
+  border-radius:0 0 3px 3px;
+}
+.results button{padding-left:54px}
+.results button::before{
+  content:"→";
+  color:var(--voy-route);
+  font-weight:800;
+}
+.origin{
+  padding-left:47px;
+  border-top:1px dashed var(--voy-border);
+}
+.origin-summary span{color:var(--voy-wayfinding)}
+.origin .location,.origin-edit{
+  border:0;
+  border-bottom:2px solid var(--voy-border);
+  border-radius:0;
+}
+.origin .location:hover,.origin-edit:hover{border-bottom-color:var(--voy-wayfinding);background:var(--voy-wayfinding-soft)}
+.manual input{
+  border-radius:3px 14px 3px 3px;
+  background:var(--voy-surface-2);
+  border-left:3px solid var(--voy-route);
+}
+
+.modes-frame{position:relative}
+.modes{
+  gap:0;
+  padding:0;
+  border:1px solid var(--voy-border);
+  border-left:3px solid var(--voy-wayfinding);
+  border-radius:3px 14px 3px 3px;
+  background:var(--voy-surface);
+}
+.modes button{
+  position:relative;
+  border-radius:0;
+  border-right:1px solid var(--voy-border);
+  color:var(--voy-ink-soft);
+  background:transparent;
+  min-height:46px;
+}
+.modes button:last-child{border-right:0}
+.modes button.active{
+  color:var(--voy-ink);
+  background:var(--voy-route-soft);
+}
+.modes button.active::after{
+  content:"";
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:4px;
+  height:3px;
+  background:var(--voy-route);
+}
+.modes-overflow-cue{color:var(--voy-route)}
+
+.message{
+  border-left:2px solid var(--voy-border);
+  padding:7px 10px 7px 22px;
+  min-height:32px;
+}
+.message::before{
+  left:8px;
+  border-radius:1px;
+}
+.assistant-trigger{
+  border:1px solid var(--voy-border);
+  border-left:3px solid var(--voy-signal);
+  border-radius:3px 14px 3px 3px;
+  padding-inline:12px;
+}
+.assistant-trigger:hover{background:var(--voy-signal-soft);color:var(--voy-ink)}
+
+.map-shell{
+  border-radius:4px 28px 4px 4px;
+  border:1px solid var(--voy-frame-border);
+  box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--voy-surface) 32%,transparent);
+}
+.map-shell::after{
+  content:"VOY / MAPA";
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:2;
+  padding:5px 8px;
+  background:var(--voy-ink);
+  color:var(--voy-surface);
+  border-left:3px solid var(--voy-signal);
+  font-size:9px;
+  line-height:1;
+  letter-spacing:.14em;
+  font-weight:800;
+  pointer-events:none;
+}
+.map-truth{
+  left:10px;
+  right:auto;
+  max-width:min(72%,420px);
+  border:0;
+  border-left:3px solid var(--voy-wayfinding);
+  border-radius:2px 12px 2px 2px;
+  box-shadow:0 6px 20px rgba(23,36,58,.1);
+}
+.map-credit{border-radius:2px}
+
+.decision-empty{
+  border:1px solid var(--voy-border);
+  border-left:3px solid var(--voy-signal);
+  border-radius:3px 18px 3px 3px;
+  background:var(--voy-surface);
+}
+.decision-index{
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  color:var(--voy-surface);
+  background:var(--voy-signal);
+  border-radius:2px 9px 2px 2px;
+}
+
+.sheet{
+  border:1px solid var(--voy-border);
+  border-left:var(--voy-wayfinding-line) solid var(--voy-route);
+  border-radius:3px;
+  clip-path:polygon(0 0,calc(100% - 28px) 0,100% 28px,100% 100%,0 100%);
+  box-shadow:var(--voy-shadow);
+}
+.sheet::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  width:42%;
+  height:4px;
+  background:linear-gradient(90deg,var(--voy-route) 0 62%,var(--voy-signal) 62% 100%);
+  pointer-events:none;
+}
+.sheet-handle{
+  left:16px;
+  margin-left:0;
+  width:54px;
+  justify-items:start;
+}
+.sheet-handle .grab{
+  width:34px;
+  height:4px;
+  border-radius:1px;
+  background:var(--voy-route);
+}
+.sheet header>div>span{color:var(--voy-route);letter-spacing:.13em}
+.sheet h2{letter-spacing:-.035em}
+.trust-line{
+  width:fit-content;
+  padding:4px 7px;
+  color:var(--voy-success);
+  background:var(--voy-success-soft);
+  border-radius:2px 9px 2px 2px;
+}
+.options{border-top:2px solid var(--voy-ink)}
+.provider{
+  position:relative;
+  padding-left:13px;
+  border-bottom:1px dashed var(--voy-border);
+}
+.provider::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:18px;
+  width:4px;
+  height:34px;
+  background:var(--voy-wayfinding);
+}
+.provider:hover:not(.disabled){
+  background:linear-gradient(90deg,var(--voy-wayfinding-soft),transparent 72%);
+}
+.provider-action{color:var(--voy-route)}
+.methodology summary{color:var(--voy-wayfinding)}
+
+footer{
+  border-top:1px dashed var(--voy-border);
+  padding-top:12px;
+}
+footer a{text-decoration-thickness:1px;text-underline-offset:4px}
+
+@media(max-width:759px){
+  .brand{padding-top:5px}
+  .brand>a{min-width:82px;height:44px;padding-inline:10px}
+  .brand-route{width:20px;height:20px}
+  .map-first-layout{
+    border-radius:3px 22px 3px 3px;
+    border:1px solid var(--voy-frame-border);
+    background:var(--voy-surface-2);
+  }
+  .map-first-layout>.map-shell{border-radius:3px 22px 3px 3px}
+  .map-first-layout>.planner{margin:9px;gap:6px}
+  .journey-builder{
+    border-radius:3px 18px 3px 3px;
+    box-shadow:0 6px 0 color-mix(in srgb,var(--voy-route-soft) 70%,transparent);
+  }
+  .search label{font-size:clamp(21px,6vw,26px)}
+  .modes{
+    border-radius:3px 12px 3px 3px;
+    padding:0;
+  }
+  .modes button{padding-inline:11px}
+  .map-first-layout>.decision-empty{
+    border-radius:3px 14px 3px 3px;
+    padding:9px 10px;
+  }
+  .map-first-layout>.sheet{
+    width:calc(100% - 10px);
+    margin:0 5px 5px;
+    border-bottom:1px solid var(--voy-border);
+    border-radius:3px;
+    clip-path:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,0 100%);
+  }
+  .map-truth{right:auto;left:9px;max-width:68%}
+  .map-shell::after{top:7px;right:7px}
+}
+
+@media(min-width:760px){
+  .map-first-layout{
+    grid-template-columns:minmax(330px,390px) minmax(0,1fr);
+    gap:10px;
+    padding:7px;
+    border:1px solid var(--voy-frame-border);
+    border-radius:4px 30px 4px 4px;
+    background:color-mix(in srgb,var(--voy-surface-2) 62%,transparent);
+  }
+  .map-first-layout>.planner{
+    padding:8px;
+    border-left:3px solid var(--voy-wayfinding);
+  }
+  .map-first-layout>.sheet{
+    margin:0 10px 10px;
+    border-radius:3px;
+  }
+  .map-first-layout>.decision-empty{margin:10px}
+}
+
+@media(max-width:520px){
+  .brand-context{display:none}
+  .theme-toggle{min-width:68px;padding-inline:8px}
+  .provider{gap:10px}
+  .provider-meta>strong{font-size:clamp(27px,7vw,34px)}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .app-shell[data-visual-system="voy-wayfinding-v1"] *,
+  .app-shell[data-visual-system="voy-wayfinding-v1"] *::before,
+  .app-shell[data-visual-system="voy-wayfinding-v1"] *::after{
+    transition-duration:0ms!important;
+    animation-duration:0ms!important;
+    scroll-behavior:auto!important;
+  }
+}

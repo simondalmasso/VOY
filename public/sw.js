@@ -25,10 +25,9 @@ self.addEventListener('fetch', event => {
     return;
   }
   if (url.pathname.startsWith('/cities/')) {
-    event.respondWith(fetch(request, { cache: 'no-store' }).then(response => {
-      if (response.ok) event.waitUntil(safePut(request, response.clone()));
-      return response;
-    }).catch(() => caches.match(request).then(value => value || Response.error())));
+    // Territorial truth (fares/providers/coverage) must fail closed when offline.
+    // Never serve a cached city payload as if it were current.
+    event.respondWith(fetch(request, { cache: 'no-store' }));
     return;
   }
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.json') {

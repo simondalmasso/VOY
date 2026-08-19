@@ -3,6 +3,7 @@ import { estimateDurationMinutes, type TravelMode } from '../../core/duration';
 import type { RouteResult } from './trip.types';
 
 interface RoutePayload { ok?: boolean; distance_km?: unknown; duration_min?: unknown; geometry?: unknown }
+const ROUTE_ENDPOINT_TOLERANCE_DEGREES = 0.002;
 function isFiniteNumber(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value); }
 function parseGeometry(value: unknown): Coordinates[] {
   if (!Array.isArray(value)) return [];
@@ -15,7 +16,8 @@ function parseGeometry(value: unknown): Coordinates[] {
 }
 function validRouteGeometry(geometry: Coordinates[], origin: Coordinates, destination: Coordinates): boolean {
   return geometry.length >= 2 && geometry.length <= 20_000 && geometry.every(isInsideSantaFe)
-    && approximatelyEqual(geometry[0]!, origin) && approximatelyEqual(geometry.at(-1)!, destination);
+    && approximatelyEqual(geometry[0]!, origin, ROUTE_ENDPOINT_TOLERANCE_DEGREES)
+    && approximatelyEqual(geometry.at(-1)!, destination, ROUTE_ENDPOINT_TOLERANCE_DEGREES);
 }
 function straightLine(origin: Coordinates, destination: Coordinates, mode: TravelMode): RouteResult {
   const distanceKm = haversineKm(origin, destination);

@@ -40,7 +40,7 @@ async function openDecisionHalf(page: Page): Promise<void> {
   await expect(sheet).toHaveAttribute('data-snap', 'half');
 }
 
-test('Issue36 composition follows the audited map-first amendment on mobile and desktop', async ({ page }, testInfo: TestInfo) => {
+test('Issue36 composition follows the audited map-first amendment on mobile, tablet and desktop', async ({ page }, testInfo: TestInfo) => {
   await deterministicTripApis(page);
   await page.goto('/');
   const metrics = await page.evaluate(() => {
@@ -66,6 +66,13 @@ test('Issue36 composition follows the audited map-first amendment on mobile and 
     expect(metrics.planner.width).toBeGreaterThanOrEqual(350);
     expect(metrics.planner.width).toBeLessThanOrEqual(430);
     expect(metrics.map.width).toBeGreaterThan(metrics.planner.width);
+    expect(metrics.map.height).toBeGreaterThanOrEqual(560);
+    expect(metrics.map.left).toBeGreaterThan(metrics.planner.right);
+    expect(metrics.decision.left).toBeGreaterThanOrEqual(metrics.map.left);
+    expect(metrics.decision.right).toBeLessThanOrEqual(metrics.map.right + 1);
+  } else if (testInfo.project.name.startsWith('tablet')) {
+    expect(metrics.planner.width).toBeGreaterThanOrEqual(350);
+    expect(metrics.planner.width).toBeLessThanOrEqual(430);
     expect(metrics.map.height).toBeGreaterThanOrEqual(560);
     expect(metrics.map.left).toBeGreaterThan(metrics.planner.right);
     expect(metrics.decision.left).toBeGreaterThanOrEqual(metrics.map.left);
