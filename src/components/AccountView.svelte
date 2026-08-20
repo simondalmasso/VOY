@@ -104,7 +104,6 @@
         }
       }
     });
-    googleButton.replaceChildren();
     api.renderButton(googleButton, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular', logo_alignment: 'left', width: 260 });
   }
 
@@ -198,7 +197,7 @@
       <label>Tema<select bind:value={preferences.theme}><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
       <label class="check"><input type="checkbox" bind:checked={preferences.reducedMotion} /> Reducir movimiento</label>
       <label class="check"><input type="checkbox" bind:checked={preferences.analytics} /> Permitir analytics no sensibles</label>
-      <fieldset><legend>Modos preferidos</legend><div class="mode-grid">{#each modes as item}<button type="button" class:active={preferences.preferredModes.includes(item.id)} aria-pressed={preferences.preferredModes.includes(item.id)} on:click={() => toggleMode(item.id)}>{item.label}</button>{/each}</div></fieldset>
+      <fieldset><legend>Modos preferidos</legend><div class="mode-grid">{#each modes as item (item.id)}<button type="button" class:active={preferences.preferredModes.includes(item.id)} aria-pressed={preferences.preferredModes.includes(item.id)} on:click={() => toggleMode(item.id)}>{item.label}</button>{/each}</div></fieldset>
       <button type="button" on:click={save} disabled={busy}>Guardar preferencias</button>
     </section>
     <section class="account-actions"><button type="button" class="secondary" on:click={logout} disabled={busy}>Cerrar sesión</button><button type="button" class="danger" on:click={deleteAccount} disabled={busy}>{deleteArmed ? 'Confirmar eliminación' : 'Eliminar cuenta'}</button>{#if deleteArmed}<button type="button" class="secondary" on:click={() => deleteArmed = false}>Cancelar</button>{/if}</section>
