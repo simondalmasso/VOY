@@ -61,7 +61,12 @@ test('ORDER-046 national base routes without inheriting Santa Fe local claims', 
   await expect(page.getByTestId('provider-taxi')).toHaveCount(0);
   await expect(page.getByTestId('provider-remis')).toHaveCount(0);
 
-  await page.locator('[data-mode="walk"]').click();
+  const walk = page.locator('[data-mode="walk"]');
+  await walk.click();
+  await expect(walk).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('trip-sheet')).toHaveAttribute('data-snap', 'peek');
+  await page.getByTestId('sheet-handle').click();
+  await expect(page.getByTestId('trip-sheet')).toHaveAttribute('data-snap', 'half');
   await expect(page.getByTestId('provider-walk')).toBeVisible();
   expect(external).toEqual([]);
 });
