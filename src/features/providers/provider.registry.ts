@@ -44,7 +44,7 @@ function visibleForMode(option: ProviderOptionModel, selected: TravelMode): bool
   return option.mode === selected;
 }
 
-export async function providerOptions(route: RouteResult | null, selectedMode: TravelMode, coverageKey: CoverageKey = '_default'): Promise<ProviderOptionModel[]> {
+export async function providerOptions(route: RouteResult | null, selectedMode: TravelMode, coverageKey = '_default'): Promise<ProviderOptionModel[]> {
   if (selectedMode === 'bus') return [{ id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: null, price: { kind: 'unavailable', label: 'Sin datos locales verificados' }, detail: 'VOY no afirma líneas, paradas, frecuencias ni tarifas sin una fuente territorial vigente.', external: false, rank: 99 }];
   if (!route) return [];
 
