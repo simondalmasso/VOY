@@ -78,8 +78,8 @@ async function assertBusUnavailableLayout(page: Page): Promise<void> {
   const provider = page.getByTestId('provider-bus');
   await expect(provider).toBeVisible();
   await expect(provider).toContainText('Colectivo');
-  await expect(provider).toContainText('Sin recorridos, paradas, frecuencias ni espera verificables. VOY no calcula ni sugiere una línea.');
-  await expect(provider).toContainText('Sin recomendación disponible');
+  await expect(provider).toContainText('VOY no afirma líneas, paradas, frecuencias ni tarifas sin una fuente territorial vigente y un planificador validado.');
+  await expect(provider).toContainText('Sin planificación verificada');
   await expect(provider).toHaveAttribute('data-price-kind', 'unavailable');
   await expect(provider).toHaveClass(/disabled/);
   expect(await provider.evaluate(node => node.tagName)).toBe('ARTICLE');
