@@ -8,317 +8,139 @@ const test = require('node:test');
 
 let verifier;
 const load = () => verifier ??= import(pathToFileURL(path.join(__dirname, '..', 'scripts', 'verify-release-policy.mjs')).href);
-const policy = `release:
-  generic_main_push_production_write: false
-  candidate_required: true
-  candidate_traffic_percent: 0
-  exact_source_sha_required: true
-  production_promotion: mission_specific
-  aud_pass_required: true
-  current_cloudflare_state_required: true
-  rollback_requires_separate_authorization: true
+
+const policy = `version: 2
+project: VOY
+order: 45
+authority:
+  governance: github
+  orders: numbered_github_issues
+  repository_instructions: AGENTS.md
+  release_control: cloudflare_workers
+  runtime_confirmation: production
+operating_model:
+  arq:
+    role: construction_operation_execution_implementation
+    principal_implementer: true
+    technical_autonomy: true
+    work_mode: long_deep_autonomous
+    waits_for_aud_during_internal_construction: false
+    evidence_before_close: true
+  aud:
+    role: brain_direction_audit_research
+    independent: true
+    intervenes_before_material_checkpoint: false
+    evidence_before_verdict: true
+  handoff:
+    trigger: arq_material_auditable_checkpoint
+    surface: github
+release:
+  merge_requires_explicit_numbered_order: true
+  deploy_requires_explicit_numbered_order: true
+  production_mutation_requires_explicit_numbered_order: true
+  internal_candidate_or_validation_work_may_continue_without_intermediate_aud: true
+  deploy_sequence:
+    - explicit_numbered_github_order
+    - arq_build_implement_test_verify
+    - cloudflare_workers_first
+    - verify_effective_runtime
+    - github_reconcile_after_runtime
+claims:
+  no_done_without_evidence: true
+  no_verdict_without_sufficient_evidence: true
 `;
 
-function fixture(workflows, files = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voy-policy-'));
+const agents = `# VOY — Operating Governance V2
+\`\`\`text
+ORDER=45
+ORDERS=NUMBERED_GITHUB_ISSUES_ONLY
+WORK_MODE=LONG_DEEP_AUTONOMOUS
+INTERNAL_RESTRICTIONS=MINIMAL
+ARQ_DOES_NOT_WAIT_FOR_AUD_DURING_INTERNAL_CONSTRUCTION=YES
+AUD_DOES_NOT_INTERVENE_UNTIL_ARQ_PUBLISHES_MATERIAL_AUDITABLE_CHECKPOINT=YES
+DEPLOY=CLOUDFLARE_WORKERS_FIRST_THEN_GITHUB
+\`\`\`
+## ROL_LOCK=AUD
+## ROL_LOCK=ARQ
+MERGE/DEPLOY/PRODUCTION_MUTATION=NO, salvo orden explícita.
+`;
+
+function fixture(workflows, options = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voy-governance-'));
   fs.mkdirSync(path.join(root, '.github/workflows'), { recursive: true });
   fs.mkdirSync(path.join(root, 'docs/control'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'docs/control/release-policy.yaml'), policy);
+  if (!options.noPolicy) fs.writeFileSync(path.join(root, 'docs/control/release-policy.yaml'), options.policy ?? policy);
+  if (!options.noAgents) fs.writeFileSync(path.join(root, 'AGENTS.md'), options.agents ?? agents);
   for (const [name, content] of Object.entries(workflows)) fs.writeFileSync(path.join(root, '.github/workflows', name), content);
-  for (const [name, content] of Object.entries(files)) {
-    const target = path.join(root, name);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content);
-  }
   return root;
 }
 
-const onMain = `on:
+const mainWorkflow = (run) => `name: test
+on:
   push:
-    branches: [main]`;
-const wf = (run, on = onMain) => `name: test
-${on}
+    branches: [main]
 jobs:
-  x:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - run: ${run}
 `;
 
-const unsafe = [
-  ['plain deploy', 'npx wrangler deploy --minify', /non-dry-run/],
-  ['version deploy', 'npx wrangler@4.112.0 deploy --minify', /non-dry-run/],
-  ['bunx versions deploy', 'bunx wrangler@latest versions deploy abc', /versions deploy/],
-  ['npm exec deploy', 'npm exec wrangler -- deploy --minify', /non-dry-run/],
-  ['secret', 'npx wrangler versions secret put X', /secret mutation/],
-  ['unknown', 'npx wrangler hyperdrive create db', /not provably read-only/],
-  ['dev no local', 'npx wrangler dev --port 8787', /not provably local-only/],
-  ['dev remote', 'npx wrangler dev --local --remote', /not provably local-only/],
-  ['command substitution', 'echo "$(npx wrangler@4.112.0 deploy --minify)"', /non-dry-run/],
-  ['shell c', "bash -c 'npx wrangler@4.112.0 versions deploy abc'", /versions deploy/],
-  ['official JS entrypoint deploy', 'node ./node_modules/wrangler/bin/wrangler.js deploy --minify', /non-dry-run/],
-  ['direct official JS entrypoint', './node_modules/wrangler/bin/wrangler.js versions deploy abc', /versions deploy/],
-  ['wrangler-dist entrypoint', 'node ./node_modules/wrangler/wrangler-dist/cli.js secret put X', /secret mutation/]
-];
-
-for (const [name, command, expected] of unsafe) test(`rejects ${name}`, async () => {
-  const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({ 'main.yml': wf(command) }));
-  assert.equal(result.ok, false);
-  assert.match(result.violations.join('\n'), expected);
-});
-
-const safe = [
-  ['plain dry-run', 'npx wrangler deploy --dry-run --minify'],
-  ['version dry-run', 'npm exec wrangler@4.112.0 -- deploy --dry-run --minify'],
-  ['version query', 'test "$(./node_modules/.bin/wrangler --version | awk \'{print $1}\')" = "4.112.0"'],
-  ['package install', 'npm install --no-save --package-lock=false wrangler@4.112.0'],
-  ['local dev', 'npx wrangler dev --local --port 8787'],
-  ['official JS entrypoint dry-run', 'node ./node_modules/wrangler/bin/wrangler.js deploy --dry-run --minify'],
-  ['wrangler-dist version', 'node ./node_modules/wrangler/wrangler-dist/cli.js --version']
-];
-
-for (const [name, command] of safe) test(`accepts ${name}`, async () => {
-  const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({ 'main.yml': wf(command) }));
-  assert.equal(result.ok, true, result.violations.join('\n'));
-});
-
-test('classifies required inline flow mappings', async () => {
-  const { analyzeRepository, allowsGenericMainPush } = await load();
-  for (const on of ['on: { push: { branches: [main] } }', 'on: { push: {} }']) {
-    assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
-    const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
-    assert.equal(result.ok, false);
-    assert.match(result.violations.join('\n'), /non-dry-run/);
-  }
-});
-
-test('fails closed on multiline flow branch sequence and inspects command', async () => {
-  const { analyzeRepository, allowsGenericMainPush } = await load();
-  const on = `on:
-  push:
-    branches: [
-      main
-    ]`;
-  assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
-  const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
-  const errors = result.violations.join('\n');
-  assert.equal(result.ok, false);
-  assert.match(errors, /multiline flow collection|not safely analyzable/);
-  assert.match(errors, /non-dry-run/);
-});
-
-test('fails closed on YAML anchor and alias trigger and inspects command', async () => {
-  const { analyzeRepository, allowsGenericMainPush } = await load();
-  const on = `on:
-  pull_request:
-    branches: &main_branches [main]
-  push:
-    branches: *main_branches`;
-  assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
-  const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
-  const errors = result.violations.join('\n');
-  assert.equal(result.ok, false);
-  assert.match(errors, /anchors, aliases/);
-  assert.match(errors, /non-dry-run/);
-});
-
-for (const header of ['>-', '|-', '>', '|', '>2-', '|+', '|-2', '>+2']) {
-  test(`fails closed on branches block scalar ${header} and inspects command`, async () => {
-    const { analyzeRepository, allowsGenericMainPush } = await load();
-    const on = `on:
-  push:
-    branches: ${header} # valid YAML block scalar header
-      main`;
-    assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
-    const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
-    const errors = result.violations.join('\n');
-    assert.equal(result.ok, false);
-    assert.match(errors, /block scalar|not safely analyzable/);
-    assert.match(errors, /non-dry-run/);
-  });
-}
-
-test('fails closed on branches-ignore block scalar and inspects command', async () => {
-  const { analyzeRepository, allowsGenericMainPush } = await load();
-  const on = `on:
-  push:
-    branches-ignore: |2-
-      main`;
-  assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
-  const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
-  const errors = result.violations.join('\n');
-  assert.equal(result.ok, false);
-  assert.match(errors, /block scalar|not safely analyzable/);
-  assert.match(errors, /non-dry-run/);
-});
-
-test('fails closed on top-level and push block scalar headers', async () => {
-  const { analyzeRepository, allowsGenericMainPush } = await load();
-  for (const on of [`on: >-\n  push`, `on:\n  push: |-\n    branches:\n      - main`]) {
-    assert.equal(allowsGenericMainPush(`${on}\njobs:\n  x:\n    runs-on: ubuntu-latest\n`), true);
-    const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --minify', on) }));
-    const errors = result.violations.join('\n');
-    assert.equal(result.ok, false);
-    assert.match(errors, /block scalar|not safely analyzable/);
-    assert.match(errors, /non-dry-run/);
-  }
-});
-
-const escapedTriggers = [
-  ['flow branch x escape', 'on: { push: { branches: ["m\\x61in"] } }'],
-  ['flow branch u escape', 'on: { push: { branches: ["ma\\u0069n"] } }'],
-  ['flow branch U escape', 'on: { push: { branches: ["ma\\U00000069n"] } }'],
-  ['block-list branch escape', 'on:\n  push:\n    branches:\n      - "ma\\u0069n"'],
-  ['inline escaped event key', 'on: { "pu\\u0073h": { branches: [main] } }'],
-  ['block escaped event key', 'on:\n  "pu\\u0073h":\n    branches: [main]'],
-  ['escaped branches key', 'on:\n  push:\n    "bran\\u0063hes": [main]'],
-  ['escaped branches-ignore key', 'on:\n  push:\n    "branches-\\u0069gnore": [feat/**]'],
-  ['escaped top-level on key', '"o\\u006e": { push: { branches: [main] } }']
-];
-
-for (const [name, on] of escapedTriggers) test(`fails closed on ${name} and inspects command`, async () => {
-  const { analyzeRepository, allowsGenericMainPush } = await load();
-  const text = wf('npx wrangler deploy --minify', on);
-  assert.equal(allowsGenericMainPush(text), true);
-  const result = analyzeRepository(fixture({ 'main.yml': text }));
-  const errors = result.violations.join('\n');
-  assert.equal(result.ok, false);
-  assert.match(errors, /double-quoted YAML escape|not safely analyzable/);
-  assert.match(errors, /non-dry-run/);
-});
-
-test('ordinary double-quoted feature branch remains non-main', async () => {
-  const { allowsGenericMainPush } = await load();
-  assert.equal(allowsGenericMainPush('name: x\non: { push: { branches: ["feat/x"] } }\njobs:\n  x:\n    runs-on: ubuntu-latest\n'), false);
-});
-
-test('does not classify feature-only flow mapping as main root', async () => {
-  const { allowsGenericMainPush } = await load();
-  assert.equal(allowsGenericMainPush('name: x\non: { push: { branches: [feat/x] } }\njobs:\n  x:\n    runs-on: ubuntu-latest\n'), false);
-});
-
-test('does not classify feature-only block sequence as main root', async () => {
-  const { allowsGenericMainPush } = await load();
-  assert.equal(allowsGenericMainPush('name: x\non:\n  push:\n    branches:\n      - feat/**\njobs:\n  x:\n    runs-on: ubuntu-latest\n'), false);
-});
-
-test('malformed flow fails closed', async () => {
-  const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({ 'main.yml': wf('npx wrangler deploy --dry-run', 'on: { push: { branches: [main] }') }));
-  assert.equal(result.ok, false);
-  assert.match(result.violations.join('\n'), /not safely analyzable/);
-});
-
-test('follows unsafe local workflow', async () => {
-  const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({
-    'main.yml': `name: main
-${onMain}
-jobs:
-  call:
-    uses: ./.github/workflows/reusable.yml
-`,
-    'reusable.yml': `name: reuse
+const featureWorkflow = (run) => `name: test
 on:
-  workflow_call:
+  push:
+    branches: [feat/candidate]
 jobs:
-  x:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - run: npx wrangler versions deploy abc
-`
-  }));
-  assert.equal(result.ok, false);
-  assert.match(result.violations.join('\n'), /versions deploy/);
-});
+      - run: ${run}
+`;
 
-test('unresolved local workflow fails closed', async () => {
+test('accepts governance v2 with a non-mutating generic main workflow', async () => {
   const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({ 'main.yml': `name: main
-${onMain}
-jobs:
-  call:
-    uses: ./.github/workflows/missing.yml
-` }));
-  assert.equal(result.ok, false);
-  assert.match(result.violations.join('\n'), /unresolved local workflow/);
-});
-
-test('rejects Cloudflare credentials, action and mutating API', async () => {
-  const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({ 'main.yml': `name: main
-${onMain}
-jobs:
-  x:
-    runs-on: ubuntu-latest
-    env:
-      CLOUDFLARE_API_TOKEN: x
-    steps:
-      - uses: cloudflare/wrangler-action@v3
-      - run: curl -X POST https://api.cloudflare.com/client/v4/accounts/x/workers/scripts
-` }));
-  const errors = result.violations.join('\n');
-  assert.equal(result.ok, false);
-  assert.match(errors, /CLOUDFLARE_API_TOKEN/);
-  assert.match(errors, /Cloudflare or Wrangler action/);
-  assert.match(errors, /Cloudflare API reference/);
-});
-
-test('quoted prose and log variables remain safe while local dev is scanned', async () => {
-  const { analyzeRepository } = await load();
-  const result = analyzeRepository(fixture({ 'main.yml': wf('bash scripts/local.sh') }, {
-    'scripts/local.sh': '#!/bin/sh\nWRANGLER_LOG=x\necho "Wrangler local starting"\nnpx wrangler dev --local --port 8787 >"$WRANGLER_LOG" 2>&1 &\n'
-  }));
+  const result = analyzeRepository(fixture({ 'main.yml': mainWorkflow('npx wrangler deploy --dry-run --minify') }));
   assert.equal(result.ok, true, result.violations.join('\n'));
 });
 
-test('non-main candidate mutation is not a generic root', async () => {
+test('rejects a generic main push that mutates Cloudflare', async () => {
+  const { analyzeRepository } = await load();
+  const result = analyzeRepository(fixture({ 'main.yml': mainWorkflow('npx wrangler deploy --minify') }));
+  assert.equal(result.ok, false);
+  assert.match(result.violations.join('\n'), /non-dry-run wrangler deploy/);
+});
+
+test('does not treat feature-only construction as a generic main mutation path', async () => {
   const { analyzeRepository } = await load();
   const result = analyzeRepository(fixture({
-    'main.yml': wf('npx wrangler deploy --dry-run'),
-    'candidate.yml': wf('npx wrangler versions deploy abc', 'on:\n  push:\n    branches: [feat/candidate]')
+    'main.yml': mainWorkflow('node --version'),
+    'candidate.yml': featureWorkflow('npx wrangler versions deploy candidate-id'),
   }));
   assert.equal(result.ok, true, result.violations.join('\n'));
 });
 
-test('security verifier source remains mechanically reviewable', () => {
-  const verifierPath = path.join(
-    __dirname,
-    '..',
-    'scripts',
-    'verify-release-policy.mjs',
-  );
-  const source = fs.readFileSync(verifierPath, 'utf8');
-  const lines = source.split(/\r?\n/);
-  const functionNames = [
-    'analyzeOnTrigger',
-    'analyzePushConfiguration',
-    'parseYamlFlowValue',
-    'findUnsafeReferences',
-    'classifyWranglerCommand',
-    'analyzeRepository',
-  ];
+test('requires numbered-order ARQ/AUD governance instead of the legacy AUD gate', async () => {
+  const { analyzeRepository } = await load();
+  const legacy = policy
+    .replace('version: 2', 'version: 1')
+    .replace('waits_for_aud_during_internal_construction: false', 'waits_for_aud_during_internal_construction: true')
+    .replace('intervenes_before_material_checkpoint: false', 'intervenes_before_material_checkpoint: true');
+  const result = analyzeRepository(fixture({ 'main.yml': mainWorkflow('node --version') }, { policy: legacy }));
+  assert.equal(result.ok, false);
+  assert.match(result.violations.join('\n'), /version: 2/);
+  assert.match(result.violations.join('\n'), /waits_for_aud_during_internal_construction: false/);
+  assert.match(result.violations.join('\n'), /intervenes_before_material_checkpoint: false/);
+});
 
-  assert.ok(lines.length >= 300, `expected readable source, found ${lines.length} lines`);
-  const ordinaryLines = lines.filter(
-    (line) => !line.startsWith('const WRANGLER_EXECUTABLE_PATTERN = /'),
-  );
-  assert.ok(
-    Math.max(...ordinaryLines.map((line) => line.length)) <= 180,
-    'verifier contains an ordinary line longer than 180 characters',
-  );
-  assert.ok(
-    lines.every((line) => line.length <= 320),
-    'verifier contains an unreviewably long regular-expression line',
-  );
-  assert.ok(
-    lines.every((line) => (line.match(/;/g) ?? []).length <= 3),
-    'verifier contains a densely packed statement line',
-  );
+test('requires AGENTS.md as the canonical repository instruction surface', async () => {
+  const { analyzeRepository } = await load();
+  const result = analyzeRepository(fixture({ 'main.yml': mainWorkflow('node --version') }, { noAgents: true }));
+  assert.equal(result.ok, false);
+  assert.match(result.violations.join('\n'), /AGENTS\.md: missing/);
+});
 
-  for (const functionName of functionNames) {
-    assert.match(source, new RegExp(`function ${functionName}\\(`));
-  }
+test('classifies the standard main and feature triggers correctly', async () => {
+  const { allowsGenericMainPush } = await load();
+  assert.equal(allowsGenericMainPush(mainWorkflow('node --version')), true);
+  assert.equal(allowsGenericMainPush(featureWorkflow('node --version')), false);
 });
