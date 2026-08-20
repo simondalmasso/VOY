@@ -121,7 +121,7 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   await page.goto('/');
   await planTrip(page);
   const provenance = page.getByTestId('destination-provenance');
-  await expect(provenance).toContainText('Verificado');
+  await expect(provenance).toContainText('Destino verificado');
   await expect(provenance).toContainText('Municipalidad de Santa Fe');
   await expect(provenance).toContainText('2026-08-05');
   await expect(page.getByTestId('trip-sheet')).not.toContainText('Destino autoritativo');
