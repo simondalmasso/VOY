@@ -61,7 +61,7 @@
       <h2 id="coverage-title">24 jurisdicciones territoriales</h2>
       <p><strong>Santa Fe ciudad:</strong> primera ciudad con cobertura local validada por componente. <strong>Resto:</strong> base nacional; las capacidades locales se habilitan sólo con evidencia propia.</p>
       <ul class="territories">
-        {#each ARGENTINA_PROVINCES as province}
+        {#each ARGENTINA_PROVINCES as province (province.id)}
           <li><span>{province.name}</span><small>{province.id === '82' ? 'Base nacional · Santa Fe ciudad validada' : 'Base nacional'}</small></li>
         {/each}
       </ul>
