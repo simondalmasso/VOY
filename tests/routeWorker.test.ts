@@ -15,7 +15,7 @@ function georefRows(count: number, provinceId = '82', provinceName = 'Santa Fe')
 
 function installRouteUpstreams(options: { unresolved?: boolean } = {}): { osrmCalls: () => number } {
   let osrm = 0;
-  globalThis.fetch = (async (input, init) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes('apis.datos.gob.ar/georef/api/v2.0/ubicacion')) {
       const body = JSON.parse(String(init?.body || '{}')) as { ubicaciones?: unknown[] };
