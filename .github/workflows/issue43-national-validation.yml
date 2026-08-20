@@ -39,9 +39,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global bun@1.3.14 wrangler@4.112.0
+          npm install --global bun@1.3.14 wrangler@4.124.0
           test "$(bun --version)" = '1.3.14'
-          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          test "$(wrangler --version | awk '{print $1}')" = '4.124.0'
+          printf 'VOY_BROWSER_WRANGLER=%s\n' "$(command -v wrangler)" >> "$GITHUB_ENV"
           bun install --frozen-lockfile
           git diff --exit-code -- bun.lock
       - name: Validate source, unit/security tests, build and budgets
