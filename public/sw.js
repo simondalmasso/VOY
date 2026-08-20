@@ -1,6 +1,6 @@
-const CACHE = 'voy-svelte-shell-v2';
+const CACHE = 'voy-svelte-shell-v3';
 const VOY_CACHE_PREFIXES = ['voy-svelte-', 'voy-v', 'voy-cache-', 'voy-static-', 'voy-runtime-'];
-const SHELL = ['/', '/manifest.json', '/icons/app-icon.svg'];
+const SHELL = ['/', '/manifest.json', '/icons/app-icon.svg', '/brand/voy-mark.svg', '/brand/voy-assistant.svg'];
 const isVoyCache = key => VOY_CACHE_PREFIXES.some(prefix => key.startsWith(prefix));
 const safePut = async (request, response) => {
   try { const cache = await caches.open(CACHE); await cache.put(request, response); } catch { /* private mode or quota */ }
@@ -25,13 +25,15 @@ self.addEventListener('fetch', event => {
     return;
   }
   if (url.pathname.startsWith('/cities/')) {
-    event.respondWith(fetch(request, { cache: 'no-store' }).then(response => {
-      if (response.ok) event.waitUntil(safePut(request, response.clone()));
-      return response;
-    }).catch(() => caches.match(request).then(value => value || Response.error())));
+    // Mobility registries are freshness-sensitive product truth. Never silently
+    // replay a cached registry offline as if it were current.
+    event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => new Response(JSON.stringify({ ok: false, error: 'offline_fresh_data_unavailable' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+    })));
     return;
   }
-  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.json') {
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/brand/') || url.pathname === '/manifest.json') {
     event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => {
       if (response.ok) event.waitUntil(safePut(request, response.clone()));
       return response;
