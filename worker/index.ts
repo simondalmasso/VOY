@@ -1,7 +1,9 @@
 import legacyWorker, { NominatimCoordinator } from '../worker-entry.js';
 import type { Env } from './contracts/env';
 import { handleMobilityTrust } from './routes/mobility-trust';
+import { handleNationalGeocode } from './routes/geocode';
 import { handleRoute } from './routes/route';
+import { handleTerritory } from './routes/territory';
 export { NominatimCoordinator };
 const API_PREFIX = '/api/';
 const VERSION = 'V8.0.0';
@@ -43,7 +45,7 @@ function authConfigured(env: Env): boolean { return Boolean(String(env.VOY_GOOGL
 function health(env: Env): Response {
   const voice = env.VOY_VOICE_ENABLED === 'true' && Boolean(env.AI);
   const auth = authConfigured(env);
-  return new Response(JSON.stringify({ ok: true, service: 'voy-app', version: VERSION, build_hash: String(env.VOY_BUILD_HASH || 'dev'), features: { voice, auth, collective_recommendations: false, core_without_login_voice_ai: true, pwa: true } }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return new Response(JSON.stringify({ ok: true, service: 'voy-app', version: VERSION, build_hash: String(env.VOY_BUILD_HASH || 'dev'), features: { voice, auth, collective_recommendations: false, core_without_login_voice_ai: true, pwa: true, national_territory: true } }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 async function assets(request: Request, env: Env): Promise<Response> {
   const response = await env.ASSETS.fetch(request); if (response.status !== 404 || request.method !== 'GET') return secure(response, request);
@@ -56,6 +58,8 @@ const worker: ExportedHandler<Env> = {
     if (isRetiredPublicPath(url.pathname)) return secure(retiredPublicAsset(), request);
     if (url.pathname === '/api/health' && request.method === 'GET') return secure(health(env), request);
     if (url.pathname === '/api/mobility/trust') return secure(handleMobilityTrust(request), request);
+    if (url.pathname === '/api/territory') return secure(await handleTerritory(request), request);
+    if (url.pathname === '/api/geocode') return secure(await handleNationalGeocode(request, async legacyRequest => await legacyWorker.fetch(legacyRequest, env, ctx)), request);
     if (url.pathname === '/api/route') return secure(await handleRoute(request, env), request);
     if (url.pathname === '/api/auth/session' && request.method === 'GET' && !authConfigured(env)) {
       return secure(new Response(JSON.stringify({ ok: true, enabled: false, authenticated: false, persistent_account: false, trip_history_persisted: false }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }), request);
