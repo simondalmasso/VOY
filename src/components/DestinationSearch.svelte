@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { territoryLabel } from '../core/territory';
   import type { Destination } from '../features/destination/destination.types';
   import { searchDestinations } from '../features/destination/destination.service';
 
@@ -49,13 +50,13 @@
       onResultsState(false);
       return;
     }
-    status = 'Buscando…';
+    status = 'Buscando en Argentina…';
     timer = setTimeout(async () => {
       controller = new AbortController();
       try {
         results = await searchDestinations(query, controller.signal);
         onResultsState(results.length > 0);
-        status = results.length ? `${results.length} resultados` : 'No encontramos un resultado dentro de la cobertura.';
+        status = results.length ? `${results.length} resultados · elegí localidad y provincia` : 'No encontramos un resultado territorial verificable.';
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           results = [];
@@ -67,13 +68,15 @@
   }
 
   function choose(item: Destination): void {
-    if (!item.operational || !item.verified || item.confidence !== 'authoritative') {
-      status = 'Ese resultado no tiene procedencia suficiente para calcular un viaje.';
+    if (!item.routeEligible || !item.territoryVerified || !item.territory) {
+      status = 'Ese resultado no tiene contexto territorial suficiente para calcular un viaje.';
       return;
     }
     query = item.name;
     selected = true;
-    status = `Destino verificado: ${item.name}`;
+    status = item.operational && item.provenance
+      ? `Destino local verificado · ${territoryLabel(item.territory)}`
+      : `Territorio verificado · ${territoryLabel(item.territory)}`;
     closeResults(false);
     onSelect(item);
   }
@@ -97,7 +100,7 @@
       on:focus={() => onFocusState(true)}
       on:blur={() => onFocusState(false)}
       on:keydown={handleKeydown}
-      placeholder="Lugar o dirección"
+      placeholder="Lugar, dirección, localidad"
       data-testid="destination-input"
       aria-expanded={results.length > 0}
       aria-controls="destination-results"
@@ -108,12 +111,17 @@
     <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results">
       {#each results as item (item.id)}
         <li>
-          <button type="button" disabled={!item.operational} aria-disabled={!item.operational} on:click={() => choose(item)} data-testid={`destination-result-${item.operational ? 'verified' : 'unverified'}`}>
+          <button type="button" disabled={!item.routeEligible} aria-disabled={!item.routeEligible} on:click={() => choose(item)} data-testid={`destination-result-${item.operational ? 'verified' : item.routeEligible ? 'national' : 'unverified'}`}>
             <strong>{item.name}</strong>
-            {#if item.operational && item.provenance}
-              <span>{item.address} · Fuente oficial</span>
+            {#if item.routeEligible && item.territory}
+              <span>{item.address || territoryLabel(item.territory)} · {territoryLabel(item.territory)}</span>
+              {#if item.operational && item.provenance}
+                <small>Fuente oficial local · movilidad verificada para este componente</small>
+              {:else}
+                <small>Territorio verificado · datos locales de movilidad no asumidos</small>
+              {/if}
             {:else}
-              <span>Ubicación no verificada · No disponible para calcular</span>
+              <span>Territorio no resuelto · no disponible para calcular</span>
             {/if}
           </button>
         </li>

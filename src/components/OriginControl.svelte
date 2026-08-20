@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { isInsideSantaFe, type Coordinates } from '../core/coordinates';
+  import type { Coordinates } from '../core/coordinates';
+  import { territoryLabel, type TerritoryContext } from '../core/territory';
 
   export let label: string;
-  export let onOrigin: (coordinates: Coordinates, label: string) => void;
+  export let onOrigin: (coordinates: Coordinates, label: string, territory: TerritoryContext) => void;
   export let dismissToken = 0;
   export let onManualState: (open: boolean) => void = () => undefined;
 
@@ -36,9 +37,16 @@
     queueMicrotask(() => manualInput?.focus());
   }
 
+  async function resolveTerritory(coordinates: Coordinates, signal?: AbortSignal): Promise<TerritoryContext | null> {
+    const response = await fetch(`/api/territory?lat=${encodeURIComponent(String(coordinates.lat))}&lon=${encodeURIComponent(String(coordinates.lon))}`, { signal, headers: { Accept: 'application/json' } });
+    if (!response.ok) return null;
+    const payload = await response.json() as { territory?: TerritoryContext };
+    return payload.territory?.countryId === 'AR' ? payload.territory : null;
+  }
+
   function useLocation(): void {
     controller?.abort();
-    requestSequence += 1;
+    const sequence = ++requestSequence;
     locationState = 'requesting';
     status = 'Solicitando ubicación…';
     if (!navigator.geolocation) {
@@ -49,17 +57,33 @@
     }
     navigator.geolocation.getCurrentPosition(
       position => {
-        const coordinates = { lat: position.coords.latitude, lon: position.coords.longitude };
-        if (!isInsideSantaFe(coordinates)) {
-          locationState = 'error';
-          status = 'La ubicación está fuera de la cobertura actual de Santa Fe.';
-          return;
-        }
-        locationState = 'available';
-        onOrigin(coordinates, `Ubicación actual · ±${Math.round(position.coords.accuracy)} m`);
-        status = '';
-        editing = false;
-        onManualState(false);
+        void (async () => {
+          const coordinates = { lat: position.coords.latitude, lon: position.coords.longitude };
+          controller = new AbortController();
+          status = 'Verificando territorio…';
+          try {
+            const territory = await resolveTerritory(coordinates, controller.signal);
+            if (sequence !== requestSequence) return;
+            if (!territory) {
+              locationState = 'error';
+              status = 'No pudimos verificar esta ubicación dentro de Argentina. Definí el origen manualmente.';
+              openManual();
+              return;
+            }
+            locationState = 'available';
+            onOrigin(coordinates, `Ubicación actual · ${territoryLabel(territory)} · ±${Math.round(position.coords.accuracy)} m`, territory);
+            status = '';
+            editing = false;
+            onManualState(false);
+          } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') return;
+            if (sequence === requestSequence) {
+              locationState = 'error';
+              status = 'No pudimos verificar el territorio. Definí el origen manualmente.';
+              openManual();
+            }
+          }
+        })();
       },
       () => {
         locationState = 'denied';
@@ -73,7 +97,7 @@
   async function useManual(): Promise<void> {
     const query = manual.trim();
     if (query.length < 3) {
-      status = 'Escribí una dirección o lugar.';
+      status = 'Escribí una dirección o lugar, incluyendo localidad o provincia si hace falta.';
       manualInput?.focus();
       return;
     }
@@ -81,21 +105,28 @@
     controller = new AbortController();
     const sequence = ++requestSequence;
     resolving = true;
-    status = 'Resolviendo origen…';
+    status = 'Resolviendo origen en Argentina…';
     try {
       const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { signal: controller.signal, headers: { Accept: 'application/json' } });
-      const payload = await response.json() as { results?: Array<{ lat?: unknown; lon?: unknown; name?: string; display_name?: string }> };
+      const payload = await response.json() as { results?: Array<{ lat?: unknown; lon?: unknown; name?: string; display_name?: string; routeEligible?: boolean; territoryVerified?: boolean; territory?: TerritoryContext }> };
       if (sequence !== requestSequence) return;
-      const first = payload.results?.[0];
-      const coordinates = first && finite(first.lat) && finite(first.lon) ? { lat: first.lat, lon: first.lon } : null;
-      if (!response.ok || !first || !coordinates || !isInsideSantaFe(coordinates)) throw new Error('not_found');
-      onOrigin(coordinates, first.name || first.display_name || query);
+      const eligible = (payload.results || []).filter(item => item.routeEligible === true && item.territoryVerified === true && item.territory?.countryId === 'AR' && finite(item.lat) && finite(item.lon));
+      if (!response.ok || eligible.length === 0) throw new Error('not_found');
+      if (eligible.length > 1) {
+        status = 'Hay varios resultados posibles. Agregá localidad y provincia para definir el origen sin ambigüedad.';
+        manualInput?.focus();
+        return;
+      }
+      const first = eligible[0]!;
+      const coordinates = { lat: first.lat as number, lon: first.lon as number };
+      const territory = first.territory!;
+      onOrigin(coordinates, `${first.name || first.display_name || query} · ${territoryLabel(territory)}`, territory);
       status = '';
       editing = false;
       onManualState(false);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      if (sequence === requestSequence) status = 'No encontramos ese origen dentro de Santa Fe.';
+      if (sequence === requestSequence) status = 'No encontramos un origen territorial verificable en Argentina.';
     } finally {
       if (sequence === requestSequence) resolving = false;
     }
@@ -116,16 +147,7 @@
     <button bind:this={editButton} type="button" class="origin-edit" on:click={openManual} data-testid="origin-edit">Cambiar</button>
   {:else if editing}
     <div class="manual">
-      <input
-        bind:this={manualInput}
-        bind:value={manual}
-        autocomplete="street-address"
-        placeholder="Escribí tu origen"
-        aria-label="Origen manual"
-        on:focus={() => onManualState(true)}
-        on:keydown={onManualKeydown}
-        data-testid="origin-input"
-      />
+      <input bind:this={manualInput} bind:value={manual} autocomplete="street-address" placeholder="Dirección · localidad · provincia" aria-label="Origen manual" on:focus={() => onManualState(true)} on:keydown={onManualKeydown} data-testid="origin-input" />
     </div>
     <p aria-live="polite">{status}</p>
   {:else}

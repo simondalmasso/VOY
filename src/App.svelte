@@ -5,6 +5,7 @@
   import { cameraPaddingFor, deriveInteractionState, nextCollapsedSnap, type SheetSnap } from './app/interaction';
   import type { Coordinates } from './core/coordinates';
   import type { TravelMode } from './core/duration';
+  import { territoryLabel, type TerritoryContext } from './core/territory';
   import DestinationSearch from './components/DestinationSearch.svelte';
   import OriginControl from './components/OriginControl.svelte';
   import MapViewport from './components/MapViewport.svelte';
@@ -26,12 +27,13 @@
 
   const routePath = currentRoute();
   let origin: Coordinates | null = null;
+  let originTerritory: TerritoryContext | null = null;
   let originLabel = 'Elegí tu origen';
   let selectedDestination: Destination | null = null;
   let mode: TravelMode = 'app';
   let routeResult = get(trip).route;
   let options: ProviderOptionModel[] = [];
-  let message = 'Elegí origen y destino para comparar opciones.';
+  let message = 'Elegí origen y destino para comparar lo que VOY puede verificar.';
   let tone: 'info' | 'error' | 'success' = 'info';
   let controller: AbortController | null = null;
   let action: ExternalAction | null = null;
@@ -65,6 +67,9 @@
   }
 
   $: themeLabel = theme === 'system' ? 'Auto' : theme === 'light' ? 'Claro' : 'Oscuro';
+  $: activeTerritory = selectedDestination?.territory || originTerritory;
+  $: activeTerritoryLabel = territoryLabel(activeTerritory);
+  $: localCoverageKey = originTerritory?.coverageKey === 'santa-fe' && selectedDestination?.coverageKey === 'santa-fe' ? 'santa-fe' : '_default';
   $: routeReady = Boolean(selectedDestination && (routeResult || options.length));
   $: effectiveSheetSnap = keyboardOpen ? 'peek' : sheetSnap;
   $: interactionState = deriveInteractionState({
@@ -96,28 +101,16 @@
       manualOriginOpen = false;
       return true;
     }
-    if (action) {
-      action = null;
-      return true;
-    }
-    if (voiceOpen) {
-      voiceOpen = false;
-      return true;
-    }
+    if (action) { action = null; return true; }
+    if (voiceOpen) { voiceOpen = false; return true; }
     const collapsed = nextCollapsedSnap(sheetSnap);
-    if (routeReady && collapsed) {
-      sheetSnap = collapsed;
-      return true;
-    }
+    if (routeReady && collapsed) { sheetSnap = collapsed; return true; }
     return false;
   }
 
   function onEscape(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return;
-    if (dismissTransient()) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+    if (dismissTransient()) { event.preventDefault(); event.stopPropagation(); }
   }
 
   onMount(() => {
@@ -134,8 +127,7 @@
       keyboardOpen = visibleHeight < window.innerHeight * 0.78;
     };
     const syncOnline = () => { offline = !navigator.onLine; };
-    syncViewport();
-    syncOnline();
+    syncViewport(); syncOnline();
     viewport?.addEventListener('resize', syncViewport);
     addEventListener('resize', syncViewport);
     addEventListener('online', syncOnline);
@@ -146,11 +138,8 @@
     history.replaceState(rootState, '', location.href);
     history.pushState({ ...rootState, voyGuard: true }, '', location.href);
     const onPopState = () => {
-      if (dismissTransient()) {
-        queueMicrotask(() => history.pushState({ ...rootState, voyGuard: true }, '', location.href));
-      } else {
-        history.back();
-      }
+      if (dismissTransient()) queueMicrotask(() => history.pushState({ ...rootState, voyGuard: true }, '', location.href));
+      else history.back();
     };
     addEventListener('popstate', onPopState);
 
@@ -168,55 +157,53 @@
     VoiceComponent ||= (await import('./components/VoiceAssistant.svelte')).default;
     searchDismissToken += 1;
     originDismissToken += 1;
-    searchFocused = false;
-    searchResultsOpen = false;
-    manualOriginOpen = false;
-    sheetSnap = 'peek';
-    voiceOpen = true;
+    searchFocused = false; searchResultsOpen = false; manualOriginOpen = false; sheetSnap = 'peek'; voiceOpen = true;
   }
 
-  function hasOperationalDestination(value: Destination | null): value is Destination {
-    return Boolean(value?.operational && value.verified && value.confidence === 'authoritative' && value.provenance);
+  function isRouteEligibleDestination(value: Destination | null): value is Destination {
+    return Boolean(value?.routeEligible && value.territoryVerified && value.territory?.countryId === 'AR');
   }
 
   async function calculate(): Promise<void> {
-    if (!origin || !selectedDestination) return;
-    if (!hasOperationalDestination(selectedDestination)) {
-      controller?.abort();
-      routeResult = null;
-      options = [];
-      routeLoading = false;
-      message = 'El destino no tiene procedencia autoritativa suficiente para calcular un viaje.';
-      tone = 'error';
-      return;
+    if (!origin || !originTerritory || !selectedDestination) return;
+    if (!isRouteEligibleDestination(selectedDestination)) {
+      controller?.abort(); routeResult = null; options = []; routeLoading = false;
+      message = 'El destino no tiene contexto territorial argentino suficiente para calcular un viaje.';
+      tone = 'error'; return;
     }
     controller?.abort();
     const activeController = new AbortController();
     controller = activeController;
     routeLoading = true;
-    message = mode === 'bus' ? 'Verificando si hay datos actuales de colectivo…' : 'Calculando una referencia verificable…';
+    message = mode === 'bus' ? 'Verificando datos territoriales de transporte…' : 'Calculando una referencia verificable…';
     tone = 'info';
     try {
       if (mode === 'bus') {
         routeResult = null;
-        options = await providerOptions(null, mode);
+        options = await providerOptions(null, mode, localCoverageKey);
         trip.set({ origin, originLabel, route: null, mode, loading: false, error: '' });
-        message = 'No recomendamos líneas de colectivo hasta contar con recorridos, paradas, frecuencias y sentidos actuales.';
-        tone = 'info';
-        sheetSnap = 'peek';
-        return;
+        message = localCoverageKey === 'santa-fe'
+          ? 'No recomendamos líneas de colectivo hasta contar con recorridos, paradas, frecuencias y sentidos actuales.'
+          : `VOY resolvió ${activeTerritoryLabel}, pero no tiene transporte público local verificado para recomendar.`;
+        tone = 'info'; sheetSnap = 'peek'; return;
       }
       routeResult = await resolveRoute(origin, selectedDestination.coordinates, mode, activeController.signal);
-      options = await providerOptions(routeResult, mode);
+      options = await providerOptions(routeResult, mode, localCoverageKey);
       trip.set({ origin, originLabel, route: routeResult, mode, loading: false, error: '' });
-      message = routeResult.source === 'osrm_route' ? 'Ruta calculada. Revisá las condiciones de cada opción.' : 'No hubo ruta vial verificable: mostramos sólo una estimación en línea recta.';
-      tone = routeResult.source === 'osrm_route' ? 'success' : 'info';
+      if (routeResult.source === 'osrm_route') {
+        message = localCoverageKey === 'santa-fe'
+          ? 'Ruta calculada. Revisá la procedencia y condiciones de cada opción.'
+          : `Ruta calculada en ${activeTerritoryLabel}. Las opciones locales sólo aparecen cuando VOY tiene evidencia territorial vigente.`;
+        tone = 'success';
+      } else {
+        message = 'No hubo ruta vial verificable: mostramos sólo una estimación en línea recta.';
+        tone = 'info';
+      }
       sheetSnap = 'peek';
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        routeResult = null;
-        options = [];
-        message = 'No pudimos calcular el viaje. Revisá origen y destino.';
+        routeResult = null; options = [];
+        message = 'No pudimos calcular el viaje con evidencia suficiente. Revisá origen y destino.';
         tone = 'error';
       }
     } finally {
@@ -224,54 +211,36 @@
     }
   }
 
-  function setOrigin(coordinates: Coordinates, label: string): void {
+  function setOrigin(coordinates: Coordinates, label: string, territory: TerritoryContext): void {
     origin = coordinates;
+    originTerritory = territory;
     originLabel = label;
     manualOriginOpen = false;
     void calculate();
   }
 
   function setDestination(value: Destination): void {
-    if (!hasOperationalDestination(value)) {
-      selectedDestination = null;
-      destination.set(null);
-      routeResult = null;
-      options = [];
-      routeLoading = false;
-      message = 'Ese destino no tiene procedencia autoritativa suficiente.';
-      tone = 'error';
-      return;
+    if (!isRouteEligibleDestination(value)) {
+      selectedDestination = null; destination.set(null); routeResult = null; options = []; routeLoading = false;
+      message = 'Ese destino no tiene contexto territorial argentino suficiente.'; tone = 'error'; return;
     }
     selectedDestination = value;
     destination.set(value);
-    searchFocused = false;
-    searchResultsOpen = false;
-    sheetSnap = 'peek';
+    searchFocused = false; searchResultsOpen = false; sheetSnap = 'peek';
     void calculate();
   }
 
-  function setMode(value: TravelMode): void {
-    mode = value;
-    sheetSnap = 'peek';
-    void calculate();
-  }
+  function setMode(value: TravelMode): void { mode = value; sheetSnap = 'peek'; void calculate(); }
 
   function choose(option: ProviderOptionModel): void {
-    if (!origin || !hasOperationalDestination(selectedDestination) || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
+    if (!origin || !isRouteEligibleDestination(selectedDestination) || localCoverageKey !== 'santa-fe' || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
     action = createExternalAction(option.id, origin, selectedDestination.coordinates);
   }
 
   function confirmAction(): void {
     if (!action) return;
-    try {
-      const url = consumeExternalAction(action);
-      action = null;
-      location.assign(url);
-    } catch {
-      action = null;
-      message = 'La confirmación venció. Volvé a elegir la opción.';
-      tone = 'error';
-    }
+    try { const url = consumeExternalAction(action); action = null; location.assign(url); }
+    catch { action = null; message = 'La confirmación venció. Volvé a elegir la opción.'; tone = 'error'; }
   }
 </script>
 
@@ -279,32 +248,23 @@
   <LegalView route={routePath} />
 {:else}
   <OfflineBanner />
-  <main class="app-shell" data-testid="app-shell" data-interaction-state={interactionState}>
+  <main class="app-shell" data-testid="app-shell" data-interaction-state={interactionState} data-coverage-key={localCoverageKey}>
     <header class="brand">
       <a href="/" aria-label="VOY inicio">VOY</a>
-      <div class="brand-context"><span>Santa Fe</span><span aria-hidden="true">·</span><span>decisión urbana</span></div>
+      <div class="brand-context"><span>{activeTerritory ? activeTerritoryLabel : 'Argentina'}</span><span aria-hidden="true">·</span><span>movilidad verificable</span></div>
       <button type="button" class="theme-toggle" on:click={cycleTheme} aria-label={`Tema: ${themeLabel}. Cambiar tema`} data-testid="theme-toggle"><span aria-hidden="true">◐</span><span>{themeLabel}</span></button>
     </header>
 
     <div class="journey-layout map-first-layout" data-testid="map-first-layout" data-interaction-state={interactionState} data-sheet-snap={effectiveSheetSnap} data-keyboard-open={keyboardOpen ? 'true' : 'false'}>
       <section class="controls planner" aria-label="Planificar viaje">
-        <div class="planner-intro" aria-hidden="true">
-          <p class="eyebrow">Movilidad urbana · Santa Fe</p>
-          <p class="planner-promise">Cuánto cuesta. Cuánto tarda. Qué conviene.</p>
+        <div class="planner-intro">
+          <p class="eyebrow">Movilidad urbana · Argentina</p>
+          <p class="planner-promise">VOY compara opciones de movilidad con datos verificables según tu territorio.</p>
+          <p class="territory-truth" data-testid="territory-truth">{activeTerritory ? activeTerritoryLabel : 'Argentina'} · {localCoverageKey === 'santa-fe' ? 'cobertura local verificada por componente' : 'base territorial nacional; movilidad local sólo con evidencia'}</p>
         </div>
         <div class="journey-builder" data-testid="journey-builder">
-          <DestinationSearch
-            onSelect={setDestination}
-            dismissToken={searchDismissToken}
-            onFocusState={(value) => searchFocused = value}
-            onResultsState={(value) => searchResultsOpen = value}
-          />
-          <OriginControl
-            label={originLabel}
-            onOrigin={setOrigin}
-            dismissToken={originDismissToken}
-            onManualState={(value) => manualOriginOpen = value}
-          />
+          <DestinationSearch onSelect={setDestination} dismissToken={searchDismissToken} onFocusState={(value) => searchFocused = value} onResultsState={(value) => searchResultsOpen = value} />
+          <OriginControl label={originLabel} onOrigin={setOrigin} dismissToken={originDismissToken} onManualState={(value) => manualOriginOpen = value} />
         </div>
         {#if origin && selectedDestination}<ModeSelector value={mode} onChange={setMode} />{/if}
         <StatusMessage {message} {tone} />
@@ -319,12 +279,12 @@
       {:else}
         <section class="decision-empty" aria-label="Comparación pendiente" data-testid="decision-empty">
           <span class="decision-index">01</span>
-          <div><strong>Armá el viaje.</strong><p>Con origen y destino verificados, VOY ordena las opciones que puede sostener con datos.</p></div>
+          <div><strong>Armá el viaje.</strong><p>Resolvé origen y destino. VOY separa territorio, ruta y cobertura local para no inventar opciones.</p></div>
         </section>
       {/if}
     </div>
 
-    <footer><a href="/privacy">Privacidad</a><a href="/terms">Términos</a><a href="/sources">Fuentes</a><a href="/contact">Contacto</a></footer>
+    <footer><span>Hecho en Santa Fe, Argentina · VOY</span><a href="/privacy">Privacidad</a><a href="/terms">Términos</a><a href="/sources">Fuentes</a><a href="/contact">Contacto</a></footer>
   </main>
   <ConfirmExternalAction {action} onConfirm={confirmAction} onCancel={() => action = null} />
 {/if}

@@ -1,4 +1,5 @@
 import type { Coordinates } from '../../core/coordinates';
+import type { TerritoryContext } from '../../core/territory';
 
 export type DestinationKind = 'poi' | 'address' | 'zone' | 'approximate';
 export type DestinationConfidence = 'authoritative' | 'unverified';
@@ -22,6 +23,10 @@ export interface Destination {
   verified: boolean;
   operational: boolean;
   confidence: DestinationConfidence;
+  routeEligible: boolean;
+  territoryVerified: boolean;
+  territory: TerritoryContext | null;
+  coverageKey: '_default' | 'santa-fe';
   source: string;
   verifiedAt?: string;
   provenance?: DestinationProvenance;

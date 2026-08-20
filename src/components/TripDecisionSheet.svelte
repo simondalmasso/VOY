@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { territoryLabel } from '../core/territory';
   import type { Destination } from '../features/destination/destination.types';
   import type { ProviderOptionModel } from '../features/providers/provider.types';
   import type { RouteResult } from '../features/trip/trip.types';
@@ -18,52 +19,33 @@
   let dragOffset = 0;
   let suppressClick = false;
 
-  $: verifiedDate = destination.verifiedAt || '';
+  $: verifiedDate = destination.verifiedAt || destination.territory?.verifiedAt || '';
   $: verifiedLabel = /^\d{4}-\d{2}-\d{2}$/.test(verifiedDate)
     ? `${verifiedDate.slice(8,10)} ${months[Number(verifiedDate.slice(5,7)) - 1]}`
     : 'FECHA NO DISPONIBLE';
+  $: trustLabel = destination.operational && destination.provenance
+    ? `Fuente oficial local · ${destination.provenance.issuer}`
+    : destination.territoryVerified && destination.territory
+      ? `Territorio GeoRef · ${territoryLabel(destination.territory)} · movilidad local no asumida`
+      : 'Territorio no verificado';
 
-  function expand(): void {
-    onSnapChange(nextExpandedSnap(snap));
-  }
-
-  function collapse(): void {
-    const next = nextCollapsedSnap(snap);
-    if (next) onSnapChange(next);
-  }
-
+  function expand(): void { onSnapChange(nextExpandedSnap(snap)); }
+  function collapse(): void { const next = nextCollapsedSnap(snap); if (next) onSnapChange(next); }
   function cycle(): void {
-    if (suppressClick) {
-      suppressClick = false;
-      return;
-    }
-    if (snap === 'expanded') collapse();
-    else expand();
+    if (suppressClick) { suppressClick = false; return; }
+    if (snap === 'expanded') collapse(); else expand();
   }
-
   function startDrag(event: PointerEvent): void {
-    dragging = true;
-    suppressClick = false;
-    dragStart = event.clientY;
-    dragOffset = 0;
+    dragging = true; suppressClick = false; dragStart = event.clientY; dragOffset = 0;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
-
-  function moveDrag(event: PointerEvent): void {
-    if (!dragging) return;
-    dragOffset = Math.max(-90, Math.min(90, event.clientY - dragStart));
-  }
-
+  function moveDrag(event: PointerEvent): void { if (dragging) dragOffset = Math.max(-90, Math.min(90, event.clientY - dragStart)); }
   function finishDrag(): void {
     if (!dragging) return;
-    const delta = dragOffset;
-    dragging = false;
-    dragOffset = 0;
+    const delta = dragOffset; dragging = false; dragOffset = 0;
     if (Math.abs(delta) >= 8) suppressClick = true;
-    if (delta <= -42) expand();
-    else if (delta >= 42) collapse();
+    if (delta <= -42) expand(); else if (delta >= 42) collapse();
   }
-
   function handleKeydown(event: KeyboardEvent): void {
     if (event.key === 'ArrowUp') { event.preventDefault(); expand(); }
     if (event.key === 'ArrowDown') { event.preventDefault(); collapse(); }
@@ -71,47 +53,22 @@
   }
 </script>
 
-<section
-  class="sheet"
-  class:dragging
-  aria-labelledby="decision-title"
-  data-testid="trip-sheet"
-  data-snap={snap}
-  style={`--voy-sheet-drag:${dragOffset}px`}
->
-  <button
-    type="button"
-    class="sheet-handle"
-    aria-label={`Panel de decisión: ${snap}. Usá flechas para cambiar tamaño`}
-    on:click={cycle}
-    on:pointerdown={startDrag}
-    on:pointermove={moveDrag}
-    on:pointerup={finishDrag}
-    on:pointercancel={finishDrag}
-    on:keydown={handleKeydown}
-    data-testid="sheet-handle"
-  ><span class="grab" aria-hidden="true"></span></button>
-
+<section class="sheet" class:dragging aria-labelledby="decision-title" data-testid="trip-sheet" data-snap={snap} style={`--voy-sheet-drag:${dragOffset}px`}>
+  <button type="button" class="sheet-handle" aria-label={`Panel de decisión: ${snap}. Usá flechas para cambiar tamaño`} on:click={cycle} on:pointerdown={startDrag} on:pointermove={moveDrag} on:pointerup={finishDrag} on:pointercancel={finishDrag} on:keydown={handleKeydown} data-testid="sheet-handle"><span class="grab" aria-hidden="true"></span></button>
   <div class="sheet-content" data-testid="sheet-content">
     <header>
       <div><span>Viaje a</span><h2 id="decision-title">{destination.name}</h2></div>
-      {#if route}
-        <p><strong>{route.distanceKm.toFixed(1)} km</strong><span>{route.source === 'osrm_route' ? 'distancia de ruta' : 'línea recta estimada'}</span></p>
-      {:else}
-        <p><strong>Sin cálculo</strong><span>datos insuficientes</span></p>
-      {/if}
+      {#if route}<p><strong>{route.distanceKm.toFixed(1)} km</strong><span>{route.source === 'osrm_route' ? 'distancia de ruta' : 'línea recta estimada'}</span></p>
+      {:else}<p><strong>Sin cálculo</strong><span>datos insuficientes</span></p>{/if}
     </header>
     <p class="ranking-note trust-line" data-testid="destination-provenance">
-      <span aria-hidden="true">✓</span>
-      <span>Verificado · {destination.provenance?.issuer || 'Fuente institucional'} · <time datetime={verifiedDate}>{verifiedLabel}<span class="sr-only"> · {verifiedDate}</span></time></span>
+      <span aria-hidden="true">✓</span><span>{trustLabel}{#if verifiedDate} · <time datetime={verifiedDate}>{verifiedLabel}<span class="sr-only"> · {verifiedDate}</span></time>{/if}</span>
     </p>
     <p class="ranking-note destination-address">{destination.address}</p>
     <div class="options" role="list" aria-live="polite">
       {#each options as option (option.id)}<ProviderOption {option} {onChoose} />{/each}
+      {#if options.length === 0}<p class="ranking-note" data-testid="no-local-options">Sin opciones locales actuales verificadas para este modo y territorio.</p>{/if}
     </div>
-    <details class="methodology">
-      <summary>Cómo comparamos</summary>
-      <p>El orden es determinista según el modo elegido. Si un precio, tiempo o dato no puede verificarse, VOY no lo inventa.</p>
-    </details>
+    <details class="methodology"><summary>Cómo comparamos</summary><p>El orden es determinista según el modo elegido. Territorio, ruta y movilidad local tienen contratos separados: si un dato no puede verificarse, VOY no lo inventa.</p></details>
   </div>
 </section>
