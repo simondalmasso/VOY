@@ -1,17 +1,24 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { resetGoogleKeyCacheForTests, verifyGoogleIdToken } from '../worker/auth/google';
+import { resetGoogleKeyCacheForTests, verifyGoogleIdToken, type FetchLike } from '../worker/auth/google';
 
 const CLIENT_ID = 'voy-test.apps.googleusercontent.com';
 const NONCE = 'nonce-0123456789abcdef';
 const NOW = 2_000_000_000;
+type GoogleJwk = JsonWebKey & { kid?: string; use?: string; alg?: string };
 let privateKey: CryptoKey;
-let publicJwk: JsonWebKey;
+let publicJwk: GoogleJwk;
 let alternatePrivateKey: CryptoKey;
 
 function base64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
 
 function jsonPart(value: unknown): string {
@@ -28,15 +35,15 @@ async function token(
     nonce: NONCE, iat: NOW - 30, exp: NOW + 3600, ...overrides
   });
   const signingInput = `${header}.${payload}`;
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', options.key || privateKey, new TextEncoder().encode(signingInput));
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', options.key || privateKey, exactArrayBuffer(new TextEncoder().encode(signingInput)));
   return `${signingInput}.${base64Url(new Uint8Array(signature))}`;
 }
 
-function jwksFetcher(keys: JsonWebKey[], calls?: { count: number }): typeof fetch {
-  return (async () => {
+function jwksFetcher(keys: GoogleJwk[], calls?: { count: number }): FetchLike {
+  return async () => {
     if (calls) calls.count += 1;
     return new Response(JSON.stringify({ keys }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' } });
-  }) as typeof fetch;
+  };
 }
 
 beforeAll(async () => {
@@ -65,12 +72,12 @@ describe('ORDER-046 Google ID token verifier', () => {
   test('refreshes JWKS once for an unknown kid before accepting a rotated key', async () => {
     resetGoogleKeyCacheForTests();
     const calls = { count: 0 };
-    const rotated = { ...publicJwk, kid: 'kid-rotated' };
-    const fetcher = (async () => {
+    const rotated: GoogleJwk = { ...publicJwk, kid: 'kid-rotated' };
+    const fetcher: FetchLike = async () => {
       calls.count += 1;
-      const keys = calls.count === 1 ? [{ ...publicJwk, kid: 'old-kid' }] : [rotated];
+      const keys: GoogleJwk[] = calls.count === 1 ? [{ ...publicJwk, kid: 'old-kid' }] : [rotated];
       return new Response(JSON.stringify({ keys }), { status: 200, headers: { 'Cache-Control': 'max-age=3600' } });
-    }) as typeof fetch;
+    };
     const verified = await verifyGoogleIdToken(await token({}, { kid: 'kid-rotated' }), { VOY_GOOGLE_CLIENT_ID: CLIENT_ID }, NONCE, { nowSeconds: NOW, fetcher });
     expect(verified.sub).toBe('google-sub-123');
     expect(calls.count).toBe(2);
