@@ -48,7 +48,7 @@ describe('Argentina territorial core', () => {
         lat: item.lat, lon: item.lon, provincia: { id: '02', nombre: 'Ciudad Autónoma de Buenos Aires' },
         departamento: { id: '02000', nombre: 'Comuna' }, municipio: { id: null, nombre: null }
       } } : { ubicacion: { lat: item.lat, lon: item.lon, provincia: { id: null, nombre: null } } }) });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     const territories = await resolveTerritories([{ lat: -34.6037, lon: -58.3816 }, { lat: 0, lon: 0 }], fakeFetch);
     expect(territories[0]?.provinceIsoId).toBe('AR-C');
     expect(territories[1]).toBeNull();
@@ -60,7 +60,7 @@ describe('Argentina territorial core', () => {
       departamento: { id: '14014', nombre: 'Capital' }, localidad_censal: { id: '14014010', nombre: 'Córdoba' },
       provincia: { id: '14', nombre: 'Córdoba' }, ubicacion: { lat: -31.408067, lon: -64.200624 },
       nomenclatura: 'AV SANTA FE 260, Córdoba, Córdoba'
-    }] })) as typeof fetch;
+    }] })) as unknown as typeof fetch;
     const results = await searchGeoRefDirections('Av. Santa Fe 260, Córdoba', {}, fakeFetch);
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
