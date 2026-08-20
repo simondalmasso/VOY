@@ -107,6 +107,8 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   for (const id of ['uber', 'didi']) {
     const provider = page.getByTestId(`provider-${id}`);
     await expect(provider).toBeVisible();
+    await expect(provider).toHaveAttribute('aria-disabled', 'true');
+    await expect(provider).toContainText('Presencia territorial actual no verificada.');
     await expect(provider).not.toContainText(/precio/i);
     await expect(provider.getByText(/\d+(?:[.,]\d+)?\s*min/i)).toHaveCount(0);
     expect((await provider.getAttribute('aria-label')) || '').not.toMatch(/precio|\d+(?:[.,]\d+)?\s*min/i);
@@ -132,9 +134,9 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await expect(page.getByTestId('provider-taxi')).toBeVisible();
   await expect(page.getByTestId('provider-taxi')).toHaveAttribute('role', 'listitem');
   await expect(page.getByTestId('provider-remis')).toHaveAttribute('role', 'listitem');
-  await page.getByTestId('provider-uber').click();
-  await expect(page.getByTestId('external-confirmation')).toBeVisible();
-  await page.getByRole('button', { name: 'Cancelar' }).click();
+  const uber = page.getByTestId('provider-uber');
+  await expect(uber).toHaveAttribute('aria-disabled', 'true');
+  await uber.click();
   await expect(page.getByTestId('external-confirmation')).toHaveCount(0);
 
   const smallTargets = await page.locator('button, input, a').evaluateAll(nodes => nodes
