@@ -1,11 +1,12 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { santaFeOrigin } from './helpers/territory';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
 async function deterministicApis(page: Page): Promise<void> {
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    const results = q.includes('Origen map-first') ? [{ id: 'map-first:origin', name: 'Plaza 25 de Mayo', display_name: 'Plaza 25 de Mayo, Santa Fe', address: 'Santa Fe', lat: -31.633, lon: -60.706 }] : [];
+    const results = q.includes('Origen map-first') ? [santaFeOrigin('map-first:origin')] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706,-31.633],[-60.7,-31.64],[-60.700503,-31.643533]] }) }));
