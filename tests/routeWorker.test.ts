@@ -87,6 +87,8 @@ describe('national route API boundary', () => {
   });
 
   test('rejects an OSRM geometry sample that GeoRef places outside Argentina', async () => {
+    const origin = { lat: -34.62, lon: -58.42 };
+    const destination = { lat: -34.63, lon: -58.41 };
     let georefCalls = 0;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -94,10 +96,11 @@ describe('national route API boundary', () => {
         georefCalls += 1;
         return georefBatch(typeof init?.body === 'string' ? init.body : null, georefCalls === 2);
       }
-      return new Response(JSON.stringify({ code: 'Ok', routes: [{ distance: 3200, duration: 630, geometry: { coordinates: [[-58.40, -34.60], [-58.395, -34.605], [-58.39, -34.61]] } }] }), { status: 200 });
+      return new Response(JSON.stringify({ code: 'Ok', routes: [{ distance: 3200, duration: 630, geometry: { coordinates: [[-58.42, -34.62], [-58.415, -34.625], [-58.41, -34.63]] } }] }), { status: 200 });
     }) as unknown as typeof fetch;
-    const response = await handleRoute(routeRequest(), {});
+    const response = await handleRoute(routeRequest(origin, destination), {});
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ error: 'route_geometry_outside_argentina' });
+    expect(georefCalls).toBe(2);
   });
 });
