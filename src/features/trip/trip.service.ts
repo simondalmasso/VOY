@@ -1,4 +1,4 @@
-import { approximatelyEqual, haversineKm, isInsideSantaFe, type Coordinates } from '../../core/coordinates';
+import { approximatelyEqual, haversineKm, isFiniteCoordinate, type Coordinates } from '../../core/coordinates';
 import { estimateDurationMinutes, type TravelMode } from '../../core/duration';
 import type { RouteResult } from './trip.types';
 
@@ -14,7 +14,7 @@ function parseGeometry(value: unknown): Coordinates[] {
   return points;
 }
 function validRouteGeometry(geometry: Coordinates[], origin: Coordinates, destination: Coordinates): boolean {
-  return geometry.length >= 2 && geometry.length <= 20_000 && geometry.every(isInsideSantaFe)
+  return geometry.length >= 2 && geometry.length <= 20_000 && geometry.every(isFiniteCoordinate)
     && approximatelyEqual(geometry[0]!, origin) && approximatelyEqual(geometry.at(-1)!, destination);
 }
 function straightLine(origin: Coordinates, destination: Coordinates, mode: TravelMode): RouteResult {
@@ -23,7 +23,7 @@ function straightLine(origin: Coordinates, destination: Coordinates, mode: Trave
 }
 
 export async function resolveRoute(origin: Coordinates, destination: Coordinates, mode: TravelMode, signal?: AbortSignal): Promise<RouteResult> {
-  if (!isInsideSantaFe(origin) || !isInsideSantaFe(destination)) throw new Error('outside_coverage');
+  if (!isFiniteCoordinate(origin) || !isFiniteCoordinate(destination)) throw new Error('invalid_coordinates');
   if (mode === 'bus') throw new Error('bus_routing_unavailable');
   if (mode === 'bike') return straightLine(origin, destination, mode);
   const profile = mode === 'walk' ? 'foot' : 'driving';
