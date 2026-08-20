@@ -45,7 +45,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/order-046-serious-product | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          test "$(cat .order46-candidate-ready)" = 'ORDER46_FINAL_CANDIDATE_READY_V1'
+          test "$(cat .order46-candidate-ready)" = 'ORDER46_FINAL_CANDIDATE_READY_V2'
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           git diff --check
