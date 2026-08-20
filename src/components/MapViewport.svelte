@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { FeatureCollection } from 'geojson';
   import type { Coordinates } from '../core/coordinates';
+  import { ARGENTINA_CENTER } from '../core/territory';
   import type { RouteResult } from '../features/trip/trip.types';
   import type { MapPadding } from '../app/interaction';
 
@@ -189,8 +190,8 @@
         const dark = darkTheme();
         map = new library.Map({
           container,
-          center: [-60.7087, -31.6256],
-          zoom: 12.4,
+          center: [ARGENTINA_CENTER.lon, ARGENTINA_CENTER.lat],
+          zoom: 3.25,
           attributionControl: false,
           style: { version: 8, sources: { [basemapSourceId]: { type: 'raster', tiles: basemapTiles, tileSize: 256, attribution: '© OpenStreetMap contributors · © CARTO' } }, layers: [{ id: 'voy-carto-basemap', type: 'raster', source: basemapSourceId, paint: { 'raster-brightness-min': dark ? .12 : 0, 'raster-brightness-max': dark ? .58 : 1, 'raster-saturation': dark ? -.72 : 0, 'raster-contrast': dark ? .14 : 0 } }] }
         });
