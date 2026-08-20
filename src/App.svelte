@@ -71,6 +71,8 @@
   $: activeTerritory = selectedDestination?.territory || originTerritory;
   $: activeTerritoryLabel = territoryLabel(activeTerritory);
   $: localCoverageKey = originTerritory?.coverageKey === 'santa-fe' && selectedDestination?.coverageKey === 'santa-fe' ? 'santa-fe' : '_default';
+  $: voiceSantaFeEligible = originTerritory?.coverageKey === 'santa-fe' && (!selectedDestination || selectedDestination.coverageKey === 'santa-fe');
+  $: if (!voiceSantaFeEligible && voiceOpen) voiceOpen = false;
   $: routeReady = Boolean(selectedDestination && (routeResult || options.length));
   $: effectiveSheetSnap = keyboardOpen ? 'peek' : sheetSnap;
   $: interactionState = deriveInteractionState({
@@ -155,6 +157,7 @@
   });
 
   async function openVoice(): Promise<void> {
+    if (!voiceSantaFeEligible) return;
     VoiceComponent ||= (await import('./components/VoiceAssistant.svelte')).default;
     searchDismissToken += 1;
     originDismissToken += 1;
@@ -275,8 +278,8 @@
         </div>
         {#if origin && selectedDestination}<ModeSelector value={mode} onChange={setMode} />{/if}
         <StatusMessage {message} {tone} />
-        {#if capabilities?.voice && !voiceOpen}<button type="button" class="assistant-trigger" on:click={openVoice} data-testid="voice-open"><span class="assistant-label"><img src="/brand/voy-assistant.svg" width="24" height="28" alt="" />Asistente VOY</span><span aria-hidden="true">↗</span></button>{/if}
-        {#if voiceOpen && VoiceComponent}<svelte:component this={VoiceComponent} onClose={() => voiceOpen = false} />{/if}
+        {#if capabilities?.voice && voiceSantaFeEligible && !voiceOpen}<button type="button" class="assistant-trigger" on:click={openVoice} data-testid="voice-open"><span class="assistant-label"><img src="/brand/voy-assistant.svg" width="24" height="28" alt="" />Asistente VOY · Santa Fe</span><span aria-hidden="true">↗</span></button>{/if}
+        {#if voiceSantaFeEligible && voiceOpen && VoiceComponent}<svelte:component this={VoiceComponent} onClose={() => voiceOpen = false} />{/if}
       </section>
 
       <MapViewport origin={origin} destination={selectedDestination?.coordinates || null} route={routeResult} cameraPadding={mapPadding} interactionEnabled={mapInteractionEnabled} />
