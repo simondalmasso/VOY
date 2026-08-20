@@ -7,7 +7,8 @@ afterEach(() => { globalThis.fetch = originalFetch; clearCapabilityCacheForTests
 describe('territorial capability broker', () => {
   test('national base asserts no local provider or fare capability', async () => {
     let calls = 0;
-    globalThis.fetch = (async () => { calls += 1; return new Response('{}', { status: 500 }); }) as typeof fetch;
+    const fakeFetch = async (): Promise<Response> => { calls += 1; return new Response('{}', { status: 500 }); };
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
     expect(await capabilitySnapshot('_default')).toEqual({ coverageKey: '_default', level: 'NATIONAL_BASE', providers: [], publicTransport: 'UNAVAILABLE' });
     expect(calls).toBe(0);
   });
@@ -25,7 +26,8 @@ describe('territorial capability broker', () => {
       remis: { status: 'not_available', source: 'Sin verificar', verified_at: '' },
       bus: { status: 'not_available' }
     } };
-    globalThis.fetch = (async input => new Response(JSON.stringify(String(input).includes('providers.json') ? providers : fares), { status: 200 })) as typeof fetch;
+    const fakeFetch = async (input: RequestInfo | URL): Promise<Response> => new Response(JSON.stringify(String(input).includes('providers.json') ? providers : fares), { status: 200 });
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
     const result = await capabilitySnapshot('santa-fe');
     expect(result.level).toBe('LOCAL_VERIFIED');
     expect(result.providers.find(item => item.id === 'uber')).toMatchObject({ availability: 'VERIFIED_CURRENT', quoteClass: 'APP_ONLY' });
