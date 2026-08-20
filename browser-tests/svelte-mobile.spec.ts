@@ -119,9 +119,11 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   const routeCountBeforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
   await openDecisionHalf(page);
-  await expect(page.getByTestId('provider-bus')).toBeVisible();
-  await expect(page.getByTestId('provider-bus')).toHaveAttribute('role', 'listitem');
-  await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
+  const busProvider = page.getByTestId('provider-bus');
+  await expect(busProvider).toBeVisible();
+  await expect(busProvider).toHaveAttribute('role', 'listitem');
+  await expect(busProvider).toContainText('VOY no afirma líneas, paradas, frecuencias ni tarifas');
+  await expect(busProvider).toContainText('Sin planificación verificada');
   expect(routeRequests.length).toBe(routeCountBeforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 
