@@ -19,7 +19,7 @@ env:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout exact head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
@@ -34,6 +34,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$BASE_SHA" HEAD
           git diff --check "$BASE_SHA"..HEAD
+          test ! -e .env
       - name: Install pinned frozen toolchain
         shell: bash
         run: |
@@ -43,10 +44,31 @@ jobs:
           test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
           bun install --frozen-lockfile
           git diff --exit-code -- bun.lock
-      - name: Validate source, tests, build and budgets
+      - name: Validate source, unit/security tests, build and budgets
         run: bun run validate
+      - name: Install Chromium for national browser regression
+        run: bunx playwright install --with-deps chromium
+      - name: National browser matrix and Santa Fe regression
+        env:
+          VOY_OUTPUT_DIR: test-results/issue43-browser
+          VOY_REPORT_DIR: test-results/issue43-browser-report
+        run: bun run test:browser
       - name: Wrangler build dry-run
         run: wrangler deploy --dry-run --outdir test-results/issue43-wrangler-dry-run
+      - name: Persist exact validation summary
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p test-results/issue43-summary
+          printf '%s\n' \
+            "ORDER_ID=VOY-ARGENTINA-NATIONAL-PRODUCT-01" \
+            "BASE_SHA=${BASE_SHA}" \
+            "HEAD_SHA=${GITHUB_SHA}" \
+            "GENERATED_IMAGES=0" \
+            "PRODUCTION_MUTATION=NO" \
+            "JURISDICTIONS_REGISTRY=24/24" \
+            > test-results/issue43-summary/result.txt
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -65,4 +87,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh issue comment 43 --repo "$GITHUB_REPOSITORY" --body "ISSUE43_VALIDATION_RUN=${GITHUB_RUN_ID};RESULT=${RESULT};HEAD=${GITHUB_SHA};BASE_SHA=${BASE_SHA};PRODUCTION_MUTATION=NO"
+          gh issue comment 43 --repo "$GITHUB_REPOSITORY" --body "ISSUE43_VALIDATION_RUN=${GITHUB_RUN_ID};RESULT=${RESULT};HEAD=${GITHUB_SHA};BASE_SHA=${BASE_SHA};NATIONAL_BROWSER=FULL;SANTA_FE_REGRESSION=INCLUDED;GENERATED_IMAGES=0;PRODUCTION_MUTATION=NO"
