@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="VOY">
-  <rect width="1024" height="1024" fill="#000000"/>
-  <path d="M352 372 L484 372 L512 444 L540 372 L672 372 L672 652 L560 652 L560 528 L536 588 L488 588 L464 528 L464 652 L352 652 Z" fill="#FFFFFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">VOY</title>
+  <rect width="1024" height="1024" fill="#0B0B0A"/>
+  <defs>
+    <mask id="voy-mask"><rect width="1024" height="1024" fill="white"/><path d="M438 568 512 728l74-160-74 58Z" fill="black"/></mask>
+  </defs>
+  <path d="M246 250 512 800 778 250" fill="none" stroke="#FFC533" stroke-width="144" stroke-linecap="round" stroke-linejoin="round" mask="url(#voy-mask)"/>
 </svg>
