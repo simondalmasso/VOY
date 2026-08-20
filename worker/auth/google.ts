@@ -7,9 +7,9 @@ const MAX_TOKEN_AGE_SECONDS = 2 * 60 * 60;
 const MAX_JWKS_CACHE_SECONDS = 6 * 60 * 60;
 
 type JsonRecord = Record<string, unknown>;
-type FetchLike = typeof fetch;
-
-type CachedKeys = { keys: JsonWebKey[]; expiresAtMs: number };
+export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type GoogleJwk = JsonWebKey & { kid?: string; use?: string; alg?: string };
+type CachedKeys = { keys: GoogleJwk[]; expiresAtMs: number };
 let keyCache: CachedKeys | null = null;
 
 export interface VerifiedGoogleIdentity {
@@ -29,6 +29,12 @@ function base64UrlBytes(value: string): Uint8Array {
   return output;
 }
 
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function base64UrlJson(value: string): JsonRecord {
   const bytes = base64UrlBytes(value);
   if (bytes.byteLength > 8192) throw new Error('google_token_payload_too_large');
@@ -44,7 +50,7 @@ function cacheSeconds(headers: Headers): number {
   return Math.max(60, Math.min(Number.isFinite(value) ? value : 300, MAX_JWKS_CACHE_SECONDS));
 }
 
-async function fetchKeys(fetcher: FetchLike, force = false): Promise<JsonWebKey[]> {
+async function fetchKeys(fetcher: FetchLike, force = false): Promise<GoogleJwk[]> {
   if (!force && keyCache && keyCache.expiresAtMs > Date.now()) return keyCache.keys;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
@@ -53,7 +59,7 @@ async function fetchKeys(fetcher: FetchLike, force = false): Promise<JsonWebKey[
     if (!response.ok) throw new Error(`google_jwks_http_${response.status}`);
     const payload = record(await response.json());
     const keys = payload && Array.isArray(payload.keys)
-      ? payload.keys.filter((value): value is JsonWebKey => Boolean(record(value))).slice(0, 20)
+      ? payload.keys.filter((value): value is GoogleJwk => Boolean(record(value))).slice(0, 20)
       : [];
     if (!keys.length) throw new Error('google_jwks_empty');
     keyCache = { keys, expiresAtMs: Date.now() + cacheSeconds(response.headers) * 1000 };
@@ -63,7 +69,7 @@ async function fetchKeys(fetcher: FetchLike, force = false): Promise<JsonWebKey[
   }
 }
 
-async function signingKey(kid: string, fetcher: FetchLike): Promise<JsonWebKey> {
+async function signingKey(kid: string, fetcher: FetchLike): Promise<GoogleJwk> {
   let keys = await fetchKeys(fetcher);
   let key = keys.find(item => item.kid === kid && item.kty === 'RSA' && (!item.use || item.use === 'sig'));
   if (!key) {
@@ -119,11 +125,12 @@ export async function verifyGoogleIdToken(
     false,
     ['verify']
   );
+  const signingInput = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
   const verified = await crypto.subtle.verify(
     'RSASSA-PKCS1-v1_5',
     publicKey,
-    base64UrlBytes(encodedSignature!),
-    new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`)
+    exactArrayBuffer(base64UrlBytes(encodedSignature!)),
+    exactArrayBuffer(signingInput)
   );
   if (!verified) throw new Error('google_invalid_signature');
 
