@@ -1,0 +1,136 @@
+name: VOY Issue43 National Candidate 0
+
+on:
+  push:
+    branches:
+      - feat/argentina-national-product-01
+    paths:
+      - .issue43-national-candidate-ready
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: voy-issue43-national-candidate
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 796c935
+  EXPECTED_STABLE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  BLOCKED_CANDIDATE_VERSION_ID: 94384215-f057-4641-b453-4364bb1d851c
+  CONVERGENCE_INTERVAL_MS: '7000'
+  EVIDENCE_DIR: test-results/issue43-national-candidate
+  VOY_REAL_BASEMAP: '1'
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact national candidate head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Gate marker lineage and authority boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/feat/argentina-national-product-01 | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          parent="$(git rev-parse HEAD^)"
+          test "$(cat .issue43-national-candidate-ready)" = "ISSUE43_NATIONAL_READY_${parent}"
+          test "$(git diff --name-only HEAD^ HEAD)" = '.issue43-national-candidate-ready'
+          git merge-base --is-ancestor ce83145c3e9a2bb08d100472c771ebdbcab3f68a HEAD
+          test ! -e .env
+          git diff --check ce83145c3e9a2bb08d100472c771ebdbcab3f68a..HEAD
+          mkdir -p "$EVIDENCE_DIR"
+          printf '%s\n' \
+            "ORDER_ID=VOY-ARGENTINA-NATIONAL-PRODUCT-01" \
+            "ISSUE43_AMENDMENT=5348745918" \
+            "AUD_FINAL_ISSUE39=5348740396;PASS_WITH_FINDINGS" \
+            "BASE_SHA=ce83145c3e9a2bb08d100472c771ebdbcab3f68a" \
+            "VALIDATED_PARENT=${parent}" \
+            "EXACT_CANDIDATE_SOURCE=${GITHUB_SHA}" \
+            "PRODUCTION_PROMOTION_AUTHORIZED=NO" \
+            "MERGE_AUTHORIZED=NO" \
+            "GENERATED_IMAGES=0" \
+            > "$EVIDENCE_DIR/authority.txt"
+      - name: Install pinned candidate toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng zip
+          npm install --global bun@1.3.14 wrangler@4.124.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.124.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+      - name: Release policy before Cloudflare write
+        run: node scripts/verify-release-policy.mjs
+      - name: Validate exact source and create candidate at zero traffic
+        run: bash scripts/run-hotfix-candidate.sh
+      - name: Verify national candidate truth and production immutability
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 "$WORKER_URL/api/mobility/trust?issue43_after=$(date +%s%N)" > "$EVIDENCE_DIR/production-mobility-trust-after.json"
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+          const final=JSON.parse(fs.readFileSync(`${e}/final-state.json`,'utf8'));
+          const api=JSON.parse(fs.readFileSync(`${e}/api-gate.json`,'utf8'));
+          const trust=JSON.parse(fs.readFileSync(`${e}/production-mobility-trust-after.json`,'utf8'));
+          if(final.result!=='PASS') throw new Error('candidate_final_state_not_pass');
+          if(final.stable_version_id!==process.env.EXPECTED_STABLE_VERSION_ID||Number(final.stable_traffic)!==100) throw new Error('stable_runtime_changed');
+          if(!final.candidate_version_id||Number(final.candidate_traffic)!==0) throw new Error('candidate_not_zero_traffic');
+          if(final.production_promoted===true||final.rollback_executed===true) throw new Error('unexpected_production_mutation');
+          if(final.blocked_candidate_active!==false) throw new Error('issue39_candidate_still_active');
+          if(api.result!=='PASS'||api.territories?.caba?.province_iso_id!=='AR-C'||api.territories?.la_plata?.province_iso_id!=='AR-B'||api.route?.origin_province_iso_id!=='AR-C'||api.route?.destination_province_iso_id!=='AR-B'||api.geocode?.route_eligible!==true) throw new Error('national_runtime_gate_failed');
+          if(trust.ok!==true||trust.operational_bus_activation!==false||trust.santa_fe?.bus_activation!==false||trust.mobility_database_role!=='DISCOVERY_ONLY') throw new Error('mobility_trust_drift');
+          fs.writeFileSync(`${e}/issue43-zero-traffic-contract.json`,JSON.stringify({result:'PASS',exact_source_sha:process.env.GITHUB_SHA,stable_version_id:final.stable_version_id,stable_traffic:final.stable_traffic,candidate_version_id:final.candidate_version_id,candidate_traffic:final.candidate_traffic,deployment_id:final.deployment_id,superseded_issue39_candidate:process.env.BLOCKED_CANDIDATE_VERSION_ID,bus_activation:false,production_promoted:false,rollback_executed:false,territory_runtime:'PASS',national_geocode:'PASS',national_route:'PASS'},null,2));
+          NODE
+      - name: Build immutable evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: voy-issue43-national-candidate-${{ github.run_id }}
+          path: test-results/issue43-national-candidate
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          compression-level: 6
+      - name: Persist candidate checkpoint on Issue 43
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$EVIDENCE_DIR/final-state.json" ]]; then
+            candidate="$(node -p "JSON.parse(require('fs').readFileSync('$EVIDENCE_DIR/final-state.json','utf8')).candidate_version_id")"
+            deployment="$(node -p "JSON.parse(require('fs').readFileSync('$EVIDENCE_DIR/final-state.json','utf8')).deployment_id")"
+          else
+            candidate='NONE'
+            deployment='NONE'
+          fi
+          gh issue comment 43 --repo "$GITHUB_REPOSITORY" --body "ISSUE43_CANDIDATE_RUN=${GITHUB_RUN_ID};RESULT=${RESULT};HEAD=${GITHUB_SHA};CANDIDATE_VERSION=${candidate};DEPLOYMENT=${deployment};CANDIDATE_TRAFFIC=0%;STABLE_VERSION=${EXPECTED_STABLE_VERSION_ID};STABLE_TRAFFIC=100%;GENERATED_IMAGES=0;PRODUCTION_PROMOTION=NO;MERGE=NO"
