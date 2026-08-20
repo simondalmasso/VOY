@@ -8,6 +8,10 @@ interface MeterRegistry { diurno: { bajada: number; ficha: number; distFicha: nu
 interface FarePayload { fare_registry?: { taxi?: MeterRegistry; remis?: MeterRegistry } }
 const fareCache = new Map<CoverageKey, Promise<FarePayload>>();
 
+function normalizeCoverageKey(value: string): CoverageKey {
+  return value === 'santa-fe' ? 'santa-fe' : '_default';
+}
+
 async function loadFares(coverageKey: CoverageKey): Promise<FarePayload> {
   const existing = fareCache.get(coverageKey);
   if (existing) return existing;
@@ -30,8 +34,9 @@ function visibleForMode(option: ProviderOptionModel, selected: TravelMode): bool
   return option.mode === selected;
 }
 
-export async function providerOptions(route: RouteResult | null, selectedMode: TravelMode, coverageKey: CoverageKey = '_default'): Promise<ProviderOptionModel[]> {
-  const capabilities = await capabilitySnapshot(coverageKey);
+export async function providerOptions(route: RouteResult | null, selectedMode: TravelMode, coverageKey = '_default'): Promise<ProviderOptionModel[]> {
+  const normalizedCoverageKey = normalizeCoverageKey(coverageKey);
+  const capabilities = await capabilitySnapshot(normalizedCoverageKey);
   if (selectedMode === 'bus') return [{
     id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: null,
     price: { kind: 'unavailable', label: capabilities.publicTransport === 'VERIFIED_CURRENT' ? 'Sin planificación verificada' : 'Sin datos locales verificados' },
@@ -43,7 +48,7 @@ export async function providerOptions(route: RouteResult | null, selectedMode: T
     { id: 'walk', name: 'Caminar', mode: 'walk', available: route.distanceKm <= 8, etaMin: route.durationMin, price: { kind: 'unavailable', label: 'Sin costo monetario' }, detail: route.source === 'osrm_route' ? 'Tiempo calculado sobre una ruta peatonal.' : 'Tiempo estimado sobre distancia en línea recta; no se dibuja como recorrido.', external: false, rank: 30 },
     { id: 'bike', name: 'Bicicleta', mode: 'bike', available: route.distanceKm <= 20, etaMin: route.durationMin, price: { kind: 'unavailable', label: 'Sin costo monetario' }, detail: 'Referencia de tiempo; no afirma ciclovías, infraestructura ni un recorrido vial para bicicleta.', external: false, rank: 31 }
   ];
-  if (coverageKey !== 'santa-fe') return baseMobility.filter(option => visibleForMode(option, selectedMode));
+  if (normalizedCoverageKey !== 'santa-fe') return baseMobility.filter(option => visibleForMode(option, selectedMode));
 
   const fares = await loadFares('santa-fe');
   const taxi = fares.fare_registry?.taxi;
