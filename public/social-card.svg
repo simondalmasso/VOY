@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">VOY — Movilidad urbana para Argentina</title>
+  <desc id="desc">Tarjeta social de VOY construida con el sistema de wayfinding del producto.</desc>
+  <rect width="1200" height="630" fill="#F7F6F2"/>
+  <path d="M90 104H1110" stroke="#D7D4CC" stroke-width="2"/>
+  <path d="M126 170V482C126 518 155 547 191 547H530" fill="none" stroke="#0B0B0A" stroke-width="10" stroke-linecap="square"/>
+  <path d="M530 547H866C930 547 982 495 982 431V348" fill="none" stroke="#FF5A36" stroke-width="10" stroke-linecap="square"/>
+  <circle cx="126" cy="170" r="18" fill="#F7F6F2" stroke="#0B0B0A" stroke-width="8"/>
+  <path d="M960 326h44v44h-44z" fill="#FF5A36" transform="rotate(45 982 348)"/>
+  <path d="M756 510l38 37-38 37z" fill="#0B0B0A"/>
+  <text x="184" y="255" font-family="Arial, Helvetica, sans-serif" font-size="108" font-weight="800" letter-spacing="-5" fill="#0B0B0A">VOY</text>
+  <text x="188" y="324" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#0B0B0A">Movilidad urbana para Argentina</text>
+  <text x="188" y="382" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#4A4842">Territorio, rutas y cobertura local separados por evidencia.</text>
+  <text x="188" y="423" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#4A4842">Santa Fe es la primera ciudad validada.</text>
+  <text x="188" y="505" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="1.2" fill="#6A675F">HECHO EN SANTA FE, ARGENTINA</text>
+</svg>

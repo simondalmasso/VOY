@@ -32,6 +32,7 @@
       "logo.svg",
       "manifest.json",
       "robots.txt",
+      "social-card.svg",
       "sw.js"
     ]
   },
