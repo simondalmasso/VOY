@@ -3,7 +3,14 @@ export interface HealthPayload {
   service: string;
   version: string;
   build_hash: string;
-  features: { voice: boolean; auth: boolean; collective_recommendations: boolean; core_without_login_voice_ai: boolean; pwa: boolean };
+  features: {
+    voice: boolean;
+    auth: boolean;
+    collective_recommendations: boolean;
+    core_without_login_voice_ai: boolean;
+    pwa: boolean;
+    national_territory?: boolean;
+  };
 }
 export async function health(): Promise<HealthPayload> {
   const response = await fetch('/api/health', { cache: 'no-store', headers: { Accept: 'application/json' } });
