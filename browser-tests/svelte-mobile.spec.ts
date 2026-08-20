@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { santaFeOrigin } from './helpers/territory';
 
 const evidenceDir = process.env.VOY_EVIDENCE_DIR || 'test-results/evidence/screenshots';
 mkdirSync(evidenceDir, { recursive: true });
@@ -16,9 +17,7 @@ async function deterministicApis(page: Page, basemapMode: BasemapMode = 'mock'):
   });
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    const results = q.includes('Origen')
-      ? [{ id: `test:${q}`, name: 'Plaza 25 de Mayo', display_name: q, address: 'Santa Fe', lat: -31.633, lon: -60.706 }]
-      : [];
+    const results = q.includes('Origen') ? [santaFeOrigin(`test:${q}`, q)] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => { routeRequests.push(route.request().postData() || ''); return route.fulfill({
