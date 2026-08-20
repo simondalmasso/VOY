@@ -1,12 +1,20 @@
-export interface Coordinates { lat: number; lon: number }
-export const SANTA_FE_BBOX = Object.freeze({ minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 });
+import type { Coordinates } from './territory';
+export type { Coordinates } from './territory';
+
+/** Reference-city bounds only. Never use this as the Argentina product boundary. */
+export const SANTA_FE_REFERENCE_BBOX = Object.freeze({ minLat: -31.67, maxLat: -31.57, minLon: -60.75, maxLon: -60.65 });
+/** @deprecated compatibility alias for Santa Fe profile/tests only. */
+export const SANTA_FE_BBOX = SANTA_FE_REFERENCE_BBOX;
 
 export function isFiniteCoordinate(value: Coordinates): boolean {
   return Number.isFinite(value.lat) && Number.isFinite(value.lon) && value.lat >= -90 && value.lat <= 90 && value.lon >= -180 && value.lon <= 180;
 }
 
+/** Reference-city membership helper. It is not an operational national coverage check. */
 export function isInsideSantaFe(value: Coordinates): boolean {
-  return isFiniteCoordinate(value) && value.lat >= SANTA_FE_BBOX.minLat && value.lat <= SANTA_FE_BBOX.maxLat && value.lon >= SANTA_FE_BBOX.minLon && value.lon <= SANTA_FE_BBOX.maxLon;
+  return isFiniteCoordinate(value)
+    && value.lat >= SANTA_FE_REFERENCE_BBOX.minLat && value.lat <= SANTA_FE_REFERENCE_BBOX.maxLat
+    && value.lon >= SANTA_FE_REFERENCE_BBOX.minLon && value.lon <= SANTA_FE_REFERENCE_BBOX.maxLon;
 }
 
 export function haversineKm(a: Coordinates, b: Coordinates): number {
