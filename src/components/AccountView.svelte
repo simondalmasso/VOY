@@ -66,7 +66,7 @@
       script.dataset.voyGoogleGis = 'true';
       script.addEventListener('load', () => resolve(), { once: true });
       script.addEventListener('error', () => reject(new Error('google_script_failed')), { once: true });
-      document.head.append(script);
+      document.head.appendChild(script);
     });
     const api = googleApi();
     if (!api) throw new Error('google_api_missing');
