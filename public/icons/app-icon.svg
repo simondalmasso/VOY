@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="VOY">
-  <rect width="1024" height="1024" rx="224" fill="#000000"/>
-  <path d="M228 292 L404 292 L512 548 L620 292 L796 292 L596 732 L428 732 Z" fill="#FFFFFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">VOY</title>
+  <rect width="1024" height="1024" rx="224" fill="#0B0B0A"/>
+  <defs>
+    <mask id="voy-mask">
+      <rect width="1024" height="1024" fill="white"/>
+      <path d="M428 572 512 754l84-182-84 66Z" fill="black"/>
+    </mask>
+  </defs>
+  <path d="M194 196 512 850 830 196" fill="none" stroke="#FFC533" stroke-width="164" stroke-linecap="round" stroke-linejoin="round" mask="url(#voy-mask)"/>
 </svg>
