@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { createVoiceSession, sendVoiceText, voiceCapabilities } from '../features/voice/voice.client';
+  import { createVoiceSession, sendVoiceText, voiceCapabilities, type VoiceTerritoryId } from '../features/voice/voice.client';
   import type { VoiceSession } from '../features/voice/voice.contracts';
   export let onClose: () => void;
   let session: VoiceSession | null = null;
@@ -16,12 +16,16 @@
     status = enabled ? 'Escribí una consulta. El asistente no ejecuta acciones externas sin confirmación.' : 'El asistente está desactivado. El comparador principal sigue disponible.';
   });
   onDestroy(() => controller.abort());
+  function activeVoiceTerritory(): VoiceTerritoryId {
+    const coverageKey = document.querySelector<HTMLElement>('[data-testid="app-shell"]')?.dataset.coverageKey;
+    return coverageKey === 'santa-fe' ? 'santafe' : '_default';
+  }
   async function submit(): Promise<void> {
     const text = message.trim();
     if (!enabled || text.length < 2 || pending) return;
     pending = true; status = 'Procesando…';
     try {
-      session ||= await createVoiceSession(controller.signal);
+      session ||= await createVoiceSession(activeVoiceTerritory(), controller.signal);
       const result = await sendVoiceText(text, session, controller.signal);
       session = result.session; responseText = result.response; status = 'Respuesta del asistente'; message = '';
     } catch { status = 'No pudimos completar la consulta. Probá de nuevo o usá la búsqueda principal.'; }
