@@ -34,6 +34,11 @@
     return item.routeEligible === true && item.territoryVerified === true && item.territory?.countryId === 'AR';
   }
 
+  function resultKind(item: Destination): 'verified' | 'eligible' | 'unresolved' {
+    if (!selectable(item)) return 'unresolved';
+    return item.confidence === 'authoritative' && item.provenance ? 'verified' : 'eligible';
+  }
+
   function closeResults(keepFocus = true): void {
     results = [];
     onResultsState(false);
@@ -112,7 +117,7 @@
     <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results">
       {#each results as item (item.id)}
         <li>
-          <button type="button" disabled={!selectable(item)} aria-disabled={!selectable(item)} on:click={() => choose(item)} data-testid={`destination-result-${selectable(item) ? 'eligible' : 'unresolved'}`}>
+          <button type="button" disabled={!selectable(item)} aria-disabled={!selectable(item)} on:click={() => choose(item)} data-testid={`destination-result-${resultKind(item)}`}>
             <strong>{item.name}</strong>
             {#if item.confidence === 'authoritative' && item.provenance}
               <span>{item.address} · Fuente oficial</span>
