@@ -10,6 +10,7 @@ const viewports = [
 ] as const;
 
 const externalCandidate = process.env.VOY_EXTERNAL_SERVER === '1';
+const browserWrangler = process.env.VOY_BROWSER_WRANGLER || 'wrangler';
 
 export default defineConfig({
   testDir: '.',
@@ -37,7 +38,7 @@ export default defineConfig({
     }
   })),
   webServer: externalCandidate ? undefined : {
-    command: 'BUILD_HASH=browser bun run build && wrangler dev --local --port 8787',
+    command: `BUILD_HASH=browser bun run build && ${browserWrangler} dev --local --port 8787`,
     url: 'http://127.0.0.1:8787/api/health',
     timeout: 120_000,
     reuseExistingServer: false,
