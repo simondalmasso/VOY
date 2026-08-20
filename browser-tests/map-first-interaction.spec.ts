@@ -210,19 +210,19 @@ test('search focus on critical mobile sizes keeps input usable and removes sheet
   expect(await page.evaluate(() => document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 });
 
-test('opening an external provider does not reset camera and disables map only for confirmation', async ({ page }) => {
+test('stale app evidence does not open an external action or disturb map state', async ({ page }) => {
   await deterministicApis(page);
   await page.goto('/');
   await planTrip(page);
   await page.getByTestId('sheet-handle').click();
   await expect(page.getByTestId('trip-sheet')).toHaveAttribute('data-snap','half');
   const before = await stableCameraFitCount(page);
-  await page.getByTestId('provider-uber').click();
-  await expect(page.getByTestId('external-confirmation')).toBeVisible();
-  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-interaction','disabled');
-  await page.waitForTimeout(400);
-  expect(await cameraFitCount(page)).toBe(before);
-  await page.keyboard.press('Escape');
+  const uber = page.getByTestId('provider-uber');
+  await expect(uber).toHaveAttribute('aria-disabled', 'true');
+  await expect(uber).toContainText('Presencia territorial actual no verificada.');
+  await uber.click();
   await expect(page.getByTestId('external-confirmation')).toHaveCount(0);
   await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-interaction','enabled');
+  await page.waitForTimeout(400);
+  expect(await cameraFitCount(page)).toBe(before);
 });
