@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: voy-issue43-national-${{ github.ref }}
@@ -56,3 +57,12 @@ jobs:
             dist
           if-no-files-found: ignore
           retention-days: 30
+      - name: Persist validation checkpoint on Issue 43
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh issue comment 43 --repo "$GITHUB_REPOSITORY" --body "ISSUE43_VALIDATION_RUN=${GITHUB_RUN_ID};RESULT=${RESULT};HEAD=${GITHUB_SHA};BASE_SHA=${BASE_SHA};PRODUCTION_MUTATION=NO"
