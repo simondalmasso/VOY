@@ -6,7 +6,6 @@ type Profile = 'driving' | 'foot';
 interface Point { lat: number; lon: number }
 interface RouteRequest { origin: Point; destination: Point; profile: Profile }
 interface OsrmPayload { code?: string; routes?: Array<{ distance?: unknown; duration?: unknown; geometry?: { coordinates?: unknown } }> }
-const memoryCache = new Map<string, { expires: number; body: string }>();
 function finite(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value); }
 function pointValid(point: Point): boolean { return isFiniteCoordinate(point); }
 function json(body: unknown, status = 200): Response { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } }); }
@@ -26,10 +25,6 @@ async function readRequest(request: Request): Promise<RouteRequest | null> {
     const result: RouteRequest = { origin: { lat: origin.lat, lon: origin.lon }, destination: { lat: destination.lat, lon: destination.lon }, profile };
     return pointValid(result.origin) && pointValid(result.destination) ? result : null;
   } catch { return null; }
-}
-function cacheKey(value: RouteRequest, originTerritory: TerritoryContext, destinationTerritory: TerritoryContext): string {
-  const exact = (number: number) => number.toFixed(6);
-  return `${TERRITORY_VERSION}:${originTerritory.provinceId}:${destinationTerritory.provinceId}:${value.profile}:${exact(value.origin.lat)},${exact(value.origin.lon)}:${exact(value.destination.lat)},${exact(value.destination.lon)}`;
 }
 export function validGeometry(points: Array<[number, number]>, input: RouteRequest): boolean {
   if (points.length < 2 || points.length > 20_000) return false;
@@ -66,9 +61,6 @@ export async function handleRoute(request: Request, _env: Partial<Env> = {}): Pr
   const destinationTerritory = endpointTerritories[1];
   if (!originTerritory || !destinationTerritory) return json({ ok: false, error: 'territory_unresolved', fallback: 'straight_line_estimate' }, 422);
 
-  const key = cacheKey(input, originTerritory, destinationTerritory);
-  const cached = memoryCache.get(key);
-  if (cached && cached.expires > Date.now()) return new Response(cached.body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-VOY-Route-Cache': 'isolate-territorial-hit' } });
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const url = `https://router.project-osrm.org/route/v1/${input.profile}/${input.origin.lon},${input.origin.lat};${input.destination.lon},${input.destination.lat}?overview=full&geometries=geojson&steps=false`;
@@ -95,9 +87,7 @@ export async function handleRoute(request: Request, _env: Partial<Env> = {}): Pr
       duration_min: Math.round(duration / 6) / 10,
       geometry: coordinates
     });
-    memoryCache.set(key, { expires: Date.now() + 120_000, body });
-    if (memoryCache.size > 100) { const oldest = memoryCache.keys().next().value; if (oldest) memoryCache.delete(oldest); }
-    return new Response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-VOY-Route-Cache': 'miss' } });
+    return new Response(body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-VOY-Route-Cache': 'disabled-privacy' } });
   } catch (error) {
     return json({ ok: false, error: error instanceof DOMException && error.name === 'AbortError' ? 'route_timeout' : 'route_failed', fallback: 'straight_line_estimate' }, 503);
   } finally { clearTimeout(timer); }
