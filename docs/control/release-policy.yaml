@@ -1,31 +1,53 @@
-version: 1
+version: 2
 project: VOY
+order: 45
 
 authority:
   governance: github
-  executable_rules: github
+  orders: numbered_github_issues
+  repository_instructions: AGENTS.md
   release_control: cloudflare_workers
   runtime_confirmation: production
-  systems_are_not_substitutable: true
+
+operating_model:
+  arq:
+    role: construction_operation_execution_implementation
+    principal_implementer: true
+    technical_autonomy: true
+    work_mode: long_deep_autonomous
+    waits_for_aud_during_internal_construction: false
+    verify_over_assume: true
+    root_cause_over_superficial_patch: true
+    end_to_end_over_ci_green: true
+    evidence_before_close: true
+  aud:
+    role: brain_direction_audit_research
+    independent: true
+    intervenes_before_material_checkpoint: false
+    evidence_before_verdict: true
+    implementation_default: false
+    implementation_requires_explicit_numbered_order: true
+  handoff:
+    trigger: arq_material_auditable_checkpoint
+    surface: github
+    long_chat_transport_required: false
 
 release:
-  generic_main_push_production_write: false
-  candidate_required: true
-  candidate_traffic_percent: 0
-  exact_source_sha_required: true
-  production_promotion: mission_specific
-  aud_pass_required: true
-  current_cloudflare_state_required: true
-  rollback_requires_separate_authorization: true
-  order:
-    - traceable_commit
-    - workers_candidate_zero_traffic
-    - validate_candidate
-    - independent_audit
-    - merge_or_promote
+  merge_requires_explicit_numbered_order: true
+  deploy_requires_explicit_numbered_order: true
+  production_mutation_requires_explicit_numbered_order: true
+  internal_candidate_or_validation_work_may_continue_without_intermediate_aud: true
+  deploy_sequence:
+    - explicit_numbered_github_order
+    - arq_build_implement_test_verify
+    - cloudflare_workers_first
+    - verify_effective_runtime
+    - github_reconcile_after_runtime
+  audit:
+    timing: after_material_auditable_checkpoint
+    intermediate_internal_audit_required: false
 
 claims:
-  current_tree_generic_main_push_production_write: false
-  pr_regression_detection: true
-  future_direct_push_prevention: unverified
-  ruleset_and_secret_isolation: unverified
+  no_done_without_evidence: true
+  no_verdict_without_sufficient_evidence: true
+  historical_conflicting_repo_instructions: superseded_by_order_45_and_AGENTS_md
