@@ -1,11 +1,12 @@
 import type { VoiceCapabilities, VoiceChatResult, VoiceSession } from './voice.contracts';
+export type VoiceTerritoryId = '_default' | 'santafe';
 export async function voiceCapabilities(signal?: AbortSignal): Promise<VoiceCapabilities> {
   const response = await fetch('/api/voice/capabilities', { signal, cache: 'no-store', headers: { Accept: 'application/json' } });
   if (!response.ok) return { ok: false, enabled: false, text_fallback: true };
   return response.json() as Promise<VoiceCapabilities>;
 }
-export async function createVoiceSession(signal?: AbortSignal): Promise<VoiceSession> {
-  const response = await fetch('/api/voice/session', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ city_id: 'santafe' }) });
+export async function createVoiceSession(cityId: VoiceTerritoryId = '_default', signal?: AbortSignal): Promise<VoiceSession> {
+  const response = await fetch('/api/voice/session', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ city_id: cityId }) });
   if (!response.ok) throw new Error('voice_session_unavailable');
   const payload = await response.json() as { session?: VoiceSession };
   if (!payload.session) throw new Error('voice_session_invalid');
