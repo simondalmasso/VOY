@@ -1,0 +1,93 @@
+name: VOY ORDER-046 D1 Read Preflight
+
+on:
+  push:
+    branches:
+      - feat/order-046-serious-product
+    paths:
+      - .github/workflows/order46-d1-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-order46-d1-read-preflight
+  cancel-in-progress: false
+
+env:
+  EXPECTED_ACCOUNT_ID: b21fa81d12acb663798f9f7c51801955
+  EXPECTED_D1_NAME: voy-auth
+  EXPECTED_D1_DATABASE_ID: f55c92be-80a0-4997-b517-cf5d19db5c2c
+  EVIDENCE_DIR: test-results/order46-d1-preflight
+
+jobs:
+  read-only-d1-pairing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Gate exact remote head and account id
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/feat/order-046-serious-product | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$CLOUDFLARE_ACCOUNT_ID" = "$EXPECTED_ACCOUNT_ID"
+          mkdir -p "$EVIDENCE_DIR"
+          printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-head.txt"
+          printf '%s\n' "$EXPECTED_ACCOUNT_ID" > "$EVIDENCE_DIR/expected-account-id.txt"
+          printf '%s\n' "$EXPECTED_D1_DATABASE_ID" > "$EVIDENCE_DIR/expected-database-id.txt"
+
+      - name: Verify Cloudflare account and D1 database pairing read-only
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$EXPECTED_D1_DATABASE_ID"
+          curl --fail --silent --show-error --retry 2 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$api" > "$EVIDENCE_DIR/d1-database-metadata.json"
+          node <<'NODE'
+          const fs=require('node:fs');
+          const e=process.env.EVIDENCE_DIR;
+          const p=JSON.parse(fs.readFileSync(`${e}/d1-database-metadata.json`,'utf8'));
+          if(p.success!==true) throw new Error('d1_metadata_query_failed');
+          const r=p.result||{};
+          const id=r.uuid||r.id;
+          if(id!==process.env.EXPECTED_D1_DATABASE_ID) throw new Error(`d1_database_id_mismatch:${id}`);
+          if(r.name!==process.env.EXPECTED_D1_NAME) throw new Error(`d1_database_name_mismatch:${r.name}`);
+          fs.writeFileSync(`${e}/pairing.json`,JSON.stringify({result:'PASS',account_id:process.env.EXPECTED_ACCOUNT_ID,database_id:id,database_name:r.name},null,2));
+          NODE
+
+      - name: Verify D1 read permission via Wrangler migrations list
+        run: |
+          set -euo pipefail
+          npm install --global wrangler@4.112.0
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          wrangler d1 migrations list "$EXPECTED_D1_NAME" --remote 2>&1 | tee "$EVIDENCE_DIR/d1-migrations-list.log"
+
+      - name: Build evidence digest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload read-only D1 preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-order46-d1-preflight-${{ github.run_id }}
+          path: test-results/order46-d1-preflight
+          if-no-files-found: error
+          retention-days: 30
