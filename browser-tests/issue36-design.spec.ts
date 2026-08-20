@@ -137,8 +137,10 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   const beforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
   await openDecisionHalf(page);
-  await expect(page.getByTestId('provider-bus')).toBeVisible();
-  await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
+  const busProvider = page.getByTestId('provider-bus');
+  await expect(busProvider).toBeVisible();
+  await expect(busProvider).toContainText('VOY no afirma líneas, paradas, frecuencias ni tarifas');
+  await expect(busProvider).toContainText('Sin planificación verificada');
   expect(routeRequests.length).toBe(beforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 });
