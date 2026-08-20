@@ -18,10 +18,15 @@
   let dragOffset = 0;
   let suppressClick = false;
 
-  $: verifiedDate = destination.verifiedAt || '';
-  $: verifiedLabel = /^\d{4}-\d{2}-\d{2}$/.test(verifiedDate)
-    ? `${verifiedDate.slice(8,10)} ${months[Number(verifiedDate.slice(5,7)) - 1]}`
-    : 'FECHA NO DISPONIBLE';
+  function dateLabel(value: string | null | undefined): string {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'FECHA NO DISPONIBLE';
+    return `${value.slice(8,10)} ${months[Number(value.slice(5,7)) - 1]}`;
+  }
+
+  $: destinationVerifiedDate = destination.verifiedAt || '';
+  $: territoryVerifiedDate = destination.territory?.verifiedAt || '';
+  $: destinationVerifiedLabel = dateLabel(destinationVerifiedDate);
+  $: territoryVerifiedLabel = dateLabel(territoryVerifiedDate);
 
   function expand(): void {
     onSnapChange(nextExpandedSnap(snap));
@@ -101,10 +106,19 @@
         <p><strong>Sin cálculo</strong><span>datos insuficientes</span></p>
       {/if}
     </header>
-    <p class="ranking-note trust-line" data-testid="destination-provenance">
-      <span aria-hidden="true">✓</span>
-      <span>Verificado · {destination.provenance?.issuer || 'Fuente institucional'} · <time datetime={verifiedDate}>{verifiedLabel}<span class="sr-only"> · {verifiedDate}</span></time></span>
-    </p>
+    {#if destination.verified && destination.provenance}
+      <p class="ranking-note trust-line" data-testid="destination-provenance">
+        <span aria-hidden="true">✓</span>
+        <span>Destino verificado · {destination.provenance.issuer} · <time datetime={destinationVerifiedDate}>{destinationVerifiedLabel}<span class="sr-only"> · {destinationVerifiedDate}</span></time></span>
+      </p>
+    {:else if destination.territoryVerified && destination.territory}
+      <p class="ranking-note trust-line" data-testid="destination-provenance">
+        <span aria-hidden="true">✓</span>
+        <span>Territorio verificado · GeoRef Argentina V2 · <time datetime={territoryVerifiedDate}>{territoryVerifiedLabel}<span class="sr-only"> · {territoryVerifiedDate}</span></time></span>
+      </p>
+    {:else}
+      <p class="ranking-note" data-testid="destination-provenance">Procedencia territorial no verificada.</p>
+    {/if}
     <p class="ranking-note destination-address">{destination.address}</p>
     <div class="options" role="list" aria-live="polite">
       {#each options as option (option.id)}<ProviderOption {option} {onChoose} />{/each}
