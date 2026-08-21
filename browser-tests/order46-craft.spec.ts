@@ -143,6 +143,7 @@ test('ORDER-046 sheet tracks 1:1, captures pointer, reverses and snaps by positi
   await page.mouse.move(x, y);
   await page.mouse.down();
   await expect(sheet).toHaveAttribute('data-motion-state', 'dragging');
+  await page.mouse.move(x, y - 1);
   await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __voyPointerCaptured?: boolean }).__voyPointerCaptured))).toBeTruthy();
   await page.mouse.move(x, y - 30);
   await page.waitForTimeout(20);
