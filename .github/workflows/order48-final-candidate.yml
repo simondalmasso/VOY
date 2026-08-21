@@ -45,7 +45,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/order-048-official-transit-handoff | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V2'
+          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V3'
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           git diff --check
@@ -53,10 +53,12 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-head.txt"
           cat > "$EVIDENCE_DIR/authority-workflow.txt" <<'EOF'
           ORDER=48
-          CANDIDATE_ATTEMPT=2
-          AUD_RETRY_AUTHORIZATION=5370333447
-          RETRY_LIMIT=ONE
+          CANDIDATE_ATTEMPT=3
+          PRIOR_RETRY_LIMIT_EXHAUSTED=YES
+          AUD_NEW_CANDIDATE_AUTHORIZATION=5371598113
+          NEW_ATTEMPT_REASON=EVIDENCE_MODEL_ARCHITECTURE_CORRECTION
           CANDIDATE_0_PERCENT_ONLY=YES
+          LIVE_MUNICIPAL_FETCH_AUTHORIZED=NO
           PRODUCTION_PROMOTION_AUTHORIZED=NO
           MERGE_AUTHORIZED=NO
           GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO
@@ -75,7 +77,7 @@ jobs:
           git diff --exit-code -- bun.lock
           bunx playwright install --with-deps chromium
 
-      - name: Prove ORDER-048 runner has no D1 write or migration path
+      - name: Prove ORDER-048 runner has no D1 or municipal-network verifier path
         run: |
           set -euo pipefail
           node scripts/verify-release-policy.mjs
@@ -84,12 +86,14 @@ jobs:
             echo 'ORDER-048 runner contains a forbidden D1 mutation command' >&2
             exit 1
           fi
-          if grep -Eiq 'user-agent|extraHTTPHeaders|proxy:' scripts/verify-santa-fe-transit-handoff.mjs; then
-            echo 'ORDER-048 municipal verifier contains forbidden custom network shaping' >&2
+          if grep -Eiq '@playwright|chromium|page\.goto|fetch\(|https?\.request|axios|user-agent|extraHTTPHeaders|proxy:' scripts/verify-santa-fe-transit-handoff.mjs; then
+            echo 'ORDER-048 source-attestation verifier contains a forbidden live-network path' >&2
             exit 1
           fi
+          test -f config/source-attestations/santa-fe-official-transit-handoff.json
           printf '%s\n' 'RUNNER_D1_MUTATION_PATH=ABSENT' > "$EVIDENCE_DIR/runner-safety.txt"
-          printf '%s\n' 'MUNICIPAL_VERIFIER_CUSTOM_NETWORK_SHAPING=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'MUNICIPAL_VERIFIER_LIVE_NETWORK_PATH=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED' >> "$EVIDENCE_DIR/runner-safety.txt"
 
       - name: Require fresh exact-head GitHub GREEN before Cloudflare write
         env:
@@ -129,10 +133,16 @@ jobs:
           printf '%s\n' 'EXACT_HEAD_REQUIRED_WORKFLOWS=GREEN' > "$EVIDENCE_DIR/exact-head-ci.txt"
           printf '%s\n' "$GITHUB_SHA" >> "$EVIDENCE_DIR/exact-head-ci.txt"
 
+      - name: Require current persisted municipal source attestation
+        run: |
+          set -euo pipefail
+          node scripts/verify-santa-fe-transit-handoff.mjs > "$EVIDENCE_DIR/source-attestation-prewrite.json"
+          cat "$EVIDENCE_DIR/source-attestation-prewrite.json"
+
       - name: Validate exact head and create verified zero-traffic candidate
         run: bash scripts/run-order48-candidate.sh
 
-      - name: Recheck municipal source after runtime browser and tail
+      - name: Recheck persisted source attestation after runtime browser and tail
         run: |
           set -euo pipefail
           node scripts/verify-santa-fe-transit-handoff.mjs > "$EVIDENCE_DIR/municipal-source-final.json"
@@ -154,7 +164,7 @@ jobs:
           if(final.production_promoted===true||final.rollback_executed===true)throw new Error('unexpected_production_mutation');
           if(api.result!=='PASS'||api.auth?.enabled!==false||api.health?.features?.auth!==false)throw new Error('candidate_api_truth_failed');
           if(bindings.result!=='PASS'||bindings.d1_write!==false||bindings.d1_migration!==false||bindings.additions.length||bindings.removals.length)throw new Error('binding_or_d1_contract_failed');
-          if(source.result!=='PASS'||source.authority!=='Municipalidad de Santa Fe'||source.verifier!=='chromium_browser_navigation'||source.status<200||source.status>=300||source.final_protocol!=='https:'||source.final_host!=='santafeciudad.gov.ar'||source.transit_surface!==true||source.current_information_reference!==true||source.authentication_supplied!==false||source.cookies_supplied!==false||source.proxy_used!==false||source.anti_bot_bypass_used!==false||source.stale_substitution!==false)throw new Error('municipal_source_freshness_failed');
+          if(source.result!=='PASS'||source.target!=='https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/'||source.authority!=='Municipalidad de Santa Fe'||source.verifier!=='persisted_source_attestation'||source.live_network_request!==false||source.verified_at!=='2026-08-21'||source.evidence_comment_id!==5371598113||source.evidence_ref!=='https://github.com/simonkey888/VOY/issues/48#issuecomment-5371598113'||source.transit_surface!==true||source.current_information_reference!==true||source.stale!==false||source.stale_substitution!==false)throw new Error('municipal_source_attestation_failed');
           if(contract.result!=='PASS'||contract.persistent_data_mutation!==false)throw new Error('order48_terminal_contract_failed');
           NODE
 
@@ -184,8 +194,10 @@ jobs:
             echo '## VOY ORDER-048 — exact-head candidate 0%'
             echo
             echo "- Exact source SHA: $GITHUB_SHA"
-            echo '- Candidate attempt: 2 (single AUD-authorized retry)'
-            echo '- AUD retry authorization: Issue #48 comment 5370333447'
+            echo '- Candidate attempt: 3 (new AUD-authorized attempt after evidence-model correction)'
+            echo '- AUD authorization: Issue #48 comment 5371598113'
+            echo '- Municipal live fetch in hosted CI: forbidden'
+            echo '- Source freshness gate: persisted current attestation, fail-closed'
             echo "- Stable expected: $EXPECTED_STABLE_VERSION_ID at 100%"
             echo '- Candidate target: 0% traffic only'
             echo '- Google auth activation: forbidden/off'
