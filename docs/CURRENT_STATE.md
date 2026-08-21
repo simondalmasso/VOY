@@ -1,6 +1,105 @@
 # VOY — Current canonical state
 
-Last reconciled: 2026-08-12
+Last reconciled: 2026-08-21
+
+## ORDER-046 — terminal zero-traffic candidate checkpoint
+
+```text
+ORDER=46
+ISSUE=46
+PR=47
+WORK_BRANCH=feat/order-046-serious-product
+PR_STATE=DRAFT_OPEN_UNMERGED
+AUD_CONTINUATION_CHECKPOINT=5366791454
+PRE_CANDIDATE_CLEAN_HEAD=bf21a60ed49a508e9ff58b014d1899b618ac1d7a
+CANDIDATE_EXACT_HEAD=4549acc6e9523e53a740d12ff118917622183c3e
+CANDIDATE_WORKFLOW=VOY ORDER-046 Final Candidate 0
+CANDIDATE_RUN=32456127358
+CANDIDATE_RUN_NUMBER=4
+CANDIDATE_RUN_EVENT=push
+CANDIDATE_RUN_RESULT=SUCCESS
+EXACT_HEAD_RUN=32456131301;SUCCESS
+RELEASE_POLICY_RUN=32456131357;SUCCESS
+PR_VALIDATE_RUN=32456131319;SUCCESS
+CANDIDATE_VERSION_ID=5489843d-db43-4779-83fb-309b5a2dec7e
+EFFECTIVE_SPLIT_DEPLOYMENT_ID=fe2f8ac7-2a22-417f-92b2-031b8580e8f8
+PREVIOUS_SPLIT_DEPLOYMENT_ID=d1af582d-2bf7-4896-8b1c-5a6e7a5e81dc
+STABLE_VERSION_ID=002c464c-15fa-42f3-a762-0214a1dc5cf3
+STABLE_TRAFFIC=100%
+CANDIDATE_TRAFFIC=0%
+LIVE_PRODUCTION_SOURCE_SHA=796c9355cc22a2e197ee719a15b506b5a3cb22b3
+LIVE_PRODUCTION_BUILD_HASH=796c935
+APPLICATION_VERSION=V8.0.0
+PRODUCTION_PROMOTED=NO
+ROLLBACK_EXECUTED=NO
+MERGE_EXECUTED=NO
+```
+
+The V4 candidate is exact to `4549acc6e9523e53a740d12ff118917622183c3e`. This CURRENT_STATE reconciliation is a later documentation-only commit; candidate exact-head evidence is intentionally not attributed to the later docs head. The Cloudflare deployment ID above is the current effective split deployment created to retain the already-live stable version at 100% and the ORDER-046 candidate at 0%; it is distinct from the historical deployment that originally promoted the live `796c935...` product.
+
+### Candidate runtime, data and security gates
+
+```text
+SOURCE_TYPECHECK=PASS;0_ERRORS;0_WARNINGS
+SOURCE_LINT=PASS
+UNIT_TESTS=214_PASS;0_FAIL
+LOCAL_CLEAN_PROFILE_BROWSER=110_PASS;0_FAIL;40_SKIP
+CANDIDATE_BROWSER=116_PASS;0_FAIL;34_SKIP
+BUNDLE_BUDGET=PASS
+D1_BINDING=voy-auth
+D1_MIGRATIONS_PENDING=NO
+D1_SCHEMA_TABLES=voy_sessions,voy_users
+D1_VERIFICATION_ROWS_WRITTEN=0
+GOOGLE_AUTH_ENABLED=NO
+PERSISTENT_ACCOUNT=NO
+TRIP_HISTORY_PERSISTED=NO
+NATIONAL_TERRITORY=YES
+CORE_WITHOUT_LOGIN_VOICE_AI=YES
+RUNTIME_API_GATE=PASS
+RETIRED_ROUTE_GATE=PASS
+```
+
+Candidate `/api/health` returned `ok=true`, `version=V8.0.0`, `build_hash=4549acc`, `national_territory=true`, voice enabled and auth disabled. The auth session gate reported `enabled=false`, `authenticated=false`, `persistent_account=false` and `trip_history_persisted=false`. National territory verification resolved Córdoba as `AR-X`, rejected a non-Argentina probe with the expected 422 contract, and the route probe returned finite normalized geometry. The root returned 200 with the expected CSP and no candidate session cookie.
+
+### Runtime convergence, map proof and tail
+
+```text
+CONVERGENCE_CONSECUTIVE_ROUNDS=20
+CONVERGENCE_DURATION_MS=200453
+REAL_MAP_PIXEL_PROOF=PASS;6_OF_6_VIEWPORTS
+REAL_MAP_VIEWPORTS=360x780,360x800,390x844,412x915,430x932,1280x800
+REAL_BASEMAP_HTTP=PASS
+ROUTE_VISIBLE=YES
+ORIGIN_MARKER_VISIBLE=YES
+DESTINATION_MARKER_VISIBLE=YES
+TAIL_EXACT_VERSION_EVENTS=2240
+TAIL_OK_OUTCOMES=2240
+TAIL_NON_OK_OUTCOMES=0
+TAIL_EXCEPTIONS=0
+TAIL_TRUNCATED_RECORDS=0
+```
+
+Every persisted tail record was for candidate version `5489843d-db43-4779-83fb-309b5a2dec7e`. HTTP 410 responses were intentional retired-route probes; the single 400 and single 422 were intentional negative API-contract probes and remained successful expected outcomes. No candidate exception or non-ok tail outcome was recorded.
+
+### Immutable evidence
+
+```text
+EVIDENCE_ARTIFACT_ID=9437528859
+EVIDENCE_ARTIFACT_NAME=voy-order46-final-candidate-32456127358
+EVIDENCE_ARTIFACT_BYTES=3856082
+EVIDENCE_ARTIFACT_SHA256=e8999b0ce96de9aebc6d039d95aec48514ca789dbe6d19aeb759277cb00a5baa
+EVIDENCE_MANIFEST_SHA256=d521d1688ca298e8c4a8969e092e3efd27d5ac4ca411b9753d5e6d61d572b230
+API_GATE_SHA256=bc32c04638f890b9ee06c5f344e19bdd9e53b8796cac1c0c7f7502e5b9ee78a0
+BINDING_CONTRACT_SHA256=45d544559724f9098e712146f9c412f7cfda3b650b15fbe92c6ab796dce9fd77
+CANDIDATE_BROWSER_LOG_SHA256=3de31118f9dfce2885b9560c44b13da0e9175b70ce1bf64ceb04e87aea6b3091
+CANDIDATE_TAIL_LOG_SHA256=2ce08bb08b86359c6871d7c6f0cfeb51beb79f264ecfe2cabcaa13accf8ace6d
+CONVERGENCE_PROOF_SHA256=967114a71a853f64ca75c02e1c4a43391ffce9134d61fb0b3db22494fc04d016
+FINAL_STATE_SHA256=f2d746522ddd20c8499e74e82f6da87d4b84284bbf3b2d862d8c51f4495b9659
+ZERO_TRAFFIC_CONTRACT_SHA256=26e642463b5fdae62969666454b4b6f395da4a4587462cd56d9eb54f86eb426b
+LOCKFILE_SHA256=e189a028c40e1462cfb7c9e758872d2c4ff89a2d756a2a957634bbe012324ec8
+```
+
+ORDER-046 is therefore at a terminal candidate checkpoint for independent AUD review, not at merge or production-promotion authority. Production remains the previously verified Map-First build `796c935...` at 100% traffic.
 
 ## Authority and source of truth
 
@@ -179,7 +278,10 @@ HISTORICAL_PRE_TARGETED_CANDIDATE_VERSION_ID=1610c90d-c06c-48b4-af9c-54979990f12
 ## Next step
 
 ```text
-MAP_FIRST_PRODUCTION_RECONCILIATION=COMPLETE
-NEXT=OWNER_VISUAL_REVIEW_OF_LIVE_MAP_FIRST_OR_NEW_SEPARATELY_AUTHORIZED_BLOCK
+ORDER46_CANDIDATE_CHECKPOINT=COMPLETE
+ORDER46_CANDIDATE_EXACT_HEAD=4549acc6e9523e53a740d12ff118917622183c3e
+NEXT=INDEPENDENT_AUD_TERMINAL_REVIEW_OF_ORDER46
+NO_MERGE_WITHOUT_ARQ_AUTHORIZATION=YES
+NO_PRODUCTION_PROMOTION_WITHOUT_ARQ_AUTHORIZATION=YES
 ISSUE_39=DO_NOT_START_IN_THIS_BLOCK
 ```
