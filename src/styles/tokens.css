@@ -9,7 +9,7 @@
   /* COLOR */
   --voy-canvas:#F2F0E8; --voy-surface:#FCFBF7; --voy-surface-2:#E9E6DD;
   --voy-ink:#0B0B0A; --voy-ink-soft:#32312D; --voy-muted:#706D64; --voy-border:#D4D0C5;
-  --voy-signal:#FF5A36; --voy-signal-soft:#FFE2D9;
+  --voy-signal:#FFC533; --voy-signal-soft:#FFF1B8; --voy-signal-ink:#171307;
   --voy-success:#126A48; --voy-success-soft:#DCEDE5; --voy-warning:#986000; --voy-warning-soft:#F8E7BF;
   --voy-danger:#B32820; --voy-danger-soft:#F5DDDA; --voy-focus:#256DFF;
 
@@ -52,8 +52,12 @@
   --voy-shadow:0 12px 40px rgba(11,11,10,.08);
 
   /* MOTION_DURATION + MOTION_EASING */
+  --voy-ease-out:cubic-bezier(0.23,1,0.32,1);
+  --voy-ease-in-out:cubic-bezier(0.77,0,0.175,1);
+  --voy-ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  --voy-motion-press:160ms; --voy-motion-popover:180ms; --voy-motion-modal:250ms;
   --voy-motion-fast:160ms; --voy-motion-base:180ms;
-  --voy-ease-standard:ease; --voy-ease-emphasized:cubic-bezier(.2,.8,.2,1);
+  --voy-ease-standard:var(--voy-ease-out); --voy-ease-emphasized:var(--voy-ease-drawer);
 
   /* Z_INDEX */
   --voy-z-rail:1; --voy-z-marker:2; --voy-z-sheet:3; --voy-z-banner:30; --voy-z-modal:50;
@@ -71,7 +75,7 @@
   color-scheme:dark;
   --voy-canvas:#0B0B0A; --voy-surface:#141412; --voy-surface-2:#20201D;
   --voy-ink:#F4F1E8; --voy-ink-soft:#D2CFC6; --voy-muted:#9E9A90; --voy-border:#34332E;
-  --voy-signal:#FF6847; --voy-signal-soft:#49231B; --voy-success:#69C39B; --voy-success-soft:#153729;
+  --voy-signal:#FFC533; --voy-signal-soft:#3A2D05; --voy-signal-ink:#171307; --voy-success:#69C39B; --voy-success-soft:#153729;
   --voy-warning:#E5B45B; --voy-warning-soft:#3D3017; --voy-danger:#FF8176; --voy-danger-soft:#48201D; --voy-focus:#73A6FF;
   --voy-shadow:0 16px 48px rgba(0,0,0,.28);
 }
@@ -80,7 +84,7 @@
     color-scheme:dark;
     --voy-canvas:#0B0B0A; --voy-surface:#141412; --voy-surface-2:#20201D;
     --voy-ink:#F4F1E8; --voy-ink-soft:#D2CFC6; --voy-muted:#9E9A90; --voy-border:#34332E;
-    --voy-signal:#FF6847; --voy-signal-soft:#49231B; --voy-success:#69C39B; --voy-success-soft:#153729;
+    --voy-signal:#FFC533; --voy-signal-soft:#3A2D05; --voy-signal-ink:#171307; --voy-success:#69C39B; --voy-success-soft:#153729;
     --voy-warning:#E5B45B; --voy-warning-soft:#3D3017; --voy-danger:#FF8176; --voy-danger-soft:#48201D; --voy-focus:#73A6FF;
     --voy-shadow:0 16px 48px rgba(0,0,0,.28);
   }

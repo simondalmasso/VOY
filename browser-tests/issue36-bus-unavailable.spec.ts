@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { santaFeOrigin } from './helpers/territory';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const mobileBusProjects = new Set(['mobile-360x800', 'mobile-360x780', 'mobile-390x844', 'mobile-412x915']);
@@ -30,9 +31,7 @@ async function deterministicTripApis(page: Page): Promise<{ routeRequests: strin
   await page.route('**/cities/santa-fe/transport.json', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(transport) }));
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    const results = q.includes('Origen BUS')
-      ? [{ id: 'issue36:bus-origin', name: 'Plaza 25 de Mayo', display_name: 'Plaza 25 de Mayo, Santa Fe', address: 'Santa Fe', lat: -31.633, lon: -60.706 }]
-      : [];
+    const results = q.includes('Origen BUS') ? [santaFeOrigin('issue36:bus-origin')] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => {
@@ -79,8 +78,8 @@ async function assertBusUnavailableLayout(page: Page): Promise<void> {
   const provider = page.getByTestId('provider-bus');
   await expect(provider).toBeVisible();
   await expect(provider).toContainText('Colectivo');
-  await expect(provider).toContainText('Sin recorridos, paradas, frecuencias ni espera verificables. VOY no calcula ni sugiere una línea.');
-  await expect(provider).toContainText('Sin recomendación disponible');
+  await expect(provider).toContainText('VOY no afirma líneas, paradas, frecuencias ni tarifas sin una fuente territorial vigente y un planificador validado.');
+  await expect(provider).toContainText('Sin planificación verificada');
   await expect(provider).toHaveAttribute('data-price-kind', 'unavailable');
   await expect(provider).toHaveClass(/disabled/);
   expect(await provider.evaluate(node => node.tagName)).toBe('ARTICLE');

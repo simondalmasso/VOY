@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { santaFeOrigin } from './helpers/territory';
 
 const evidenceDir = process.env.VOY_EVIDENCE_DIR || 'test-results/map-render-proof';
 mkdirSync(evidenceDir, { recursive: true });
@@ -10,7 +11,7 @@ async function deterministicTripApis(page: Page): Promise<void> {
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
     const results = q.includes('Origen')
-      ? [{ id: `render:${q}`, name: 'Plaza 25 de Mayo', display_name: q, address: 'Santa Fe', lat: -31.633, lon: -60.706 }]
+      ? [santaFeOrigin(`render:${q}`, q)]
       : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });

@@ -1,9 +1,15 @@
 {
-  "name": "VOY — Movilidad en Santa Fe", "short_name": "VOY", "description": "Comparador móvil de movilidad urbana con datos y límites visibles.",
-  "start_url": "/", "scope": "/", "display": "standalone", "background_color": "#f7f6f2", "theme_color": "#f7f6f2", "lang": "es-AR",
+  "name": "VOY — Movilidad urbana para Argentina",
+  "short_name": "VOY",
+  "description": "Compará opciones de movilidad con territorio, procedencia y límites visibles en Argentina.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F2F0E8",
+  "theme_color": "#0B0B0A",
+  "lang": "es-AR",
+  "categories": ["navigation", "travel", "utilities"],
   "icons": [
-    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
-    { "src": "/icons/apple-touch-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/apple-touch-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

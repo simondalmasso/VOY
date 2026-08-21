@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { santaFeOrigin } from './helpers/territory';
 
 const evidenceDir = process.env.VOY_EVIDENCE_DIR || 'test-results/evidence/screenshots';
 mkdirSync(evidenceDir, { recursive: true });
@@ -16,9 +17,7 @@ async function deterministicApis(page: Page, basemapMode: BasemapMode = 'mock'):
   });
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    const results = q.includes('Origen')
-      ? [{ id: `test:${q}`, name: 'Plaza 25 de Mayo', display_name: q, address: 'Santa Fe', lat: -31.633, lon: -60.706 }]
-      : [];
+    const results = q.includes('Origen') ? [santaFeOrigin(`test:${q}`, q)] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => { routeRequests.push(route.request().postData() || ''); return route.fulfill({
@@ -108,6 +107,8 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   for (const id of ['uber', 'didi']) {
     const provider = page.getByTestId(`provider-${id}`);
     await expect(provider).toBeVisible();
+    await expect(provider).toHaveAttribute('data-disabled', 'true');
+    await expect(provider).toContainText('Presencia territorial actual no verificada.');
     await expect(provider).not.toContainText(/precio/i);
     await expect(provider.getByText(/\d+(?:[.,]\d+)?\s*min/i)).toHaveCount(0);
     expect((await provider.getAttribute('aria-label')) || '').not.toMatch(/precio|\d+(?:[.,]\d+)?\s*min/i);
@@ -120,9 +121,11 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   const routeCountBeforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
   await openDecisionHalf(page);
-  await expect(page.getByTestId('provider-bus')).toBeVisible();
-  await expect(page.getByTestId('provider-bus')).toHaveAttribute('role', 'listitem');
-  await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
+  const busProvider = page.getByTestId('provider-bus');
+  await expect(busProvider).toBeVisible();
+  await expect(busProvider).toHaveAttribute('role', 'listitem');
+  await expect(busProvider).toContainText('VOY no afirma líneas, paradas, frecuencias ni tarifas');
+  await expect(busProvider).toContainText('Sin planificación verificada');
   expect(routeRequests.length).toBe(routeCountBeforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 
@@ -131,9 +134,9 @@ test('mobile-first journey is usable, truthful and accessible', async ({ page },
   await expect(page.getByTestId('provider-taxi')).toBeVisible();
   await expect(page.getByTestId('provider-taxi')).toHaveAttribute('role', 'listitem');
   await expect(page.getByTestId('provider-remis')).toHaveAttribute('role', 'listitem');
-  await page.getByTestId('provider-uber').click();
-  await expect(page.getByTestId('external-confirmation')).toBeVisible();
-  await page.getByRole('button', { name: 'Cancelar' }).click();
+  const uber = page.getByTestId('provider-uber');
+  await expect(uber).toHaveAttribute('data-disabled', 'true');
+  await uber.click();
   await expect(page.getByTestId('external-confirmation')).toHaveCount(0);
 
   const smallTargets = await page.locator('button, input, a').evaluateAll(nodes => nodes

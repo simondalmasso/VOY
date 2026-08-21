@@ -14,6 +14,9 @@
       "cities/santa-fe/transport.json"
     ],
     "required_static_assets": [
+      "brand/voy-assistant.svg",
+      "brand/voy-mark.svg",
+      "brand/voy-social.svg",
       "icons/app-icon-maskable.svg",
       "icons/app-icon.svg",
       "icons/apple-touch-1024.png",
@@ -32,6 +35,7 @@
       "logo.svg",
       "manifest.json",
       "robots.txt",
+      "sitemap.xml",
       "sw.js"
     ]
   },

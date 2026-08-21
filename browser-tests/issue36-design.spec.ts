@@ -1,12 +1,20 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { santaFeOrigin } from './helpers/territory';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+
+function cssTimeMs(value: string): number {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.endsWith('ms')) return Number.parseFloat(normalized);
+  if (normalized.endsWith('s')) return Number.parseFloat(normalized) * 1000;
+  return Number.NaN;
+}
 
 async function deterministicTripApis(page: Page): Promise<{ routeRequests: string[] }> {
   const routeRequests: string[] = [];
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    const results = q.includes('Origen diseño') ? [{ id: 'issue36:origin', name: 'Plaza 25 de Mayo', display_name: 'Plaza 25 de Mayo, Santa Fe', address: 'Santa Fe', lat: -31.633, lon: -60.706 }] : [];
+    const results = q.includes('Origen diseño') ? [santaFeOrigin('issue36:origin')] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => {
@@ -85,6 +93,7 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   const required = [
     '--voy-canvas', '--voy-font-sans', '--voy-weight-label', '--voy-type-body', '--voy-leading-copy', '--voy-tracking-label',
     '--voy-space-4', '--voy-radius-md', '--voy-border-default', '--voy-shadow', '--voy-motion-fast', '--voy-ease-standard',
+    '--voy-ease-out', '--voy-ease-in-out', '--voy-ease-drawer', '--voy-motion-press', '--voy-motion-popover', '--voy-motion-modal',
     '--voy-z-sheet', '--voy-content-max', '--voy-control-m'
   ];
   const values = await page.evaluate(names => {
@@ -95,8 +104,16 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   expect(values['--voy-font-sans']).toContain('system-ui');
   expect(values['--voy-border-default']).toContain('solid');
   const motion = values['--voy-motion-fast'] ?? '';
-  const motionMs = motion.endsWith('ms') ? parseFloat(motion) : motion.endsWith('s') ? parseFloat(motion) * 1000 : Number.NaN;
-  expect(motionMs).toBeCloseTo(160, 3);
+  const easeOut = values['--voy-ease-out'] ?? '';
+  const easeInOut = values['--voy-ease-in-out'] ?? '';
+  const easeDrawer = values['--voy-ease-drawer'] ?? '';
+  expect(cssTimeMs(motion)).toBeCloseTo(160, 3);
+  expect(easeOut.replace(/\s+/g, '')).toBe('cubic-bezier(.23,1,.32,1)');
+  expect(easeInOut.replace(/\s+/g, '')).toBe('cubic-bezier(.77,0,.175,1)');
+  expect(easeDrawer.replace(/\s+/g, '')).toBe('cubic-bezier(.32,.72,0,1)');
+  expect(cssTimeMs(values['--voy-motion-press'] ?? '')).toBeCloseTo(160, 3);
+  expect(cssTimeMs(values['--voy-motion-popover'] ?? '')).toBeCloseTo(180, 3);
+  expect(cssTimeMs(values['--voy-motion-modal'] ?? '')).toBeCloseTo(250, 3);
 });
 
 test('Issue36 theme choice is explicit, persistent and preserves the no-account path', async ({ page }) => {
@@ -109,7 +126,7 @@ test('Issue36 theme choice is explicit, persistent and preserves the no-account 
   await toggle.click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const signal = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--voy-signal').trim());
-  expect(signal.toUpperCase()).toBe('#FF6847');
+  expect(signal.toUpperCase()).toBe('#FFC533');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByTestId('destination-input')).toBeVisible();
@@ -120,7 +137,7 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   await page.goto('/');
   await planTrip(page);
   const provenance = page.getByTestId('destination-provenance');
-  await expect(provenance).toContainText('Verificado');
+  await expect(provenance).toContainText('Destino verificado');
   await expect(provenance).toContainText('Municipalidad de Santa Fe');
   await expect(provenance).toContainText('2026-08-05');
   await expect(page.getByTestId('trip-sheet')).not.toContainText('Destino autoritativo');
@@ -136,8 +153,10 @@ test('Issue36 decision hierarchy makes verified facts dominant without changing 
   const beforeBus = routeRequests.length;
   await page.locator('[data-mode="bus"]').click();
   await openDecisionHalf(page);
-  await expect(page.getByTestId('provider-bus')).toBeVisible();
-  await expect(page.getByTestId('provider-bus')).toContainText('no calcula ni sugiere');
+  const busProvider = page.getByTestId('provider-bus');
+  await expect(busProvider).toBeVisible();
+  await expect(busProvider).toContainText('VOY no afirma líneas, paradas, frecuencias ni tarifas');
+  await expect(busProvider).toContainText('Sin planificación verificada');
   expect(routeRequests.length).toBe(beforeBus);
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 });

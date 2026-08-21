@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import type { Destination } from '../features/destination/destination.types';
   import { searchDestinations } from '../features/destination/destination.service';
+  import { searchPopoverTransition } from '../lib/motion';
 
   export let onSelect: (destination: Destination) => void;
   export let dismissToken = 0;
@@ -30,6 +31,15 @@
     input?.blur();
   }
 
+  function selectable(item: Destination): boolean {
+    return item.routeEligible === true && item.territoryVerified === true && item.territory?.countryId === 'AR';
+  }
+
+  function resultKind(item: Destination): 'verified' | 'eligible' | 'unresolved' {
+    if (!selectable(item)) return 'unresolved';
+    return item.confidence === 'authoritative' && item.provenance ? 'verified' : 'eligible';
+  }
+
   function closeResults(keepFocus = true): void {
     results = [];
     onResultsState(false);
@@ -49,13 +59,13 @@
       onResultsState(false);
       return;
     }
-    status = 'Buscando…';
+    status = 'Buscando en Argentina…';
     timer = setTimeout(async () => {
       controller = new AbortController();
       try {
         results = await searchDestinations(query, controller.signal);
         onResultsState(results.length > 0);
-        status = results.length ? `${results.length} resultados` : 'No encontramos un resultado dentro de la cobertura.';
+        status = results.length ? `${results.length} resultados` : 'No encontramos un resultado territorial verificable en Argentina.';
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           results = [];
@@ -67,13 +77,13 @@
   }
 
   function choose(item: Destination): void {
-    if (!item.operational || !item.verified || item.confidence !== 'authoritative') {
-      status = 'Ese resultado no tiene procedencia suficiente para calcular un viaje.';
+    if (!selectable(item)) {
+      status = 'Ese resultado no tiene contexto territorial suficiente para calcular una ruta.';
       return;
     }
     query = item.name;
     selected = true;
-    status = `Destino verificado: ${item.name}`;
+    status = item.confidence === 'authoritative' ? `Destino verificado: ${item.name}` : `Destino resuelto en ${item.territory?.displayName || 'Argentina'}`;
     closeResults(false);
     onSelect(item);
   }
@@ -97,7 +107,7 @@
       on:focus={() => onFocusState(true)}
       on:blur={() => onFocusState(false)}
       on:keydown={handleKeydown}
-      placeholder="Lugar o dirección"
+      placeholder="Lugar, dirección, localidad o provincia"
       data-testid="destination-input"
       aria-expanded={results.length > 0}
       aria-controls="destination-results"
@@ -105,15 +115,17 @@
   </div>
   <p class="status" aria-live="polite">{status}</p>
   {#if results.length}
-    <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results">
+    <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results" data-motion="origin-aware-popover" transition:searchPopoverTransition>
       {#each results as item (item.id)}
         <li>
-          <button type="button" disabled={!item.operational} aria-disabled={!item.operational} on:click={() => choose(item)} data-testid={`destination-result-${item.operational ? 'verified' : 'unverified'}`}>
+          <button type="button" disabled={!selectable(item)} aria-disabled={!selectable(item)} on:click={() => choose(item)} data-testid={`destination-result-${resultKind(item)}`}>
             <strong>{item.name}</strong>
-            {#if item.operational && item.provenance}
+            {#if item.confidence === 'authoritative' && item.provenance}
               <span>{item.address} · Fuente oficial</span>
+            {:else if selectable(item)}
+              <span>{item.address} · {item.territory?.displayName} · cobertura local no asumida</span>
             {:else}
-              <span>Ubicación no verificada · No disponible para calcular</span>
+              <span>Territorio no resuelto · No disponible para calcular</span>
             {/if}
           </button>
         </li>

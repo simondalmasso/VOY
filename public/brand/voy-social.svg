@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">VOY — Movilidad urbana para Argentina</title>
+  <desc id="desc">Vista editorial de marca VOY con su V amarilla y la promesa de movilidad verificable.</desc>
+  <rect width="1200" height="630" fill="#F2F0E8"/>
+  <rect x="62" y="62" width="1076" height="506" rx="38" fill="#0B0B0A"/>
+  <g transform="translate(112 126) scale(4.2)">
+    <defs><mask id="m"><rect width="64" height="64" fill="white"/><path d="M26.8 36.5 32 47.7l5.2-11.2L32 40.6Z" fill="black"/></mask></defs>
+    <path d="M12.2 11.6 32 54 51.8 11.6" fill="none" stroke="#FFC533" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" mask="url(#m)"/>
+  </g>
+  <text x="430" y="226" fill="#F4F1E8" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="84" font-weight="800" letter-spacing="-4">VOY</text>
+  <text x="430" y="302" fill="#F4F1E8" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="43" font-weight="650">Movilidad urbana para Argentina</text>
+  <text x="430" y="374" fill="#BDB8AA" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="27">Territorio · rutas · procedencia · cobertura honesta</text>
+  <text x="430" y="470" fill="#FFC533" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="23" font-weight="700">Hecho en Santa Fe, Argentina</text>
+</svg>

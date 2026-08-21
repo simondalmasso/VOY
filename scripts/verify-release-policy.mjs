@@ -43,9 +43,7 @@ function validateGovernance(root) {
 
   const cf = policy.indexOf('- cloudflare_workers_first');
   const gh = policy.indexOf('- github_reconcile_after_runtime');
-  if (cf < 0 || gh < 0 || cf > gh) {
-    errors.push(`${POLICY}: deploy sequence must be Cloudflare Workers first, then GitHub reconciliation`);
-  }
+  if (cf < 0 || gh < 0 || cf > gh) errors.push(`${POLICY}: deploy sequence must be Cloudflare Workers first, then GitHub reconciliation`);
 
   const agentRules = [
     [/\bORDER=45\b/, 'ORDER=45'],
@@ -60,23 +58,63 @@ function validateGovernance(root) {
     [/MERGE\/DEPLOY\/PRODUCTION_MUTATION=NO, salvo orden explícita\./, 'explicit mutation authorization rule'],
   ];
   for (const [pattern, label] of agentRules) required(agents, pattern, label, errors, AGENTS);
-
   return errors;
 }
 
-export function allowsGenericMainPush(text) {
-  const onBlock = text.match(/(?:^|\n)on:\s*\n([\s\S]*?)(?=\n\S|$)/)?.[1] ?? '';
-  if (!/^\s*push\s*:/m.test(onBlock)) return false;
-  const pushLine = onBlock.match(/^\s*push\s*:\s*(.*)$/m)?.[1]?.trim() ?? '';
-  if (pushLine === '{}' || pushLine === '' || pushLine === 'null') {
-    const branchBlock = onBlock.match(/^\s*push\s*:\s*\n([\s\S]*?)(?=^\s{2}\S|$)/m)?.[1] ?? '';
-    if (!/branches(?:-ignore)?\s*:/m.test(branchBlock)) return true;
-    if (/branches\s*:\s*\[[^\]]*\bmain\b[^\]]*\]/m.test(branchBlock)) return true;
-    if (/branches\s*:\s*\n(?:\s*-.*\n)*\s*-\s*['"]?main['"]?\s*$/m.test(branchBlock)) return true;
-    if (/branches-ignore\s*:/m.test(branchBlock) && !/branches-ignore[\s\S]*\bmain\b/m.test(branchBlock)) return true;
-    return false;
+function indent(line) {
+  return line.match(/^\s*/)?.[0].length ?? 0;
+}
+
+function blockAfter(lines, start, parentIndent) {
+  const output = [];
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.trim() || line.trimStart().startsWith('#')) { output.push(line); continue; }
+    if (indent(line) <= parentIndent) break;
+    output.push(line);
   }
-  return /push\s*:\s*\{[^}]*branches\s*:\s*\[[^\]]*\bmain\b/i.test(`push: ${pushLine}`);
+  return output;
+}
+
+function listContainsMain(lines, key) {
+  const keyIndex = lines.findIndex(line => new RegExp(`^\\s*${key}\\s*:`).test(line));
+  if (keyIndex < 0) return null;
+  const line = lines[keyIndex];
+  const inline = line.slice(line.indexOf(':') + 1).trim();
+  if (inline.startsWith('[')) return /(?:^|[\s,'"\[]+)main(?:[\s,'"\]]+|$)/.test(inline);
+  const keyIndent = indent(line);
+  const children = blockAfter(lines, keyIndex, keyIndent);
+  return children.some(child => /^\s*-\s*['"]?main['"]?\s*(?:#.*)?$/.test(child));
+}
+
+export function allowsGenericMainPush(text) {
+  const lines = text.split(/\r?\n/);
+  const onIndex = lines.findIndex(line => /^\s*on\s*:\s*/.test(line) && indent(line) === 0);
+  if (onIndex < 0) return false;
+  const onLine = lines[onIndex];
+  const onInline = onLine.slice(onLine.indexOf(':') + 1).trim();
+  if (onInline) return /\bpush\b/.test(onInline);
+
+  const onLines = blockAfter(lines, onIndex, 0);
+  const pushIndex = onLines.findIndex(line => /^\s*push\s*:/.test(line));
+  if (pushIndex < 0) return false;
+  const pushLine = onLines[pushIndex];
+  const inline = pushLine.slice(pushLine.indexOf(':') + 1).trim();
+  if (inline) {
+    if (inline === '{}' || inline === 'null') return true;
+    const explicitBranches = inline.match(/branches\s*:\s*\[([^\]]*)\]/)?.[1];
+    if (explicitBranches !== undefined) return /(?:^|[\s,'"]+)main(?:[\s,'"]+|$)/.test(explicitBranches);
+    const ignored = inline.match(/branches-ignore\s*:\s*\[([^\]]*)\]/)?.[1];
+    if (ignored !== undefined) return !/(?:^|[\s,'"]+)main(?:[\s,'"]+|$)/.test(ignored);
+    return true;
+  }
+
+  const pushChildren = blockAfter(onLines, pushIndex, indent(pushLine));
+  const branches = listContainsMain(pushChildren, 'branches');
+  if (branches !== null) return branches;
+  const ignored = listContainsMain(pushChildren, 'branches-ignore');
+  if (ignored !== null) return !ignored;
+  return true;
 }
 
 function mutatingCloudflareReferences(file, text) {
@@ -84,19 +122,11 @@ function mutatingCloudflareReferences(file, text) {
   const commands = [...text.matchAll(/(?:run\s*:\s*|^)([^\n]+)/gim)].map((m) => m[1]);
   for (const command of commands) {
     const c = command.replace(/\\\r?\n\s*/g, ' ');
-    if (/\bwrangler(?:@[\w.*+-]+)?\s+deploy\b/i.test(c) && !/--dry-run(?:\s|$|=true)/i.test(c)) {
-      errors.push(`${file}: generic main push contains non-dry-run wrangler deploy`);
-    }
-    if (/\bwrangler(?:@[\w.*+-]+)?\s+(?:versions\s+deploy|rollback|delete|secret\b|versions\s+secret\b|deployments\s+create)/i.test(c)) {
-      errors.push(`${file}: generic main push contains mutating wrangler command`);
-    }
-    if (/api\.cloudflare\.com\/client\/v4/i.test(c) && /(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b|(?:--data(?:-raw|-binary)?|-d)\s+/i.test(c)) {
-      errors.push(`${file}: generic main push contains mutating Cloudflare API call`);
-    }
+    if (/\bwrangler(?:@[\w.*+-]+)?\s+deploy\b/i.test(c) && !/--dry-run(?:\s|$|=true)/i.test(c)) errors.push(`${file}: generic main push contains non-dry-run wrangler deploy`);
+    if (/\bwrangler(?:@[\w.*+-]+)?\s+(?:versions\s+deploy|rollback|delete|secret\b|versions\s+secret\b|deployments\s+create)/i.test(c)) errors.push(`${file}: generic main push contains mutating wrangler command`);
+    if (/api\.cloudflare\.com\/client\/v4/i.test(c) && /(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b|(?:--data(?:-raw|-binary)?|-d)\s+/i.test(c)) errors.push(`${file}: generic main push contains mutating Cloudflare API call`);
   }
-  if (/uses\s*:\s*['"]?cloudflare\/wrangler-action@/i.test(text)) {
-    errors.push(`${file}: generic main push uses Cloudflare Wrangler action`);
-  }
+  if (/uses\s*:\s*['"]?cloudflare\/wrangler-action@/i.test(text)) errors.push(`${file}: generic main push uses Cloudflare Wrangler action`);
   return [...new Set(errors)];
 }
 
@@ -105,7 +135,6 @@ export function analyzeRepository(root = process.cwd()) {
   const workflowDir = path.join(root, WORKFLOWS);
   const roots = [];
   const inspected = [];
-
   if (!fs.existsSync(workflowDir)) {
     violations.push(`${WORKFLOWS}: missing`);
   } else {
@@ -118,14 +147,8 @@ export function analyzeRepository(root = process.cwd()) {
       violations.push(...mutatingCloudflareReferences(file, text));
     }
   }
-
   const unique = [...new Set(violations)].sort();
-  return {
-    ok: unique.length === 0,
-    roots,
-    inspected,
-    violations: unique,
-  };
+  return { ok: unique.length === 0, roots, inspected, violations: unique };
 }
 
 function cli() {
@@ -135,11 +158,7 @@ function cli() {
     genericMainPushWorkflows: result.roots,
     inspectedFiles: result.inspected,
     violations: result.violations,
-    governance: {
-      order: 45,
-      model: 'ARQ_INTERNAL_CONSTRUCTION -> MATERIAL_CHECKPOINT -> AUD_INDEPENDENT_REVIEW',
-      deploySequence: 'CLOUDFLARE_WORKERS_FIRST_THEN_GITHUB',
-    },
+    governance: { order: 45, model: 'ARQ_INTERNAL_CONSTRUCTION -> MATERIAL_CHECKPOINT -> AUD_INDEPENDENT_REVIEW', deploySequence: 'CLOUDFLARE_WORKERS_FIRST_THEN_GITHUB' },
   }, null, 2));
   if (!result.ok) process.exitCode = 1;
 }

@@ -1,7 +1,11 @@
 import legacyWorker, { NominatimCoordinator } from '../worker-entry.js';
 import type { Env } from './contracts/env';
+import { authEnabled } from './auth/session';
+import { handleAccount, handleAuthBootstrap, handleAuthSession, handleGoogleAuth, handleLogout } from './routes/auth';
 import { handleMobilityTrust } from './routes/mobility-trust';
+import { handleNationalGeocode } from './routes/geocode';
 import { handleRoute } from './routes/route';
+import { handleTerritory } from './routes/territory';
 export { NominatimCoordinator };
 const API_PREFIX = '/api/';
 const VERSION = 'V8.0.0';
@@ -17,8 +21,14 @@ const RETIRED_PUBLIC_PATHS = new Set([
   '/navigator/navigator.js'
 ]);
 const SECURITY_HEADERS = Object.freeze({
-  'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com; connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'",
-  'Referrer-Policy': 'strict-origin-when-cross-origin', 'Permissions-Policy': 'camera=(), geolocation=(self), microphone=(self)', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+  'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://lh3.googleusercontent.com; connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://accounts.google.com; frame-src https://accounts.google.com; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'",
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), geolocation=(self), microphone=(self), identity-credentials-get=(self)',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
 });
 function secure(response: Response, request: Request): Response {
   const headers = new Headers(response.headers); for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
@@ -39,11 +49,16 @@ function isRetiredPublicPath(pathname: string): boolean {
 function retiredPublicAsset(): Response {
   return new Response('Recurso público retirado.', { status: 410, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
-function authConfigured(env: Env): boolean { return Boolean(String(env.VOY_GOOGLE_CLIENT_ID || '').trim() && String(env.VOY_AUTH_SESSION_SECRET_V1 || '').trim()); }
 function health(env: Env): Response {
   const voice = env.VOY_VOICE_ENABLED === 'true' && Boolean(env.AI);
-  const auth = authConfigured(env);
-  return new Response(JSON.stringify({ ok: true, service: 'voy-app', version: VERSION, build_hash: String(env.VOY_BUILD_HASH || 'dev'), features: { voice, auth, collective_recommendations: false, core_without_login_voice_ai: true, pwa: true } }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  const auth = authEnabled(env);
+  return new Response(JSON.stringify({
+    ok: true,
+    service: 'voy-app',
+    version: VERSION,
+    build_hash: String(env.VOY_BUILD_HASH || 'dev'),
+    features: { voice, auth, collective_recommendations: false, core_without_login_voice_ai: true, pwa: true, national_territory: true }
+  }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 async function assets(request: Request, env: Env): Promise<Response> {
   const response = await env.ASSETS.fetch(request); if (response.status !== 404 || request.method !== 'GET') return secure(response, request);
@@ -56,11 +71,15 @@ const worker: ExportedHandler<Env> = {
     if (isRetiredPublicPath(url.pathname)) return secure(retiredPublicAsset(), request);
     if (url.pathname === '/api/health' && request.method === 'GET') return secure(health(env), request);
     if (url.pathname === '/api/mobility/trust') return secure(handleMobilityTrust(request), request);
+    if (url.pathname === '/api/territory') return secure(await handleTerritory(request), request);
+    if (url.pathname === '/api/geocode') return secure(await handleNationalGeocode(request, async legacyRequest => await legacyWorker.fetch(legacyRequest, env, ctx)), request);
     if (url.pathname === '/api/route') return secure(await handleRoute(request, env), request);
-    if (url.pathname === '/api/auth/session' && request.method === 'GET' && !authConfigured(env)) {
-      return secure(new Response(JSON.stringify({ ok: true, enabled: false, authenticated: false, persistent_account: false, trip_history_persisted: false }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }), request);
-    }
-    if (url.pathname.startsWith('/api/auth/') && !authConfigured(env)) return secure(new Response(JSON.stringify({ ok: false, error: 'auth_not_configured' }), { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }), request);
+    if (url.pathname === '/api/auth/bootstrap' && request.method === 'GET') return secure(handleAuthBootstrap(request, env), request);
+    if (url.pathname === '/api/auth/google') return secure(await handleGoogleAuth(request, env), request);
+    if (url.pathname === '/api/auth/session') return secure(await handleAuthSession(request, env), request);
+    if (url.pathname === '/api/auth/logout') return secure(await handleLogout(request, env), request);
+    if (url.pathname === '/api/account') return secure(await handleAccount(request, env), request);
+    if (url.pathname.startsWith('/api/auth/') && !authEnabled(env)) return secure(new Response(JSON.stringify({ ok: false, error: 'auth_not_configured' }), { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }), request);
     if (url.pathname.startsWith(API_PREFIX)) return secure(await legacyWorker.fetch(request, env, ctx), request);
     return assets(request, env);
   },

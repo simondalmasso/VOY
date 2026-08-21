@@ -1,0 +1,240 @@
+/* ORDER-046 design amendment 5359395830 — interaction craft only.
+   Mobility truth, map opacity, provider semantics and privacy boundaries are unchanged. */
+
+html,
+body,
+button,
+input {
+  font-optical-sizing:auto;
+}
+
+.sheet header p strong,
+.provider-meta,
+.provider-meta > strong,
+time {
+  font-variant-numeric:tabular-nums;
+}
+
+/* Search/results originate from the search trigger instead of appearing from nowhere. */
+.search .results {
+  transform-origin:50% 0;
+  box-shadow:0 18px 42px rgba(11,11,10,.12);
+}
+
+/* Static materials only. The basemap and decision sheet remain fully opaque. */
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  .map-first-layout>.planner .journey-builder,
+  .map-first-layout>.decision-empty,
+  .map-first-layout .message,
+  .map-first-layout .assistant-trigger,
+  .map-truth,
+  .map-credit {
+    -webkit-backdrop-filter:blur(18px) saturate(1.04);
+    backdrop-filter:blur(18px) saturate(1.04);
+  }
+}
+
+.map-first-layout>.planner .journey-builder,
+.map-first-layout>.decision-empty,
+.map-first-layout .message,
+.map-first-layout .assistant-trigger,
+.map-truth,
+.map-credit {
+  border-color:color-mix(in srgb,var(--voy-border) 72%,transparent);
+  box-shadow:0 10px 32px rgba(11,11,10,.07);
+}
+
+.map-first-layout>.sheet {
+  opacity:1;
+  background:var(--voy-surface);
+  color:var(--voy-ink);
+  will-change:auto;
+  transition:transform var(--voy-motion-modal) var(--voy-ease-drawer),box-shadow var(--voy-motion-popover) var(--voy-ease-out);
+}
+
+.map-first-layout>.sheet.dragging,
+.map-first-layout>.sheet.settling,
+.map-first-layout>.sheet[data-motion-state="keyboard"] {
+  transition:none!important;
+}
+
+.map-first-layout>.sheet.dragging,
+.map-first-layout>.sheet.settling {
+  will-change:transform;
+}
+
+/* Semantic information depth: PEEK -> HALF -> EXPANDED. */
+.map-first-layout>.sheet[data-snap="peek"] .options,
+.map-first-layout>.sheet[data-snap="peek"] .methodology,
+.map-first-layout>.sheet[data-snap="peek"] .destination-address,
+.map-first-layout>.sheet[data-snap="half"] .methodology,
+.map-first-layout>.sheet[data-snap="half"] .destination-address {
+  display:none;
+}
+
+.map-first-layout>.sheet[data-snap="expanded"] .options,
+.map-first-layout>.sheet[data-snap="expanded"] .methodology,
+.map-first-layout>.sheet[data-snap="expanded"] .destination-address {
+  display:block;
+}
+
+/* One brand signal: VOY yellow denotes selection/attention, never decision-critical text. */
+.map-first-layout .modes button.active {
+  background:var(--voy-signal);
+  color:var(--voy-signal-ink);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--voy-signal-ink) 16%,transparent);
+}
+
+.provider-action,
+.decision-index,
+.assistant-trigger:hover {
+  color:var(--voy-ink);
+}
+
+.provider-actionable .provider-action::before {
+  content:"";
+  display:inline-block;
+  width:7px;
+  height:7px;
+  margin-right:6px;
+  border-radius:50%;
+  background:var(--voy-signal);
+  box-shadow:0 0 0 2px var(--voy-signal-soft);
+}
+
+/* Immediate physical press feedback, restrained for high-frequency controls. */
+@media (prefers-reduced-motion:no-preference) {
+  .theme-toggle,
+  .origin .location,
+  .origin-edit,
+  .manual button,
+  .assistant-trigger,
+  .dialog button {
+    transition:transform var(--voy-motion-press) var(--voy-ease-out),background-color var(--voy-motion-press) var(--voy-ease-out),color var(--voy-motion-press) var(--voy-ease-out),opacity var(--voy-motion-press) var(--voy-ease-out);
+  }
+
+  .results button,
+  .provider-actionable,
+  .modes button {
+    transition:transform var(--voy-motion-press) var(--voy-ease-out),background-color var(--voy-motion-press) var(--voy-ease-out),color var(--voy-motion-press) var(--voy-ease-out),opacity var(--voy-motion-press) var(--voy-ease-out);
+  }
+
+  .theme-toggle:active,
+  .origin .location:active,
+  .origin-edit:active,
+  .manual button:active,
+  .assistant-trigger:active,
+  .dialog button:active {
+    transform:scale(.97);
+  }
+
+  .results button:not(:disabled):active,
+  .provider-actionable:active,
+  .modes button:active {
+    transform:scale(.985);
+  }
+}
+
+@media (hover:hover) and (pointer:fine) {
+  .provider-actionable:hover,
+  .theme-toggle:hover {
+    box-shadow:0 8px 22px rgba(11,11,10,.08);
+  }
+}
+
+/* Fixed physical sheet with transform-only snap positions. Percent transforms are
+   relative to the sheet itself, keeping the map layout out of per-frame work. */
+@media (max-width:759px) {
+  .map-first-layout>.sheet {
+    height:78%;
+  }
+  .map-first-layout>.sheet[data-snap="peek"] {
+    height:78%;
+    transform:translate3d(0,calc(100% - 154px),0);
+  }
+  .map-first-layout>.sheet[data-snap="half"] {
+    height:78%;
+    transform:translate3d(0,41.025641%,0);
+  }
+  .map-first-layout>.sheet[data-snap="expanded"] {
+    height:78%;
+    transform:translate3d(0,0,0);
+  }
+}
+
+@media (min-width:760px) {
+  .map-first-layout>.sheet {
+    height:72%;
+  }
+  .map-first-layout>.sheet[data-snap="peek"] {
+    height:72%;
+    transform:translate3d(0,calc(100% - 158px),0);
+  }
+  .map-first-layout>.sheet[data-snap="half"] {
+    height:72%;
+    transform:translate3d(0,38.888889%,0);
+  }
+  .map-first-layout>.sheet[data-snap="expanded"] {
+    height:72%;
+    transform:translate3d(0,0,0);
+  }
+}
+
+/* Reduced motion keeps comprehension feedback while removing springs/slides. */
+@media (prefers-reduced-motion:reduce) {
+  .map-first-layout>.sheet,
+  .search,
+  .origin,
+  .results button,
+  .provider,
+  .modes button,
+  .theme-toggle,
+  .assistant-trigger,
+  .dialog,
+  .dialog-backdrop,
+  .message {
+    transition:opacity 120ms var(--voy-ease-out),color 120ms var(--voy-ease-out),background-color 120ms var(--voy-ease-out)!important;
+  }
+
+  .theme-toggle:active,
+  .origin .location:active,
+  .origin-edit:active,
+  .manual button:active,
+  .assistant-trigger:active,
+  .dialog button:active,
+  .results button:active,
+  .provider-actionable:active,
+  .modes button:active {
+    transform:none!important;
+  }
+}
+
+@media (prefers-reduced-transparency:reduce) {
+  .map-first-layout>.planner .journey-builder,
+  .map-first-layout>.decision-empty,
+  .map-first-layout .message,
+  .map-first-layout .assistant-trigger,
+  .map-truth,
+  .map-credit {
+    -webkit-backdrop-filter:none!important;
+    backdrop-filter:none!important;
+    background:var(--voy-surface)!important;
+  }
+}
+
+@media (prefers-contrast:more) {
+  .map-first-layout>.planner .journey-builder,
+  .map-first-layout>.decision-empty,
+  .map-truth,
+  .map-credit,
+  .results,
+  .dialog {
+    border-color:var(--voy-ink)!important;
+  }
+  .map-first-layout .modes button.active {
+    box-shadow:inset 0 0 0 2px var(--voy-signal-ink);
+  }
+  :focus-visible {
+    outline-width:4px;
+  }
+}

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">VOY</title>
+  <defs>
+    <mask id="voy-v-mask">
+      <rect width="64" height="64" fill="white"/>
+      <path d="M26.8 36.5 32 47.7l5.2-11.2L32 40.6Z" fill="black"/>
+    </mask>
+  </defs>
+  <path d="M12.2 11.6 32 54 51.8 11.6" fill="none" stroke="#FFC533" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" mask="url(#voy-v-mask)"/>
+</svg>

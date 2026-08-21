@@ -7,12 +7,14 @@
   "routes": [],
   "assets": { "directory": "./dist", "binding": "ASSETS", "html_handling": "none", "not_found_handling": "single-page-application", "run_worker_first": true },
   "ai": { "binding": "AI" },
+  "d1_databases": [{ "binding": "DB", "database_name": "voy-auth", "database_id": "f55c92be-80a0-4997-b517-cf5d19db5c2c", "migrations_dir": "migrations" }],
   "analytics_engine_datasets": [{ "binding": "VOY_METRICS", "dataset": "voy_metrics" }],
   "durable_objects": { "bindings": [{ "name": "NOMINATIM_COORDINATOR", "class_name": "NominatimCoordinator" }] },
   "migrations": [{ "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }],
   "vars": {
     "VOY_OWNER_IPS": "", "VOY_OWNER_IP_HASHES": "", "VOY_DEV_IPS": "", "VOY_OPERATOR_DIAGNOSTICS": "false", "VOY_ALLOWED_ORIGINS": "",
-    "VOY_EXCLUDE_LOCALHOST": "true", "VOY_EXCLUDE_HEADLESS": "true", "VOY_EXCLUDE_BOT": "true", "VOY_EXCLUDE_GLM": "true", "VOY_EXCLUDE_UA_PATTERNS": "", "VOY_VOICE_ENABLED": "true", "VOY_BUILD_HASH": "dev"
+    "VOY_EXCLUDE_LOCALHOST": "true", "VOY_EXCLUDE_HEADLESS": "true", "VOY_EXCLUDE_BOT": "true", "VOY_EXCLUDE_GLM": "true", "VOY_EXCLUDE_UA_PATTERNS": "",
+    "VOY_VOICE_ENABLED": "true", "GOOGLE_AUTH_ENABLED": "false", "VOY_GOOGLE_CLIENT_ID": "379083246627-tup6ts6e39p18crni4g7p45l8oud4s17.apps.googleusercontent.com", "VOY_BUILD_HASH": "dev"
   },
   "observability": { "enabled": true, "logs": { "enabled": true, "head_sampling_rate": 1 } },
   "triggers": { "crons": ["0 6 * * 1"] }

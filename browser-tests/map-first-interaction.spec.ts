@@ -1,11 +1,12 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { santaFeOrigin } from './helpers/territory';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
 async function deterministicApis(page: Page): Promise<void> {
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
-    const results = q.includes('Origen map-first') ? [{ id: 'map-first:origin', name: 'Plaza 25 de Mayo', display_name: 'Plaza 25 de Mayo, Santa Fe', address: 'Santa Fe', lat: -31.633, lon: -60.706 }] : [];
+    const results = q.includes('Origen map-first') ? [santaFeOrigin('map-first:origin')] : [];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route('**/api/route', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, source: 'osrm_route', distance_km: 3.2, duration_min: 10.5, geometry: [[-60.706,-31.633],[-60.7,-31.64],[-60.700503,-31.643533]] }) }));
@@ -105,19 +106,16 @@ test('manual origin is hidden initially, opens explicitly, and Escape/Back resto
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
   await expect(page.getByTestId('origin-apply')).toHaveCount(0);
   await expect(trigger).toBeVisible();
-
   await trigger.click();
   await expect(page.getByTestId('origin-input')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
   await expect(trigger).toBeFocused();
-
   await trigger.click();
   await expect(page.getByTestId('origin-input')).toBeFocused();
   await page.evaluate(() => history.back());
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
   await expect(trigger).toBeFocused();
-
   await trigger.click();
   const input = page.getByTestId('origin-input');
   await input.fill('Origen map-first');
@@ -164,12 +162,20 @@ test('decision sheet snaps progressively and map camera does not recenter during
   const beforeDrag = await cameraFitCount(page);
   const box = await handle.boundingBox();
   if (!box) throw new Error('sheet_handle_missing');
-  await page.mouse.move(box.x + box.width/2, box.y + box.height/2);
+  const x = box.x + box.width/2;
+  const y = box.y + box.height/2;
+  const halfY = await sheet.evaluate(element => {
+    const transform = getComputedStyle(element).transform;
+    return transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).m42 : 0;
+  });
+  const lift = Math.max(120, halfY * 0.8);
+  await page.mouse.move(x, y);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width/2, box.y - 24, { steps: 4 });
+  await page.mouse.move(x, y - 24, { steps: 4 });
   await page.waitForTimeout(100);
   expect(await cameraFitCount(page)).toBe(beforeDrag);
-  await page.mouse.move(box.x + box.width/2, box.y - 60, { steps: 4 });
+  await page.mouse.move(x, y - lift, { steps: 5 });
+  await page.waitForTimeout(150);
   await page.mouse.up();
   await expect(sheet).toHaveAttribute('data-snap','expanded');
   await page.waitForTimeout(280);
@@ -209,19 +215,19 @@ test('search focus on critical mobile sizes keeps input usable and removes sheet
   expect(await page.evaluate(() => document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 });
 
-test('opening an external provider does not reset camera and disables map only for confirmation', async ({ page }) => {
+test('stale app evidence does not open an external action or disturb map state', async ({ page }) => {
   await deterministicApis(page);
   await page.goto('/');
   await planTrip(page);
   await page.getByTestId('sheet-handle').click();
   await expect(page.getByTestId('trip-sheet')).toHaveAttribute('data-snap','half');
   const before = await stableCameraFitCount(page);
-  await page.getByTestId('provider-uber').click();
-  await expect(page.getByTestId('external-confirmation')).toBeVisible();
-  await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-interaction','disabled');
-  await page.waitForTimeout(400);
-  expect(await cameraFitCount(page)).toBe(before);
-  await page.keyboard.press('Escape');
+  const uber = page.getByTestId('provider-uber');
+  await expect(uber).toHaveAttribute('data-disabled', 'true');
+  await expect(uber).toContainText('Presencia territorial actual no verificada.');
+  await uber.click();
   await expect(page.getByTestId('external-confirmation')).toHaveCount(0);
   await expect(page.getByTestId('map-shell')).toHaveAttribute('data-map-interaction','enabled');
+  await page.waitForTimeout(400);
+  expect(await cameraFitCount(page)).toBe(before);
 });
