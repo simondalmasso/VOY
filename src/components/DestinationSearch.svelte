@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import type { Destination } from '../features/destination/destination.types';
   import { searchDestinations } from '../features/destination/destination.service';
+  import { searchPopoverTransition } from '../lib/motion';
 
   export let onSelect: (destination: Destination) => void;
   export let dismissToken = 0;
@@ -114,7 +115,7 @@
   </div>
   <p class="status" aria-live="polite">{status}</p>
   {#if results.length}
-    <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results">
+    <ul id="destination-results" class="results" aria-label="Resultados de destino" data-testid="destination-results" data-motion="origin-aware-popover" transition:searchPopoverTransition>
       {#each results as item (item.id)}
         <li>
           <button type="button" disabled={!selectable(item)} aria-disabled={!selectable(item)} on:click={() => choose(item)} data-testid={`destination-result-${resultKind(item)}`}>
