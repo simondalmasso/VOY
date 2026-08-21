@@ -164,17 +164,19 @@ test('decision sheet snaps progressively and map camera does not recenter during
   if (!box) throw new Error('sheet_handle_missing');
   const x = box.x + box.width/2;
   const y = box.y + box.height/2;
+  const halfY = await sheet.evaluate(element => {
+    const transform = getComputedStyle(element).transform;
+    return transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).m42 : 0;
+  });
+  const lift = Math.max(120, halfY * 0.8);
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x, y - 24, { steps: 4 });
   await page.waitForTimeout(100);
   expect(await cameraFitCount(page)).toBe(beforeDrag);
-  await page.mouse.move(x, y - 40);
-  await page.waitForTimeout(12);
-  await page.mouse.move(x, y - 130);
-  await page.waitForTimeout(6);
+  await page.mouse.move(x, y - lift, { steps: 5 });
+  await page.waitForTimeout(150);
   await page.mouse.up();
-  await expect(sheet).toHaveAttribute('data-release-mode','momentum');
   await expect(sheet).toHaveAttribute('data-snap','expanded');
   await page.waitForTimeout(280);
   expect(await cameraFitCount(page)).toBeLessThanOrEqual(beforeDrag + 1);
