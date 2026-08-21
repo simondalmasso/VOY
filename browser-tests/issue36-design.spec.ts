@@ -3,6 +3,13 @@ import { santaFeOrigin } from './helpers/territory';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
+function cssTimeMs(value: string): number {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.endsWith('ms')) return Number.parseFloat(normalized);
+  if (normalized.endsWith('s')) return Number.parseFloat(normalized) * 1000;
+  return Number.NaN;
+}
+
 async function deterministicTripApis(page: Page): Promise<{ routeRequests: string[] }> {
   const routeRequests: string[] = [];
   await page.route('**/api/geocode?*', async route => {
@@ -100,14 +107,13 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   const easeOut = values['--voy-ease-out'] ?? '';
   const easeInOut = values['--voy-ease-in-out'] ?? '';
   const easeDrawer = values['--voy-ease-drawer'] ?? '';
-  const motionMs = motion.endsWith('ms') ? parseFloat(motion) : motion.endsWith('s') ? parseFloat(motion) * 1000 : Number.NaN;
-  expect(motionMs).toBeCloseTo(160, 3);
+  expect(cssTimeMs(motion)).toBeCloseTo(160, 3);
   expect(easeOut.replace(/\s+/g, '')).toBe('cubic-bezier(.23,1,.32,1)');
   expect(easeInOut.replace(/\s+/g, '')).toBe('cubic-bezier(.77,0,.175,1)');
   expect(easeDrawer.replace(/\s+/g, '')).toBe('cubic-bezier(.32,.72,0,1)');
-  expect(values['--voy-motion-press']).toBe('160ms');
-  expect(values['--voy-motion-popover']).toBe('180ms');
-  expect(values['--voy-motion-modal']).toBe('250ms');
+  expect(cssTimeMs(values['--voy-motion-press'] ?? '')).toBeCloseTo(160, 3);
+  expect(cssTimeMs(values['--voy-motion-popover'] ?? '')).toBeCloseTo(180, 3);
+  expect(cssTimeMs(values['--voy-motion-modal'] ?? '')).toBeCloseTo(250, 3);
 });
 
 test('Issue36 theme choice is explicit, persistent and preserves the no-account path', async ({ page }) => {
