@@ -21,15 +21,17 @@
       <strong>{option.name}</strong>
       <small>{option.detail}</small>
       {#if unavailableLabel}<span class="provider-unavailable-state">{unavailableLabel}</span>{/if}
-      {#if handoffActionable && option.handoff}
-        <span class="provider-handoff-trust" data-testid={`provider-${option.id}-handoff-source`}>Información externa · {option.handoff.authority}</span>
-        <button type="button" class="provider-handoff" on:click={() => onChoose(option)} data-testid={`provider-${option.id}-handoff`} aria-label={`${option.handoff.label} en ${option.handoff.authority}`}>
-          {option.handoff.label} <span aria-hidden="true">↗</span>
-        </button>
-      {/if}
     </span>
     {#if hasMeta}<span class="provider-meta">{#if priceLabel}<strong>{priceLabel}</strong>{/if}{#if option.available && option.etaMin !== null && option.etaMin > 0}<small>{option.etaMin} min</small>{/if}</span>{/if}
   </article>
+  {#if handoffActionable && option.handoff}
+    <div class="provider-handoff-group" role="presentation" data-testid={`provider-${option.id}-handoff-group`}>
+      <span class="provider-handoff-trust" data-testid={`provider-${option.id}-handoff-source`}>Información externa · {option.handoff.authority}</span>
+      <button type="button" class="provider-handoff" on:click={() => onChoose(option)} data-testid={`provider-${option.id}-handoff`} aria-label={`${option.handoff.label} en ${option.handoff.authority}`}>
+        {option.handoff.label} <span aria-hidden="true">↗</span>
+      </button>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -47,7 +49,6 @@
   .provider-unavailable-state,
   .provider-handoff-trust {
     display: block;
-    margin-top: 4px;
     color: var(--voy-muted);
     font-size: var(--voy-type-label);
     line-height: var(--voy-leading-19);
@@ -58,13 +59,21 @@
     word-break: normal;
   }
 
+  .provider-unavailable-state {
+    margin-top: 4px;
+  }
+
+  .provider-handoff-group {
+    margin-top: 8px;
+    padding: 0 2px 8px;
+  }
+
   .provider-handoff-trust {
-    margin-top: 10px;
+    margin-bottom: 6px;
   }
 
   .provider-handoff {
     min-height: 44px;
-    margin-top: 8px;
     padding: 0 12px;
     border: 1px solid var(--voy-border);
     border-radius: var(--voy-radius-button);
