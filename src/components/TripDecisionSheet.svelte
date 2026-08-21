@@ -128,6 +128,7 @@
     if (samples.length < 2) return 0;
     const first = samples[0];
     const last = samples[samples.length - 1];
+    if (!first || !last) return 0;
     const elapsed = last.time - first.time;
     return elapsed > 0 ? (last.y - first.y) / elapsed : 0;
   }
@@ -135,9 +136,11 @@
   function nearestSnap(projectedY: number): SheetSnap {
     const targets = snapTargets();
     const snaps: SheetSnap[] = ['expanded', 'half', 'peek'];
-    return snaps.reduce((best, candidate) =>
-      Math.abs(targets[candidate] - projectedY) < Math.abs(targets[best] - projectedY) ? candidate : best
-    , snaps[0]);
+    let best: SheetSnap = 'expanded';
+    for (const candidate of snaps) {
+      if (Math.abs(targets[candidate] - projectedY) < Math.abs(targets[best] - projectedY)) best = candidate;
+    }
+    return best;
   }
 
   function cancelSpring(): void {
