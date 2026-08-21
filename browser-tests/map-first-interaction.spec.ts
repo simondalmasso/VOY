@@ -218,7 +218,7 @@ test('stale app evidence does not open an external action or disturb map state',
   await expect(page.getByTestId('trip-sheet')).toHaveAttribute('data-snap','half');
   const before = await stableCameraFitCount(page);
   const uber = page.getByTestId('provider-uber');
-  await expect(uber).toHaveAttribute('aria-disabled', 'true');
+  await expect(uber).toHaveAttribute('data-disabled', 'true');
   await expect(uber).toContainText('Presencia territorial actual no verificada.');
   await uber.click();
   await expect(page.getByTestId('external-confirmation')).toHaveCount(0);
