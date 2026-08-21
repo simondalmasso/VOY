@@ -9,22 +9,100 @@ CANONICAL_STATE=GITHUB
 REPOSITORY=simonkey888/VOY
 REPOSITORY_WORKLOG=docs/CURRENT_STATE.md
 RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
-ORDER=46
-ISSUE=46
-ISSUE46_STATE=CLOSED_COMPLETED
-PR=47
+ORDER=48
+ISSUE=48
+PR=49
+ORDER48_STATUS=FIRST_REAL_FAILURE_AUD_REQUIRED
+ORDER48_SELECTION_COMMENT=5369044980
+ORDER48_AUD_CONTINUE_COMMENT=5369449833
 ORDER46_STATUS=TERMINAL_COMPLETE
+ISSUE46_STATE=CLOSED_COMPLETED
 AUD_TERMINAL_CANDIDATE_PASS=5367382043
 ARQ_PRODUCTION_AUTHORIZATION=5367456917
 AUD_POST_PRODUCTION_PASS=5367927644
 ARQ_MERGE_AUTHORIZATION=5368067280
 ARQ_TERMINAL_CLOSURE_COMMENT=5368264473
 GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO
+D1_WRITE_AUTHORIZED=NO
+D1_MIGRATION_AUTHORIZED=NO
+PERSISTENT_DATA_MUTATION_AUTHORIZED=NO
+MERGE_AUTHORIZED=NO
+PRODUCTION_PROMOTION_AUTHORIZED=NO
 DRIVE=LEGACY_READ_ONLY
 NEW_DRIVE_WRITES=NO
 ```
 
-Production truth has priority over branch/document state. Runtime source and deployment identifiers below are intentionally distinguished from later GitHub-only merge and documentation commits.
+Production truth has priority over branch/document state. Runtime source and deployment identifiers below are intentionally distinguished from later GitHub-only implementation, candidate-trigger and documentation commits.
+
+## ORDER-048 — first real candidate failure checkpoint
+
+```text
+SELECTION=SANTA_FE_OFFICIAL_TRANSIT_HANDOFF
+BRANCH=feat/order-048-official-transit-handoff
+PR49_STATE=OPEN_DRAFT_UNMERGED
+BASE_MAIN_SHA=12e0fd006ed20d255496fbdcc883849038fe301f
+AUD_CONTINUE_BASE_HEAD=0e93583bd99ec74c8facb4176a60a839da327c59
+CONTROL_PLANE_HEAD=d0f282123bb53ee1872f2d4b07955121c7f06f8f
+CANDIDATE_TRIGGER_EXACT_SOURCE_SHA=3dcb3e63ad80c9fd8a201176c8ea18a51a86ad66
+CANDIDATE_WORKFLOW=VOY ORDER-048 Final Candidate 0
+CANDIDATE_RUN=32482253921;FAILURE
+CANDIDATE_JOB=96770974256
+FIRST_CAUSAL_FAILURE=official_handoff_unreachable:403
+FIRST_CAUSAL_FAILURE_STAGE=municipal-source-before
+FIRST_CAUSAL_FAILURE_TIMESTAMP_UTC=2026-08-21T12:36:15Z
+CANDIDATE_VERSION_CREATED=NO
+CANDIDATE_DEPLOYMENT_CREATED=NO
+CLOUDFLARE_WRITE_REACHED=NO
+D1_WRITE_EXECUTED=NO
+D1_MIGRATION_EXECUTED=NO
+PERSISTENT_DATA_MUTATION_EXECUTED=NO
+GOOGLE_AUTH_ENABLED=NO
+PRODUCTION_PROMOTION_EXECUTED=NO
+MERGE_EXECUTED=NO
+RETRY_EXECUTED=NO
+```
+
+The first real ORDER-048 candidate attempt stopped fail-closed before any Cloudflare write. The exact failing command was the fresh municipal-source verifier at `scripts/verify-santa-fe-transit-handoff.mjs`; the GitHub-hosted runner received HTTP `403` from `santafeciudad.gov.ar` and threw `official_handoff_unreachable:403`. This proves a source-verification failure from that runner environment. It does **not** by itself prove the municipal page is globally unavailable or establish why the municipality returned 403. No retry or source substitution was attempted after the first causal failure.
+
+A read-only preflight before the attempt had resolved the official municipal Colectivos page and its current `Cuándo Pasa` reference. A read-only production recheck after the failure still returned `V8.0.0`, build `4549acc`, `auth=false`; `/api/auth/session` remained `enabled=false`, `authenticated=false`, `persistent_account=false`, `trip_history_persisted=false`.
+
+### ORDER-048 exact-head gates before candidate attempt
+
+```text
+CONTROL_PLANE_RELEASE_POLICY_RUN=32481702020;SUCCESS
+CONTROL_PLANE_EXACT_HEAD_RUN=32481701934;SUCCESS
+CONTROL_PLANE_PR_VALIDATE_RUN=32481701942;SUCCESS
+CONTROL_PLANE_UNIT_TESTS=217_PASS;0_FAIL
+CONTROL_PLANE_BROWSER=112_PASS;0_FAIL;44_SKIP
+CONTROL_PLANE_TYPECHECK=PASS;0_ERRORS;0_WARNINGS
+CONTROL_PLANE_LINT=PASS
+CONTROL_PLANE_BUILD=PASS
+CONTROL_PLANE_BUDGET=PASS
+CONTROL_PLANE_WRANGLER_DRY_RUN=PASS
+SENTINEL_RELEASE_POLICY_RUN=32482256751;SUCCESS
+SENTINEL_EXACT_HEAD_RUN=32482256734;SUCCESS
+SENTINEL_PR_VALIDATE_RUN=32482256738;SUCCESS
+SENTINEL_EXACT_HEAD_CI_GATE=GREEN
+RUNNER_D1_MUTATION_PATH=ABSENT
+```
+
+The ORDER-048 workflow intentionally waited until all three workflows for exact candidate source `3dcb3e63ad80c9fd8a201176c8ea18a51a86ad66` were SUCCESS before entering its operational step. The runner contains no `wrangler d1`, migration-apply or D1-execute path. The failure occurred during the runner's source-freshness check before candidate-config dry-run, version upload or split deployment.
+
+### ORDER-048 failure evidence
+
+```text
+FAILURE_EVIDENCE_ARTIFACT_ID=9446641822
+FAILURE_EVIDENCE_ARTIFACT_NAME=voy-order48-final-candidate-32482253921
+FAILURE_EVIDENCE_ARTIFACT_BYTES=17738
+FAILURE_EVIDENCE_ARTIFACT_SHA256=15472e0af5c8730512b6b1d37eaae8aba997b073aa5d16e8090155e44d5698e1
+FAILURE_EVIDENCE_MANIFEST_SHA256=f12bc23a91c83201c4cfd698447eda3102b10d3ba606c25152d71116b93f5713
+MUNICIPAL_SOURCE_BEFORE_FILE_SHA256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EXACT_HEAD_CI_FILE_SHA256=37705a48b06f672dbee2b2e74962fbca9d763735821de3c893a7db99b51a978e
+RUNNER_SAFETY_FILE_SHA256=a6f66e13e0574fec032fde2389fdd96da82391d85fe3f60f6b7dffb9c7ecdc96
+LOCKFILE_SHA256=e189a028c40e1462cfb7c9e758872d2c4ff89a2d756a2a957634bbe012324ec8
+```
+
+The empty `municipal-source-before.json` is expected evidence of the immediate thrown HTTP 403: stdout redirection created the file before the verifier failed. The immutable artifact was uploaded by the workflow's `always()` evidence path after the failure.
 
 ## ORDER-046 — terminal production and merge state
 
@@ -68,7 +146,7 @@ CORE_WITHOUT_LOGIN_VOICE_AI=true
 PWA=true
 ```
 
-Final pre-closure read-only production verification returned `V8.0.0`, build `4549acc`, `national_territory=true` and auth disabled. `/api/auth/session` remained `enabled=false`, `authenticated=false`, `persistent_account=false`, `trip_history_persisted=false`.
+Post-failure read-only production verification returned `V8.0.0`, build `4549acc`, `national_territory=true` and auth disabled. `/api/auth/session` remained `enabled=false`, `authenticated=false`, `persistent_account=false`, `trip_history_persisted=false`.
 
 ## Release execution evidence
 
@@ -180,14 +258,17 @@ Detailed ORDER-046 implementation, candidate, release, audit, merge and closure 
 ## Next step
 
 ```text
-ORDER46_IMPLEMENTATION=COMPLETE
-ORDER46_CANDIDATE_AUD=PASS
-ORDER46_PRODUCTION_RELEASE=COMPLETE
-ORDER46_POST_PRODUCTION_AUD=PASS
-ORDER46_MERGE=COMPLETE
-ORDER46_TERMINAL_RECONCILIATION=COMPLETE
-ISSUE46_STATE=CLOSED_COMPLETED
-NEXT=NONE
+ORDER48_IMPLEMENTATION=COMPLETE
+ORDER48_CONTROL_PLANE=COMPLETE
+ORDER48_CANDIDATE_ATTEMPT_1=FAILED_BEFORE_CLOUDFLARE_WRITE
+ORDER48_FIRST_CAUSAL_FAILURE=official_handoff_unreachable:403
+ORDER48_RETRY_AUTHORIZED=NO_PENDING_INDEPENDENT_AUD
+ORDER48_AUD_REQUIRED=YES
+NEXT=INDEPENDENT_AUD_REVIEW_FIRST_REAL_FAILURE
 GOOGLE_AUTH_ENABLED=NO
+D1_WRITE_EXECUTED=NO
+PERSISTENT_DATA_MUTATION_EXECUTED=NO
+MERGE_AUTHORIZED=NO
+PRODUCTION_PROMOTION_AUTHORIZED=NO
 ISSUE_39=DO_NOT_START_IN_THIS_BLOCK
 ```
