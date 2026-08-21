@@ -26,6 +26,7 @@ function fail(code, details = {}) {
     source_attestation_path: 'config/source-attestations/santa-fe-official-transit-handoff.json',
     checked_at: checkedAt(),
     stale: true,
+    stale_substitution: false,
     ...details
   });
   process.stderr.write(`${code}\n`);
@@ -106,6 +107,7 @@ if (
             transit_surface: true,
             current_information_reference: true,
             stale: false,
+            stale_substitution: false,
             age_hours: Number(ageHours.toFixed(3)),
             max_age_hours: maxAgeHours,
             checked_at: checkedAt()
