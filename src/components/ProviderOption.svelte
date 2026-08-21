@@ -7,6 +7,7 @@
   $: unavailableLabel = option.price.kind === 'unavailable' ? option.price.label : null;
   $: priceLabel = option.price.kind === 'regulated_estimate' ? `≈ ${formatArs(option.price.value)}` : null;
   $: actionable = option.available && option.external;
+  $: handoffActionable = Boolean(option.handoff);
   $: hasMeta = Boolean(priceLabel) || (option.available && option.etaMin !== null && option.etaMin > 0);
 </script>
 {#if actionable}
@@ -20,6 +21,12 @@
       <strong>{option.name}</strong>
       <small>{option.detail}</small>
       {#if unavailableLabel}<span class="provider-unavailable-state">{unavailableLabel}</span>{/if}
+      {#if handoffActionable && option.handoff}
+        <span class="provider-handoff-trust" data-testid={`provider-${option.id}-handoff-source`}>Información externa · {option.handoff.authority}</span>
+        <button type="button" class="provider-handoff" on:click={() => onChoose(option)} data-testid={`provider-${option.id}-handoff`} aria-label={`${option.handoff.label} en ${option.handoff.authority}`}>
+          {option.handoff.label} <span aria-hidden="true">↗</span>
+        </button>
+      {/if}
     </span>
     {#if hasMeta}<span class="provider-meta">{#if priceLabel}<strong>{priceLabel}</strong>{/if}{#if option.available && option.etaMin !== null && option.etaMin > 0}<small>{option.etaMin} min</small>{/if}</span>{/if}
   </article>
@@ -37,7 +44,8 @@
     min-width: 0;
   }
 
-  .provider-unavailable-state {
+  .provider-unavailable-state,
+  .provider-handoff-trust {
     display: block;
     margin-top: 4px;
     color: var(--voy-muted);
@@ -48,5 +56,31 @@
     white-space: normal;
     overflow-wrap: normal;
     word-break: normal;
+  }
+
+  .provider-handoff-trust {
+    margin-top: 10px;
+  }
+
+  .provider-handoff {
+    min-height: 44px;
+    margin-top: 8px;
+    padding: 0 12px;
+    border: 1px solid var(--voy-border);
+    border-radius: var(--voy-radius-button);
+    background: transparent;
+    color: var(--voy-ink);
+    font: inherit;
+    font-weight: var(--voy-weight-label);
+    cursor: pointer;
+  }
+
+  .provider-handoff:hover {
+    background: var(--voy-surface-2);
+  }
+
+  .provider-handoff:focus-visible {
+    outline: 3px solid var(--voy-focus);
+    outline-offset: 2px;
   }
 </style>
