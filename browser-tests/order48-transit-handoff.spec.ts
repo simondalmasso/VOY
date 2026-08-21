@@ -38,6 +38,10 @@ async function plan(page: Page): Promise<void> {
   await bus.scrollIntoViewIfNeeded();
   await bus.click();
   await expect(bus).toHaveAttribute('aria-pressed', 'true');
+  const sheet = page.getByTestId('trip-sheet');
+  await expect(sheet).toHaveAttribute('data-snap', 'peek');
+  await page.getByTestId('sheet-handle').click();
+  await expect(sheet).toHaveAttribute('data-snap', 'half');
   await expect(page.getByTestId('provider-bus')).toBeVisible();
 }
 
@@ -54,6 +58,7 @@ test('ORDER-048 Santa Fe bus stays unavailable but offers a confirmed no-data of
   await expect(page.getByTestId('trip-sheet')).not.toContainText(/(?:Línea|Lin\.)\s*\d/i);
 
   const handoff = page.getByTestId('provider-bus-handoff');
+  await handoff.scrollIntoViewIfNeeded();
   await expect(handoff).toBeVisible();
   await expect(page.getByTestId('provider-bus-handoff-source')).toContainText('Municipalidad de Santa Fe');
   const box = await handoff.boundingBox();
@@ -70,6 +75,7 @@ test('ORDER-048 Santa Fe bus stays unavailable but offers a confirmed no-data of
 
   await confirmation.getByRole('button', { name: 'Cancelar' }).click();
   await expect(confirmation).toHaveCount(0);
+  await handoff.scrollIntoViewIfNeeded();
   await handoff.click();
   await confirmation.getByRole('button', { name: 'Continuar' }).click();
   await page.waitForURL('https://santafeciudad.gov.ar/**');
