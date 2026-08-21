@@ -106,19 +106,16 @@ test('manual origin is hidden initially, opens explicitly, and Escape/Back resto
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
   await expect(page.getByTestId('origin-apply')).toHaveCount(0);
   await expect(trigger).toBeVisible();
-
   await trigger.click();
   await expect(page.getByTestId('origin-input')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
   await expect(trigger).toBeFocused();
-
   await trigger.click();
   await expect(page.getByTestId('origin-input')).toBeFocused();
   await page.evaluate(() => history.back());
   await expect(page.getByTestId('origin-input')).toHaveCount(0);
   await expect(trigger).toBeFocused();
-
   await trigger.click();
   const input = page.getByTestId('origin-input');
   await input.fill('Origen map-first');
@@ -165,13 +162,19 @@ test('decision sheet snaps progressively and map camera does not recenter during
   const beforeDrag = await cameraFitCount(page);
   const box = await handle.boundingBox();
   if (!box) throw new Error('sheet_handle_missing');
-  await page.mouse.move(box.x + box.width/2, box.y + box.height/2);
+  const x = box.x + box.width/2;
+  const y = box.y + box.height/2;
+  await page.mouse.move(x, y);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width/2, box.y - 24, { steps: 4 });
+  await page.mouse.move(x, y - 24, { steps: 4 });
   await page.waitForTimeout(100);
   expect(await cameraFitCount(page)).toBe(beforeDrag);
-  await page.mouse.move(box.x + box.width/2, box.y - 60, { steps: 4 });
+  await page.mouse.move(x, y - 40);
+  await page.waitForTimeout(12);
+  await page.mouse.move(x, y - 130);
+  await page.waitForTimeout(6);
   await page.mouse.up();
+  await expect(sheet).toHaveAttribute('data-release-mode','momentum');
   await expect(sheet).toHaveAttribute('data-snap','expanded');
   await page.waitForTimeout(280);
   expect(await cameraFitCount(page)).toBeLessThanOrEqual(beforeDrag + 1);
