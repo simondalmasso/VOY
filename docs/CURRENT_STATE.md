@@ -11,12 +11,14 @@ REPOSITORY_WORKLOG=docs/CURRENT_STATE.md
 RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
 ORDER=46
 ISSUE=46
+ISSUE46_STATE=CLOSED_COMPLETED
 PR=47
 ORDER46_STATUS=TERMINAL_COMPLETE
 AUD_TERMINAL_CANDIDATE_PASS=5367382043
 ARQ_PRODUCTION_AUTHORIZATION=5367456917
 AUD_POST_PRODUCTION_PASS=5367927644
 ARQ_MERGE_AUTHORIZATION=5368067280
+ARQ_TERMINAL_CLOSURE_COMMENT=5368264473
 GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO
 DRIVE=LEGACY_READ_ONLY
 NEW_DRIVE_WRITES=NO
@@ -44,7 +46,7 @@ BUS_ACTIVATION=OFF
 MOBILITY_DATABASE_ROLE=DISCOVERY_ONLY
 ```
 
-PR #47 was merged only after independent post-production AUD PASS and a separate exact-head ARQ merge authorization. The merge did not deploy a new Worker version, change Cloudflare traffic, activate Google auth, mutate DNS/secrets/cron, or add persistent account/history behavior.
+PR #47 was merged only after independent post-production AUD PASS and a separate exact-head ARQ merge authorization. Issue #46 was closed as completed only after post-merge validation and the terminal worklog gate were green. The merge and closure did not deploy a new Worker version, change Cloudflare traffic, activate Google auth, mutate DNS/secrets/cron, or add persistent account/history behavior.
 
 ## Productive runtime
 
@@ -66,7 +68,7 @@ CORE_WITHOUT_LOGIN_VOICE_AI=true
 PWA=true
 ```
 
-Fresh post-merge read-only production verification continued to return `V8.0.0`, build `4549acc`, `national_territory=true` and auth disabled. `/api/auth/session` remained `enabled=false`, `authenticated=false`, `persistent_account=false`, `trip_history_persisted=false`.
+Final pre-closure read-only production verification returned `V8.0.0`, build `4549acc`, `national_territory=true` and auth disabled. `/api/auth/session` remained `enabled=false`, `authenticated=false`, `persistent_account=false`, `trip_history_persisted=false`.
 
 ## Release execution evidence
 
@@ -132,7 +134,7 @@ CANDIDATE_EVIDENCE_MANIFEST_SHA256=d521d1688ca298e8c4a8969e092e3efd27d5ac4ca411b
 
 Promotion reused the exact audited candidate Worker version; no replacement production build was generated.
 
-## GitHub post-merge reconciliation
+## GitHub post-merge and closure reconciliation
 
 ```text
 MAIN_MERGE_SHA=59098f70a73a61216ed4bedaa12df801c48a79b2
@@ -150,9 +152,12 @@ POST_MERGE_EVIDENCE_ARTIFACT_ID=9441621570
 POST_MERGE_EVIDENCE_ARTIFACT_NAME=main-validation-32467933515
 POST_MERGE_EVIDENCE_ARTIFACT_BYTES=1541726
 POST_MERGE_EVIDENCE_ARTIFACT_SHA256=b0a661e41d1d0883dd850ff6a3d412d4e52a253b3acff9623f892e97de562625
+TERMINAL_PRE_CLOSE_DOCS_SHA=95d4cc0bac842c165b48b66d6bf5a7190a235dd2
+TERMINAL_PRE_CLOSE_RELEASE_POLICY_RUN=32468737113;SUCCESS
+TERMINAL_PRE_CLOSE_MAIN_VALIDATION_RUN=32468737158;SUCCESS
 ```
 
-The post-merge main workflow is non-mutating: it validated source/build locally and inspected production read-only. Its Wrangler operation was dry-run only and showed `GOOGLE_AUTH_ENABLED="false"`.
+The main workflows are non-mutating: they validate source/build locally and inspect production read-only. Their Wrangler operation is dry-run only and shows `GOOGLE_AUTH_ENABLED="false"`.
 
 ## Permanent mobility and safety invariants
 
@@ -170,7 +175,7 @@ The post-merge main workflow is non-mutating: it validated source/build locally 
 
 Before ORDER-046, production source `796c9355cc22a2e197ee719a15b506b5a3cb22b3` ran as Worker version `002c464c-15fa-42f3-a762-0214a1dc5cf3`. Its evidence remains in workflow `VOY Map-First Production Finalize V4` run `31651286356`, Issue #36 and `docs/MAP_FIRST_PRODUCTION_RECONCILIATION_20260812.md`.
 
-Detailed ORDER-046 implementation, candidate, release and audit evidence remains preserved in PR #47, Issue #46, Git history and GitHub Actions artifacts.
+Detailed ORDER-046 implementation, candidate, release, audit, merge and closure evidence remains preserved in PR #47, closed Issue #46, Git history and GitHub Actions artifacts.
 
 ## Next step
 
@@ -181,7 +186,8 @@ ORDER46_PRODUCTION_RELEASE=COMPLETE
 ORDER46_POST_PRODUCTION_AUD=PASS
 ORDER46_MERGE=COMPLETE
 ORDER46_TERMINAL_RECONCILIATION=COMPLETE
-NEXT=ORDER46_CLOSE_ISSUE_AFTER_THIS_DOCS_COMMIT_CHECKS_GREEN
+ISSUE46_STATE=CLOSED_COMPLETED
+NEXT=NONE
 GOOGLE_AUTH_ENABLED=NO
 ISSUE_39=DO_NOT_START_IN_THIS_BLOCK
 ```
