@@ -5,6 +5,7 @@
   import type { RouteResult } from '../features/trip/trip.types';
   import { nextCollapsedSnap, nextExpandedSnap, type SheetSnap } from '../app/interaction';
   import { prefersReducedMotion } from '../lib/motion';
+  import { decideSheetRelease, type SheetMotionSample } from '../lib/sheetPhysics';
   import ProviderOption from './ProviderOption.svelte';
 
   export let route: RouteResult | null;
@@ -16,12 +17,9 @@
 
   const months = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
   const DRAG_CLICK_THRESHOLD = 8;
-  const FLICK_THRESHOLD_PX_MS = 0.35;
-  const MOMENTUM_HORIZON_MS = 180;
   const SPRING_STIFFNESS = 430;
   const SPRING_CRITICAL_DAMPING = 41.5;
   const SPRING_MOMENTUM_DAMPING = 33.2;
-  const FLICK_STALE_MS = 100;
 
   let sheetElement: HTMLElement;
   let dragging = false;
@@ -33,7 +31,7 @@
   let dragDistance = 0;
   let motionState: 'idle' | 'dragging' | 'settling' | 'keyboard' = 'idle';
   let releaseMode: 'none' | 'direct' | 'momentum' = 'none';
-  let samples: Array<{ y: number; time: number }> = [];
+  let samples: SheetMotionSample[] = [];
   let animationFrame: number | null = null;
 
   onDestroy(() => {
@@ -101,33 +99,6 @@
     samples = samples.filter(sample => sample.time >= cutoff).slice(-8);
   }
 
-  function releaseVelocity(releaseTime: number): number {
-    if (samples.length < 2) return 0;
-    const last = samples[samples.length - 1];
-    if (!last || releaseTime - last.time > FLICK_STALE_MS) return 0;
-    let first = samples[samples.length - 2];
-    if (!first) return 0;
-    for (let index = samples.length - 2; index >= 0; index -= 1) {
-      const candidate = samples[index];
-      if (!candidate) continue;
-      if (last.time - candidate.time > 70) break;
-      first = candidate;
-      if (last.time - candidate.time >= 16) break;
-    }
-    const elapsed = last.time - first.time;
-    return elapsed > 0 ? (last.y - first.y) / elapsed : 0;
-  }
-
-  function nearestSnap(projectedY: number): SheetSnap {
-    const targets = snapTargets();
-    const snaps: SheetSnap[] = ['expanded', 'half', 'peek'];
-    let best: SheetSnap = 'expanded';
-    for (const candidate of snaps) {
-      if (Math.abs(targets[candidate] - projectedY) < Math.abs(targets[best] - projectedY)) best = candidate;
-    }
-    return best;
-  }
-
   function cancelSpring(): void {
     if (animationFrame !== null) { cancelAnimationFrame(animationFrame); animationFrame = null; }
   }
@@ -192,7 +163,6 @@
     const handle = event.currentTarget as HTMLElement;
     if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
     const moved = Math.abs(dragDistance);
-    const velocity = cancelled ? 0 : releaseVelocity(event.timeStamp);
     dragging = false;
     activePointerId = null;
     if (moved < DRAG_CLICK_THRESHOLD && !cancelled) {
@@ -200,15 +170,15 @@
       sheetElement.style.transform = '';
       return;
     }
+
     suppressClick = true;
-    const momentum = Math.abs(velocity) >= FLICK_THRESHOLD_PX_MS;
-    releaseMode = momentum ? 'momentum' : 'direct';
-    const projectedY = dragCurrentY + velocity * MOMENTUM_HORIZON_MS;
-    const targetSnap = nearestSnap(projectedY);
-    const targetY = snapTargets()[targetSnap];
+    const targets = snapTargets();
+    const decision = decideSheetRelease({ currentY: dragCurrentY, samples, releaseTime: event.timeStamp, targets, cancelled });
+    releaseMode = decision.momentum ? 'momentum' : 'direct';
+    const targetY = targets[decision.targetSnap];
     motionState = 'settling';
-    onSnapChange(targetSnap);
-    springTo(targetY, velocity, momentum);
+    onSnapChange(decision.targetSnap);
+    springTo(targetY, decision.velocityPxMs, decision.momentum);
   }
 
   function keyboardSnap(target: SheetSnap | null): void {
