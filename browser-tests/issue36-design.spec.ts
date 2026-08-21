@@ -97,11 +97,14 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   expect(values['--voy-font-sans']).toContain('system-ui');
   expect(values['--voy-border-default']).toContain('solid');
   const motion = values['--voy-motion-fast'] ?? '';
+  const easeOut = values['--voy-ease-out'] ?? '';
+  const easeInOut = values['--voy-ease-in-out'] ?? '';
+  const easeDrawer = values['--voy-ease-drawer'] ?? '';
   const motionMs = motion.endsWith('ms') ? parseFloat(motion) : motion.endsWith('s') ? parseFloat(motion) * 1000 : Number.NaN;
   expect(motionMs).toBeCloseTo(160, 3);
-  expect(values['--voy-ease-out'].replace(/\s+/g, '')).toBe('cubic-bezier(0.23,1,0.32,1)');
-  expect(values['--voy-ease-in-out'].replace(/\s+/g, '')).toBe('cubic-bezier(0.77,0,0.175,1)');
-  expect(values['--voy-ease-drawer'].replace(/\s+/g, '')).toBe('cubic-bezier(0.32,0.72,0,1)');
+  expect(easeOut.replace(/\s+/g, '')).toBe('cubic-bezier(0.23,1,0.32,1)');
+  expect(easeInOut.replace(/\s+/g, '')).toBe('cubic-bezier(0.77,0,0.175,1)');
+  expect(easeDrawer.replace(/\s+/g, '')).toBe('cubic-bezier(0.32,0.72,0,1)');
   expect(values['--voy-motion-press']).toBe('160ms');
   expect(values['--voy-motion-popover']).toBe('180ms');
   expect(values['--voy-motion-modal']).toBe('250ms');
