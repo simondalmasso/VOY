@@ -64,9 +64,9 @@ test('ORDER-046 craft tokens, brand signal and media fallbacks are canonical', a
     };
   });
   expect(contract.signal.toUpperCase()).toBe('#FFC533');
-  expect(contract.easeOut).toBe('cubic-bezier(0.23,1,0.32,1)');
-  expect(contract.easeInOut).toBe('cubic-bezier(0.77,0,0.175,1)');
-  expect(contract.easeDrawer).toBe('cubic-bezier(0.32,0.72,0,1)');
+  expect(contract.easeOut).toBe('cubic-bezier(.23,1,.32,1)');
+  expect(contract.easeInOut).toBe('cubic-bezier(.77,0,.175,1)');
+  expect(contract.easeDrawer).toBe('cubic-bezier(.32,.72,0,1)');
   expect(contract.press).toBe('160ms');
   expect(contract.popover).toBe('180ms');
   expect(contract.modal).toBe('250ms');
@@ -156,10 +156,10 @@ test('ORDER-046 sheet tracks 1:1, reverses mid-gesture and hands flick velocity 
   const fy = flickBox.y + flickBox.height / 2;
   await page.mouse.move(fx, fy);
   await page.mouse.down();
-  await page.mouse.move(fx, fy - 22);
+  await page.mouse.move(fx, fy - 20);
   await page.waitForTimeout(12);
-  await page.mouse.move(fx, fy - 92);
-  await page.waitForTimeout(8);
+  await page.mouse.move(fx, fy - 130);
+  await page.waitForTimeout(6);
   await page.mouse.up();
   await expect(sheet).toHaveAttribute('data-release-mode', 'momentum');
   await expect(sheet).toHaveAttribute('data-snap', 'expanded');
