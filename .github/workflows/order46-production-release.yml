@@ -1,0 +1,176 @@
+name: VOY ORDER-046 Production Release
+
+on:
+  push:
+    branches:
+      - ops/order-046-production-release-20260821
+    paths:
+      - .order46-production-release-ready
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-order46-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      WORKER_NAME: voy-app
+      WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+      CANDIDATE_SOURCE_SHA: 4549acc6e9523e53a740d12ff118917622183c3e
+      CANDIDATE_SHORT_SHA: 4549acc
+      CANDIDATE_VERSION_ID: 5489843d-db43-4779-83fb-309b5a2dec7e
+      STABLE_VERSION_ID: 002c464c-15fa-42f3-a762-0214a1dc5cf3
+      EXPECTED_STABLE_VERSION: V8.0.0
+      EXPECTED_STABLE_HASH: 796c935
+      EXPECTED_CANDIDATE_VERSION: V8.0.0
+      EXPECTED_MAIN_SHA: 224403d8729eee6ffcb4fe1b6d183ac40526853c
+      EXPECTED_FEATURE_HEAD: 81b294dd1a3de78baeffa36b89308d0d80866d36
+      ARQ_AUTH_COMMENT: '5367456917'
+      AUD_PASS_COMMENT: '5367382043'
+      EVIDENCE_DIR: test-results/order46-production-release
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout exact release control commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fail-closed authorization and lineage preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat .order46-production-release-ready)" = 'ORDER46_PRODUCTION_RELEASE_5367456917_5489843d'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git ls-remote origin refs/heads/ops/order-046-production-release-20260821 | awk '{print $1}')" = "$GITHUB_SHA"
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main refs/heads/feat/order-046-serious-product:refs/remotes/origin/feat/order-046-serious-product
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_MAIN_SHA"
+          test "$(git rev-parse refs/remotes/origin/feat/order-046-serious-product)" = "$EXPECTED_FEATURE_HEAD"
+          git merge-base --is-ancestor "$CANDIDATE_SOURCE_SHA" refs/remotes/origin/feat/order-046-serious-product
+          test -z "$(git diff --name-only "$CANDIDATE_SOURCE_SHA"..refs/remotes/origin/feat/order-046-serious-product | grep -Ev '^(docs/CURRENT_STATE\.md|$)' || true)"
+          curl -fsS --retry 3 https://api.github.com/repos/simonkey888/VOY/pulls/47 > pr47-entry.json
+          node - <<'NODE'
+          const fs=require('node:fs'); const pr=JSON.parse(fs.readFileSync('pr47-entry.json','utf8'));
+          if(pr.state!=='open'||pr.draft!==true||pr.merged===true||pr.head?.sha!==process.env.EXPECTED_FEATURE_HEAD||pr.base?.sha!==process.env.EXPECTED_MAIN_SHA) throw new Error('pr47_release_preflight_drift');
+          NODE
+          bash -n scripts/order46-production-release.sh
+          printf '%s\n' \
+            "ROLE=EJE" \
+            "ORDER=46" \
+            "AUD_TERMINAL_PASS=$AUD_PASS_COMMENT" \
+            "ARQ_RELEASE_AUTHORIZATION=$ARQ_AUTH_COMMENT" \
+            'PRODUCTION_PROMOTION_AUTHORIZED=YES' \
+            'ROLLBACK_AUTHORIZED=YES;MAX_ATTEMPTS=1' \
+            'MERGE_AUTHORIZED=NO' \
+            'GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO' \
+            "CANDIDATE_SOURCE_SHA=$CANDIDATE_SOURCE_SHA" \
+            "CANDIDATE_VERSION_ID=$CANDIDATE_VERSION_ID" \
+            "STABLE_VERSION_ID=$STABLE_VERSION_ID" \
+            > control-authority.txt
+
+      - name: Checkout immutable audited product source
+        uses: actions/checkout@v4
+        with:
+          ref: 4549acc6e9523e53a740d12ff118917622183c3e
+          path: source
+          fetch-depth: 0
+
+      - name: Install pinned frozen release toolchain
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Fresh immutable source safety gate
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SOURCE_SHA"
+          node scripts/verify-release-policy.mjs
+          git diff --check
+          bun run typecheck
+          bun run lint
+          bun run test
+          BUILD_HASH="$CANDIDATE_SHORT_SHA" VOY_METRICS_PATH="$EVIDENCE_DIR/preflight-build-metrics.json" bun run build
+          VOY_METRICS_PATH="$EVIDENCE_DIR/preflight-build-metrics.json" bun run budget
+          node - <<'NODE'
+          const fs=require('node:fs'); const c=JSON.parse(fs.readFileSync('dist/voy_app/wrangler.json','utf8'));
+          if(c.vars?.GOOGLE_AUTH_ENABLED!=='false') throw new Error('google_auth_flag_drift');
+          if(!Array.isArray(c.d1_databases)||!c.d1_databases.some(x=>x.binding==='DB'&&x.database_name==='voy-auth')) throw new Error('d1_binding_drift');
+          NODE
+          wrangler deploy --config dist/voy_app/wrangler.json --dry-run --minify
+
+      - name: Promote and verify with bounded rollback
+        shell: bash
+        env:
+          SOURCE_DIR: source
+          EVIDENCE_DIR: test-results/order46-production-release
+        run: bash scripts/order46-production-release.sh
+
+      - name: Build immutable release evidence manifest
+        if: always()
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          cp ../control-authority.txt "$EVIDENCE_DIR/control-authority.txt" || true
+          cp ../pr47-entry.json "$EVIDENCE_DIR/pr47-entry.json" || true
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload ORDER-046 production evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-order46-production-release-${{ github.run_id }}
+          path: source/test-results/order46-production-release
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          overwrite: false
+          compression-level: 6
+
+      - name: Release summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## VOY ORDER-046 production release'
+            echo
+            echo "- Audited source: $CANDIDATE_SOURCE_SHA"
+            echo "- Candidate Worker version: $CANDIDATE_VERSION_ID"
+            echo "- Previous stable: $STABLE_VERSION_ID"
+            echo "- ARQ authorization: Issue #46 comment $ARQ_AUTH_COMMENT"
+            echo '- Merge: not authorized in this block'
+            echo '- Google auth activation: not authorized'
+            if [[ -f source/$EVIDENCE_DIR/entry-state.txt ]]; then
+              echo '```text'
+              cat source/$EVIDENCE_DIR/entry-state.txt
+              echo '```'
+            fi
+            if [[ -f source/$EVIDENCE_DIR/production-final-state.json ]]; then
+              echo '```json'
+              cat source/$EVIDENCE_DIR/production-final-state.json
+              echo '```'
+            fi
+            if [[ -f source/$EVIDENCE_DIR/rollback.log ]]; then
+              echo '```text'
+              cat source/$EVIDENCE_DIR/rollback.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
