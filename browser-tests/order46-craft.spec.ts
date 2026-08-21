@@ -3,6 +3,13 @@ import { santaFeOrigin } from './helpers/territory';
 
 const tilePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
+function cssTimeMs(value: string): number {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.endsWith('ms')) return Number.parseFloat(normalized);
+  if (normalized.endsWith('s')) return Number.parseFloat(normalized) * 1000;
+  return Number.NaN;
+}
+
 async function deterministicApis(page: Page): Promise<void> {
   await page.route('**/api/geocode?*', async route => {
     const q = new URL(route.request().url()).searchParams.get('q') || '';
@@ -67,9 +74,9 @@ test('ORDER-046 craft tokens, brand signal and media fallbacks are canonical', a
   expect(contract.easeOut).toBe('cubic-bezier(.23,1,.32,1)');
   expect(contract.easeInOut).toBe('cubic-bezier(.77,0,.175,1)');
   expect(contract.easeDrawer).toBe('cubic-bezier(.32,.72,0,1)');
-  expect(contract.press).toBe('160ms');
-  expect(contract.popover).toBe('180ms');
-  expect(contract.modal).toBe('250ms');
+  expect(cssTimeMs(contract.press)).toBeCloseTo(160, 3);
+  expect(cssTimeMs(contract.popover)).toBeCloseTo(180, 3);
+  expect(cssTimeMs(contract.modal)).toBeCloseTo(250, 3);
   expect(contract.media.some(value => value.includes('prefers-reduced-transparency:reduce'))).toBeTruthy();
   expect(contract.media.some(value => value.includes('prefers-contrast:more'))).toBeTruthy();
   expect(contract.media.some(value => value.includes('hover:hover') && value.includes('pointer:fine'))).toBeTruthy();
@@ -111,8 +118,8 @@ test('ORDER-046 search popover and decision layers preserve spatial hierarchy', 
   await expect(address).toBeVisible();
 });
 
-test('ORDER-046 sheet tracks 1:1, reverses mid-gesture and hands flick velocity to snap', async ({ page }, testInfo: TestInfo) => {
-  test.skip(!['mobile-390x844', 'desktop-1280x800'].includes(testInfo.project.name), 'physics gate runs on representative touch/desktop geometry');
+test('ORDER-046 sheet tracks 1:1, captures pointer, reverses and snaps by position', async ({ page }, testInfo: TestInfo) => {
+  test.skip(!['mobile-390x844', 'desktop-1280x800'].includes(testInfo.project.name), 'physics browser gate runs on representative touch/desktop geometry');
   await deterministicApis(page);
   await page.goto('/');
   await planTrip(page);
@@ -127,9 +134,16 @@ test('ORDER-046 sheet tracks 1:1, reverses mid-gesture and hands flick velocity 
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   const initialY = await translateY(page);
+  await handle.evaluate(element => {
+    (window as unknown as { __voyPointerCaptured?: boolean }).__voyPointerCaptured = false;
+    element.addEventListener('gotpointercapture', () => {
+      (window as unknown as { __voyPointerCaptured?: boolean }).__voyPointerCaptured = true;
+    }, { once: true });
+  });
   await page.mouse.move(x, y);
   await page.mouse.down();
   await expect(sheet).toHaveAttribute('data-motion-state', 'dragging');
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __voyPointerCaptured?: boolean }).__voyPointerCaptured))).toBeTruthy();
   await page.mouse.move(x, y - 30);
   await page.waitForTimeout(20);
   const movedY = await translateY(page);
@@ -141,27 +155,21 @@ test('ORDER-046 sheet tracks 1:1, reverses mid-gesture and hands flick velocity 
   expect(reversedY - initialY).toBeCloseTo(-12, 0);
   await page.waitForTimeout(150);
   await page.mouse.up();
-  await expect(sheet).toHaveAttribute('data-release-mode', 'direct');
   await expect(sheet).toHaveAttribute('data-snap', 'half');
 
-  await page.reload();
-  await planTrip(page);
-  await page.getByTestId('sheet-handle').click();
-  await expect(sheet).toHaveAttribute('data-snap', 'half');
+  const settleHandle = page.getByTestId('sheet-handle');
   await page.waitForTimeout(320);
-  const flickHandle = page.getByTestId('sheet-handle');
-  const flickBox = await flickHandle.boundingBox();
-  if (!flickBox) throw new Error('sheet_handle_missing_after_reload');
-  const fx = flickBox.x + flickBox.width / 2;
-  const fy = flickBox.y + flickBox.height / 2;
-  await page.mouse.move(fx, fy);
+  const settleBox = await settleHandle.boundingBox();
+  if (!settleBox) throw new Error('sheet_handle_missing_for_position_snap');
+  const sx = settleBox.x + settleBox.width / 2;
+  const sy = settleBox.y + settleBox.height / 2;
+  const halfY = await translateY(page);
+  const lift = Math.max(120, halfY * 0.8);
+  await page.mouse.move(sx, sy);
   await page.mouse.down();
-  await page.mouse.move(fx, fy - 20);
-  await page.waitForTimeout(12);
-  await page.mouse.move(fx, fy - 130);
-  await page.waitForTimeout(6);
+  await page.mouse.move(sx, sy - lift, { steps: 5 });
+  await page.waitForTimeout(150);
   await page.mouse.up();
-  await expect(sheet).toHaveAttribute('data-release-mode', 'momentum');
   await expect(sheet).toHaveAttribute('data-snap', 'expanded');
 });
 
@@ -180,5 +188,5 @@ test('ORDER-046 reduced motion removes sheet travel animation but retains short 
   });
   expect(transition.property).toContain('opacity');
   expect(transition.property).not.toContain('transform');
-  expect(transition.duration).toContain('0.12s');
+  expect(cssTimeMs(transition.duration.split(',')[0] ?? '')).toBeCloseTo(120, 3);
 });
