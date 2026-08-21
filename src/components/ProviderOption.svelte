@@ -15,7 +15,7 @@
     <span class="provider-action">Abrir <span aria-hidden="true">↗</span></span>
   </button>
 {:else}
-  <article class="provider provider-info" class:disabled={!option.available} class:provider-unavailable={unavailable} data-testid={`provider-${option.id}`} data-price-kind={option.price.kind} data-disabled={!option.available ? 'true' : 'false'} aria-label={unavailableLabel ? `${option.name}: ${unavailableLabel}` : priceLabel ? `${option.name}: ${priceLabel}` : option.name}>
+  <article role="listitem" class="provider provider-info" class:disabled={!option.available} class:provider-unavailable={unavailable} data-testid={`provider-${option.id}`} data-price-kind={option.price.kind} data-disabled={!option.available ? 'true' : 'false'} aria-label={unavailableLabel ? `${option.name}: ${unavailableLabel}` : priceLabel ? `${option.name}: ${priceLabel}` : option.name}>
     <span class="provider-main">
       <strong>{option.name}</strong>
       <small>{option.detail}</small>
