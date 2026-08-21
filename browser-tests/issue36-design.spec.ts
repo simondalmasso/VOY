@@ -86,6 +86,7 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   const required = [
     '--voy-canvas', '--voy-font-sans', '--voy-weight-label', '--voy-type-body', '--voy-leading-copy', '--voy-tracking-label',
     '--voy-space-4', '--voy-radius-md', '--voy-border-default', '--voy-shadow', '--voy-motion-fast', '--voy-ease-standard',
+    '--voy-ease-out', '--voy-ease-in-out', '--voy-ease-drawer', '--voy-motion-press', '--voy-motion-popover', '--voy-motion-modal',
     '--voy-z-sheet', '--voy-content-max', '--voy-control-m'
   ];
   const values = await page.evaluate(names => {
@@ -98,6 +99,12 @@ test('Issue36 mandatory design-system token contract is complete', async ({ page
   const motion = values['--voy-motion-fast'] ?? '';
   const motionMs = motion.endsWith('ms') ? parseFloat(motion) : motion.endsWith('s') ? parseFloat(motion) * 1000 : Number.NaN;
   expect(motionMs).toBeCloseTo(160, 3);
+  expect(values['--voy-ease-out'].replace(/\s+/g, '')).toBe('cubic-bezier(0.23,1,0.32,1)');
+  expect(values['--voy-ease-in-out'].replace(/\s+/g, '')).toBe('cubic-bezier(0.77,0,0.175,1)');
+  expect(values['--voy-ease-drawer'].replace(/\s+/g, '')).toBe('cubic-bezier(0.32,0.72,0,1)');
+  expect(values['--voy-motion-press']).toBe('160ms');
+  expect(values['--voy-motion-popover']).toBe('180ms');
+  expect(values['--voy-motion-modal']).toBe('250ms');
 });
 
 test('Issue36 theme choice is explicit, persistent and preserves the no-account path', async ({ page }) => {
@@ -110,7 +117,7 @@ test('Issue36 theme choice is explicit, persistent and preserves the no-account 
   await toggle.click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const signal = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--voy-signal').trim());
-  expect(signal.toUpperCase()).toBe('#FF6847');
+  expect(signal.toUpperCase()).toBe('#FFC533');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByTestId('destination-input')).toBeVisible();
