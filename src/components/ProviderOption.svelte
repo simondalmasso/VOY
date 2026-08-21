@@ -8,23 +8,14 @@
   $: priceLabel = option.price.kind === 'regulated_estimate' ? `≈ ${formatArs(option.price.value)}` : null;
   $: actionable = option.available && option.external;
   $: hasMeta = Boolean(priceLabel) || (option.available && option.etaMin !== null && option.etaMin > 0);
-
-  function syncAriaDisabled(node: HTMLElement, disabled: boolean) {
-    const sync = (value: boolean) => {
-      if (value) node.setAttribute('aria-disabled', 'true');
-      else node.removeAttribute('aria-disabled');
-    };
-    sync(disabled);
-    return { update: sync };
-  }
 </script>
 {#if actionable}
-  <button type="button" class="provider provider-actionable" on:click={() => onChoose(option)} data-testid={`provider-${option.id}`} data-price-kind={option.price.kind} aria-label={`Abrir ${option.name} con confirmación`}>
+  <button type="button" class="provider provider-actionable" on:click={() => onChoose(option)} data-testid={`provider-${option.id}`} data-price-kind={option.price.kind} data-disabled="false" aria-label={`Abrir ${option.name} con confirmación`}>
     <span class="provider-main"><strong>{option.name}</strong><small>{option.detail}</small></span>
     <span class="provider-action">Abrir <span aria-hidden="true">↗</span></span>
   </button>
 {:else}
-  <article role="listitem" class="provider provider-info" class:disabled={!option.available} class:provider-unavailable={unavailable} data-testid={`provider-${option.id}`} data-price-kind={option.price.kind} use:syncAriaDisabled={!option.available} aria-label={unavailableLabel ? `${option.name}: ${unavailableLabel}` : priceLabel ? `${option.name}: ${priceLabel}` : option.name}>
+  <article class="provider provider-info" class:disabled={!option.available} class:provider-unavailable={unavailable} data-testid={`provider-${option.id}`} data-price-kind={option.price.kind} data-disabled={!option.available ? 'true' : 'false'} aria-label={unavailableLabel ? `${option.name}: ${unavailableLabel}` : priceLabel ? `${option.name}: ${priceLabel}` : option.name}>
     <span class="provider-main">
       <strong>{option.name}</strong>
       <small>{option.detail}</small>
