@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "source_id": "santa_fe_official_transit_handoff",
+  "url": "https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/",
+  "authority": "Municipalidad de Santa Fe",
+  "surface": "Colectivos",
+  "current_information_reference": "Cuándo Pasa",
+  "verified_at": "2026-08-21",
+  "evidence_ref": "https://github.com/simonkey888/VOY/issues/48#issuecomment-5371598113",
+  "evidence_comment_id": 5371598113,
+  "verification_method": "independent_aud_primary_source_check",
+  "claims": {
+    "official_municipal_surface": true,
+    "colectivos_present": true,
+    "cuando_pasa_present": true
+  }
+}
