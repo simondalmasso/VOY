@@ -45,7 +45,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/order-048-official-transit-handoff | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V4'
+          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V5'
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           git diff --check
@@ -53,10 +53,15 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-head.txt"
           cat > "$EVIDENCE_DIR/authority-workflow.txt" <<'EOF'
           ORDER=48
-          CANDIDATE_ATTEMPT=4
-          PRIOR_CANDIDATE_V3=32497318770;SUCCESS
+          CANDIDATE_ATTEMPT=5
+          PRIOR_CANDIDATE_V3=32497318770;SUCCESS_BUT_SUPERSEDED_BY_AUD_CONTROL_FIX
+          PRIOR_CANDIDATE_V4=32582651050;FAILURE
+          PRIOR_V4_VERSION=b110897f-7359-40f4-a144-211eeb215fbb;0_PERCENT
+          PRIOR_V4_DEPLOYMENT=c754dac2-6474-485e-923a-fd2307e52090
+          PRIOR_V4_CAUSE=CANDIDATE_API_HARNESS_CAMELCASE_MISMATCH
           AUD_CONTROL_FIX_DIRECTIVE=5381139446
-          NEW_ATTEMPT_REASON=REFRESHABLE_SOURCE_ATTESTATION_CONTROL_FIX
+          RECOVERY_AUTHORITY=RECOVERABLE_CONSTRUCTION_FAILURE_NO_HUMAN_GATE
+          NEW_ATTEMPT_REASON=CAUSAL_CANDIDATE_API_HARNESS_FIX
           CANDIDATE_0_PERCENT_ONLY=YES
           LIVE_MUNICIPAL_FETCH_AUTHORIZED=NO
           PRODUCTION_PROMOTION_AUTHORIZED=NO
@@ -84,6 +89,7 @@ jobs:
           bash -n scripts/run-order48-candidate.sh
           node --check scripts/verify-santa-fe-transit-handoff.mjs
           node --check scripts/verify-order48-control-only-refresh.mjs
+          node --check scripts/svelte-candidate-api-gate.mjs
           if grep -Eiq 'wrangler[[:space:]]+d1|migrations[[:space:]]+apply|d1[[:space:]]+execute' scripts/run-order48-candidate.sh; then
             echo 'ORDER-048 runner contains a forbidden D1 mutation command' >&2
             exit 1
@@ -92,6 +98,11 @@ jobs:
             echo 'ORDER-048 source-attestation verifier contains a forbidden live-network path' >&2
             exit 1
           fi
+          if grep -Fq "territory?.province_id==='14'" scripts/svelte-candidate-api-gate.mjs; then
+            echo 'ORDER-048 candidate API gate contains stale snake_case territory contract' >&2
+            exit 1
+          fi
+          grep -Fq "territory?.provinceId==='14'" scripts/svelte-candidate-api-gate.mjs
           git diff --quiet b33fd3c864904c839b3d223871201c492a9d89c0..HEAD -- package.json bun.lock || {
             echo 'ORDER-048 correction unexpectedly changed dependency metadata' >&2
             exit 1
@@ -102,6 +113,7 @@ jobs:
           printf '%s\n' 'MUNICIPAL_VERIFIER_LIVE_NETWORK_PATH=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED_V2' >> "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'CONTROL_ONLY_REFRESH_GUARD=PASS' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CANDIDATE_API_TERRITORY_CONTRACT=CAMELCASE_PASS' >> "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'DEPENDENCY_METADATA_DRIFT=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
 
       - name: Require fresh exact-head GitHub GREEN before Cloudflare write
@@ -206,8 +218,9 @@ jobs:
             echo '## VOY ORDER-048 — exact-head candidate 0%'
             echo
             echo "- Exact source SHA: $GITHUB_SHA"
-            echo '- Candidate attempt: 4 (AUD-directed refreshable attestation correction)'
+            echo '- Candidate attempt: 5 (causal recovery from candidate API harness contract mismatch)'
             echo '- AUD directive: Issue #48 comment 5381139446'
+            echo '- Prior V4 failure remains preserved; no blind retry'
             echo '- Municipal live fetch in hosted CI: forbidden'
             echo '- Source freshness gate: schema-v2 persisted current attestation, fail-closed'
             echo '- Future control-only refresh guard: exact attestation/docs allowlist'
