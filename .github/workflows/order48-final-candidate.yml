@@ -45,7 +45,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/order-048-official-transit-handoff | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V5'
+          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V6'
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           git diff --check
@@ -53,15 +53,23 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-head.txt"
           cat > "$EVIDENCE_DIR/authority-workflow.txt" <<'EOF'
           ORDER=48
-          CANDIDATE_ATTEMPT=5
+          CANDIDATE_ATTEMPT=6
           PRIOR_CANDIDATE_V3=32497318770;SUCCESS_BUT_SUPERSEDED_BY_AUD_CONTROL_FIX
           PRIOR_CANDIDATE_V4=32582651050;FAILURE
-          PRIOR_V4_VERSION=b110897f-7359-40f4-a144-211eeb215fbb;0_PERCENT
-          PRIOR_V4_DEPLOYMENT=c754dac2-6474-485e-923a-fd2307e52090
-          PRIOR_V4_CAUSE=CANDIDATE_API_HARNESS_CAMELCASE_MISMATCH
-          AUD_CONTROL_FIX_DIRECTIVE=5381139446
-          RECOVERY_AUTHORITY=RECOVERABLE_CONSTRUCTION_FAILURE_NO_HUMAN_GATE
-          NEW_ATTEMPT_REASON=CAUSAL_CANDIDATE_API_HARNESS_FIX
+          PRIOR_CANDIDATE_V5=32583842655;FAILURE
+          PRIOR_V5_VERSION=7c669ff0-d64a-4571-8304-6db1e84308cb;0_PERCENT
+          PRIOR_V5_DEPLOYMENT=5b7f7a69-6601-4247-b7fc-d8e0422e020a
+          PRIOR_V5_CAUSE=GEOREF_ORIGIN_BAD_GATEWAY
+          V5_RAW_DIAGNOSTIC_RUN=32597236549;SUCCESS
+          V5_RAW_DIAGNOSTIC_ARTIFACT=9481881496
+          V5_RAW_DIAGNOSTIC_ZIP_SHA256=833bd9d180e723378f90e7a53b04ee816a7b35efd503f84f895c6ab330490fb7
+          V5_WORKER_CORDOBA=5_OF_5_HTTP_503_TERRITORY_UPSTREAM_UNAVAILABLE
+          GEOREF_DIRECT_GET=HTTP_502_ORIGIN_BAD_GATEWAY
+          GEOREF_DIRECT_POST=HTTP_502_ORIGIN_BAD_GATEWAY
+          GEOREF_RETRYABLE=YES;RETRY_AFTER_SECONDS=60
+          AUD_V5_DIRECTIVE=5382403987
+          ARQ_RECOVERY_AUTHORIZATION=5382467077
+          NEW_ATTEMPT_REASON=BOUNDED_UPSTREAM_BACKOFF_AND_RAW_CAUSAL_OBSERVABILITY
           CANDIDATE_0_PERCENT_ONLY=YES
           LIVE_MUNICIPAL_FETCH_AUTHORIZED=NO
           PRODUCTION_PROMOTION_AUTHORIZED=NO
@@ -98,11 +106,11 @@ jobs:
             echo 'ORDER-048 source-attestation verifier contains a forbidden live-network path' >&2
             exit 1
           fi
-          if grep -Fq "territory?.province_id==='14'" scripts/svelte-candidate-api-gate.mjs; then
-            echo 'ORDER-048 candidate API gate contains stale snake_case territory contract' >&2
-            exit 1
-          fi
-          grep -Fq "territory?.provinceId==='14'" scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'territory-cordoba-attempts.json' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'UPSTREAM_RETRY_MS = 60_000' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'MAX_UPSTREAM_ATTEMPTS = 6' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'territory_upstream_unavailable_after_retry' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'territory_province_id_failed' scripts/svelte-candidate-api-gate.mjs
           git diff --quiet b33fd3c864904c839b3d223871201c492a9d89c0..HEAD -- package.json bun.lock || {
             echo 'ORDER-048 correction unexpectedly changed dependency metadata' >&2
             exit 1
@@ -113,7 +121,8 @@ jobs:
           printf '%s\n' 'MUNICIPAL_VERIFIER_LIVE_NETWORK_PATH=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED_V2' >> "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'CONTROL_ONLY_REFRESH_GUARD=PASS' >> "$EVIDENCE_DIR/runner-safety.txt"
-          printf '%s\n' 'CANDIDATE_API_TERRITORY_CONTRACT=CAMELCASE_PASS' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CANDIDATE_API_TERRITORY_OBSERVABILITY=BOUNDED_NO_HEADERS_NO_COOKIES' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CANDIDATE_API_GEOREF_BACKOFF=6_ATTEMPTS_60_SECONDS_FAIL_CLOSED' >> "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'DEPENDENCY_METADATA_DRIFT=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
 
       - name: Require fresh exact-head GitHub GREEN before Cloudflare write
@@ -176,6 +185,7 @@ jobs:
           const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
           const final=JSON.parse(fs.readFileSync(`${e}/final-state.json`,'utf8'));
           const api=JSON.parse(fs.readFileSync(`${e}/api-gate.json`,'utf8'));
+          const cordoba=JSON.parse(fs.readFileSync(`${e}/territory-cordoba-attempts.json`,'utf8'));
           const bindings=JSON.parse(fs.readFileSync(`${e}/binding-contract.json`,'utf8'));
           const source=JSON.parse(fs.readFileSync(`${e}/municipal-source-final.json`,'utf8'));
           const contract=JSON.parse(fs.readFileSync(`${e}/order48-zero-traffic-contract.json`,'utf8'));
@@ -187,6 +197,9 @@ jobs:
           if(!final.candidate_version_id||Number(final.candidate_traffic)!==0)throw new Error('candidate_not_zero_traffic');
           if(final.production_promoted===true||final.rollback_executed===true)throw new Error('unexpected_production_mutation');
           if(api.result!=='PASS'||api.auth?.enabled!==false||api.health?.features?.auth!==false)throw new Error('candidate_api_truth_failed');
+          if(cordoba.result!=='CAPTURED'||cordoba.target_version_id!==final.candidate_version_id||!Array.isArray(cordoba.attempts)||cordoba.attempts.length<1||cordoba.attempts.length>6)throw new Error('cordoba_attempt_evidence_invalid');
+          if(!cordoba.attempts.some(a=>a.http_status===200&&a.ok===true&&a.provinceId==='14'&&a.provinceIsoId==='AR-X'&&a.coverageKey==='_default'))throw new Error('cordoba_real_success_missing');
+          if(cordoba.attempts.some(a=>'headers' in a||'cookie' in a||'raw_text' in a))throw new Error('cordoba_evidence_privacy_violation');
           if(bindings.result!=='PASS'||bindings.d1_write!==false||bindings.d1_migration!==false||bindings.additions.length||bindings.removals.length)throw new Error('binding_or_d1_contract_failed');
           if(source.result!=='PASS'||source.schema_version!==2||source.target!=='https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/'||source.authority!=='Municipalidad de Santa Fe'||source.verifier!=='persisted_source_attestation'||source.live_network_request!==false||typeof source.verified_at_utc!=='string'||source.evidence?.kind!=='github_issue_comment'||source.evidence?.repository!=='simonkey888/VOY'||source.evidence?.issue!==48||source.evidence?.url!==expectedEvidenceUrl||source.transit_surface!==true||source.current_information_reference!==true||source.stale!==false||source.stale_substitution!==false)throw new Error('municipal_source_attestation_failed');
           if(contract.result!=='PASS'||contract.persistent_data_mutation!==false)throw new Error('order48_terminal_contract_failed');
@@ -218,12 +231,13 @@ jobs:
             echo '## VOY ORDER-048 — exact-head candidate 0%'
             echo
             echo "- Exact source SHA: $GITHUB_SHA"
-            echo '- Candidate attempt: 5 (causal recovery from candidate API harness contract mismatch)'
-            echo '- AUD directive: Issue #48 comment 5381139446'
-            echo '- Prior V4 failure remains preserved; no blind retry'
+            echo '- Candidate attempt: 6 (causal recovery from externally proven GeoRef origin outage)'
+            echo '- AUD directive: Issue #48 comment 5382403987'
+            echo '- ARQ recovery authorization: Issue #48 comment 5382467077'
+            echo '- V5 raw diagnostic: run 32597236549 / artifact 9481881496'
+            echo '- Candidate territory proof still requires real exact 200; upstream outage is never treated as PASS'
             echo '- Municipal live fetch in hosted CI: forbidden'
             echo '- Source freshness gate: schema-v2 persisted current attestation, fail-closed'
-            echo '- Future control-only refresh guard: exact attestation/docs allowlist'
             echo "- Stable expected: $EXPECTED_STABLE_VERSION_ID at 100%"
             echo '- Candidate target: 0% traffic only'
             echo '- Google auth activation: forbidden/off'
