@@ -15,6 +15,7 @@
       "coordinatorAlarmPagination.test.js",
       "dataProvenanceCompletion.test.js",
       "nominatimCoordinator.test.js",
+      "order48SourceAttestation.test.js",
       "productionReleaseGuard.test.js",
       "releasePolicy.test.js",
       "securityBoundary.test.js",

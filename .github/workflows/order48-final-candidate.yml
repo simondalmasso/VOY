@@ -1,0 +1,252 @@
+name: VOY ORDER-048 Final Candidate 0
+
+on:
+  push:
+    branches:
+      - feat/order-048-official-transit-handoff
+    paths:
+      - .order48-candidate-ready
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: voy-order48-final-candidate
+  cancel-in-progress: false
+
+env:
+  WORKER_NAME: voy-app
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+  EXPECTED_STABLE_VERSION: V8.0.0
+  EXPECTED_STABLE_HASH: 4549acc
+  EXPECTED_STABLE_VERSION_ID: 5489843d-db43-4779-83fb-309b5a2dec7e
+  EXPECTED_CANDIDATE_VERSION: V8.0.0
+  CONVERGENCE_INTERVAL_MS: '7000'
+  EVIDENCE_DIR: test-results/order48-final-candidate
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact ORDER-048 head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Gate exact head and candidate-only authority
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          remote_head="$(git ls-remote origin refs/heads/feat/order-048-official-transit-handoff | awk '{print $1}')"
+          test "$remote_head" = "$GITHUB_SHA"
+          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V6'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          git diff --check
+          mkdir -p "$EVIDENCE_DIR"
+          printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-head.txt"
+          cat > "$EVIDENCE_DIR/authority-workflow.txt" <<'EOF'
+          ORDER=48
+          CANDIDATE_ATTEMPT=6
+          PRIOR_CANDIDATE_V3=32497318770;SUCCESS_BUT_SUPERSEDED_BY_AUD_CONTROL_FIX
+          PRIOR_CANDIDATE_V4=32582651050;FAILURE
+          PRIOR_CANDIDATE_V5=32583842655;FAILURE
+          PRIOR_V5_VERSION=7c669ff0-d64a-4571-8304-6db1e84308cb;0_PERCENT
+          PRIOR_V5_DEPLOYMENT=5b7f7a69-6601-4247-b7fc-d8e0422e020a
+          PRIOR_V5_CAUSE=GEOREF_ORIGIN_BAD_GATEWAY
+          V5_RAW_DIAGNOSTIC_RUN=32597236549;SUCCESS
+          V5_RAW_DIAGNOSTIC_ARTIFACT=9481881496
+          V5_RAW_DIAGNOSTIC_ZIP_SHA256=833bd9d180e723378f90e7a53b04ee816a7b35efd503f84f895c6ab330490fb7
+          V5_WORKER_CORDOBA=5_OF_5_HTTP_503_TERRITORY_UPSTREAM_UNAVAILABLE
+          GEOREF_DIRECT_GET=HTTP_502_ORIGIN_BAD_GATEWAY
+          GEOREF_DIRECT_POST=HTTP_502_ORIGIN_BAD_GATEWAY
+          GEOREF_RETRYABLE=YES;RETRY_AFTER_SECONDS=60
+          AUD_V5_DIRECTIVE=5382403987
+          ARQ_RECOVERY_AUTHORIZATION=5382467077
+          NEW_ATTEMPT_REASON=BOUNDED_UPSTREAM_BACKOFF_AND_RAW_CAUSAL_OBSERVABILITY
+          CANDIDATE_0_PERCENT_ONLY=YES
+          LIVE_MUNICIPAL_FETCH_AUTHORIZED=NO
+          PRODUCTION_PROMOTION_AUTHORIZED=NO
+          MERGE_AUTHORIZED=NO
+          GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO
+          D1_WRITE_AUTHORIZED=NO
+          D1_MIGRATION_AUTHORIZED=NO
+          PERSISTENT_DATA_MUTATION_AUTHORIZED=NO
+          EOF
+
+      - name: Install pinned frozen candidate toolchain
+        run: |
+          set -euo pipefail
+          npm install --global bun@1.3.14 wrangler@4.112.0
+          test "$(bun --version)" = '1.3.14'
+          test "$(wrangler --version | awk '{print $1}')" = '4.112.0'
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+          bunx playwright install --with-deps chromium
+
+      - name: Prove ORDER-048 runner and refresh controls are safe
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-policy.mjs
+          bash -n scripts/run-order48-candidate.sh
+          node --check scripts/verify-santa-fe-transit-handoff.mjs
+          node --check scripts/verify-order48-control-only-refresh.mjs
+          node --check scripts/svelte-candidate-api-gate.mjs
+          if grep -Eiq 'wrangler[[:space:]]+d1|migrations[[:space:]]+apply|d1[[:space:]]+execute' scripts/run-order48-candidate.sh; then
+            echo 'ORDER-048 runner contains a forbidden D1 mutation command' >&2
+            exit 1
+          fi
+          if grep -Eiq '@playwright|chromium|page\.goto|fetch\(|https?\.request|axios|user-agent|extraHTTPHeaders|proxy:' scripts/verify-santa-fe-transit-handoff.mjs; then
+            echo 'ORDER-048 source-attestation verifier contains a forbidden live-network path' >&2
+            exit 1
+          fi
+          grep -Fq 'territory-cordoba-attempts.json' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'UPSTREAM_RETRY_MS = 60_000' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'MAX_UPSTREAM_ATTEMPTS = 6' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'territory_upstream_unavailable_after_retry' scripts/svelte-candidate-api-gate.mjs
+          grep -Fq 'territory_province_id_failed' scripts/svelte-candidate-api-gate.mjs
+          git diff --quiet b33fd3c864904c839b3d223871201c492a9d89c0..HEAD -- package.json bun.lock || {
+            echo 'ORDER-048 correction unexpectedly changed dependency metadata' >&2
+            exit 1
+          }
+          node scripts/verify-order48-control-only-refresh.mjs --static-only > "$EVIDENCE_DIR/control-only-static-guard.json"
+          test -f config/source-attestations/santa-fe-official-transit-handoff.json
+          printf '%s\n' 'RUNNER_D1_MUTATION_PATH=ABSENT' > "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'MUNICIPAL_VERIFIER_LIVE_NETWORK_PATH=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED_V2' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CONTROL_ONLY_REFRESH_GUARD=PASS' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CANDIDATE_API_TERRITORY_OBSERVABILITY=BOUNDED_NO_HEADERS_NO_COOKIES' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CANDIDATE_API_GEOREF_BACKOFF=6_ATTEMPTS_60_SECONDS_FAIL_CLOSED' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'DEPENDENCY_METADATA_DRIFT=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
+
+      - name: Require fresh exact-head GitHub GREEN before Cloudflare write
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          required=(
+            'Validate VOY pull request'
+            'VOY ORDER-046 Exact-Head Validation'
+            'Release policy guard'
+          )
+          complete=0
+          for attempt in $(seq 1 120); do
+            payload="$(gh api -H 'Accept: application/vnd.github+json' "/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")"
+            pending=0
+            for workflow in "${required[@]}"; do
+              row="$(jq -c --arg name "$workflow" '[.workflow_runs[] | select(.name==$name)] | sort_by(.run_number) | last // empty' <<<"$payload")"
+              if [[ -z "$row" ]]; then
+                pending=1
+                echo "waiting: $workflow not visible yet"
+                continue
+              fi
+              status="$(jq -r '.status' <<<"$row")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"$row")"
+              run_id="$(jq -r '.id' <<<"$row")"
+              echo "$workflow run=$run_id status=$status conclusion=$conclusion"
+              if [[ "$status" == 'completed' && "$conclusion" != 'success' ]]; then
+                echo "required exact-head workflow failed: $workflow run=$run_id conclusion=$conclusion" >&2
+                exit 1
+              fi
+              if [[ "$status" != 'completed' || "$conclusion" != 'success' ]]; then pending=1; fi
+            done
+            if [[ "$pending" -eq 0 ]]; then complete=1; break; fi
+            sleep 15
+          done
+          test "$complete" -eq 1
+          printf '%s\n' 'EXACT_HEAD_REQUIRED_WORKFLOWS=GREEN' > "$EVIDENCE_DIR/exact-head-ci.txt"
+          printf '%s\n' "$GITHUB_SHA" >> "$EVIDENCE_DIR/exact-head-ci.txt"
+
+      - name: Require current persisted municipal source attestation
+        run: |
+          set -euo pipefail
+          node scripts/verify-santa-fe-transit-handoff.mjs > "$EVIDENCE_DIR/source-attestation-prewrite.json"
+          cat "$EVIDENCE_DIR/source-attestation-prewrite.json"
+
+      - name: Validate exact head and create verified zero-traffic candidate
+        run: bash scripts/run-order48-candidate.sh
+
+      - name: Recheck persisted source attestation after runtime browser and tail
+        run: |
+          set -euo pipefail
+          node scripts/verify-santa-fe-transit-handoff.mjs > "$EVIDENCE_DIR/municipal-source-final.json"
+          cat "$EVIDENCE_DIR/municipal-source-final.json"
+
+      - name: Verify terminal ORDER-048 candidate contract
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('node:fs'); const e=process.env.EVIDENCE_DIR;
+          const final=JSON.parse(fs.readFileSync(`${e}/final-state.json`,'utf8'));
+          const api=JSON.parse(fs.readFileSync(`${e}/api-gate.json`,'utf8'));
+          const cordoba=JSON.parse(fs.readFileSync(`${e}/territory-cordoba-attempts.json`,'utf8'));
+          const bindings=JSON.parse(fs.readFileSync(`${e}/binding-contract.json`,'utf8'));
+          const source=JSON.parse(fs.readFileSync(`${e}/municipal-source-final.json`,'utf8'));
+          const contract=JSON.parse(fs.readFileSync(`${e}/order48-zero-traffic-contract.json`,'utf8'));
+          const expectedEvidenceUrl = source.evidence && Number.isSafeInteger(source.evidence.comment_id)
+            ? `https://github.com/simonkey888/VOY/issues/48#issuecomment-${source.evidence.comment_id}`
+            : '';
+          if(final.result!=='PASS'||final.exact_source_sha!==process.env.GITHUB_SHA)throw new Error('candidate_final_state_not_pass');
+          if(final.stable_version_id!==process.env.EXPECTED_STABLE_VERSION_ID||Number(final.stable_traffic)!==100)throw new Error('stable_runtime_changed');
+          if(!final.candidate_version_id||Number(final.candidate_traffic)!==0)throw new Error('candidate_not_zero_traffic');
+          if(final.production_promoted===true||final.rollback_executed===true)throw new Error('unexpected_production_mutation');
+          if(api.result!=='PASS'||api.auth?.enabled!==false||api.health?.features?.auth!==false)throw new Error('candidate_api_truth_failed');
+          if(cordoba.result!=='CAPTURED'||cordoba.target_version_id!==final.candidate_version_id||!Array.isArray(cordoba.attempts)||cordoba.attempts.length<1||cordoba.attempts.length>6)throw new Error('cordoba_attempt_evidence_invalid');
+          if(!cordoba.attempts.some(a=>a.http_status===200&&a.ok===true&&a.provinceId==='14'&&a.provinceIsoId==='AR-X'&&a.coverageKey==='_default'))throw new Error('cordoba_real_success_missing');
+          if(cordoba.attempts.some(a=>'headers' in a||'cookie' in a||'raw_text' in a))throw new Error('cordoba_evidence_privacy_violation');
+          if(bindings.result!=='PASS'||bindings.d1_write!==false||bindings.d1_migration!==false||bindings.additions.length||bindings.removals.length)throw new Error('binding_or_d1_contract_failed');
+          if(source.result!=='PASS'||source.schema_version!==2||source.target!=='https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/'||source.authority!=='Municipalidad de Santa Fe'||source.verifier!=='persisted_source_attestation'||source.live_network_request!==false||typeof source.verified_at_utc!=='string'||source.evidence?.kind!=='github_issue_comment'||source.evidence?.repository!=='simonkey888/VOY'||source.evidence?.issue!==48||source.evidence?.url!==expectedEvidenceUrl||source.transit_surface!==true||source.current_information_reference!==true||source.stale!==false||source.stale_substitution!==false)throw new Error('municipal_source_attestation_failed');
+          if(contract.result!=='PASS'||contract.persistent_data_mutation!==false)throw new Error('order48_terminal_contract_failed');
+          NODE
+
+      - name: Rebuild immutable evidence manifest
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          find "$EVIDENCE_DIR" -type f ! -name manifest.sha256 ! -name digest.txt -print0 | sort -z | xargs -0 -r sha256sum > "$EVIDENCE_DIR/manifest.sha256"
+          sha256sum "$EVIDENCE_DIR/manifest.sha256" > "$EVIDENCE_DIR/digest.txt"
+
+      - name: Upload ORDER-048 candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voy-order48-final-candidate-${{ github.run_id }}
+          path: test-results/order48-final-candidate
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          compression-level: 6
+
+      - name: Candidate summary
+        if: always()
+        run: |
+          {
+            echo '## VOY ORDER-048 — exact-head candidate 0%'
+            echo
+            echo "- Exact source SHA: $GITHUB_SHA"
+            echo '- Candidate attempt: 6 (causal recovery from externally proven GeoRef origin outage)'
+            echo '- AUD directive: Issue #48 comment 5382403987'
+            echo '- ARQ recovery authorization: Issue #48 comment 5382467077'
+            echo '- V5 raw diagnostic: run 32597236549 / artifact 9481881496'
+            echo '- Candidate territory proof still requires real exact 200; upstream outage is never treated as PASS'
+            echo '- Municipal live fetch in hosted CI: forbidden'
+            echo '- Source freshness gate: schema-v2 persisted current attestation, fail-closed'
+            echo "- Stable expected: $EXPECTED_STABLE_VERSION_ID at 100%"
+            echo '- Candidate target: 0% traffic only'
+            echo '- Google auth activation: forbidden/off'
+            echo '- D1 writes/migrations: forbidden/absent'
+            echo '- Production promotion: not authorized'
+            echo '- Merge: not authorized'
+            if [ -f "$EVIDENCE_DIR/order48-zero-traffic-contract.json" ]; then
+              echo '```json'
+              cat "$EVIDENCE_DIR/order48-zero-traffic-contract.json"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
