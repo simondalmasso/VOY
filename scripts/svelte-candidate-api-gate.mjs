@@ -12,7 +12,7 @@ const auth=await json('/api/auth/session');
 if (auth.response.status!==200 || auth.body.enabled!==false || auth.body.authenticated!==false || auth.body.trip_history_persisted!==false || auth.response.headers.get('set-cookie')) throw new Error('auth_safe_disabled_failed');
 const invalid=await json('/api/route',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
 if (invalid.response.status!==400 || invalid.body.error!=='invalid_route_request') throw new Error('route_invalid_gate_failed');
-const cordoba=await retryJson('/api/territory?lat=-31.4201&lon=-64.1888', value=>value?.response?.status===200&&value?.body?.territory?.province_id==='14');
+const cordoba=await retryJson('/api/territory?lat=-31.4201&lon=-64.1888', value=>value?.response?.status===200&&value?.body?.territory?.provinceId==='14');
 if (!cordoba || cordoba.response.status!==200 || cordoba.body.ok!==true || cordoba.body.territory?.provinceId!=='14' || cordoba.body.territory?.provinceIsoId!=='AR-X' || cordoba.body.territory?.coverageKey!=='_default') throw new Error('national_territory_gate_failed');
 const outside=await retryJson('/api/territory?lat=0&lon=0', value=>value?.response?.status===422);
 if (!outside || outside.response.status!==422 || outside.body.error!=='territory_unresolved') throw new Error('non_argentina_fail_closed_gate_failed');
