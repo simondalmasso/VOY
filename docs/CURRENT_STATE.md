@@ -12,44 +12,111 @@ RUNTIME_TRUTH=VERIFIED_PRODUCTION_AND_CLOUDFLARE_EFFECTIVE_STATE
 ORDER=48
 ISSUE=48
 PR=49
-ORDER48_STATUS=READY_FOR_INDEPENDENT_AUD
-ORDER48_SELECTION_COMMENT=5369044980
-ORDER48_AUD_CONTINUE_COMMENT=5369449833
-ORDER48_FIRST_FAILURE_CHECKPOINT=5369910050
-ORDER48_AUD_RETRY_AUTHORIZATION=5370333447
-ORDER48_AUD_ATTESTATION_AUTHORIZATION=5371598113
+SELECTION=SANTA_FE_OFFICIAL_TRANSIT_HANDOFF
+BRANCH=feat/order-048-official-transit-handoff
+BASE_MAIN_SHA=12e0fd006ed20d255496fbdcc883849038fe301f
+ORDER48_STATUS=BLOCKED_AT_INDEPENDENT_AUD_AFTER_V6_FIRST_REAL_FAILURE
+ORDER48_AUD_V5_TRIAGE_COMMENT=5382403987
+ORDER48_ARQ_RECOVERY_AUTHORIZATION=5382467077
 MERGE_AUTHORIZED=NO
 PRODUCTION_PROMOTION_AUTHORIZED=NO
 GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO
 D1_WRITE_AUTHORIZED=NO
 D1_MIGRATION_AUTHORIZED=NO
 PERSISTENT_DATA_MUTATION_AUTHORIZED=NO
-DRIVE=LEGACY_READ_ONLY
-NEW_DRIVE_WRITES=NO
 ```
 
-Production truth has priority over branch/document state. Candidate source, later documentation commits, Worker versions, deployments and traffic are intentionally recorded separately.
+Production truth has priority over branch/document state. Candidate runtime source and later evidence/docs-only commits are intentionally recorded separately.
 
-## ORDER-048 — successful zero-traffic candidate checkpoint
+## ORDER-048 V6 — first real failure / hard stop
 
 ```text
-SELECTION=SANTA_FE_OFFICIAL_TRANSIT_HANDOFF
-BRANCH=feat/order-048-official-transit-handoff
-PR49_STATE=OPEN_DRAFT_UNMERGED
-BASE_MAIN_SHA=12e0fd006ed20d255496fbdcc883849038fe301f
-CANDIDATE_EXACT_SOURCE_SHA=b33fd3c864904c839b3d223871201c492a9d89c0
-CANDIDATE_BUILD_HASH=b33fd3c
-CANDIDATE_WORKFLOW=VOY ORDER-048 Final Candidate 0
-CANDIDATE_RUN=32497318770;SUCCESS
-CANDIDATE_JOB=96818698145
-CANDIDATE_ATTEMPT=3
-CANDIDATE_VERSION_ID=1c04a69c-9608-4ccd-853d-8d3f436d9f7e
-CANDIDATE_VERSION_NUMBER=137
-ACTIVE_SPLIT_DEPLOYMENT_ID=10522621-0e22-48e3-8582-de36b1b30bb3
+V6_EXACT_RUNTIME_SOURCE_SHA=029c1ca586ff6b7e8c0808958e7a62da9f16c530
+V6_BUILD_HASH=029c1ca
+V6_WORKFLOW=VOY ORDER-048 Final Candidate 0
+V6_RUN=32597725253;FAILURE
+V6_JOB=97091209460
+V6_ATTEMPT=6
+FIRST_REAL_FAILURE=territory_upstream_unavailable_after_retry
+FIRST_REAL_FAILURE_STAGE=CANDIDATE_API_GATE_CORDOBA
+V7_AUTHORIZED=NO
+NEXT=INDEPENDENT_AUD_FAILURE_TRIAGE
+```
+
+The V6 runner passed all source, safety, exact-head, attestation, deterministic, build and local-browser gates, created a real zero-traffic candidate, converged assets/runtime, then failed closed because GeoRef remained unavailable through the complete bounded retry window. This failure is not converted into PASS and no further candidate attempt is authorized before independent AUD.
+
+## Proven external cause
+
+AUD comment `5382403987` required raw Córdoba observability against V5 before another candidate. The resulting read-only diagnosis established the causal chain without a new deploy:
+
+```text
+V5_VERSION_ID=7c669ff0-d64a-4571-8304-6db1e84308cb
+V5_DIAGNOSTIC_RUN=32597236549;SUCCESS
+V5_DIAGNOSTIC_ARTIFACT_ID=9481881496
+V5_DIAGNOSTIC_ZIP_SHA256=833bd9d180e723378f90e7a53b04ee816a7b35efd503f84f895c6ab330490fb7
+V5_HEALTH=200;V8.0.0;8a76a68
+V5_CORDOBA_ATTEMPTS=5_OF_5_HTTP_503
+V5_CORDOBA_ERROR=territory_upstream_unavailable
+GEOREF_DIRECT_GET=HTTP_502;origin_bad_gateway
+GEOREF_DIRECT_POST=HTTP_502;origin_bad_gateway
+GEOREF_ERROR_CATEGORY=origin
+GEOREF_RETRYABLE=true
+GEOREF_RETRY_AFTER_SECONDS=60
+```
+
+The same runner reached the official GeoRef endpoint directly with both GET and POST. Both returned Cloudflare `502 origin_bad_gateway`, proving the failure was external to VOY rather than a version-override mismatch, field-name mismatch, request method error or Worker-only egress problem.
+
+V6 therefore changed only the candidate verification harness: bounded raw attempt evidence, causal error classes and up to six 60-second waits for the externally advertised retry interval. Runtime territorial semantics were not weakened: a real Córdoba HTTP 200 with exact province identity remained mandatory.
+
+## V6 fresh exact-head gates
+
+```text
+V6_RELEASE_POLICY_RUN=32597727075;SUCCESS
+V6_EXACT_HEAD_RUN=32597726992;SUCCESS
+V6_PR_VALIDATE_RUN=32597727038;SUCCESS
+EXACT_HEAD_CI_GATE=GREEN
+TYPECHECK=PASS;0_ERRORS;0_WARNINGS
+LINT=PASS
+UNIT_TESTS=237_PASS;0_FAIL;595_EXPECTS;40_FILES
+LOCAL_BROWSER=112_PASS;0_FAIL;44_SKIP
+WRANGLER_DRY_RUN=PASS
+LOCKFILE_SHA256=e189a028c40e1462cfb7c9e758872d2c4ff89a2d756a2a957634bbe012324ec8
+BUILD_OUTPUT_SIZE_BYTES=1144056
+CRITICAL_JS_GZIP_BYTES=27469
+INITIAL_CSS_GZIP_BYTES=18944
+LAZY_MAP_GZIP_BYTES=217320
+LAZY_VOICE_GZIP_BYTES=19150
+```
+
+The Cloudflare write did not begin until all three required workflows for exact source `029c1ca...` were terminal SUCCESS and the persisted municipal source attestation passed.
+
+## V6 source attestation pre-write
+
+```text
+ATTESTATION_TARGET=https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/
+ATTESTATION_AUTHORITY=Municipalidad de Santa Fe
+ATTESTATION_SCHEMA_VERSION=2
+ATTESTATION_VERIFIER=persisted_source_attestation
+ATTESTATION_LIVE_NETWORK_REQUEST=false
+ATTESTATION_VERIFIED_AT_UTC=2026-08-22T15:23:03Z
+ATTESTATION_AUD_EVIDENCE_COMMENT=5381139446
+ATTESTATION_PREWRITE=PASS
+ATTESTATION_PREWRITE_AGE_HOURS=5.498
+ATTESTATION_MAX_AGE_HOURS=36
+STALE_SUBSTITUTION=false
+POST_RUNTIME_ATTESTATION=NOT_RUN_DUE_FIRST_REAL_FAILURE
+```
+
+## V6 candidate / effective Cloudflare state
+
+```text
+V6_CANDIDATE_VERSION_ID=ec043331-899d-41a5-8385-9a7d31c43b35
+V6_CANDIDATE_VERSION_NUMBER=140
+V6_CANDIDATE_TAG=voy-order48-029c1ca586ff
+V6_SPLIT_DEPLOYMENT_ID=ad2da01e-c4f8-4a9b-9a9c-23957f39929e
 STABLE_VERSION_ID=5489843d-db43-4779-83fb-309b5a2dec7e
 STABLE_TRAFFIC=100%
-CANDIDATE_TRAFFIC=0%
-PREVIOUS_PRODUCTION_DEPLOYMENT_ID=cd6ffedd-12db-4340-aacd-4333f91aa15b
+V6_CANDIDATE_TRAFFIC=0%
 PRODUCTION_PROMOTED=NO
 ROLLBACK_EXECUTED=NO
 MERGE_EXECUTED=NO
@@ -57,64 +124,6 @@ D1_WRITE_EXECUTED=NO
 D1_MIGRATION_EXECUTED=NO
 PERSISTENT_DATA_MUTATION_EXECUTED=NO
 GOOGLE_AUTH_ENABLED=NO
-```
-
-The successful candidate is the first ORDER-048 candidate created after the AUD-approved evidence-model architecture correction in Issue #48 comment `5371598113`. The two earlier HTTP 403 attempts remain historically preserved; the successful run did not reinterpret either 403 as PASS and performed no new live municipal fetch from hosted CI.
-
-## Source attestation gate
-
-```text
-ATTESTATION_TARGET=https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/
-ATTESTATION_AUTHORITY=Municipalidad de Santa Fe
-ATTESTATION_VERIFIED_AT=2026-08-21
-ATTESTATION_AUD_EVIDENCE_COMMENT=5371598113
-ATTESTATION_VERIFIER=persisted_source_attestation
-ATTESTATION_LIVE_NETWORK_REQUEST=false
-ATTESTATION_MAX_AGE_HOURS=36
-ATTESTATION_PREWRITE=PASS;AGE_HOURS=15.48
-ATTESTATION_POST_RUNTIME=PASS;AGE_HOURS=15.688
-STALE_SUBSTITUTION=false
-```
-
-The candidate runner validates the persisted attestation fail-closed: exact fixed URL, exact municipal authority, verification date, AUD evidence reference, current age and the fixed handoff target in code. Missing, changed or stale attestation fails. The verifier contains no Chromium/navigation/fetch/proxy/cookie/auth/bypass path.
-
-## Fresh exact-head gates for candidate source
-
-```text
-CANDIDATE_RELEASE_POLICY_RUN=32497324210;SUCCESS
-CANDIDATE_EXACT_HEAD_RUN=32497324252;SUCCESS
-CANDIDATE_PR_VALIDATE_RUN=32497324222;SUCCESS
-EXACT_HEAD_CI_GATE=GREEN
-TYPECHECK=PASS;0_ERRORS;0_WARNINGS
-LINT=PASS
-UNIT_TESTS=217_PASS;0_FAIL;522_EXPECTS;38_FILES
-LOCAL_BROWSER=112_PASS;0_FAIL;44_SKIP
-WRANGLER_DRY_RUN=PASS
-RUNNER_D1_MUTATION_PATH=ABSENT
-MUNICIPAL_VERIFIER_LIVE_NETWORK_PATH=ABSENT
-SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED
-```
-
-The candidate workflow waited for all three exact-source workflows to be terminal SUCCESS before the attestation pre-write gate and before the first Cloudflare write.
-
-## Candidate runtime / API / browser / map evidence
-
-```text
-CANDIDATE_RUNTIME=PASS
-CANDIDATE_HEALTH_VERSION=V8.0.0
-CANDIDATE_HEALTH_BUILD=b33fd3c
-CANDIDATE_AUTH_FEATURE=false
-CANDIDATE_AUTH_SESSION_ENABLED=false
-CANDIDATE_PERSISTENT_ACCOUNT=false
-CANDIDATE_TRIP_HISTORY_PERSISTED=false
-CANDIDATE_API_GATE=PASS
-CANDIDATE_BROWSER=118_PASS;0_FAIL;38_SKIP
-REAL_MAP_PIXEL_PROOF=PASS
-REAL_MAP_PROFILES_PASS=6
-ASSET_CONVERGENCE_ROUNDS=20
-ASSET_CONVERGENCE_DURATION_MS=210931
-ASSET_COUNT=44
-ASSET_PASS=44
 BINDING_CONTRACT=PASS
 STABLE_BINDING_COUNT=19
 CANDIDATE_BINDING_COUNT=19
@@ -122,78 +131,67 @@ BINDING_ADDITIONS=0
 BINDING_REMOVALS=0
 ```
 
-Real-map pixel proof passed on `mobile-360x800`, `mobile-360x780`, `mobile-390x844`, `mobile-412x915`, `mobile-430x932` and `desktop-1280x800`; each proof asserted non-flat basemap, visible route, origin marker and destination marker.
+V6 replaced the previous 0% candidate in the active split deployment but did not move productive traffic. The audited ORDER-046 stable version remains at 100%.
 
-Candidate API proof returned `V8.0.0`, build `b33fd3c`, `auth=false`, `national_territory=true`, no persistent account/history, a valid deterministic route response and a CSP-protected root without a session cookie.
-
-## Exact-version tail
+## V6 convergence and causal API evidence
 
 ```text
-TAIL_EXACT_VERSION_ID=1c04a69c-9608-4ccd-853d-8d3f436d9f7e
-TAIL_EXACT_VERSION_EVENTS=2380
-TAIL_OBSERVED_VERSION_IDS=1c04a69c-9608-4ccd-853d-8d3f436d9f7e
-TAIL_OK_OUTCOMES=2380
+ASSET_CONVERGENCE=PASS_BEFORE_API_FAILURE
+ASSET_CONVERGENCE_ROUNDS=20
+ASSET_CONVERGENCE_DURATION_MS=150170
+ASSET_COUNT=44
+ASSET_PASS=44
+STABLE_RUNTIME_OK=true
+CANDIDATE_RUNTIME_OK=true
+DEPLOYMENT_OK=true
+CORDOBA_RETRY_POLICY_MAX_ATTEMPTS=6
+CORDOBA_RETRY_POLICY_INTERVAL_MS=60000
+CORDOBA_ATTEMPTS=6
+CORDOBA_HTTP_503=6
+CORDOBA_ERROR=territory_upstream_unavailable
+CORDOBA_REAL_200_OBSERVED=NO
+API_GATE=FAIL_CLOSED
+API_GATE_CAUSAL_ERROR=territory_upstream_unavailable_after_retry
+CANDIDATE_BROWSER=NOT_RUN_AFTER_API_FAILURE
+REAL_MAP_PIXEL_PROOF=NOT_RUN_AFTER_API_FAILURE
+FINAL_RUNTIME_GATE=NOT_RUN_AFTER_API_FAILURE
+```
+
+Each persisted Córdoba attempt contains only bounded status/error/territory observations; it contains no cookies, auth headers or raw personal data. The gate never treats 502/503 or an unresolved province as success.
+
+## V6 partial exact-version tail evidence
+
+The exact-version tail started before the API gate and stopped when the first real failure terminated the operational block. It is valid partial failure evidence, not a terminal browser/runtime PASS.
+
+```text
+TAIL_SCOPE=PARTIAL_PRE_FAILURE
+TAIL_EXACT_VERSION_ID=ec043331-899d-41a5-8385-9a7d31c43b35
+TAIL_EXACT_VERSION_EVENTS=908
+TAIL_OBSERVED_VERSION_IDS=ec043331-899d-41a5-8385-9a7d31c43b35
+TAIL_OK_OUTCOMES=908
 TAIL_NON_OK_OUTCOMES=0
 TAIL_EXCEPTIONS=0
-TAIL_TRUNCATED_EVENTS=0
+TAIL_METHOD_GET=907
+TAIL_METHOD_POST=1
+TAIL_LOG_SHA256=2effaffdd90dca7b13b350fd9e68d9ad404aa08336336d8369995f582aa223e7
 ```
 
-The downloaded `candidate-tail.log` parses as exactly 2,380 JSON records; every record belongs to the candidate version, has `outcome=ok`, and contains no exception.
-
-## Assets, hashes and immutable candidate evidence
+## V6 immutable failure evidence
 
 ```text
-CANDIDATE_EVIDENCE_ARTIFACT_ID=9452709137
-CANDIDATE_EVIDENCE_ARTIFACT_NAME=voy-order48-final-candidate-32497318770
-CANDIDATE_EVIDENCE_ARTIFACT_BYTES=3868174
-CANDIDATE_EVIDENCE_ARTIFACT_SHA256=e9c2b30027d6aab0660e038923471e5f76d3fe9f56c88d481bfd81a416fe9251
-CANDIDATE_EVIDENCE_FILE_COUNT=111
-CANDIDATE_EVIDENCE_MANIFEST_SHA256=cfd80de23cc2110f44175779b0e5ea309de7f242b3f514b113d5a4d9ee5d126d
-LOCKFILE_SHA256=e189a028c40e1462cfb7c9e758872d2c4ff89a2d756a2a957634bbe012324ec8
-STATIC_MANIFEST_SHA256=eab2a724740ac6989be15ba756281613e39aee6a86c4281213a562188c9970ef
-TAIL_LOG_SHA256=60457ae354035cbf495bd34707e544b6576836fbce7842bbba874410568b9ec8
-FINAL_STATE_SHA256=ede263ffd3b6bc3fbc6031ff8a4b48a2bbaa0b94413321365b2e193c697b4566
-API_GATE_SHA256=bf4b33e9112e162baac1fad58b2a029f5dd5fb904d1dc44c61b6e71c0540b161
-BINDING_CONTRACT_SHA256=0c5b35f9cee23587ad94c5ab382df3f6d66c2bcaed2edb1b1cbbde7fbc12f51c
-ZERO_TRAFFIC_CONTRACT_SHA256=ba8d1ecca8dfc0fb0129edf3169d963d215b969f800159925cb80f9e1bce903a
-CANDIDATE_BROWSER_LOG_SHA256=705da8941e743123a9ed9dcbd4ce5aff5cf6f554c62e81772750d26f53527784
-CONVERGENCE_PROOF_SHA256=d1002ca32b0ea669879c0a460d4bbb56a5569a700b4f567316e86550c4d9697a
-SOURCE_ATTESTATION_FINAL_SHA256=6a090ef92efe4be2b2db721be1e071bfe3f80435e98433d89cc7f4fbcc89c684
-RUNNER_SAFETY_SHA256=7e5fa58418e9a2bfa32948f0fc4e9f6050ab3f90b5ccd985652009be0b7bdf01
-EXACT_HEAD_CI_SHA256=36e147d76dbc769371378cbc5ed4b5586db9da9d5a9a3e0ed2809a81d710614d
+V6_EVIDENCE_ARTIFACT_ID=9482221007
+V6_EVIDENCE_ARTIFACT_NAME=voy-order48-final-candidate-32597725253
+V6_EVIDENCE_ARTIFACT_BYTES=884207
+V6_EVIDENCE_ARTIFACT_ZIP_SHA256=9bfb7e19d2f7487d503f83b98be4c2a13e7de51826e88e711d9aefd92a2e7657
+V6_MANIFEST_SHA256=ca30e13eb7818c15135853364a943a001ad7adad39fd228b4bada27efeb8e1f3
+V6_CORDOBA_ATTEMPTS_SHA256=f58cbd070245bf9d35cb329649e0c113b3753485fd5be3ce479c544381cf04d7
+V6_CANDIDATE_VERSION_SHA256=9da140557f78425aed8758e380392665e7d278fe862c0a27ad9fe091a47fa25f
+V6_BINDING_CONTRACT_SHA256=0c5b35f9cee23587ad94c5ab382df3f6d66c2bcaed2edb1b1cbbde7fbc12f51c
+V6_CONVERGENCE_PROOF_SHA256=63576ee2e4cb8d57a77ef2feeb6952f0d0b4d5c439ba8914c8571df701b8ff94
+V6_TAIL_LOG_SHA256=2effaffdd90dca7b13b350fd9e68d9ad404aa08336336d8369995f582aa223e7
 ```
 
-Selected built asset hashes:
-
-```text
-INDEX_JS_SHA256=934d5cd39c0aefea8e53299af7cdfdd2b061c51f707c5e6a1b3a639607614b0c
-INDEX_CSS_SHA256=ebe0e90ba216326f977a37f96f32fe6acd851a77a751f7d595a93d0305887c15
-MAPLIBRE_JS_SHA256=7c11bee853e66ef7bc8c915918a370a11d1707ff3c8acf4b381c87b3ea7117ad
-SANTA_FE_TRANSPORT_SHA256=cf33e3ad52977711926098bc305445f826e1a5833d6d71c8fa97df00efb94d17
-SERVICE_WORKER_SHA256=daf193083f657c7afe1b06a1e483bdd86df2af2e92425c638c1238296c25d201
-```
-
-GitHub's artifact digest and an independent SHA-256 of the downloaded ZIP both equal `e9c2b30027d6aab0660e038923471e5f76d3fe9f56c88d481bfd81a416fe9251`.
-
-## Historical ORDER-048 failures preserved
-
-```text
-FIRST_FAILURE_EXACT_SOURCE=3dcb3e63ad80c9fd8a201176c8ea18a51a86ad66
-FIRST_FAILURE_RUN=32482253921;FAILURE
-FIRST_FAILURE=official_handoff_unreachable:403
-FIRST_FAILURE_ARTIFACT_ID=9446641822
-FIRST_FAILURE_ARTIFACT_SHA256=15472e0af5c8730512b6b1d37eaae8aba997b073aa5d16e8090155e44d5698e1
-CAUSAL_CHROMIUM_PATCH_HEAD=75e1117fff3dd11d8502f756e1d38744ba6aa8c7
-SECOND_ATTEMPT_EXACT_SOURCE=2877908749fec746b2eac1745a3643db584fe5e6
-SECOND_ATTEMPT_RUN=32487962587;FAILURE
-SECOND_ATTEMPT_FAILURE=official_handoff_unreachable:403
-SECOND_ATTEMPT_ARTIFACT_ID=9448729697
-SECOND_ATTEMPT_ARTIFACT_SHA256=0212872fc7d3ebd79065ebe6d5bb16b3b1b66ebf91ef053330bb51bd2b416e6e
-```
-
-Those failures proved hosted-CI egress/challenge behavior only. AUD comment `5371598113` independently re-established the primary-source evidence and authorized the persisted-attestation architecture plus exactly one new candidate attempt. No historical retry limit or failure record was erased.
-
-## Productive runtime — unchanged by candidate
+## Productive runtime — unchanged
 
 ```text
 ORDER46_STATUS=TERMINAL_COMPLETE
@@ -203,49 +201,45 @@ PRODUCTIVE_VERSION_ID=5489843d-db43-4779-83fb-309b5a2dec7e
 PRODUCTIVE_TRAFFIC=100%
 PRODUCTIVE_BUILD_HASH=4549acc
 APPLICATION_VERSION=V8.0.0
-CURRENT_SPLIT_DEPLOYMENT_ID=10522621-0e22-48e3-8582-de36b1b30bb3
-ORDER48_CANDIDATE_VERSION_ID=1c04a69c-9608-4ccd-853d-8d3f436d9f7e
+CURRENT_SPLIT_DEPLOYMENT_ID=ad2da01e-c4f8-4a9b-9a9c-23957f39929e
+ORDER48_CANDIDATE_VERSION_ID=ec043331-899d-41a5-8385-9a7d31c43b35
 ORDER48_CANDIDATE_TRAFFIC=0%
-NATIONAL_TERRITORY=true
-VOICE_ENABLED=true
-AUTH_FEATURE=false
-CORE_WITHOUT_LOGIN_VOICE_AI=true
-PWA=true
+GOOGLE_AUTH_ENABLED=NO
 PERSISTENT_ACCOUNT=false
 TRIP_HISTORY_PERSISTED=false
 BUS_ACTIVATION=OFF
 MOBILITY_DATABASE_ROLE=DISCOVERY_ONLY
 ```
 
-The 0% deployment changed the active deployment record but did not shift production traffic: stable remains 100%, candidate 0%. Google auth remains disabled; no D1 write/migration or persistent-data mutation occurred.
-
-## Permanent mobility and safety invariants
+## Permanent ORDER-048 product and safety invariants
 
 - Santa Fe BUS remains unavailable inside VOY without accepted authoritative GTFS; ORDER-048 does not upgrade availability.
-- The official handoff is a typed external-information escape hatch, not a local bus route/ETA/fare/frequency claim.
-- The handoff URL is fixed and allowlisted and sends no origin/destination coordinates, raw destination query or account identity.
-- External action requires explicit expiring single-use confirmation.
-- Hosted candidate CI does not bypass or challenge-solve the municipal WAF; primary-source freshness is independently attested and must be freshly rechecked at the material pre-production AUD gate.
+- The municipal handoff remains a typed official-information escape hatch, separate from `available` and from local bus data.
+- The fixed allowlisted handoff sends no origin/destination coordinates, raw destination query or account identity.
+- External action remains explicit, expiring and single-use.
+- GeoRef or any other upstream outage fails closed and cannot be converted to a local territorial claim.
 - Browser does not call Nominatim, OSRM or Mobility Database directly.
 - Mobility Database remains discovery-only.
-- APP_ONLY providers expose no fabricated numeric fare.
 - AI does not calculate canonical routes, fares, times, availability or rankings.
 - Audio, transcripts and exact-location history are not persistently stored.
 - VOY works without login, voice or AI.
-- Google auth remains disabled until a separate future authorization and runtime verification.
+- Google auth remains disabled.
 
 ## Next step
 
 ```text
 ORDER48_IMPLEMENTATION=COMPLETE
-ORDER48_ATTESTATION_ARCHITECTURE=COMPLETE
-ORDER48_CANDIDATE_ATTEMPT_1=FAILED_PRE_WRITE_HTTP_403_NODE_FETCH
-ORDER48_CANDIDATE_ATTEMPT_2=FAILED_PRE_WRITE_HTTP_403_CHROMIUM
-ORDER48_CANDIDATE_ATTEMPT_3=SUCCESS_ZERO_TRAFFIC
-ORDER48_CANDIDATE_CREATED=YES
-ORDER48_CANDIDATE_VALIDATED=YES
-ORDER48_READY_FOR_INDEPENDENT_AUD=YES
-NEXT=INDEPENDENT_AUD_CANDIDATE_PASS_GATE
+ORDER48_V5_RAW_CAUSE_DIAGNOSIS=COMPLETE
+ORDER48_V6_EXACT_HEAD=GREEN
+ORDER48_V6_CANDIDATE_CREATED=YES
+ORDER48_V6_CANDIDATE_TRAFFIC=0%
+ORDER48_V6_RUNTIME_CONVERGENCE=PASS
+ORDER48_V6_API_GATE=FAIL_CLOSED_GEOREF_UNAVAILABLE
+ORDER48_V6_FIRST_REAL_FAILURE=PERSISTED
+ORDER48_READY_FOR_INDEPENDENT_AUD_FAILURE_TRIAGE=YES
+ORDER48_READY_FOR_CANDIDATE_PASS=NO
+V7_AUTHORIZED=NO
+NEXT=INDEPENDENT_AUD_FAILURE_TRIAGE
 GOOGLE_AUTH_ENABLED=NO
 D1_WRITE_EXECUTED=NO
 PERSISTENT_DATA_MUTATION_EXECUTED=NO
