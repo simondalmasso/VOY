@@ -47,67 +47,72 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const fs = require('node:fs');
-          const base = process.env.WORKER_URL.replace(/\/$/, '');
-          const worker = process.env.WORKER_NAME;
-          const versionId = process.env.V5_VERSION_ID;
-          const out = process.env.EVIDENCE_DIR;
-          const headers = {
-            'Cloudflare-Workers-Version-Overrides': `${worker}="${versionId}"`,
-            'Cache-Control': 'no-cache, no-store',
-            'Accept': 'application/json'
-          };
-          async function capture(path) {
-            const started = new Date().toISOString();
-            try {
-              const response = await fetch(`${base}${path}`, { headers, signal: AbortSignal.timeout(25000) });
-              const raw = await response.text();
-              let body = null;
-              try { body = JSON.parse(raw); } catch {}
-              return {
-                started_at: started,
-                completed_at: new Date().toISOString(),
-                http_status: response.status,
-                raw_text: raw.slice(0, 4096),
-                body_class: body && typeof body === 'object' && !Array.isArray(body) ? 'json_object' : body === null ? 'non_json' : typeof body,
-                error: body && typeof body === 'object' ? body.error ?? null : null,
-                ok: body && typeof body === 'object' ? body.ok ?? null : null,
-                provinceId: body?.territory?.provinceId ?? null,
-                provinceIsoId: body?.territory?.provinceIsoId ?? null,
-                coverageKey: body?.territory?.coverageKey ?? null,
-                source: body?.territory?.source ?? null
-              };
-            } catch (error) {
-              return {
-                started_at: started,
-                completed_at: new Date().toISOString(),
-                http_status: null,
-                raw_text: null,
-                body_class: 'request_exception',
-                error: error?.name || 'unknown_exception',
-                message: String(error?.message || error).slice(0, 500),
-                ok: null,
-                provinceId: null,
-                provinceIsoId: null,
-                coverageKey: null,
-                source: null
-              };
+          (async () => {
+            const base = process.env.WORKER_URL.replace(/\/$/, '');
+            const worker = process.env.WORKER_NAME;
+            const versionId = process.env.V5_VERSION_ID;
+            const out = process.env.EVIDENCE_DIR;
+            const headers = {
+              'Cloudflare-Workers-Version-Overrides': `${worker}="${versionId}"`,
+              'Cache-Control': 'no-cache, no-store',
+              'Accept': 'application/json'
+            };
+            async function capture(path) {
+              const started = new Date().toISOString();
+              try {
+                const response = await fetch(`${base}${path}`, { headers, signal: AbortSignal.timeout(25000) });
+                const raw = await response.text();
+                let body = null;
+                try { body = JSON.parse(raw); } catch {}
+                return {
+                  started_at: started,
+                  completed_at: new Date().toISOString(),
+                  http_status: response.status,
+                  raw_text: raw.slice(0, 4096),
+                  body_class: body && typeof body === 'object' && !Array.isArray(body) ? 'json_object' : body === null ? 'non_json' : typeof body,
+                  error: body && typeof body === 'object' ? body.error ?? null : null,
+                  ok: body && typeof body === 'object' ? body.ok ?? null : null,
+                  provinceId: body?.territory?.provinceId ?? null,
+                  provinceIsoId: body?.territory?.provinceIsoId ?? null,
+                  coverageKey: body?.territory?.coverageKey ?? null,
+                  source: body?.territory?.source ?? null
+                };
+              } catch (error) {
+                return {
+                  started_at: started,
+                  completed_at: new Date().toISOString(),
+                  http_status: null,
+                  raw_text: null,
+                  body_class: 'request_exception',
+                  error: error?.name || 'unknown_exception',
+                  message: String(error?.message || error).slice(0, 500),
+                  ok: null,
+                  provinceId: null,
+                  provinceIsoId: null,
+                  coverageKey: null,
+                  source: null
+                };
+              }
             }
-          }
-          const health = await capture('/api/health?order48_v5_diag=1');
-          fs.writeFileSync(`${out}/health.json`, JSON.stringify(health, null, 2) + '\n');
-          const attempts = [];
-          for (let i = 1; i <= 5; i += 1) {
-            const result = await capture(`/api/territory?lat=-31.4201&lon=-64.1888&order48_v5_diag=${i}`);
-            attempts.push({ attempt: i, ...result });
-            if (i < 5) await new Promise(resolve => setTimeout(resolve, 1500));
-          }
-          fs.writeFileSync(`${out}/territory-cordoba-attempts.json`, JSON.stringify({
-            result: 'CAPTURED',
-            target_version_id: versionId,
-            request_count: attempts.length,
-            attempts
-          }, null, 2) + '\n');
-          console.log(JSON.stringify({ health, attempts }, null, 2));
+            const health = await capture('/api/health?order48_v5_diag=1');
+            fs.writeFileSync(`${out}/health.json`, JSON.stringify(health, null, 2) + '\n');
+            const attempts = [];
+            for (let i = 1; i <= 5; i += 1) {
+              const result = await capture(`/api/territory?lat=-31.4201&lon=-64.1888&order48_v5_diag=${i}`);
+              attempts.push({ attempt: i, ...result });
+              if (i < 5) await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            fs.writeFileSync(`${out}/territory-cordoba-attempts.json`, JSON.stringify({
+              result: 'CAPTURED',
+              target_version_id: versionId,
+              request_count: attempts.length,
+              attempts
+            }, null, 2) + '\n');
+            console.log(JSON.stringify({ health, attempts }, null, 2));
+          })().catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
           NODE
 
       - name: Build diagnostic manifest
