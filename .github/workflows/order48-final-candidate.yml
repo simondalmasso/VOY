@@ -45,7 +45,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           remote_head="$(git ls-remote origin refs/heads/feat/order-048-official-transit-handoff | awk '{print $1}')"
           test "$remote_head" = "$GITHUB_SHA"
-          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V3'
+          test "$(cat .order48-candidate-ready)" = 'ORDER48_FINAL_CANDIDATE_READY_V4'
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           git diff --check
@@ -53,10 +53,10 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE_DIR/exact-head.txt"
           cat > "$EVIDENCE_DIR/authority-workflow.txt" <<'EOF'
           ORDER=48
-          CANDIDATE_ATTEMPT=3
-          PRIOR_RETRY_LIMIT_EXHAUSTED=YES
-          AUD_NEW_CANDIDATE_AUTHORIZATION=5371598113
-          NEW_ATTEMPT_REASON=EVIDENCE_MODEL_ARCHITECTURE_CORRECTION
+          CANDIDATE_ATTEMPT=4
+          PRIOR_CANDIDATE_V3=32497318770;SUCCESS
+          AUD_CONTROL_FIX_DIRECTIVE=5381139446
+          NEW_ATTEMPT_REASON=REFRESHABLE_SOURCE_ATTESTATION_CONTROL_FIX
           CANDIDATE_0_PERCENT_ONLY=YES
           LIVE_MUNICIPAL_FETCH_AUTHORIZED=NO
           PRODUCTION_PROMOTION_AUTHORIZED=NO
@@ -77,11 +77,13 @@ jobs:
           git diff --exit-code -- bun.lock
           bunx playwright install --with-deps chromium
 
-      - name: Prove ORDER-048 runner has no D1 or municipal-network verifier path
+      - name: Prove ORDER-048 runner and refresh controls are safe
         run: |
           set -euo pipefail
           node scripts/verify-release-policy.mjs
           bash -n scripts/run-order48-candidate.sh
+          node --check scripts/verify-santa-fe-transit-handoff.mjs
+          node --check scripts/verify-order48-control-only-refresh.mjs
           if grep -Eiq 'wrangler[[:space:]]+d1|migrations[[:space:]]+apply|d1[[:space:]]+execute' scripts/run-order48-candidate.sh; then
             echo 'ORDER-048 runner contains a forbidden D1 mutation command' >&2
             exit 1
@@ -90,10 +92,17 @@ jobs:
             echo 'ORDER-048 source-attestation verifier contains a forbidden live-network path' >&2
             exit 1
           fi
+          git diff --quiet b33fd3c864904c839b3d223871201c492a9d89c0..HEAD -- package.json bun.lock || {
+            echo 'ORDER-048 correction unexpectedly changed dependency metadata' >&2
+            exit 1
+          }
+          node scripts/verify-order48-control-only-refresh.mjs --static-only > "$EVIDENCE_DIR/control-only-static-guard.json"
           test -f config/source-attestations/santa-fe-official-transit-handoff.json
           printf '%s\n' 'RUNNER_D1_MUTATION_PATH=ABSENT' > "$EVIDENCE_DIR/runner-safety.txt"
           printf '%s\n' 'MUNICIPAL_VERIFIER_LIVE_NETWORK_PATH=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
-          printf '%s\n' 'SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'SOURCE_ATTESTATION_GATE=PERSISTED_FAIL_CLOSED_V2' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'CONTROL_ONLY_REFRESH_GUARD=PASS' >> "$EVIDENCE_DIR/runner-safety.txt"
+          printf '%s\n' 'DEPENDENCY_METADATA_DRIFT=ABSENT' >> "$EVIDENCE_DIR/runner-safety.txt"
 
       - name: Require fresh exact-head GitHub GREEN before Cloudflare write
         env:
@@ -158,13 +167,16 @@ jobs:
           const bindings=JSON.parse(fs.readFileSync(`${e}/binding-contract.json`,'utf8'));
           const source=JSON.parse(fs.readFileSync(`${e}/municipal-source-final.json`,'utf8'));
           const contract=JSON.parse(fs.readFileSync(`${e}/order48-zero-traffic-contract.json`,'utf8'));
+          const expectedEvidenceUrl = source.evidence && Number.isSafeInteger(source.evidence.comment_id)
+            ? `https://github.com/simonkey888/VOY/issues/48#issuecomment-${source.evidence.comment_id}`
+            : '';
           if(final.result!=='PASS'||final.exact_source_sha!==process.env.GITHUB_SHA)throw new Error('candidate_final_state_not_pass');
           if(final.stable_version_id!==process.env.EXPECTED_STABLE_VERSION_ID||Number(final.stable_traffic)!==100)throw new Error('stable_runtime_changed');
           if(!final.candidate_version_id||Number(final.candidate_traffic)!==0)throw new Error('candidate_not_zero_traffic');
           if(final.production_promoted===true||final.rollback_executed===true)throw new Error('unexpected_production_mutation');
           if(api.result!=='PASS'||api.auth?.enabled!==false||api.health?.features?.auth!==false)throw new Error('candidate_api_truth_failed');
           if(bindings.result!=='PASS'||bindings.d1_write!==false||bindings.d1_migration!==false||bindings.additions.length||bindings.removals.length)throw new Error('binding_or_d1_contract_failed');
-          if(source.result!=='PASS'||source.target!=='https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/'||source.authority!=='Municipalidad de Santa Fe'||source.verifier!=='persisted_source_attestation'||source.live_network_request!==false||source.verified_at!=='2026-08-21'||source.evidence_comment_id!==5371598113||source.evidence_ref!=='https://github.com/simonkey888/VOY/issues/48#issuecomment-5371598113'||source.transit_surface!==true||source.current_information_reference!==true||source.stale!==false||source.stale_substitution!==false)throw new Error('municipal_source_attestation_failed');
+          if(source.result!=='PASS'||source.schema_version!==2||source.target!=='https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/'||source.authority!=='Municipalidad de Santa Fe'||source.verifier!=='persisted_source_attestation'||source.live_network_request!==false||typeof source.verified_at_utc!=='string'||source.evidence?.kind!=='github_issue_comment'||source.evidence?.repository!=='simonkey888/VOY'||source.evidence?.issue!==48||source.evidence?.url!==expectedEvidenceUrl||source.transit_surface!==true||source.current_information_reference!==true||source.stale!==false||source.stale_substitution!==false)throw new Error('municipal_source_attestation_failed');
           if(contract.result!=='PASS'||contract.persistent_data_mutation!==false)throw new Error('order48_terminal_contract_failed');
           NODE
 
@@ -194,10 +206,11 @@ jobs:
             echo '## VOY ORDER-048 — exact-head candidate 0%'
             echo
             echo "- Exact source SHA: $GITHUB_SHA"
-            echo '- Candidate attempt: 3 (new AUD-authorized attempt after evidence-model correction)'
-            echo '- AUD authorization: Issue #48 comment 5371598113'
+            echo '- Candidate attempt: 4 (AUD-directed refreshable attestation correction)'
+            echo '- AUD directive: Issue #48 comment 5381139446'
             echo '- Municipal live fetch in hosted CI: forbidden'
-            echo '- Source freshness gate: persisted current attestation, fail-closed'
+            echo '- Source freshness gate: schema-v2 persisted current attestation, fail-closed'
+            echo '- Future control-only refresh guard: exact attestation/docs allowlist'
             echo "- Stable expected: $EXPECTED_STABLE_VERSION_ID at 100%"
             echo '- Candidate target: 0% traffic only'
             echo '- Google auth activation: forbidden/off'

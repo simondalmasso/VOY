@@ -35,8 +35,7 @@ describe('provider ranking and price truthfulness', () => {
     expect(option?.handoff).toEqual({
       kind: 'santa_fe_municipal_transit',
       label: 'Consultar transporte oficial',
-      authority: 'Municipalidad de Santa Fe',
-      verifiedAt: '2026-08-21'
+      authority: 'Municipalidad de Santa Fe'
     });
   });
 
