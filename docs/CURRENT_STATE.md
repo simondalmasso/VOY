@@ -19,7 +19,7 @@ ORDER48_STATUS=BLOCKED_AT_INDEPENDENT_AUD_AFTER_V6_FIRST_REAL_FAILURE
 ORDER48_AUD_V5_TRIAGE_COMMENT=5382403987
 ORDER48_ARQ_RECOVERY_AUTHORIZATION=5382467077
 V6_EXACT_RUNTIME_SOURCE_SHA=029c1ca586ff6b7e8c0808958e7a62da9f16c530
-PRE_FAILURE_RECONCILIATION_DOCS_HEAD=61e318dfe6a51679b571f257f3ee3401b8b821a7
+EVIDENCE_RECONCILIATION_PARENT_HEAD=d0046ab2460c4cde0e1a7c7dd7613f845337acaf
 MERGE_AUTHORIZED=NO
 PRODUCTION_PROMOTION_AUTHORIZED=NO
 GOOGLE_AUTH_ACTIVATION_AUTHORIZED=NO
@@ -28,7 +28,7 @@ D1_MIGRATION_AUTHORIZED=NO
 PERSISTENT_DATA_MUTATION_AUTHORIZED=NO
 ```
 
-Production truth has priority over branch/document state. Candidate runtime source and later evidence/docs-only commits are intentionally recorded separately. The branch head after this document commit is documentation/evidence state, not a candidate runtime source and must never be substituted for `V6_EXACT_RUNTIME_SOURCE_SHA`.
+Production truth has priority over branch/document state. Candidate runtime source and later evidence/docs-only commits are intentionally recorded separately. Any branch head at or after the evidence reconciliation is documentation/control state, not a candidate runtime source and must never be substituted for `V6_EXACT_RUNTIME_SOURCE_SHA`.
 
 ## ORDER-048 V6 — first real failure / hard stop
 
