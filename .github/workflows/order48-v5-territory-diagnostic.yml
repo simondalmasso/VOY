@@ -115,6 +115,36 @@ jobs:
           });
           NODE
 
+      - name: Probe GeoRef upstream directly from runner
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          (async () => {
+            const out = process.env.EVIDENCE_DIR;
+            const base = 'https://apis.datos.gob.ar/georef/api/v2.0/ubicacion';
+            async function probe(label, url, init) {
+              const started = new Date().toISOString();
+              try {
+                const response = await fetch(url, { ...init, signal: AbortSignal.timeout(25000) });
+                const raw = await response.text();
+                return { label, started_at: started, completed_at: new Date().toISOString(), http_status: response.status, raw_text: raw.slice(0, 4096) };
+              } catch (error) {
+                return { label, started_at: started, completed_at: new Date().toISOString(), http_status: null, error: error?.name || 'unknown_exception', message: String(error?.message || error).slice(0, 500) };
+              }
+            }
+            const get = await probe('GET_single', `${base}?lat=-31.4201&lon=-64.1888&campos=completo`, { headers: { Accept: 'application/json' } });
+            const post = await probe('POST_batch', base, {
+              method: 'POST',
+              headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ubicaciones: [{ lat: -31.4201, lon: -64.1888, campos: 'completo' }] })
+            });
+            const result = { checked_at: new Date().toISOString(), get, post };
+            fs.writeFileSync(`${out}/georef-direct-probe.json`, JSON.stringify(result, null, 2) + '\n');
+            console.log(JSON.stringify(result, null, 2));
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          NODE
+
       - name: Build diagnostic manifest
         if: always()
         run: |
