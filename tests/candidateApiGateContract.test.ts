@@ -12,15 +12,17 @@ describe('ORDER-048 candidate API harness contract', () => {
 
   test('Córdoba candidate proof persists bounded raw attempt observability', async () => {
     const source = await readFile(new URL('../scripts/svelte-candidate-api-gate.mjs', import.meta.url), 'utf8');
-    expect(source).toContain("territory-cordoba-attempts.json");
-    expect(source).toContain('http_status');
-    expect(source).toContain('body_class');
-    expect(source).toContain('provinceId');
-    expect(source).toContain('provinceIsoId');
-    expect(source).toContain('coverageKey');
+    expect(source).toContain('territory-cordoba-attempts.json');
+    const attemptSource = source.slice(source.indexOf('function territoryAttempt'), source.indexOf('function assertCordoba'));
+    expect(attemptSource).toContain('http_status');
+    expect(attemptSource).toContain('body_class');
+    expect(attemptSource).toContain('provinceId');
+    expect(attemptSource).toContain('provinceIsoId');
+    expect(attemptSource).toContain('coverageKey');
+    expect(attemptSource).not.toContain('headers');
+    expect(attemptSource).not.toContain('cookie');
+    expect(attemptSource).not.toContain('rawText');
     expect(source).toContain('target_version_id');
-    expect(source).not.toContain('response.headers');
-    expect(source).not.toContain('cookie');
   });
 
   test('observed GeoRef upstream outage gets bounded 60-second backoff without weakening PASS', async () => {
