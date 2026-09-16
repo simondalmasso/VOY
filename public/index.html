@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es-AR" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0a">
+  <meta name="description" content="VOY te ayuda a encontrar destinos y opciones de movilidad en Argentina.">
+  <title>VOY — Movilidad en Argentina</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/app-icon-192.png">
+
+<link rel="stylesheet" href="/styles.css?v=__BUILD_ID__">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand-lockup" href="/" aria-label="VOY inicio">
+
+    <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="18" fill="currentColor"/><path d="M17 18c0 12 15 13 15 27M47 18c0 12-15 13-15 27" fill="none" stroke="#11110f" stroke-width="6" stroke-linecap="round"/><circle cx="32" cy="49" r="4.5" fill="#11110f"/></svg>
+
+    <svg class="brand-wordmark" viewBox="0 0 190 48" aria-hidden="true"><path d="M0 0h12l16 34L44 0h12L34 48H22L0 0Zm78 0h30c14 0 24 9 24 24s-10 24-24 24H78c-14 0-24-9-24-24S64 0 78 0Zm1 10c-8 0-13 5-13 14s5 14 13 14h28c8 0 13-5 13-14s-5-14-13-14H79Zm55-10h14l15 18 15-18h14l-23 29v19h-12V29L134 0Z" fill="currentColor" fill-rule="evenodd"/></svg>
+
+  </a>
+  <button id="theme" type="button" class="theme-button" aria-label="Cambiar tema"><span aria-hidden="true">◐</span></button>
+</header>
+
+<main class="app-shell">
+  <section class="planner" aria-labelledby="destination-label">
+    <div class="destination-hero">
+
+      <label id="destination-label" for="destination">¿A dónde vas?</label>
+
+      <div class="hero-support">
+
+        <p id="destination-status" class="status-line" aria-live="polite" data-state="neutral"></p>
+
+        <div class="search-aftercare">
+
+          <button id="national-search" class="quiet-action" type="button" hidden>Buscar en toda Argentina</button>
+
+          <div id="destination-context" class="context-help" hidden>Probá agregando localidad o provincia.</div>
+
+        </div>
+
+      </div>
+
+      <div class="destination-search-stack">
+
+        <div class="destination-control">
+
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 4.9 12l4.05 4.05 1.4-1.4L17.3 14.6A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/></svg>
+
+          <input id="destination" autocomplete="off" maxlength="160" placeholder="Buscá un destino" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destination-suggestions" aria-describedby="destination-status">
+
+          <span id="destination-loading" class="search-progress" aria-hidden="true" hidden></span>
+
+        </div>
+
+        <div id="destination-suggestions" class="suggestions" role="listbox" aria-label="Resultados de destino" hidden></div>
+
+      </div>
+
+    </div>
+
+
+
+    <div class="context-rail">
+
+      <div class="origin-bar">
+      <div class="origin-copy">
+        <span class="origin-dot" aria-hidden="true"></span>
+        <span id="origin-label">Sin origen elegido</span>
+      </div>
+      <div class="origin-actions">
+        <button id="use-location" type="button" class="origin-action">Usar mi ubicación</button>
+        <button id="manual-origin" type="button" class="origin-action" aria-expanded="false" aria-controls="origin-editor">Elegir origen</button>
+        <button id="clear-location" type="button" class="origin-action" hidden>Cambiar</button>
+      </div>
+    </div>
+
+    <div id="origin-editor" class="origin-editor" hidden>
+      <input id="origin" class="origin-input" maxlength="160" placeholder="Escribí un origen" aria-label="Origen">
+      <button id="resolve-origin" type="button">Usar origen</button>
+    </div>
+
+
+
+
+
+    <aside id="voy-assistant" class="assistant" aria-label="Ayuda contextual de VOY">
+
+      <button id="assistant-toggle" class="assistant-toggle" type="button" aria-expanded="false" aria-controls="assistant-panel">
+
+        <span class="assistant-symbol" aria-hidden="true"><span></span></span>
+
+        <span>Ayuda</span>
+
+      </button>
+
+      <div id="assistant-panel" class="assistant-panel" hidden>
+
+        <div class="assistant-heading"><strong>VOY</strong><button id="assistant-close" type="button" aria-label="Cerrar ayuda">×</button></div>
+
+        <p id="assistant-copy">Podés buscar directo o usar tu ubicación para priorizar resultados cercanos.</p>
+
+        <button id="assistant-action" class="assistant-action" type="button" data-action="location">Usar mi ubicación</button>
+
+      </div>
+
+    </aside>
+
+    </div>
+
+    <section id="decision" class="decision" hidden aria-live="polite">
+      <div class="destination-summary">
+        <div class="summary-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.15 7 13 7 13s7-7.85 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
+        </div>
+        <div class="summary-copy">
+          <span class="summary-kicker">Destino</span>
+          <h1 id="result-title"></h1>
+          <p id="result-meta"></p>
+        </div>
+      </div>
+      <div id="options" class="options" aria-label="Opciones de movilidad"></div>
+    </section>
+  </section>
+
+  <section id="map-shell" class="map-shell" aria-label="Mapa del destino" hidden>
+    <div id="map-tiles" class="map-tiles" aria-hidden="true"></div>
+    <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
+    <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
+  </section>
+</main>
+
+<footer class="footer">
+  <nav aria-label="Información"><a href="/coverage.html">Cobertura</a><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a><a href="/sources.html">Fuentes</a></nav>
+</footer>
+
+<dialog id="handoff-dialog" aria-labelledby="handoff-title">
+  <form method="dialog" class="dialog-card">
+    <h2 id="handoff-title">Abrir sitio externo</h2>
+    <p id="handoff-copy">Vas a salir de VOY. No enviamos tu ubicación ni tu búsqueda.</p>
+    <p id="handoff-destination" class="destination-url"></p>
+    <div class="dialog-actions"><button id="cancel-handoff" value="cancel" type="button">Cancelar</button><button id="confirm-handoff" value="confirm" type="button" class="primary">Continuar</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="/app.js?v=__BUILD_ID__"></script>
+</body>
+</html>

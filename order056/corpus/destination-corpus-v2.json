@@ -1,0 +1,3804 @@
+{
+  "schema_version": 2,
+  "corpus_id": "VOY_ORDER056_DESTINATION_CORPUS_V2",
+  "revision": "2026-09-03-final-aud",
+  "case_count": 137,
+  "quality_gates": {
+    "local_intent_top1_relevance_min": 0.92,
+    "top3_acceptable_recall_min": 0.98,
+    "wrong_province_top1_rate_max": 0.02,
+    "explicit_geography_respect_min": 1.0,
+    "false_locality_invention_max": 0,
+    "no_result_fail_closed_min": 1.0
+  },
+  "revision_policy": "Expectations are fixed before final resolver scoring. Known v1 corrections require independent official GeoRef proof and are recorded separately.",
+  "cases": [
+    {
+      "id": "c001",
+      "query": "San Martín 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c002",
+      "query": "Rivadavia",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c003",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c004",
+      "query": "9 de Julio",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c005",
+      "query": "General López 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c006",
+      "query": "Urquiza",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c007",
+      "query": "Francia",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c008",
+      "query": "Boulevard Gálvez",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c009",
+      "query": "Córdoba 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c010",
+      "query": "San Martín",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c011",
+      "query": "Corrientes",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c012",
+      "query": "Entre Ríos",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c013",
+      "query": "Santa Fe 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c014",
+      "query": "Rioja",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c015",
+      "query": "Mendoza",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c016",
+      "query": "Aeropuerto Sauce Viejo",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Sauce Viejo",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Sauce Viejo",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Corrected from v1 using official GeoRef reverse at Aeropuerto de Sauce Viejo coordinates."
+    },
+    {
+      "id": "c017",
+      "query": "Colón 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c018",
+      "query": "General Paz",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c019",
+      "query": "Vélez Sarsfield",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c020",
+      "query": "Duarte Quirós",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c021",
+      "query": "27 de Abril 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c022",
+      "query": "Chacabuco",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c023",
+      "query": "Humberto Primo",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c024",
+      "query": "Illia",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c025",
+      "query": "San Martín 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c026",
+      "query": "Las Heras",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c027",
+      "query": "Colón",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c028",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c029",
+      "query": "Vicente Zapata 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c030",
+      "query": "Rioja",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c031",
+      "query": "España",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c032",
+      "query": "Ciudad Universitaria",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Official GeoRef reverse normalizes Santa Fe Capital label to Santa Fe municipality."
+    },
+    {
+      "id": "c033",
+      "query": "Corrientes 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c034",
+      "query": "Santa Fe",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c035",
+      "query": "Córdoba",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c036",
+      "query": "Rivadavia",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c037",
+      "query": "Callao 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c038",
+      "query": "Pueyrredón",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c039",
+      "query": "9 de Julio",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c040",
+      "query": "Cabildo",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c041",
+      "query": "San Martín 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c042",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c043",
+      "query": "Buenos Aires",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c044",
+      "query": "España",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c045",
+      "query": "Caseros 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c046",
+      "query": "Pellegrini",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c047",
+      "query": "Córdoba",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c048",
+      "query": "Alvarado",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c049",
+      "query": "Urquiza 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c050",
+      "query": "Buenos Aires",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c051",
+      "query": "Corrientes",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c052",
+      "query": "Santa Fe",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c053",
+      "query": "25 de Mayo 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c054",
+      "query": "Echagüe",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c055",
+      "query": "Alameda de la Federación",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c056",
+      "query": "Ramírez",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c057",
+      "query": "San Martín 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c058",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c059",
+      "query": "9 de Julio",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c060",
+      "query": "Sarmiento",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c061",
+      "query": "Boulevard Santa Fe 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c062",
+      "query": "Mitre",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c063",
+      "query": "Moreno",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c064",
+      "query": "Tucumán",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.2503,
+        "lon": -61.4867
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c065",
+      "query": "San Martín 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c066",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c067",
+      "query": "9 de Julio",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c068",
+      "query": "Mitre",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c069",
+      "query": "Obligado 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c070",
+      "query": "Habegger",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c071",
+      "query": "Roca",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c072",
+      "query": "Ludueña",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -29.1443,
+        "lon": -59.6436
+      },
+      "expected_top": {
+        "locality": "Reconquista",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Reconquista",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c073",
+      "query": "Mitre 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "lat": -33.3358,
+        "lon": -60.2252
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c074",
+      "query": "Nación",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "lat": -33.3358,
+        "lon": -60.2252
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c075",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "lat": -33.3358,
+        "lon": -60.2252
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c076",
+      "query": "Terminal",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Guaymallén",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Guaymallén",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Corrected from v1 using official GeoRef reverse at Terminal de Ómnibus Mendoza."
+    },
+    {
+      "id": "c077",
+      "query": "Rivadavia 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "lat": -33.3358,
+        "lon": -60.2252
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c078",
+      "query": "Urquiza",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "lat": -33.3358,
+        "lon": -60.2252
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c079",
+      "query": "Maipú",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "lat": -33.3358,
+        "lon": -60.2252
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c080",
+      "query": "Shopping",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Guaymallén",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Guaymallén",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Corrected from v1 using official GeoRef reverse at Mendoza Plaza Shopping."
+    },
+    {
+      "id": "c081",
+      "query": "San Martín 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c082",
+      "query": "Maipú",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c083",
+      "query": "Kuanip",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c084",
+      "query": "Magallanes",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c085",
+      "query": "Gobernador Paz 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c086",
+      "query": "Yaganes",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c087",
+      "query": "Perito Moreno",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c088",
+      "query": "Fuegia Basket",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "lat": -54.8019,
+        "lon": -68.303
+      },
+      "expected_top": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ushuaia",
+          "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+          "province_id": "94"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c089",
+      "query": "Aeroparque",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Official GeoRef reverse establishes province id 02 for Aeroparque coordinates."
+    },
+    {
+      "id": "c090",
+      "query": "Alberdi",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "lat": -27.4514,
+        "lon": -58.9867
+      },
+      "expected_top": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Resistencia",
+          "province": "Chaco",
+          "province_id": "22"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c091",
+      "query": "Sarmiento",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "lat": -27.4514,
+        "lon": -58.9867
+      },
+      "expected_top": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Resistencia",
+          "province": "Chaco",
+          "province_id": "22"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c092",
+      "query": "Municipalidad",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Official GeoRef reverse establishes province id 02 for the candidate coordinates."
+    },
+    {
+      "id": "c093",
+      "query": "Hernandarias 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "lat": -27.4514,
+        "lon": -58.9867
+      },
+      "expected_top": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Resistencia",
+          "province": "Chaco",
+          "province_id": "22"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c094",
+      "query": "Las Heras",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "lat": -27.4514,
+        "lon": -58.9867
+      },
+      "expected_top": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Resistencia",
+          "province": "Chaco",
+          "province_id": "22"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c095",
+      "query": "Castelli",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "lat": -27.4514,
+        "lon": -58.9867
+      },
+      "expected_top": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Resistencia",
+          "province": "Chaco",
+          "province_id": "22"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c096",
+      "query": "Paraguay",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "lat": -27.4514,
+        "lon": -58.9867
+      },
+      "expected_top": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Resistencia",
+          "province": "Chaco",
+          "province_id": "22"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c097",
+      "query": "25 de Mayo 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c098",
+      "query": "San Martín",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c099",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c100",
+      "query": "España",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c101",
+      "query": "Brandsen 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c102",
+      "query": "Rivadavia",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c103",
+      "query": "Paraguay",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c104",
+      "query": "Saavedra",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "lat": -26.1775,
+        "lon": -58.1781
+      },
+      "expected_top": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Formosa",
+          "province": "Formosa",
+          "province_id": "34"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c105",
+      "query": "San Nicolás de Bari 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c106",
+      "query": "Rivadavia",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c107",
+      "query": "San Martín",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c108",
+      "query": "Belgrano",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c109",
+      "query": "Pelagio Luna 1000",
+      "query_class": "address",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c110",
+      "query": "8 de Diciembre",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c111",
+      "query": "Santa Fe",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c112",
+      "query": "Buenos Aires",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "lat": -29.4131,
+        "lon": -66.8558
+      },
+      "expected_top": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46"
+      },
+      "acceptable_results": [
+        {
+          "locality": "La Rioja",
+          "province": "La Rioja",
+          "province_id": "46"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined street/address territorial expectation from origin city context."
+    },
+    {
+      "id": "c113",
+      "query": "Puente Colgante",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Known Santa Fe landmark query."
+    },
+    {
+      "id": "c114",
+      "query": "Monumento a la Bandera",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Known Rosario landmark query."
+    },
+    {
+      "id": "c115",
+      "query": "Plaza 9 de Julio",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Known Salta central landmark query."
+    },
+    {
+      "id": "c116",
+      "query": "San Martín, Mendoza",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c117",
+      "query": "Terminal de Córdoba",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c118",
+      "query": "Belgrano, Rosario",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c119",
+      "query": "Rivadavia, Salta",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c120",
+      "query": "9 de Julio, CABA",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c121",
+      "query": "Costanera, Paraná",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c122",
+      "query": "Municipalidad de Rafaela",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rafaela",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c123",
+      "query": "Terminal de Mendoza",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Guaymallén",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Guaymallén",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c124",
+      "query": "Aeropuerto de Córdoba",
+      "query_class": "poi",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c125",
+      "query": "San Martín, San Nicolás de los Arroyos",
+      "query_class": "street",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "San Nicolás de los Arroyos",
+        "province": "Buenos Aires",
+        "province_id": "06"
+      },
+      "acceptable_results": [
+        {
+          "locality": "San Nicolás de los Arroyos",
+          "province": "Buenos Aires",
+          "province_id": "06"
+        }
+      ],
+      "explicit_geography": true,
+      "national_expansion_expected": true,
+      "no_result_acceptable": false,
+      "note": "Explicit geography must override Santa Fe proximity; c123 uses official GeoRef-corrected Guaymallén terminal territory."
+    },
+    {
+      "id": "c126",
+      "query": "sarmient",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Santa Fe",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c127",
+      "query": "rivdavia",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -32.9468,
+        "lon": -60.6393
+      },
+      "expected_top": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Rosario",
+          "province": "Santa Fe",
+          "province_id": "82"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c128",
+      "query": "velez sarsfiel",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "lat": -31.4167,
+        "lon": -64.1833
+      },
+      "expected_top": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Córdoba",
+          "province": "Córdoba",
+          "province_id": "14"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c129",
+      "query": "sna martin",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "lat": -32.8895,
+        "lon": -68.8458
+      },
+      "expected_top": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Mendoza",
+          "province": "Mendoza",
+          "province_id": "50"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c130",
+      "query": "corientes",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "lat": -34.6037,
+        "lon": -58.3816
+      },
+      "expected_top": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Ciudad Autónoma de Buenos Aires",
+          "province": "Ciudad Autónoma de Buenos Aires",
+          "province_id": "02"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c131",
+      "query": "belgrno",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "lat": -24.7821,
+        "lon": -65.4232
+      },
+      "expected_top": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Salta",
+          "province": "Salta",
+          "province_id": "66"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c132",
+      "query": "urquza",
+      "query_class": "typo",
+      "origin_context": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "lat": -31.7413,
+        "lon": -60.5115
+      },
+      "expected_top": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30"
+      },
+      "acceptable_results": [
+        {
+          "locality": "Paraná",
+          "province": "Entre Ríos",
+          "province_id": "30"
+        }
+      ],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": false,
+      "note": "Predetermined typo variant of a local street name."
+    },
+    {
+      "id": "c133",
+      "query": "zzzz-no-existe-voy-056",
+      "query_class": "no_result",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": null,
+      "acceptable_results": [],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": true,
+      "note": "Synthetic negative control; resolver must fail closed."
+    },
+    {
+      "id": "c134",
+      "query": "qwxzqwxz 99999",
+      "query_class": "no_result",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": null,
+      "acceptable_results": [],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": true,
+      "note": "Synthetic negative control; resolver must fail closed."
+    },
+    {
+      "id": "c135",
+      "query": "--- --- ---",
+      "query_class": "no_result",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": null,
+      "acceptable_results": [],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": true,
+      "note": "Synthetic negative control; resolver must fail closed."
+    },
+    {
+      "id": "c136",
+      "query": "xqv hospital inexistente 998877",
+      "query_class": "no_result",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": null,
+      "acceptable_results": [],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": true,
+      "note": "Synthetic negative control; resolver must fail closed."
+    },
+    {
+      "id": "c137",
+      "query": "zzqvxx nonexistent 123456",
+      "query_class": "no_result",
+      "origin_context": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "lat": -31.6333,
+        "lon": -60.7
+      },
+      "expected_top": null,
+      "acceptable_results": [],
+      "explicit_geography": false,
+      "national_expansion_expected": false,
+      "no_result_acceptable": true,
+      "note": "Synthetic negative control; resolver must fail closed."
+    }
+  ],
+  "corpus_sha256": "6e806fde4ddfa6a7988ac0a9de1ac13612091ac5bb7a0ba9c22c75118ed7c274"
+}

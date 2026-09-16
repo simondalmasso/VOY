@@ -1,0 +1,26 @@
+﻿[
+    {
+        "distribution":  "7.15",
+        "source_url":  "https://infra.datos.gob.ar/catalog/modernizacion/dataset/7/distribution/7.15/download/localidades.geojson",
+        "file":  "localidades.geojson",
+        "identity":  "GeoRef localidades GeoJSON",
+        "retrieved_at":  "2026-09-04T05:00:49.1670570Z",
+        "sha256":  "0a04f1c4968c8fc5ba330dc429c201686f92b281c8839685a377fe00b2f5477f",
+        "bytes":  1864325,
+        "last_modified":  "Tue, 27 Apr 2021 20:05:25 GMT",
+        "etag":  "\"1c7285-5c0f9c86b2adf\"",
+        "content_type":  "application/geo+json; charset=utf-8"
+    },
+    {
+        "distribution":  "7.31",
+        "source_url":  "https://infra.datos.gob.ar/catalog/modernizacion/dataset/7/distribution/7.31/download/localidades-censales.geojson",
+        "file":  "localidades-censales.geojson",
+        "identity":  "GeoRef localidades censales GeoJSON",
+        "retrieved_at":  "2026-09-04T05:00:51.5628622Z",
+        "sha256":  "d0ddbe03c1496fe60fc0acca46c0313f4ca67d66ef2f54b983218adc142b5d07",
+        "bytes":  1650349,
+        "last_modified":  "Tue, 27 Apr 2021 20:05:28 GMT",
+        "etag":  "\"192ead-5c0f9c89f3ae3\"",
+        "content_type":  "application/geo+json; charset=utf-8"
+    }
+]

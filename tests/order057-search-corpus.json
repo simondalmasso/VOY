@@ -1,0 +1,5117 @@
+{
+  "schema_version": 1,
+  "purpose": "GENERAL destination search ranking benchmark. Benchmark-only fixtures; not production aliases.",
+  "owner_seed_count": 2,
+  "cases": [
+    {
+      "id": "sf_bridge:exact",
+      "stratum": "exact",
+      "query": "Puente Colgante",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:accentless",
+      "stratum": "accentless",
+      "query": "Puente Colgante",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:incomplete",
+      "stratum": "incomplete",
+      "query": "Puente Colgante",
+      "expected": "sf_bridge",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.628,
+          "lon": -60.671
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:typo1",
+      "stratum": "typo1",
+      "query": "Puente Cogante",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:typo2",
+      "stratum": "typo2",
+      "query": "Puente Coante",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:transposed",
+      "stratum": "transposed",
+      "query": "Colgante Puente",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Puente Colgante, Santa Fe, Santa Fe",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sf_bridge:local_context",
+      "stratum": "local_context",
+      "query": "Puente Colgante",
+      "expected": "sf_bridge",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.628,
+          "lon": -60.671
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_bridge:colloquial",
+      "stratum": "colloquial",
+      "query": "puente Colgante",
+      "expected": "sf_bridge",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:exact",
+      "stratum": "exact",
+      "query": "Estadio Brigadier General Estanislao López",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:accentless",
+      "stratum": "accentless",
+      "query": "Estadio Brigadier General Estanislao Lopez",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:incomplete",
+      "stratum": "incomplete",
+      "query": "Estadio Brigadier General Estanislao",
+      "expected": "sf_colon",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.653,
+          "lon": -60.715
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:typo1",
+      "stratum": "typo1",
+      "query": "Estadio Brigadier General Esanislao López",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:typo2",
+      "stratum": "typo2",
+      "query": "Estadio Brigadier General Esnislao López",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:transposed",
+      "stratum": "transposed",
+      "query": "Brigadier Estadio General Estanislao López",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Estadio Brigadier General Estanislao López, Santa Fe, Santa Fe",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sf_colon:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Brigadier General Estanislao López",
+      "expected": "sf_colon",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.653,
+          "lon": -60.715
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_colon:colloquial",
+      "stratum": "colloquial",
+      "query": "cancha Brigadier General Estanislao López",
+      "expected": "sf_colon",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus Manuel",
+      "expected": "sf_terminal",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.634999999999998,
+          "lon": -60.694
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus Manuel Belgrano, Santa Fe, Santa Fe",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sf_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.634999999999998,
+          "lon": -60.694
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Manuel Belgrano",
+      "expected": "sf_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:exact",
+      "stratum": "exact",
+      "query": "Hospital José María Cullen",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:accentless",
+      "stratum": "accentless",
+      "query": "Hospital Jose Maria Cullen",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:incomplete",
+      "stratum": "incomplete",
+      "query": "Hospital José María",
+      "expected": "sf_hospital",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.639,
+          "lon": -60.701
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:typo1",
+      "stratum": "typo1",
+      "query": "Hopital José María Cullen",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:typo2",
+      "stratum": "typo2",
+      "query": "Hoital José María Cullen",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:transposed",
+      "stratum": "transposed",
+      "query": "José Hospital María Cullen",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Hospital José María Cullen, Santa Fe, Santa Fe",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sf_hospital:local_context",
+      "stratum": "local_context",
+      "query": "Hospital José María Cullen",
+      "expected": "sf_hospital",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.639,
+          "lon": -60.701
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_hospital:colloquial",
+      "stratum": "colloquial",
+      "query": "sanatorio José María Cullen",
+      "expected": "sf_hospital",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:exact",
+      "stratum": "exact",
+      "query": "Universidad Nacional del Litoral",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:accentless",
+      "stratum": "accentless",
+      "query": "Universidad Nacional del Litoral",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:incomplete",
+      "stratum": "incomplete",
+      "query": "Universidad Nacional del",
+      "expected": "sf_unl",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.625999999999998,
+          "lon": -60.663000000000004
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:typo1",
+      "stratum": "typo1",
+      "query": "Unversidad Nacional del Litoral",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:typo2",
+      "stratum": "typo2",
+      "query": "Unersidad Nacional del Litoral",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:transposed",
+      "stratum": "transposed",
+      "query": "Nacional Universidad del Litoral",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Universidad Nacional del Litoral, Santa Fe, Santa Fe",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sf_unl:local_context",
+      "stratum": "local_context",
+      "query": "Universidad Nacional del Litoral",
+      "expected": "sf_unl",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.625999999999998,
+          "lon": -60.663000000000004
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sf_unl:colloquial",
+      "stratum": "colloquial",
+      "query": "facultad Nacional Litoral",
+      "expected": "sf_unl",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:exact",
+      "stratum": "exact",
+      "query": "Monumento Nacional a la Bandera",
+      "expected": "ros_monumento",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:accentless",
+      "stratum": "accentless",
+      "query": "Monumento Nacional a la Bandera",
+      "expected": "ros_monumento",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:incomplete",
+      "stratum": "incomplete",
+      "query": "Monumento Nacional a la",
+      "expected": "ros_monumento",
+      "origin": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -32.938,
+          "lon": -60.619
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:typo1",
+      "stratum": "typo1",
+      "query": "Moumento Nacional a la Bandera",
+      "expected": "ros_monumento",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:typo2",
+      "stratum": "typo2",
+      "query": "Momento Nacional a la Bandera",
+      "expected": "ros_monumento",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:transposed",
+      "stratum": "transposed",
+      "query": "Nacional Monumento a la Bandera",
+      "expected": "ros_monumento",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_monumento:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Monumento Nacional a la Bandera, Rosario, Santa Fe",
+      "expected": "ros_monumento",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "ros_monumento:local_context",
+      "stratum": "local_context",
+      "query": "Monumento Nacional a la Bandera",
+      "expected": "ros_monumento",
+      "origin": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -32.938,
+          "lon": -60.619
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:exact",
+      "stratum": "exact",
+      "query": "Estadio Gigante de Arroyito",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:accentless",
+      "stratum": "accentless",
+      "query": "Estadio Gigante de Arroyito",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:incomplete",
+      "stratum": "incomplete",
+      "query": "Estadio Gigante de",
+      "expected": "ros_gigante",
+      "origin": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -32.904,
+          "lon": -60.665
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:typo1",
+      "stratum": "typo1",
+      "query": "Estadio Gigante de Aroyito",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:typo2",
+      "stratum": "typo2",
+      "query": "Estadio Gigante de Aryito",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:transposed",
+      "stratum": "transposed",
+      "query": "Gigante Estadio de Arroyito",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Estadio Gigante de Arroyito, Rosario, Santa Fe",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "ros_gigante:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Gigante de Arroyito",
+      "expected": "ros_gigante",
+      "origin": {
+        "locality": "Rosario",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -32.904,
+          "lon": -60.665
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ros_gigante:colloquial",
+      "stratum": "colloquial",
+      "query": "cancha Gigante Arroyito",
+      "expected": "ros_gigante",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:exact",
+      "stratum": "exact",
+      "query": "Obelisco",
+      "expected": "caba_obelisco",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:accentless",
+      "stratum": "accentless",
+      "query": "Obelisco",
+      "expected": "caba_obelisco",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:incomplete",
+      "stratum": "incomplete",
+      "query": "Obelisco",
+      "expected": "caba_obelisco",
+      "origin": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "coordinates": {
+          "lat": -34.593,
+          "lon": -58.372
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:typo1",
+      "stratum": "typo1",
+      "query": "Oblisco",
+      "expected": "caba_obelisco",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:typo2",
+      "stratum": "typo2",
+      "query": "Obisco",
+      "expected": "caba_obelisco",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:transposed",
+      "stratum": "transposed",
+      "query": "Obelisco",
+      "expected": "caba_obelisco",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_obelisco:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Obelisco, Ciudad Autónoma de Buenos Aires, Ciudad Autónoma de Buenos Aires",
+      "expected": "caba_obelisco",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "caba_obelisco:local_context",
+      "stratum": "local_context",
+      "query": "Obelisco",
+      "expected": "caba_obelisco",
+      "origin": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "coordinates": {
+          "lat": -34.593,
+          "lon": -58.372
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Retiro",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Retiro",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "caba_retiro",
+      "origin": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "coordinates": {
+          "lat": -34.579,
+          "lon": -58.363
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Retiro",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Retiro",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Retiro",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Retiro, Ciudad Autónoma de Buenos Aires, Ciudad Autónoma de Buenos Aires",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "caba_retiro:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Retiro",
+      "expected": "caba_retiro",
+      "origin": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "coordinates": {
+          "lat": -34.579,
+          "lon": -58.363
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "caba_retiro:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Retiro",
+      "expected": "caba_retiro",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:exact",
+      "stratum": "exact",
+      "query": "Aeroparque Jorge Newbery",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:accentless",
+      "stratum": "accentless",
+      "query": "Aeroparque Jorge Newbery",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:incomplete",
+      "stratum": "incomplete",
+      "query": "Aeroparque Jorge",
+      "expected": "caba_aeroparque",
+      "origin": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "coordinates": {
+          "lat": -34.549,
+          "lon": -58.406
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:typo1",
+      "stratum": "typo1",
+      "query": "Aeoparque Jorge Newbery",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:typo2",
+      "stratum": "typo2",
+      "query": "Aeparque Jorge Newbery",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:transposed",
+      "stratum": "transposed",
+      "query": "Jorge Aeroparque Newbery",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Aeroparque Jorge Newbery, Ciudad Autónoma de Buenos Aires, Ciudad Autónoma de Buenos Aires",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "caba_aeroparque:local_context",
+      "stratum": "local_context",
+      "query": "Aeroparque Jorge Newbery",
+      "expected": "caba_aeroparque",
+      "origin": {
+        "locality": "Ciudad Autónoma de Buenos Aires",
+        "province": "Ciudad Autónoma de Buenos Aires",
+        "province_id": "02",
+        "coordinates": {
+          "lat": -34.549,
+          "lon": -58.406
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "caba_aeroparque:colloquial",
+      "stratum": "colloquial",
+      "query": "aeropuerto Aeroparque Jorge Newbery",
+      "expected": "caba_aeroparque",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:exact",
+      "stratum": "exact",
+      "query": "Catedral de La Plata",
+      "expected": "lp_catedral",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:accentless",
+      "stratum": "accentless",
+      "query": "Catedral de La Plata",
+      "expected": "lp_catedral",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:incomplete",
+      "stratum": "incomplete",
+      "query": "Catedral de La",
+      "expected": "lp_catedral",
+      "origin": {
+        "locality": "La Plata",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "coordinates": {
+          "lat": -34.912,
+          "lon": -57.946000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:typo1",
+      "stratum": "typo1",
+      "query": "Caedral de La Plata",
+      "expected": "lp_catedral",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:typo2",
+      "stratum": "typo2",
+      "query": "Cadral de La Plata",
+      "expected": "lp_catedral",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:transposed",
+      "stratum": "transposed",
+      "query": "de Catedral La Plata",
+      "expected": "lp_catedral",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_catedral:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Catedral de La Plata, La Plata, Buenos Aires",
+      "expected": "lp_catedral",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "lp_catedral:local_context",
+      "stratum": "local_context",
+      "query": "Catedral de La Plata",
+      "expected": "lp_catedral",
+      "origin": {
+        "locality": "La Plata",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "coordinates": {
+          "lat": -34.912,
+          "lon": -57.946000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:exact",
+      "stratum": "exact",
+      "query": "Universidad Nacional de La Plata",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:accentless",
+      "stratum": "accentless",
+      "query": "Universidad Nacional de La Plata",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:incomplete",
+      "stratum": "incomplete",
+      "query": "Universidad Nacional de La",
+      "expected": "lp_unlp",
+      "origin": {
+        "locality": "La Plata",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "coordinates": {
+          "lat": -34.9,
+          "lon": -57.943000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:typo1",
+      "stratum": "typo1",
+      "query": "Unversidad Nacional de La Plata",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:typo2",
+      "stratum": "typo2",
+      "query": "Unersidad Nacional de La Plata",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:transposed",
+      "stratum": "transposed",
+      "query": "Nacional Universidad de La Plata",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Universidad Nacional de La Plata, La Plata, Buenos Aires",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "lp_unlp:local_context",
+      "stratum": "local_context",
+      "query": "Universidad Nacional de La Plata",
+      "expected": "lp_unlp",
+      "origin": {
+        "locality": "La Plata",
+        "province": "Buenos Aires",
+        "province_id": "06",
+        "coordinates": {
+          "lat": -34.9,
+          "lon": -57.943000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "lp_unlp:colloquial",
+      "stratum": "colloquial",
+      "query": "facultad Nacional La Plata",
+      "expected": "lp_unlp",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Córdoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Cordoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "cord_terminal",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.410999999999998,
+          "lon": -64.16499999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Córdoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Córdoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Córdoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Córdoba, Córdoba, Córdoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "cord_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Córdoba",
+      "expected": "cord_terminal",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.410999999999998,
+          "lon": -64.16499999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "cord_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Córdoba",
+      "expected": "cord_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:exact",
+      "stratum": "exact",
+      "query": "Estadio Mario Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:accentless",
+      "stratum": "accentless",
+      "query": "Estadio Mario Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:incomplete",
+      "stratum": "incomplete",
+      "query": "Estadio Mario Alberto",
+      "expected": "cord_kempes",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.358999999999998,
+          "lon": -64.23599999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:typo1",
+      "stratum": "typo1",
+      "query": "Esadio Mario Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:typo2",
+      "stratum": "typo2",
+      "query": "Esdio Mario Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:transposed",
+      "stratum": "transposed",
+      "query": "Mario Estadio Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Estadio Mario Alberto Kempes, Córdoba, Córdoba",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "cord_kempes:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Mario Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.358999999999998,
+          "lon": -64.23599999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "cord_kempes:colloquial",
+      "stratum": "colloquial",
+      "query": "cancha Mario Alberto Kempes",
+      "expected": "cord_kempes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "mza_terminal",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.884,
+          "lon": -68.826
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Mendoza, Mendoza, Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "mza_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Mendoza",
+      "expected": "mza_terminal",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.884,
+          "lon": -68.826
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "mza_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Mendoza",
+      "expected": "mza_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:exact",
+      "stratum": "exact",
+      "query": "Plaza Independencia",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:accentless",
+      "stratum": "accentless",
+      "query": "Plaza Independencia",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:incomplete",
+      "stratum": "incomplete",
+      "query": "Plaza Independencia",
+      "expected": "mza_independencia",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.879000000000005,
+          "lon": -68.835
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:typo1",
+      "stratum": "typo1",
+      "query": "Plaza Inependencia",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:typo2",
+      "stratum": "typo2",
+      "query": "Plaza Inpendencia",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:transposed",
+      "stratum": "transposed",
+      "query": "Independencia Plaza",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Plaza Independencia, Mendoza, Mendoza",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "mza_independencia:local_context",
+      "stratum": "local_context",
+      "query": "Plaza Independencia",
+      "expected": "mza_independencia",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.879000000000005,
+          "lon": -68.835
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "mza_independencia:colloquial",
+      "stratum": "colloquial",
+      "query": "plaza Independencia",
+      "expected": "mza_independencia",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "salta_terminal",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.782,
+          "lon": -65.39099999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Salta, Salta, Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "salta_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Salta",
+      "expected": "salta_terminal",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.782,
+          "lon": -65.39099999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "salta_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Salta",
+      "expected": "salta_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:exact",
+      "stratum": "exact",
+      "query": "Monumento a Güemes",
+      "expected": "salta_guemes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:accentless",
+      "stratum": "accentless",
+      "query": "Monumento a Guemes",
+      "expected": "salta_guemes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:incomplete",
+      "stratum": "incomplete",
+      "query": "Monumento a",
+      "expected": "salta_guemes",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.769,
+          "lon": -65.39099999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:typo1",
+      "stratum": "typo1",
+      "query": "Moumento a Güemes",
+      "expected": "salta_guemes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:typo2",
+      "stratum": "typo2",
+      "query": "Momento a Güemes",
+      "expected": "salta_guemes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:transposed",
+      "stratum": "transposed",
+      "query": "a Monumento Güemes",
+      "expected": "salta_guemes",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "salta_guemes:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Monumento a Güemes, Salta, Salta",
+      "expected": "salta_guemes",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "salta_guemes:local_context",
+      "stratum": "local_context",
+      "query": "Monumento a Güemes",
+      "expected": "salta_guemes",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.769,
+          "lon": -65.39099999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Paraná",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Parana",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "parana_terminal",
+      "origin": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "coordinates": {
+          "lat": -31.733999999999998,
+          "lon": -60.501000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Paraná",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Paraná",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Paraná",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Paraná, Paraná, Entre Ríos",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "parana_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Paraná",
+      "expected": "parana_terminal",
+      "origin": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "coordinates": {
+          "lat": -31.733999999999998,
+          "lon": -60.501000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "parana_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Paraná",
+      "expected": "parana_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:exact",
+      "stratum": "exact",
+      "query": "Parque Urquiza",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:accentless",
+      "stratum": "accentless",
+      "query": "Parque Urquiza",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:incomplete",
+      "stratum": "incomplete",
+      "query": "Parque Urquiza",
+      "expected": "parana_urquiza",
+      "origin": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "coordinates": {
+          "lat": -31.715,
+          "lon": -60.519000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:typo1",
+      "stratum": "typo1",
+      "query": "Parque Uruiza",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:typo2",
+      "stratum": "typo2",
+      "query": "Parque Uriza",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:transposed",
+      "stratum": "transposed",
+      "query": "Urquiza Parque",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Parque Urquiza, Paraná, Entre Ríos",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "parana_urquiza:local_context",
+      "stratum": "local_context",
+      "query": "Parque Urquiza",
+      "expected": "parana_urquiza",
+      "origin": {
+        "locality": "Paraná",
+        "province": "Entre Ríos",
+        "province_id": "30",
+        "coordinates": {
+          "lat": -31.715,
+          "lon": -60.519000000000005
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "parana_urquiza:colloquial",
+      "stratum": "colloquial",
+      "query": "plaza Urquiza",
+      "expected": "parana_urquiza",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "rafaela_terminal",
+      "origin": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.238,
+          "lon": -61.482
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Rafaela, Rafaela, Santa Fe",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "rafaela_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": {
+        "locality": "Rafaela",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.238,
+          "lon": -61.482
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "rafaela_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Rafaela",
+      "expected": "rafaela_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Villa María",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Villa Maria",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "vm_terminal",
+      "origin": {
+        "locality": "Villa María",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -32.398,
+          "lon": -63.232
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Villa María",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Villa María",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Villa María",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Villa María, Villa María, Córdoba",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "vm_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Villa María",
+      "expected": "vm_terminal",
+      "origin": {
+        "locality": "Villa María",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -32.398,
+          "lon": -63.232
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "vm_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Villa María",
+      "expected": "vm_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Ushuaia",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Ushuaia",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "ush_terminal",
+      "origin": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "coordinates": {
+          "lat": -54.797000000000004,
+          "lon": -68.294
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Ushuaia",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Ushuaia",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Ushuaia",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Ushuaia, Ushuaia, Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "ush_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Ushuaia",
+      "expected": "ush_terminal",
+      "origin": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "coordinates": {
+          "lat": -54.797000000000004,
+          "lon": -68.294
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ush_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Ushuaia",
+      "expected": "ush_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:exact",
+      "stratum": "exact",
+      "query": "Aeropuerto Internacional de Ushuaia",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:accentless",
+      "stratum": "accentless",
+      "query": "Aeropuerto Internacional de Ushuaia",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:incomplete",
+      "stratum": "incomplete",
+      "query": "Aeropuerto Internacional de",
+      "expected": "ush_aero",
+      "origin": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "coordinates": {
+          "lat": -54.833000000000006,
+          "lon": -68.286
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:typo1",
+      "stratum": "typo1",
+      "query": "Aeropuerto Inernacional de Ushuaia",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:typo2",
+      "stratum": "typo2",
+      "query": "Aeropuerto Inrnacional de Ushuaia",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:transposed",
+      "stratum": "transposed",
+      "query": "Internacional Aeropuerto de Ushuaia",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Aeropuerto Internacional de Ushuaia, Ushuaia, Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "ush_aero:local_context",
+      "stratum": "local_context",
+      "query": "Aeropuerto Internacional de Ushuaia",
+      "expected": "ush_aero",
+      "origin": {
+        "locality": "Ushuaia",
+        "province": "Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+        "province_id": "94",
+        "coordinates": {
+          "lat": -54.833000000000006,
+          "lon": -68.286
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "ush_aero:colloquial",
+      "stratum": "colloquial",
+      "query": "aeropuerto Internacional Ushuaia",
+      "expected": "ush_aero",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Resistencia",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Resistencia",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "res_terminal",
+      "origin": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "coordinates": {
+          "lat": -27.441,
+          "lon": -58.976
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Terminal de Ómnibus de Reistencia",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Terminal de Ómnibus de Restencia",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Resistencia",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Resistencia, Resistencia, Chaco",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "res_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Resistencia",
+      "expected": "res_terminal",
+      "origin": {
+        "locality": "Resistencia",
+        "province": "Chaco",
+        "province_id": "22",
+        "coordinates": {
+          "lat": -27.441,
+          "lon": -58.976
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "res_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Resistencia",
+      "expected": "res_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "form_terminal",
+      "origin": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "coordinates": {
+          "lat": -26.166999999999998,
+          "lon": -58.168
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Formosa, Formosa, Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "form_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Formosa",
+      "expected": "form_terminal",
+      "origin": {
+        "locality": "Formosa",
+        "province": "Formosa",
+        "province_id": "34",
+        "coordinates": {
+          "lat": -26.166999999999998,
+          "lon": -58.168
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "form_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Formosa",
+      "expected": "form_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "lr_terminal",
+      "origin": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "coordinates": {
+          "lat": -29.404,
+          "lon": -66.84599999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de La Rioja, La Rioja, La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "lr_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de La Rioja",
+      "expected": "lr_terminal",
+      "origin": {
+        "locality": "La Rioja",
+        "province": "La Rioja",
+        "province_id": "46",
+        "coordinates": {
+          "lat": -29.404,
+          "lon": -66.84599999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "lr_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal La Rioja",
+      "expected": "lr_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Neuquén",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Neuquen",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "nqn_terminal",
+      "origin": {
+        "locality": "Neuquén",
+        "province": "Neuquén",
+        "province_id": "58",
+        "coordinates": {
+          "lat": -38.941,
+          "lon": -68.04899999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Neuquén",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Neuquén",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Neuquén",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Neuquén, Neuquén, Neuquén",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "nqn_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Neuquén",
+      "expected": "nqn_terminal",
+      "origin": {
+        "locality": "Neuquén",
+        "province": "Neuquén",
+        "province_id": "58",
+        "coordinates": {
+          "lat": -38.941,
+          "lon": -68.04899999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "nqn_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Neuquén",
+      "expected": "nqn_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "sj_terminal",
+      "origin": {
+        "locality": "San Juan",
+        "province": "San Juan",
+        "province_id": "70",
+        "coordinates": {
+          "lat": -31.528,
+          "lon": -68.51599999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de San Juan, San Juan, San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sj_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de San Juan",
+      "expected": "sj_terminal",
+      "origin": {
+        "locality": "San Juan",
+        "province": "San Juan",
+        "province_id": "70",
+        "coordinates": {
+          "lat": -31.528,
+          "lon": -68.51599999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sj_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal San Juan",
+      "expected": "sj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "sl_terminal",
+      "origin": {
+        "locality": "San Luis",
+        "province": "San Luis",
+        "province_id": "74",
+        "coordinates": {
+          "lat": -33.285000000000004,
+          "lon": -66.32499999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de San Luis, San Luis, San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sl_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de San Luis",
+      "expected": "sl_terminal",
+      "origin": {
+        "locality": "San Luis",
+        "province": "San Luis",
+        "province_id": "74",
+        "coordinates": {
+          "lat": -33.285000000000004,
+          "lon": -66.32499999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sl_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal San Luis",
+      "expected": "sl_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Río Gallegos",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Rio Gallegos",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "rg_terminal",
+      "origin": {
+        "locality": "Río Gallegos",
+        "province": "Santa Cruz",
+        "province_id": "78",
+        "coordinates": {
+          "lat": -51.613,
+          "lon": -69.207
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Río Gallegos",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Río Gallegos",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Río Gallegos",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Río Gallegos, Río Gallegos, Santa Cruz",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "rg_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Río Gallegos",
+      "expected": "rg_terminal",
+      "origin": {
+        "locality": "Río Gallegos",
+        "province": "Santa Cruz",
+        "province_id": "78",
+        "coordinates": {
+          "lat": -51.613,
+          "lon": -69.207
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "rg_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Río Gallegos",
+      "expected": "rg_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "sde_terminal",
+      "origin": {
+        "locality": "Santiago del Estero",
+        "province": "Santiago del Estero",
+        "province_id": "86",
+        "coordinates": {
+          "lat": -27.785,
+          "lon": -64.25099999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Santiago del Estero, Santiago del Estero, Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "sde_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Santiago del Estero",
+      "expected": "sde_terminal",
+      "origin": {
+        "locality": "Santiago del Estero",
+        "province": "Santiago del Estero",
+        "province_id": "86",
+        "coordinates": {
+          "lat": -27.785,
+          "lon": -64.25099999999999
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "sde_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Santiago Estero",
+      "expected": "sde_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de San Miguel de Tucumán",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de San Miguel de Tucuman",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "tuc_terminal",
+      "origin": {
+        "locality": "San Miguel de Tucumán",
+        "province": "Tucumán",
+        "province_id": "90",
+        "coordinates": {
+          "lat": -26.819999999999997,
+          "lon": -65.192
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de San Miguel de Tucumán",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de San Miguel de Tucumán",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de San Miguel de Tucumán",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de San Miguel de Tucumán, San Miguel de Tucumán, Tucumán",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "tuc_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de San Miguel de Tucumán",
+      "expected": "tuc_terminal",
+      "origin": {
+        "locality": "San Miguel de Tucumán",
+        "province": "Tucumán",
+        "province_id": "90",
+        "coordinates": {
+          "lat": -26.819999999999997,
+          "lon": -65.192
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "tuc_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal San Miguel Tucumán",
+      "expected": "tuc_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de San Salvador de Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de San Salvador de Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "juj_terminal",
+      "origin": {
+        "locality": "San Salvador de Jujuy",
+        "province": "Jujuy",
+        "province_id": "38",
+        "coordinates": {
+          "lat": -24.174999999999997,
+          "lon": -65.289
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de San Salvador de Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de San Salvador de Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de San Salvador de Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de San Salvador de Jujuy, San Salvador de Jujuy, Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "juj_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de San Salvador de Jujuy",
+      "expected": "juj_terminal",
+      "origin": {
+        "locality": "San Salvador de Jujuy",
+        "province": "Jujuy",
+        "province_id": "38",
+        "coordinates": {
+          "lat": -24.174999999999997,
+          "lon": -65.289
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "juj_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal San Salvador Jujuy",
+      "expected": "juj_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Viedma",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Viedma",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "viedma_terminal",
+      "origin": {
+        "locality": "Viedma",
+        "province": "Río Negro",
+        "province_id": "62",
+        "coordinates": {
+          "lat": -40.804,
+          "lon": -62.99
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Viedma",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Viedma",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Viedma",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Viedma, Viedma, Río Negro",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "viedma_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Viedma",
+      "expected": "viedma_terminal",
+      "origin": {
+        "locality": "Viedma",
+        "province": "Río Negro",
+        "province_id": "62",
+        "coordinates": {
+          "lat": -40.804,
+          "lon": -62.99
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "viedma_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Viedma",
+      "expected": "viedma_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Rawson",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Rawson",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "rawson_terminal",
+      "origin": {
+        "locality": "Rawson",
+        "province": "Chubut",
+        "province_id": "26",
+        "coordinates": {
+          "lat": -43.29,
+          "lon": -65.092
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Rawson",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Rawson",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Rawson",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Rawson, Rawson, Chubut",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "rawson_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Rawson",
+      "expected": "rawson_terminal",
+      "origin": {
+        "locality": "Rawson",
+        "province": "Chubut",
+        "province_id": "26",
+        "coordinates": {
+          "lat": -43.29,
+          "lon": -65.092
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "rawson_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Rawson",
+      "expected": "rawson_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "srosa_terminal",
+      "origin": {
+        "locality": "Santa Rosa",
+        "province": "La Pampa",
+        "province_id": "42",
+        "coordinates": {
+          "lat": -36.61,
+          "lon": -64.28
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Santa Rosa, Santa Rosa, La Pampa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "srosa_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": {
+        "locality": "Santa Rosa",
+        "province": "La Pampa",
+        "province_id": "42",
+        "coordinates": {
+          "lat": -36.61,
+          "lon": -64.28
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "srosa_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Santa Rosa",
+      "expected": "srosa_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:exact",
+      "stratum": "exact",
+      "query": "Terminal de Ómnibus de Posadas",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:accentless",
+      "stratum": "accentless",
+      "query": "Terminal de Omnibus de Posadas",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:incomplete",
+      "stratum": "incomplete",
+      "query": "Terminal de Ómnibus de",
+      "expected": "posadas_terminal",
+      "origin": {
+        "locality": "Posadas",
+        "province": "Misiones",
+        "province_id": "54",
+        "coordinates": {
+          "lat": -27.355999999999998,
+          "lon": -55.886
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:typo1",
+      "stratum": "typo1",
+      "query": "Teminal de Ómnibus de Posadas",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:typo2",
+      "stratum": "typo2",
+      "query": "Teinal de Ómnibus de Posadas",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:transposed",
+      "stratum": "transposed",
+      "query": "de Terminal Ómnibus de Posadas",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:explicit_geo",
+      "stratum": "explicit_geo",
+      "query": "Terminal de Ómnibus de Posadas, Posadas, Misiones",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": true
+    },
+    {
+      "id": "posadas_terminal:local_context",
+      "stratum": "local_context",
+      "query": "Terminal de Ómnibus de Posadas",
+      "expected": "posadas_terminal",
+      "origin": {
+        "locality": "Posadas",
+        "province": "Misiones",
+        "province_id": "54",
+        "coordinates": {
+          "lat": -27.355999999999998,
+          "lon": -55.886
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "posadas_terminal:colloquial",
+      "stratum": "colloquial",
+      "query": "terminal Posadas",
+      "expected": "posadas_terminal",
+      "origin": null,
+      "explicit": false
+    },
+    {
+      "id": "amb0_82:local_context",
+      "stratum": "local_context",
+      "query": "Plaza Central",
+      "expected": "amb0_82",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.63,
+          "lon": -60.7
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 0
+    },
+    {
+      "id": "amb0_14:local_context",
+      "stratum": "local_context",
+      "query": "Plaza Central",
+      "expected": "amb0_14",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.42,
+          "lon": -64.18
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 0
+    },
+    {
+      "id": "amb0_50:local_context",
+      "stratum": "local_context",
+      "query": "Plaza Central",
+      "expected": "amb0_50",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.89,
+          "lon": -68.85
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 0
+    },
+    {
+      "id": "amb0_66:local_context",
+      "stratum": "local_context",
+      "query": "Plaza Central",
+      "expected": "amb0_66",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.78,
+          "lon": -65.42
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 0
+    },
+    {
+      "id": "amb1_82:local_context",
+      "stratum": "local_context",
+      "query": "Terminal Central",
+      "expected": "amb1_82",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.63,
+          "lon": -60.7
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 1
+    },
+    {
+      "id": "amb1_14:local_context",
+      "stratum": "local_context",
+      "query": "Terminal Central",
+      "expected": "amb1_14",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.42,
+          "lon": -64.18
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 1
+    },
+    {
+      "id": "amb1_50:local_context",
+      "stratum": "local_context",
+      "query": "Terminal Central",
+      "expected": "amb1_50",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.89,
+          "lon": -68.85
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 1
+    },
+    {
+      "id": "amb1_66:local_context",
+      "stratum": "local_context",
+      "query": "Terminal Central",
+      "expected": "amb1_66",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.78,
+          "lon": -65.42
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 1
+    },
+    {
+      "id": "amb2_82:local_context",
+      "stratum": "local_context",
+      "query": "Hospital Central",
+      "expected": "amb2_82",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.63,
+          "lon": -60.7
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 2
+    },
+    {
+      "id": "amb2_14:local_context",
+      "stratum": "local_context",
+      "query": "Hospital Central",
+      "expected": "amb2_14",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.42,
+          "lon": -64.18
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 2
+    },
+    {
+      "id": "amb2_50:local_context",
+      "stratum": "local_context",
+      "query": "Hospital Central",
+      "expected": "amb2_50",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.89,
+          "lon": -68.85
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 2
+    },
+    {
+      "id": "amb2_66:local_context",
+      "stratum": "local_context",
+      "query": "Hospital Central",
+      "expected": "amb2_66",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.78,
+          "lon": -65.42
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 2
+    },
+    {
+      "id": "amb3_82:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Municipal",
+      "expected": "amb3_82",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.63,
+          "lon": -60.7
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 3
+    },
+    {
+      "id": "amb3_14:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Municipal",
+      "expected": "amb3_14",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.42,
+          "lon": -64.18
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 3
+    },
+    {
+      "id": "amb3_50:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Municipal",
+      "expected": "amb3_50",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.89,
+          "lon": -68.85
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 3
+    },
+    {
+      "id": "amb3_66:local_context",
+      "stratum": "local_context",
+      "query": "Estadio Municipal",
+      "expected": "amb3_66",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.78,
+          "lon": -65.42
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 3
+    },
+    {
+      "id": "amb4_82:local_context",
+      "stratum": "local_context",
+      "query": "Puente Nuevo",
+      "expected": "amb4_82",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.63,
+          "lon": -60.7
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 4
+    },
+    {
+      "id": "amb4_14:local_context",
+      "stratum": "local_context",
+      "query": "Puente Nuevo",
+      "expected": "amb4_14",
+      "origin": {
+        "locality": "Córdoba",
+        "province": "Córdoba",
+        "province_id": "14",
+        "coordinates": {
+          "lat": -31.42,
+          "lon": -64.18
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 4
+    },
+    {
+      "id": "amb4_50:local_context",
+      "stratum": "local_context",
+      "query": "Puente Nuevo",
+      "expected": "amb4_50",
+      "origin": {
+        "locality": "Mendoza",
+        "province": "Mendoza",
+        "province_id": "50",
+        "coordinates": {
+          "lat": -32.89,
+          "lon": -68.85
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 4
+    },
+    {
+      "id": "amb4_66:local_context",
+      "stratum": "local_context",
+      "query": "Puente Nuevo",
+      "expected": "amb4_66",
+      "origin": {
+        "locality": "Salta",
+        "province": "Salta",
+        "province_id": "66",
+        "coordinates": {
+          "lat": -24.78,
+          "lon": -65.42
+        }
+      },
+      "explicit": false,
+      "ambiguous_group": 4
+    },
+    {
+      "id": "owner_seed_colon",
+      "stratum": "owner_seed",
+      "query": "cancha de colon",
+      "expected": "sf_colon",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.64,
+          "lon": -60.7
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "owner_seed_puente",
+      "stratum": "owner_seed",
+      "query": "puente colgante",
+      "expected": "sf_bridge",
+      "origin": {
+        "locality": "Santa Fe",
+        "province": "Santa Fe",
+        "province_id": "82",
+        "coordinates": {
+          "lat": -31.64,
+          "lon": -60.7
+        }
+      },
+      "explicit": false
+    },
+    {
+      "id": "no_result_0",
+      "stratum": "no_result",
+      "query": "zzzxqv 9981",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_1",
+      "stratum": "no_result",
+      "query": "asdf qwer nowhere",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_2",
+      "stratum": "no_result",
+      "query": "lugar inexistente 123xyz",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_3",
+      "stratum": "no_result",
+      "query": "terminal marte argentina",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_4",
+      "stratum": "no_result",
+      "query": "puente qzxwvv",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_5",
+      "stratum": "no_result",
+      "query": "hospital noexiste999",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_6",
+      "stratum": "no_result",
+      "query": "calle xyzxyz 99999",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_7",
+      "stratum": "no_result",
+      "query": "aeropuerto inexistente qqq",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_8",
+      "stratum": "no_result",
+      "query": "plaza qqqxxx",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    },
+    {
+      "id": "no_result_9",
+      "stratum": "no_result",
+      "query": "universidad zzqqvv",
+      "expected": null,
+      "origin": null,
+      "explicit": false,
+      "candidate_pool": []
+    }
+  ],
+  "candidates": [
+    {
+      "candidate_id": "sf_bridge",
+      "candidate_ref": "sf_bridge",
+      "display_primary": "Puente Colgante",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Puente Colgante",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.638,
+        "lon": -60.681
+      },
+      "provider_types": [
+        "bridge"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sf_colon",
+      "candidate_ref": "sf_colon",
+      "display_primary": "Estadio Brigadier General Estanislao López",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Club Atlético Colón Estadio Brigadier General Estanislao López",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.663,
+        "lon": -60.725
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sf_terminal",
+      "candidate_ref": "sf_terminal",
+      "display_primary": "Terminal de Ómnibus Manuel Belgrano",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Terminal Ómnibus Manuel Belgrano",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.645,
+        "lon": -60.704
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sf_hospital",
+      "candidate_ref": "sf_hospital",
+      "display_primary": "Hospital José María Cullen",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Hospital Cullen",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.649,
+        "lon": -60.711
+      },
+      "provider_types": [
+        "hospital"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sf_unl",
+      "candidate_ref": "sf_unl",
+      "display_primary": "Universidad Nacional del Litoral",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "UNL Universidad Nacional del Litoral",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.636,
+        "lon": -60.673
+      },
+      "provider_types": [
+        "university"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "ros_monumento",
+      "candidate_ref": "ros_monumento",
+      "display_primary": "Monumento Nacional a la Bandera",
+      "display_secondary": "Rosario · Santa Fe",
+      "search_text": "Monumento Bandera Rosario",
+      "locality": {
+        "name": "Rosario"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -32.948,
+        "lon": -60.629
+      },
+      "provider_types": [
+        "monument"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "ros_gigante",
+      "candidate_ref": "ros_gigante",
+      "display_primary": "Estadio Gigante de Arroyito",
+      "display_secondary": "Rosario · Santa Fe",
+      "search_text": "Rosario Central Gigante Arroyito",
+      "locality": {
+        "name": "Rosario"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -32.914,
+        "lon": -60.675
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "caba_obelisco",
+      "candidate_ref": "caba_obelisco",
+      "display_primary": "Obelisco",
+      "display_secondary": "Ciudad Autónoma de Buenos Aires · Ciudad Autónoma de Buenos Aires",
+      "search_text": "Obelisco Buenos Aires",
+      "locality": {
+        "name": "Ciudad Autónoma de Buenos Aires"
+      },
+      "province": {
+        "id": "02",
+        "name": "Ciudad Autónoma de Buenos Aires"
+      },
+      "coordinates": {
+        "lat": -34.603,
+        "lon": -58.382
+      },
+      "provider_types": [
+        "monument"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "caba_retiro",
+      "candidate_ref": "caba_retiro",
+      "display_primary": "Terminal de Ómnibus de Retiro",
+      "display_secondary": "Ciudad Autónoma de Buenos Aires · Ciudad Autónoma de Buenos Aires",
+      "search_text": "Terminal Retiro",
+      "locality": {
+        "name": "Ciudad Autónoma de Buenos Aires"
+      },
+      "province": {
+        "id": "02",
+        "name": "Ciudad Autónoma de Buenos Aires"
+      },
+      "coordinates": {
+        "lat": -34.589,
+        "lon": -58.373
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "caba_aeroparque",
+      "candidate_ref": "caba_aeroparque",
+      "display_primary": "Aeroparque Jorge Newbery",
+      "display_secondary": "Ciudad Autónoma de Buenos Aires · Ciudad Autónoma de Buenos Aires",
+      "search_text": "Aeroparque Jorge Newbery AEP",
+      "locality": {
+        "name": "Ciudad Autónoma de Buenos Aires"
+      },
+      "province": {
+        "id": "02",
+        "name": "Ciudad Autónoma de Buenos Aires"
+      },
+      "coordinates": {
+        "lat": -34.559,
+        "lon": -58.416
+      },
+      "provider_types": [
+        "airport"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "lp_catedral",
+      "candidate_ref": "lp_catedral",
+      "display_primary": "Catedral de La Plata",
+      "display_secondary": "La Plata · Buenos Aires",
+      "search_text": "Catedral La Plata",
+      "locality": {
+        "name": "La Plata"
+      },
+      "province": {
+        "id": "06",
+        "name": "Buenos Aires"
+      },
+      "coordinates": {
+        "lat": -34.922,
+        "lon": -57.956
+      },
+      "provider_types": [
+        "place_of_worship"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "lp_unlp",
+      "candidate_ref": "lp_unlp",
+      "display_primary": "Universidad Nacional de La Plata",
+      "display_secondary": "La Plata · Buenos Aires",
+      "search_text": "UNLP Universidad Nacional La Plata",
+      "locality": {
+        "name": "La Plata"
+      },
+      "province": {
+        "id": "06",
+        "name": "Buenos Aires"
+      },
+      "coordinates": {
+        "lat": -34.91,
+        "lon": -57.953
+      },
+      "provider_types": [
+        "university"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "cord_terminal",
+      "candidate_ref": "cord_terminal",
+      "display_primary": "Terminal de Ómnibus de Córdoba",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Terminal Córdoba",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.421,
+        "lon": -64.175
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "cord_kempes",
+      "candidate_ref": "cord_kempes",
+      "display_primary": "Estadio Mario Alberto Kempes",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Kempes Estadio Córdoba",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.369,
+        "lon": -64.246
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "mza_terminal",
+      "candidate_ref": "mza_terminal",
+      "display_primary": "Terminal de Ómnibus de Mendoza",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Terminal Mendoza",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.894,
+        "lon": -68.836
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "mza_independencia",
+      "candidate_ref": "mza_independencia",
+      "display_primary": "Plaza Independencia",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Plaza Independencia Mendoza",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.889,
+        "lon": -68.845
+      },
+      "provider_types": [
+        "park"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "salta_terminal",
+      "candidate_ref": "salta_terminal",
+      "display_primary": "Terminal de Ómnibus de Salta",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Terminal Salta",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.792,
+        "lon": -65.401
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "salta_guemes",
+      "candidate_ref": "salta_guemes",
+      "display_primary": "Monumento a Güemes",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Monumento Guemes Salta",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.779,
+        "lon": -65.401
+      },
+      "provider_types": [
+        "monument"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "parana_terminal",
+      "candidate_ref": "parana_terminal",
+      "display_primary": "Terminal de Ómnibus de Paraná",
+      "display_secondary": "Paraná · Entre Ríos",
+      "search_text": "Terminal Paraná",
+      "locality": {
+        "name": "Paraná"
+      },
+      "province": {
+        "id": "30",
+        "name": "Entre Ríos"
+      },
+      "coordinates": {
+        "lat": -31.744,
+        "lon": -60.511
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "parana_urquiza",
+      "candidate_ref": "parana_urquiza",
+      "display_primary": "Parque Urquiza",
+      "display_secondary": "Paraná · Entre Ríos",
+      "search_text": "Parque Urquiza Paraná",
+      "locality": {
+        "name": "Paraná"
+      },
+      "province": {
+        "id": "30",
+        "name": "Entre Ríos"
+      },
+      "coordinates": {
+        "lat": -31.725,
+        "lon": -60.529
+      },
+      "provider_types": [
+        "park"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "rafaela_terminal",
+      "candidate_ref": "rafaela_terminal",
+      "display_primary": "Terminal de Ómnibus de Rafaela",
+      "display_secondary": "Rafaela · Santa Fe",
+      "search_text": "Terminal Rafaela",
+      "locality": {
+        "name": "Rafaela"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.248,
+        "lon": -61.492
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "vm_terminal",
+      "candidate_ref": "vm_terminal",
+      "display_primary": "Terminal de Ómnibus de Villa María",
+      "display_secondary": "Villa María · Córdoba",
+      "search_text": "Terminal Villa María",
+      "locality": {
+        "name": "Villa María"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -32.408,
+        "lon": -63.242
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "ush_terminal",
+      "candidate_ref": "ush_terminal",
+      "display_primary": "Terminal de Ómnibus de Ushuaia",
+      "display_secondary": "Ushuaia · Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+      "search_text": "Terminal Ushuaia",
+      "locality": {
+        "name": "Ushuaia"
+      },
+      "province": {
+        "id": "94",
+        "name": "Tierra del Fuego, Antártida e Islas del Atlántico Sur"
+      },
+      "coordinates": {
+        "lat": -54.807,
+        "lon": -68.304
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "ush_aero",
+      "candidate_ref": "ush_aero",
+      "display_primary": "Aeropuerto Internacional de Ushuaia",
+      "display_secondary": "Ushuaia · Tierra del Fuego, Antártida e Islas del Atlántico Sur",
+      "search_text": "Aeropuerto Ushuaia USH",
+      "locality": {
+        "name": "Ushuaia"
+      },
+      "province": {
+        "id": "94",
+        "name": "Tierra del Fuego, Antártida e Islas del Atlántico Sur"
+      },
+      "coordinates": {
+        "lat": -54.843,
+        "lon": -68.296
+      },
+      "provider_types": [
+        "airport"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "res_terminal",
+      "candidate_ref": "res_terminal",
+      "display_primary": "Terminal de Ómnibus de Resistencia",
+      "display_secondary": "Resistencia · Chaco",
+      "search_text": "Terminal Resistencia",
+      "locality": {
+        "name": "Resistencia"
+      },
+      "province": {
+        "id": "22",
+        "name": "Chaco"
+      },
+      "coordinates": {
+        "lat": -27.451,
+        "lon": -58.986
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "form_terminal",
+      "candidate_ref": "form_terminal",
+      "display_primary": "Terminal de Ómnibus de Formosa",
+      "display_secondary": "Formosa · Formosa",
+      "search_text": "Terminal Formosa",
+      "locality": {
+        "name": "Formosa"
+      },
+      "province": {
+        "id": "34",
+        "name": "Formosa"
+      },
+      "coordinates": {
+        "lat": -26.177,
+        "lon": -58.178
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "lr_terminal",
+      "candidate_ref": "lr_terminal",
+      "display_primary": "Terminal de Ómnibus de La Rioja",
+      "display_secondary": "La Rioja · La Rioja",
+      "search_text": "Terminal La Rioja",
+      "locality": {
+        "name": "La Rioja"
+      },
+      "province": {
+        "id": "46",
+        "name": "La Rioja"
+      },
+      "coordinates": {
+        "lat": -29.414,
+        "lon": -66.856
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "nqn_terminal",
+      "candidate_ref": "nqn_terminal",
+      "display_primary": "Terminal de Ómnibus de Neuquén",
+      "display_secondary": "Neuquén · Neuquén",
+      "search_text": "Terminal Neuquén",
+      "locality": {
+        "name": "Neuquén"
+      },
+      "province": {
+        "id": "58",
+        "name": "Neuquén"
+      },
+      "coordinates": {
+        "lat": -38.951,
+        "lon": -68.059
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sj_terminal",
+      "candidate_ref": "sj_terminal",
+      "display_primary": "Terminal de Ómnibus de San Juan",
+      "display_secondary": "San Juan · San Juan",
+      "search_text": "Terminal San Juan",
+      "locality": {
+        "name": "San Juan"
+      },
+      "province": {
+        "id": "70",
+        "name": "San Juan"
+      },
+      "coordinates": {
+        "lat": -31.538,
+        "lon": -68.526
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sl_terminal",
+      "candidate_ref": "sl_terminal",
+      "display_primary": "Terminal de Ómnibus de San Luis",
+      "display_secondary": "San Luis · San Luis",
+      "search_text": "Terminal San Luis",
+      "locality": {
+        "name": "San Luis"
+      },
+      "province": {
+        "id": "74",
+        "name": "San Luis"
+      },
+      "coordinates": {
+        "lat": -33.295,
+        "lon": -66.335
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "rg_terminal",
+      "candidate_ref": "rg_terminal",
+      "display_primary": "Terminal de Ómnibus de Río Gallegos",
+      "display_secondary": "Río Gallegos · Santa Cruz",
+      "search_text": "Terminal Río Gallegos",
+      "locality": {
+        "name": "Río Gallegos"
+      },
+      "province": {
+        "id": "78",
+        "name": "Santa Cruz"
+      },
+      "coordinates": {
+        "lat": -51.623,
+        "lon": -69.217
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "sde_terminal",
+      "candidate_ref": "sde_terminal",
+      "display_primary": "Terminal de Ómnibus de Santiago del Estero",
+      "display_secondary": "Santiago del Estero · Santiago del Estero",
+      "search_text": "Terminal Santiago del Estero",
+      "locality": {
+        "name": "Santiago del Estero"
+      },
+      "province": {
+        "id": "86",
+        "name": "Santiago del Estero"
+      },
+      "coordinates": {
+        "lat": -27.795,
+        "lon": -64.261
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "tuc_terminal",
+      "candidate_ref": "tuc_terminal",
+      "display_primary": "Terminal de Ómnibus de San Miguel de Tucumán",
+      "display_secondary": "San Miguel de Tucumán · Tucumán",
+      "search_text": "Terminal Tucumán",
+      "locality": {
+        "name": "San Miguel de Tucumán"
+      },
+      "province": {
+        "id": "90",
+        "name": "Tucumán"
+      },
+      "coordinates": {
+        "lat": -26.83,
+        "lon": -65.202
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "juj_terminal",
+      "candidate_ref": "juj_terminal",
+      "display_primary": "Terminal de Ómnibus de San Salvador de Jujuy",
+      "display_secondary": "San Salvador de Jujuy · Jujuy",
+      "search_text": "Terminal Jujuy",
+      "locality": {
+        "name": "San Salvador de Jujuy"
+      },
+      "province": {
+        "id": "38",
+        "name": "Jujuy"
+      },
+      "coordinates": {
+        "lat": -24.185,
+        "lon": -65.299
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "viedma_terminal",
+      "candidate_ref": "viedma_terminal",
+      "display_primary": "Terminal de Ómnibus de Viedma",
+      "display_secondary": "Viedma · Río Negro",
+      "search_text": "Terminal Viedma",
+      "locality": {
+        "name": "Viedma"
+      },
+      "province": {
+        "id": "62",
+        "name": "Río Negro"
+      },
+      "coordinates": {
+        "lat": -40.814,
+        "lon": -63.0
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "rawson_terminal",
+      "candidate_ref": "rawson_terminal",
+      "display_primary": "Terminal de Ómnibus de Rawson",
+      "display_secondary": "Rawson · Chubut",
+      "search_text": "Terminal Rawson",
+      "locality": {
+        "name": "Rawson"
+      },
+      "province": {
+        "id": "26",
+        "name": "Chubut"
+      },
+      "coordinates": {
+        "lat": -43.3,
+        "lon": -65.102
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "srosa_terminal",
+      "candidate_ref": "srosa_terminal",
+      "display_primary": "Terminal de Ómnibus de Santa Rosa",
+      "display_secondary": "Santa Rosa · La Pampa",
+      "search_text": "Terminal Santa Rosa",
+      "locality": {
+        "name": "Santa Rosa"
+      },
+      "province": {
+        "id": "42",
+        "name": "La Pampa"
+      },
+      "coordinates": {
+        "lat": -36.62,
+        "lon": -64.29
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "posadas_terminal",
+      "candidate_ref": "posadas_terminal",
+      "display_primary": "Terminal de Ómnibus de Posadas",
+      "display_secondary": "Posadas · Misiones",
+      "search_text": "Terminal Posadas",
+      "locality": {
+        "name": "Posadas"
+      },
+      "province": {
+        "id": "54",
+        "name": "Misiones"
+      },
+      "coordinates": {
+        "lat": -27.366,
+        "lon": -55.896
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb0_82",
+      "candidate_ref": "amb0_82",
+      "display_primary": "Plaza Central",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Plaza Central",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.63,
+        "lon": -60.7
+      },
+      "provider_types": [
+        "park"
+      ],
+      "provider_rank": 0,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb0_14",
+      "candidate_ref": "amb0_14",
+      "display_primary": "Plaza Central",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Plaza Central",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.42,
+        "lon": -64.18
+      },
+      "provider_types": [
+        "park"
+      ],
+      "provider_rank": 1,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb0_50",
+      "candidate_ref": "amb0_50",
+      "display_primary": "Plaza Central",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Plaza Central",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.89,
+        "lon": -68.85
+      },
+      "provider_types": [
+        "park"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb0_66",
+      "candidate_ref": "amb0_66",
+      "display_primary": "Plaza Central",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Plaza Central",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.78,
+        "lon": -65.42
+      },
+      "provider_types": [
+        "park"
+      ],
+      "provider_rank": 3,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb1_82",
+      "candidate_ref": "amb1_82",
+      "display_primary": "Terminal Central",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Terminal Central",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.63,
+        "lon": -60.7
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 0,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb1_14",
+      "candidate_ref": "amb1_14",
+      "display_primary": "Terminal Central",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Terminal Central",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.42,
+        "lon": -64.18
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 1,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb1_50",
+      "candidate_ref": "amb1_50",
+      "display_primary": "Terminal Central",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Terminal Central",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.89,
+        "lon": -68.85
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb1_66",
+      "candidate_ref": "amb1_66",
+      "display_primary": "Terminal Central",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Terminal Central",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.78,
+        "lon": -65.42
+      },
+      "provider_types": [
+        "bus_station"
+      ],
+      "provider_rank": 3,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb2_82",
+      "candidate_ref": "amb2_82",
+      "display_primary": "Hospital Central",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Hospital Central",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.63,
+        "lon": -60.7
+      },
+      "provider_types": [
+        "hospital"
+      ],
+      "provider_rank": 0,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb2_14",
+      "candidate_ref": "amb2_14",
+      "display_primary": "Hospital Central",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Hospital Central",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.42,
+        "lon": -64.18
+      },
+      "provider_types": [
+        "hospital"
+      ],
+      "provider_rank": 1,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb2_50",
+      "candidate_ref": "amb2_50",
+      "display_primary": "Hospital Central",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Hospital Central",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.89,
+        "lon": -68.85
+      },
+      "provider_types": [
+        "hospital"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb2_66",
+      "candidate_ref": "amb2_66",
+      "display_primary": "Hospital Central",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Hospital Central",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.78,
+        "lon": -65.42
+      },
+      "provider_types": [
+        "hospital"
+      ],
+      "provider_rank": 3,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb3_82",
+      "candidate_ref": "amb3_82",
+      "display_primary": "Estadio Municipal",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Estadio Municipal",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.63,
+        "lon": -60.7
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 0,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb3_14",
+      "candidate_ref": "amb3_14",
+      "display_primary": "Estadio Municipal",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Estadio Municipal",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.42,
+        "lon": -64.18
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 1,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb3_50",
+      "candidate_ref": "amb3_50",
+      "display_primary": "Estadio Municipal",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Estadio Municipal",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.89,
+        "lon": -68.85
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb3_66",
+      "candidate_ref": "amb3_66",
+      "display_primary": "Estadio Municipal",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Estadio Municipal",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.78,
+        "lon": -65.42
+      },
+      "provider_types": [
+        "stadium"
+      ],
+      "provider_rank": 3,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb4_82",
+      "candidate_ref": "amb4_82",
+      "display_primary": "Puente Nuevo",
+      "display_secondary": "Santa Fe · Santa Fe",
+      "search_text": "Puente Nuevo",
+      "locality": {
+        "name": "Santa Fe"
+      },
+      "province": {
+        "id": "82",
+        "name": "Santa Fe"
+      },
+      "coordinates": {
+        "lat": -31.63,
+        "lon": -60.7
+      },
+      "provider_types": [
+        "bridge"
+      ],
+      "provider_rank": 0,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb4_14",
+      "candidate_ref": "amb4_14",
+      "display_primary": "Puente Nuevo",
+      "display_secondary": "Córdoba · Córdoba",
+      "search_text": "Puente Nuevo",
+      "locality": {
+        "name": "Córdoba"
+      },
+      "province": {
+        "id": "14",
+        "name": "Córdoba"
+      },
+      "coordinates": {
+        "lat": -31.42,
+        "lon": -64.18
+      },
+      "provider_types": [
+        "bridge"
+      ],
+      "provider_rank": 1,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb4_50",
+      "candidate_ref": "amb4_50",
+      "display_primary": "Puente Nuevo",
+      "display_secondary": "Mendoza · Mendoza",
+      "search_text": "Puente Nuevo",
+      "locality": {
+        "name": "Mendoza"
+      },
+      "province": {
+        "id": "50",
+        "name": "Mendoza"
+      },
+      "coordinates": {
+        "lat": -32.89,
+        "lon": -68.85
+      },
+      "provider_types": [
+        "bridge"
+      ],
+      "provider_rank": 2,
+      "confidence_class": "high"
+    },
+    {
+      "candidate_id": "amb4_66",
+      "candidate_ref": "amb4_66",
+      "display_primary": "Puente Nuevo",
+      "display_secondary": "Salta · Salta",
+      "search_text": "Puente Nuevo",
+      "locality": {
+        "name": "Salta"
+      },
+      "province": {
+        "id": "66",
+        "name": "Salta"
+      },
+      "coordinates": {
+        "lat": -24.78,
+        "lon": -65.42
+      },
+      "provider_types": [
+        "bridge"
+      ],
+      "provider_rank": 3,
+      "confidence_class": "high"
+    }
+  ]
+}

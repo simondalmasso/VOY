@@ -1,0 +1,40 @@
+﻿{
+    "authority":  "Datos Argentina / GeoRef official static distributions",
+    "purpose":  "Pinned offline default politico-administrativa reverse authority",
+    "coordinate_system":  "WGS84 / EPSG:4326",
+    "resources":  [
+                      {
+                          "distribution":  "7.34",
+                          "source_url":  "https://infra.datos.gob.ar/catalog/modernizacion/dataset/7/distribution/7.34/download/provincias.zip",
+                          "file":  "provincias.zip",
+                          "retrieved_at":  "2026-09-04T04:57:47.7008380Z",
+                          "sha256":  "81a85eb506317b484a5ea0eff6add4b868c2effb1007a2028b3ac6496b826b75",
+                          "bytes":  10497796,
+                          "last_modified":  "Mon, 25 Nov 2019 18:48:48 GMT",
+                          "etag":  "\"a02f04-5983036c68cd5\"",
+                          "content_type":  "application/zip"
+                      },
+                      {
+                          "distribution":  "7.35",
+                          "source_url":  "https://infra.datos.gob.ar/catalog/modernizacion/dataset/7/distribution/7.35/download/departamentos.zip",
+                          "file":  "departamentos.zip",
+                          "retrieved_at":  "2026-09-04T04:58:16.4883583Z",
+                          "sha256":  "339a3af5ff2b0dec8bd9cd40acdf45a9b4acb5eddf9ea5ca4d01ab96de947507",
+                          "bytes":  22924891,
+                          "last_modified":  "Mon, 25 Nov 2019 18:19:09 GMT",
+                          "etag":  "\"15dce5b-5982fccbb2323\"",
+                          "content_type":  "application/zip"
+                      },
+                      {
+                          "distribution":  "7.36",
+                          "source_url":  "https://infra.datos.gob.ar/catalog/modernizacion/dataset/7/distribution/7.36/download/municipios.zip",
+                          "file":  "municipios.zip",
+                          "retrieved_at":  "2026-09-04T04:58:39.2716440Z",
+                          "sha256":  "17f4e9ad6bd654a900a231b2c7d560d579a4ce6d0b0c6d16488d56108b312375",
+                          "bytes":  20860015,
+                          "last_modified":  "Mon, 25 Nov 2019 18:19:38 GMT",
+                          "etag":  "\"13e4c6f-5982fce7cd773\"",
+                          "content_type":  "application/zip"
+                      }
+                  ]
+}

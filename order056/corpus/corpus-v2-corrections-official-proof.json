@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "authority": "Argentina.gob.ar / GeoRef API v2.0",
+  "evidence_origin": "Previously captured live GeoRef responses in this ORDER056 execution; revalidation attempted 2026-09-03 and upstream returned 502/503, so frozen prior successful observations are preserved verbatim here.",
+  "revalidation_status": "UPSTREAM_TEMPORARILY_UNAVAILABLE_FAIL_CLOSED",
+  "proofs": {
+    "c016": {
+      "coordinates": {
+        "lat": -31.7082249,
+        "lon": -60.8094188
+      },
+      "response": {
+        "ubicacion": {
+          "departamento": {
+            "id": "82063",
+            "nombre": "La Capital"
+          },
+          "lat": -31.7082249,
+          "lon": -60.8094188,
+          "municipio": {
+            "id": "820158",
+            "nombre": "Sauce Viejo"
+          },
+          "provincia": {
+            "id": "82",
+            "nombre": "Santa Fe"
+          }
+        }
+      },
+      "correction": "expected locality Sauce Viejo, province Santa Fe"
+    },
+    "c076": {
+      "coordinates": {
+        "lat": -32.8946844,
+        "lon": -68.8302139
+      },
+      "response": {
+        "ubicacion": {
+          "departamento": {
+            "id": "50028",
+            "nombre": "Guaymallén"
+          },
+          "lat": -32.8946844,
+          "lon": -68.8302139,
+          "municipio": {
+            "id": "500028",
+            "nombre": "Guaymallén"
+          },
+          "provincia": {
+            "id": "50",
+            "nombre": "Mendoza"
+          }
+        }
+      },
+      "correction": "expected locality Guaymallén, province Mendoza"
+    },
+    "c080": {
+      "coordinates": {
+        "lat": -32.9011023,
+        "lon": -68.7991067
+      },
+      "response": {
+        "ubicacion": {
+          "departamento": {
+            "id": "50028",
+            "nombre": "Guaymallén"
+          },
+          "lat": -32.9011023,
+          "lon": -68.7991067,
+          "municipio": {
+            "id": "500028",
+            "nombre": "Guaymallén"
+          },
+          "provincia": {
+            "id": "50",
+            "nombre": "Mendoza"
+          }
+        }
+      },
+      "correction": "expected locality Guaymallén, province Mendoza"
+    },
+    "c089": {
+      "coordinates": {
+        "lat": -34.5594554,
+        "lon": -58.4143637
+      },
+      "response": {
+        "ubicacion": {
+          "departamento": {
+            "id": "02098",
+            "nombre": "Comuna 14"
+          },
+          "lat": -34.5594554,
+          "lon": -58.4143637,
+          "municipio": {
+            "id": "022098",
+            "nombre": "Comuna 14"
+          },
+          "provincia": {
+            "id": "02",
+            "nombre": "Ciudad Autónoma de Buenos Aires"
+          }
+        }
+      },
+      "correction": "province normalized to id 02 CABA; VOY city display canonicalizes CABA communes to CABA"
+    },
+    "c092": {
+      "coordinates": {
+        "lat": -34.6388581,
+        "lon": -58.3605058
+      },
+      "response": {
+        "ubicacion": {
+          "departamento": {
+            "id": "02028",
+            "nombre": "Comuna 4"
+          },
+          "lat": -34.6388581,
+          "lon": -58.3605058,
+          "municipio": {
+            "id": "022028",
+            "nombre": "Comuna 4"
+          },
+          "provincia": {
+            "id": "02",
+            "nombre": "Ciudad Autónoma de Buenos Aires"
+          }
+        }
+      },
+      "correction": "province normalized to id 02 CABA; VOY city display canonicalizes CABA communes to CABA"
+    },
+    "c123": {
+      "coordinates": {
+        "lat": -32.8946844,
+        "lon": -68.8302139
+      },
+      "response": {
+        "ubicacion": {
+          "departamento": {
+            "id": "50028",
+            "nombre": "Guaymallén"
+          },
+          "lat": -32.8946844,
+          "lon": -68.8302139,
+          "municipio": {
+            "id": "500028",
+            "nombre": "Guaymallén"
+          },
+          "provincia": {
+            "id": "50",
+            "nombre": "Mendoza"
+          }
+        }
+      },
+      "correction": "Terminal de Mendoza expectation corrected to Guaymallén / Mendoza"
+    }
+  }
+}

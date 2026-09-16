@@ -1,0 +1,11 @@
+﻿{
+    "source_url":  "https://infra.datos.gob.ar/catalog/modernizacion/dataset/7/distribution/7.31/download/localidades-censales.geojson",
+    "retrieved_at":  "2026-09-04T04:53:08.6171654Z",
+    "sha256":  "d0ddbe03c1496fe60fc0acca46c0313f4ca67d66ef2f54b983218adc142b5d07",
+    "bytes":  1650349,
+    "content_type":  "application/geo+json; charset=utf-8",
+    "last_modified":  "Tue, 27 Apr 2021 20:05:28 GMT",
+    "etag":  "\"192ead-5c0f9c89f3ae3\"",
+    "resource_identity":  "GeoRef / Datos Argentina distribution 7.31 — Localidades censales (GeoJSON)",
+    "coordinate_system":  "WGS84 / EPSG:4326"
+}
