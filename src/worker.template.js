@@ -170,6 +170,21 @@ function matchTrailingLocality(value,provinceId=''){
   return null;
 }
 __name(matchTrailingLocality,"matchTrailingLocality");
+function matchTrailingLocalityTypo(value,provinceId=''){
+  if(!provinceId)return null;
+  const parts=text(value).split(/\s+/).filter(Boolean);if(!parts.length)return null;
+  const pool=officialLocalitySearchRows().filter(row=>row.province_id===provinceId);
+  for(let n=Math.min(4,parts.length);n>=1;n--){
+    const fragment=foldText(parts.slice(-n).join(' ')).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+    if(fragment.length<5)continue;
+    const matches=pool.filter(row=>Math.abs(row.alias.length-fragment.length)<=1&&editDistance(fragment,row.alias,1)===1);
+    const unique=new Map();for(const row of matches)unique.set(`${row.province_id}|${foldText(row.name)}`,row);
+    if(unique.size===1)return {...[...unique.values()][0],matched_tokens:n};
+    if(unique.size>1)return null;
+  }
+  return null;
+}
+__name(matchTrailingLocalityTypo,"matchTrailingLocalityTypo");
 function matchTrailingProvince(value,{allowAmbiguousBuenosAires=false,allowTypo=false}={}){
   const parts=foldText(value).split(/\s+/).filter(Boolean);let best=null;
   for(const [id,name,aliases] of PROVINCES)for(const alias of aliases){const a=foldText(alias),ap=a.split(/\s+/);if(parts.length<ap.length||parts.slice(-ap.length).join(' ')!==a)continue;if(!allowAmbiguousBuenosAires&&id==='06'&&a==='buenos aires')continue;if(!best||ap.length>best.matched_tokens)best={id,name,alias:a,matched_tokens:ap.length};}
@@ -202,13 +217,13 @@ function parseExplicitGeography(query){
       const ambiguous=matchTrailingProvince(rawText,{allowAmbiguousBuenosAires:true});
       if(ambiguous?.id==='06'){
         const parts=text(rawText).split(/\s+/),head=parts.slice(0,-ambiguous.matched_tokens).join(' ');
-        headLoc=matchTrailingLocality(head,'06');
+        headLoc=matchTrailingLocality(head,'06')||matchTrailingLocalityTypo(head,'06');
         if(headLoc)pMatch=ambiguous;
       }
     }
     if(pMatch){
       province={id:pMatch.id,name:pMatch.name};matched=pMatch.matched_tokens;
-      if(!headLoc){const parts=text(rawText).split(/\s+/),head=parts.slice(0,-pMatch.matched_tokens).join(' ');headLoc=matchTrailingLocality(head,pMatch.id);}
+      if(!headLoc){const parts=text(rawText).split(/\s+/),head=parts.slice(0,-pMatch.matched_tokens).join(' ');headLoc=matchTrailingLocality(head,pMatch.id)||matchTrailingLocalityTypo(head,pMatch.id);}
       if(headLoc){locality=headLoc;matched+=headLoc.matched_tokens;}
     }
   }

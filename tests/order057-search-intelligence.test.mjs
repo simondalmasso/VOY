@@ -414,3 +414,16 @@ test('official locality initial abbreviation matches provider expanded settlemen
   assert.match(r.suggestions[0]?.locality?.name||'',/^Joaquín V\. González$/i);
   assert.match(r.suggestions[0]?.display_primary||'',/^Joaquín Víctor González$/i);
 });
+
+
+test('one-edit settlement before an explicit province uses a unique official locality correction', async()=>{
+  const urls=[];
+  const f=async u=>{const x=String(u);if(x.includes('photon')){const q=(new URL(x).searchParams.get('q')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();urls.push(q);return q.includes('olavarria')?photon([
+    {type:'Feature',geometry:{type:'Point',coordinates:[-60.3225,-36.8927]},properties:{name:'Olavarría',state:'Buenos Aires',country:'Argentina',countrycode:'AR',osm_type:'R',osm_id:99101,osm_key:'place',osm_value:'city',type:'city'}}
+  ]):photon([])}return jsonResp({direcciones:[]})};
+  const r=await suggestDestinations({query:'Olavaria Buenos Aires',context:{search_scope:'national'},session_token:'abcdefghijklmnop'},f);
+  assert.ok(urls.length<=3);
+  assert.ok(urls.some(q=>q.includes('olavarria')),'planner must issue the unique official one-edit locality correction');
+  assert.equal(r.suggestions[0]?.province?.id,'06');
+  assert.match(r.suggestions[0]?.locality?.name||'',/^Olavarría$/i);
+});
