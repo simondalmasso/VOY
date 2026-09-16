@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-16",
+  "full_audit_expected": {
+    "high": 3,
+    "critical": 0,
+    "packages": ["miniflare", "sharp", "wrangler"]
+  },
+  "advisory": {
+    "id": "GHSA-rgj7-g3m4-5g8c",
+    "package": "sharp",
+    "affected": "<0.35.4",
+    "observed_version": "0.35.2",
+    "path": "wrangler > miniflare > sharp",
+    "severity": "high",
+    "exploit_condition": "processing untrusted HEIF/AVIF input"
+  },
+  "classification": {
+    "runtime_reachable": false,
+    "dev_toolchain_reachable": true,
+    "production_dependencies_audit_high": 0,
+    "production_dependencies_audit_critical": 0,
+    "source_imports_vulnerable_packages": false,
+    "release_artifact_contains_vulnerable_packages": false,
+    "repository_has_avif_input": false,
+    "disposition": "CLASSIFIED_DEV_TOOLCHAIN_NOT_RUNTIME; FAIL CI IF ADVISORY SET OR PRODUCTION REACHABILITY CHANGES"
+  },
+  "remediation_policy": "Do not run npm audit fix --force blindly. Re-evaluate a bounded Wrangler/sharp upgrade separately if toolchain exposure changes or before accepting untrusted image input."
+}

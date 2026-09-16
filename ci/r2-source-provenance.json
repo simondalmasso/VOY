@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "original_source_commit": "9d0f3b4704c3cdb63f1ea5e306a1ca273b6f90db",
+  "original_source_tree": "001caa48937b25107ea3d3028bcc534e351eff4c",
+  "sealed_zip_sha256": "8BA559AB26F467D12D4807B5FC2396E742EB689CA182DD5ADC5FBF32365E7073",
+  "sealed_zip_bytes": 1254524,
+  "sealed_tracked_files": 59,
+  "materialization_method": "SEALED_ARCHIVE",
+  "materialized_gitlab_branch": "r2/source-9d0f3b4704c3",
+  "materialized_gitlab_commit": "2f05b87aa0d9c2282f10b8c41eaff29f82927410",
+  "materialized_gitlab_tree": "742db7b886bfc4b4743aa323d36e468f7822eb5e",
+  "missing_files": 0,
+  "unexpected_files": 0,
+  "note": "The Windows-format sealed ZIP preserves exact file bytes and paths but not original Git executable-mode metadata. The materialized GitLab commit is TRANSPORT_DERIVED_FROM the historical source commit; no false SHA/tree equality is claimed."
+}

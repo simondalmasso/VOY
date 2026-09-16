@@ -1,0 +1,44 @@
+image: node:24-bookworm
+
+stages:
+  - verify
+
+variables:
+  NPM_CONFIG_UPDATE_NOTIFIER: "false"
+  NPM_CONFIG_FUND: "false"
+
+r2_verify:
+  stage: verify
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "r2/recovery-order057-r2"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends wget apt-transport-https gnupg ca-certificates >/dev/null
+    - wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb
+    - dpkg -i /tmp/packages-microsoft-prod.deb >/dev/null
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends powershell >/dev/null
+    - ln -sf /usr/bin/pwsh /usr/local/bin/powershell
+  script:
+    - node ci/verify-r2.mjs provenance
+    - npm ci --ignore-scripts
+    - npm test
+    - npm run build
+    - node ci/verify-r2.mjs package
+    - npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+    - |
+      set +e
+      npm audit --json > npm-audit.json
+      audit_rc=$?
+      set -e
+      test "$audit_rc" -eq 1
+    - node ci/verify-r2.mjs audit npm-audit.json
+    - npm audit --omit=dev --audit-level=high
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - npm-audit.json
+      - dist/BUILD_MANIFEST.json
+  interruptible: true
