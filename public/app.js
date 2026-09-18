@@ -7,7 +7,7 @@ function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValue
 
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
-  searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
+  trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
   locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
 };
 
@@ -16,6 +16,7 @@ const originInput=$('#origin'),originEditor=$('#origin-editor'),originLabel=$('#
 const statusLine=$('#destination-status'),decision=$('#decision'),options=$('#options');
 const dialog=$('#handoff-dialog'),confirmHandoff=$('#confirm-handoff'),cancelHandoff=$('#cancel-handoff');
 const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution');
+const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 
 const assistantToggle=$('#assistant-toggle'),assistantPanel=$('#assistant-panel'),assistantClose=$('#assistant-close'),assistantCopy=$('#assistant-copy'),assistantAction=$('#assistant-action');
 
@@ -53,8 +54,46 @@ async function suggestDestinationQuery(query,scope=state.searchScope){
   }catch(error){if(error.name==='AbortError')return;clearSuggestions();nationalSearch.hidden=true;if(error.payload?.error==='external_dependency_unavailable')setStatus('La búsqueda no está disponible ahora.','error');else if(error.status===429)setStatus('Probá de nuevo en un momento.','error');else setStatus('No pudimos buscar ese destino.','error')}
   finally{loading.hidden=true}
 }
-function clearMap(){mapShell.hidden=true;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=true}
-function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');clearMap();nationalSearch.hidden=true}
+function clearMap(){mapShell.hidden=true;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=true;state.mapCenter=null}
+function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();mapTiles.querySelectorAll('.train-station-marker').forEach(marker=>marker.remove())}
+function radarObservedLabel(value){if(!value)return '';try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return ''}}
+function renderTrainRadar(radar){
+  state.trainRadar=radar;trainRadar.hidden=false;trainRadarList.replaceChildren();
+  const status=radar?.source_status==='available'?'scheduled':radar?.source_status==='stale'?'unknown · fuente vencida':'unknown · fuente no disponible';
+  const observed=radar?.stations?.find(item=>item.observed_at)?.observed_at;
+  trainRadarMeta.textContent=[status,observed?`consultado ${radarObservedLabel(observed)}`:'',radar?.source?.published_at?`publicado ${radar.source.published_at}`:'',radar?.source?.authority?`Fuente: ${radar.source.authority}`:''].filter(Boolean).join(' · ');
+  if(!radar?.stations?.length){const empty=document.createElement('p');empty.className='train-radar-empty';empty.textContent='No hay estaciones cubiertas por este primer vertical dentro del radio cercano.';trainRadarList.appendChild(empty);return}
+  for(const item of radar.stations){
+    const card=document.createElement('article');card.className='train-station-card';
+    const service=item.service?.scheduled_times?.length?`Horarios publicados: ${item.service.scheduled_times.join(' / ')}`:'Servicio no confirmado ahora';
+    const branch=item.branch?` · ${item.branch}`:'';
+    card.innerHTML=`<div><strong>${escapeHtml(item.station.name)}</strong><span>Línea ${escapeHtml(item.line)}${escapeHtml(branch)}</span></div><p><b>${escapeHtml(item.temporal_state)}</b> · ${escapeHtml(service)} · ${escapeHtml(approxDistance(item.station.distance_meters))}</p>`;
+    trainRadarList.appendChild(card);
+  }
+}
+function updateTrainStationMarkers(stations=[]){
+  mapTiles.querySelectorAll('.train-station-marker').forEach(marker=>marker.remove());
+  if(!state.mapCenter)return;
+  const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(state.mapCenter.lon,state.mapCenter.lat,z);
+  for(const item of stations){
+    const coords=item?.station?.coordinates;if(!coords)continue;const point=worldPixel(coords.lon,coords.lat,z);
+    const marker=document.createElement('div');marker.className='train-station-marker';marker.dataset.station=item.station.name;marker.title=item.station.name;
+    marker.style.cssText='position:absolute;width:14px;height:14px;border:3px solid white;border-radius:50%;background:#111;z-index:8;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    marker.style.left=`calc(50% + ${point.x-center.x}px)`;marker.style.top=`calc(50% + ${point.y-center.y}px)`;mapTiles.appendChild(marker);
+  }
+}
+async function refreshTrainRadar(){
+  if(!state.origin?.coordinates){clearTrainRadar();return}
+  const center=state.origin.coordinates,sameCenter=state.mapCenter&&Math.abs(state.mapCenter.lat-center.lat)<1e-7&&Math.abs(state.mapCenter.lon-center.lon)<1e-7;
+  if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa de estaciones de tren cercanas');
+  try{
+    const payload=await apiJson('/api/radar/trains/nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({coordinates:center})});
+    renderTrainRadar(payload.radar);updateTrainStationMarkers(payload.radar?.stations||[]);
+  }catch{
+    renderTrainRadar({source_status:'unavailable',stations:[],source:null});updateTrainStationMarkers([]);
+  }
+}
+function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');clearTrainRadar();clearMap();nationalSearch.hidden=true}
 destinationInput.addEventListener('input',()=>{resetDestinationState();clearSuggestions();clearTimeout(state.searchTimer);const q=destinationInput.value.trim();contextHelp.hidden=true;if(q.length<3){setStatus();return}state.searchTimer=setTimeout(()=>suggestDestinationQuery(q,'local'),220)});
 destinationInput.addEventListener('keydown',(event)=>{if(event.key==='ArrowDown'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex+1)}else if(event.key==='ArrowUp'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex-1)}else if(event.key==='Enter'){if(state.destinationActiveIndex>=0){event.preventDefault();selectDestination(state.destinationCandidates[state.destinationActiveIndex])}else if(destinationInput.value.trim().length>=3){event.preventDefault();clearTimeout(state.searchTimer);suggestDestinationQuery(destinationInput.value.trim(),state.searchScope)}}else if(event.key==='Escape'){clearSuggestions();nationalSearch.hidden=true}});
 document.addEventListener('click',(event)=>{if(!suggestions.contains(event.target)&&event.target!==destinationInput&&event.target!==nationalSearch)clearSuggestions()});
@@ -76,9 +115,9 @@ async function selectDestination(suggestion){
 
 $('#manual-origin').addEventListener('click',()=>{const opening=originEditor.hidden;originEditor.hidden=!opening;$('#manual-origin').setAttribute('aria-expanded',String(opening));if(opening)originInput.focus()});
 $('#resolve-origin').addEventListener('click',resolveManualOrigin);originInput.addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();resolveManualOrigin()}});
-async function resolveManualOrigin(){const query=originInput.value.trim();if(query.length<3){setStatus('Escribí un origen un poco más preciso.');return}try{const payload=await apiJson('/api/origin/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});if(payload.result_class==='ambiguous'){setStatus('Agregá localidad o provincia para ubicar ese origen.');return}const candidate=normalizeResolvedCandidate(payload.candidates?.[0]);if(!candidate)throw new Error('invalid_origin');state.origin=candidate;state.locationGranted=false;originLabel.textContent=[candidate.label,candidate.locality?.name].filter(Boolean).join(' · ');$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch(error){setStatus(error.payload?.error==='external_dependency_unavailable'?'No pudimos ubicar ese origen ahora.':'No pudimos ubicar ese origen.','error')}}
-$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;state.locationGranted=true;originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
-$('#clear-location').addEventListener('click',()=>{state.origin=null;state.locationGranted=false;state.mobilityComputation=null;state.selectedRouteMode=null;originInput.value='';originLabel.textContent='Sin origen elegido';$('#clear-location').hidden=true;$('#use-location').hidden=false;$('#manual-origin').hidden=false;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination){renderMap(state.destination.coordinates);renderOptions();setStatus('Elegí un origen para calcular recorridos y precios.')}else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')});
+async function resolveManualOrigin(){const query=originInput.value.trim();if(query.length<3){setStatus('Escribí un origen un poco más preciso.');return}try{const payload=await apiJson('/api/origin/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});if(payload.result_class==='ambiguous'){setStatus('Agregá localidad o provincia para ubicar ese origen.');return}const candidate=normalizeResolvedCandidate(payload.candidates?.[0]);if(!candidate)throw new Error('invalid_origin');state.origin=candidate;state.locationGranted=false;originLabel.textContent=[candidate.label,candidate.locality?.name].filter(Boolean).join(' · ');$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch(error){setStatus(error.payload?.error==='external_dependency_unavailable'?'No pudimos ubicar ese origen ahora.':'No pudimos ubicar ese origen.','error')}}
+$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;state.locationGranted=true;originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
+$('#clear-location').addEventListener('click',()=>{state.origin=null;state.locationGranted=false;state.mobilityComputation=null;state.selectedRouteMode=null;clearTrainRadar();clearMap();originInput.value='';originLabel.textContent='Sin origen elegido';$('#clear-location').hidden=true;$('#use-location').hidden=false;$('#manual-origin').hidden=false;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination){renderMap(state.destination.coordinates);renderOptions();setStatus('Elegí un origen para calcular recorridos y precios.')}else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')});
 
 async function refreshMobilityComputation(){
   if(!state.destination||!state.origin){state.mobilityComputation=null;state.selectedRouteMode=null;renderOptions();return}
@@ -135,8 +174,8 @@ confirmHandoff.addEventListener('click',()=>{
   dialog.dataset.nonce='0';dialog.close('confirm');submitTelemetry('handoff_confirm',{endpoint_class:'handoff',result_class:'confirmed'});window.open(url,'_blank','noopener,noreferrer')
 });
 function worldPixel(lon,lat,z){const scale=256*Math.pow(2,z),x=(Number(lon)+180)/360*scale,r=Number(lat)*Math.PI/180,y=(1-Math.asinh(Math.tan(r))/Math.PI)/2*scale;return{x,y}}
-function renderMap(coords){
-  mapShell.hidden=false;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=false;
+function renderMap(coords,label='Mapa del destino'){
+  state.mapCenter={lat:Number(coords.lat),lon:Number(coords.lon)};mapShell.setAttribute('aria-label',label);mapShell.hidden=false;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=false;
   const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(coords.lon,coords.lat,z),centerX=Math.floor(center.x/256),centerY=Math.floor(center.y/256),radius=APP_CONFIG.MAP_PROVIDER.tile_radius;let loaded=0,failed=0,total=0;
   for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
     total++;const x=centerX+dx,y=centerY+dy,img=document.createElement('img');img.className='map-tile';img.alt='';img.decoding='async';img.loading='eager';img.referrerPolicy='strict-origin-when-cross-origin';img.style.left=`calc(50% + ${x*256-center.x}px)`;img.style.top=`calc(50% + ${y*256-center.y}px)`;img.src=APP_CONFIG.MAP_PROVIDER.tile_template.replace('{z}',z).replace('{x}',x).replace('{y}',y);

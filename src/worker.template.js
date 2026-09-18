@@ -452,6 +452,112 @@ var RAIL_HANDOFF_SOURCE = {
 };
 SOURCE_BY_ID.set(RAIL_STATIC_SOURCE.id, RAIL_STATIC_SOURCE);
 SOURCE_BY_ID.set(RAIL_HANDOFF_SOURCE.id, RAIL_HANDOFF_SOURCE);
+
+var TRAIN_RADAR_SOURCE = Object.freeze({
+  id: "src_trenes_argentinos_sarmiento_diferencial",
+  authority: "Trenes Argentinos Operaciones / SOFSE",
+  url: "https://www.argentina.gob.ar/noticias/el-servicio-diferencial-entre-once-haedo-moreno-de-la-linea-sarmiento-suma-servicios-los",
+  published_at: "2026-08-21",
+  access_method: "public_html",
+  license: "CC BY 4.0 unless otherwise declared by Argentina.gob.ar"
+});
+var TRAIN_RADAR_CACHE_TTL_MS = 300000;
+var TRAIN_RADAR_RADIUS_METERS = 8000;
+var TRAIN_RADAR_STATION_NAMES = new Set(["once", "haedo", "moreno"]);
+
+function decodeTrainSourceHtml(value) {
+  return String(value ?? "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&aacute;/gi, "á").replace(/&eacute;/gi, "é").replace(/&iacute;/gi, "í")
+    .replace(/&oacute;/gi, "ó").replace(/&uacute;/gi, "ú").replace(/&ntilde;/gi, "ñ")
+    .replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
+}
+function normalizeTrainTime(value) {
+  const [h, m] = String(value).split(":");
+  return `${String(Number(h)).padStart(2, "0")}:${m}`;
+}
+function parseSarmientoScheduledService(html, observedAt = new Date().toISOString()) {
+  const plain = foldText(decodeTrainSourceHtml(html));
+  if (!plain.includes("once-haedo-moreno") || !plain.includes("linea sarmiento") || !plain.includes("dias habiles")) throw new Error("rail_source_contract_invalid");
+  const outbound = plain.match(/sale a las (\d{1,2}:\d{2}).{0,160}?haedo a las (\d{1,2}:\d{2}).{0,160}?moreno a las (\d{1,2}:\d{2})/);
+  const inbound = plain.match(/de moreno parte a las (\d{1,2}:\d{2}).{0,160}?haedo a las (\d{1,2}:\d{2}).{0,160}?once a las (\d{1,2}:\d{2})/);
+  if (!outbound || !inbound) throw new Error("rail_source_contract_invalid");
+  return {
+    source: TRAIN_RADAR_SOURCE,
+    observed_at: observedAt,
+    temporal_state: "scheduled",
+    line: "Sarmiento",
+    branch: "Once-Haedo-Moreno diferencial",
+    service: {
+      days: "weekdays",
+      stations: {
+        Once: [normalizeTrainTime(outbound[1]), normalizeTrainTime(inbound[3])],
+        Haedo: [normalizeTrainTime(outbound[2]), normalizeTrainTime(inbound[2])],
+        Moreno: [normalizeTrainTime(outbound[3]), normalizeTrainTime(inbound[1])]
+      }
+    }
+  };
+}
+function createSarmientoScheduledAdapter({ fetchImpl = fetch, now = Date.now, ttlMs = TRAIN_RADAR_CACHE_TTL_MS, timeoutMs = 3500 } = {}) {
+  let cached = null;
+  return {
+    async read() {
+      const current = Number(now());
+      if (cached && current - cached.fetched_at_ms <= ttlMs) return { available: true, reason: null, observation: cached.observation, cache_hit: true };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetchImpl(TRAIN_RADAR_SOURCE.url, { headers: { accept: "text/html,application/xhtml+xml" }, signal: controller.signal });
+        if (!response?.ok) throw new Error("rail_source_unavailable");
+        const observation = parseSarmientoScheduledService(await response.text(), new Date(current).toISOString());
+        cached = { fetched_at_ms: current, observation };
+        return { available: true, reason: null, observation, cache_hit: false };
+      } catch (error) {
+        cached = null;
+        return { available: false, reason: error?.message === "rail_source_contract_invalid" ? "source_contract_invalid" : "source_unavailable", observation: null, cache_hit: false };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  };
+}
+function buildTrainRadarSnapshot({ coordinates, providerResult, nowMs = Date.now(), freshnessMs = TRAIN_RADAR_CACHE_TTL_MS } = {}) {
+  const center = validCoordinates(coordinates);
+  if (!center) throw new VoyError("invalid_coordinates", 400);
+  const observation = providerResult?.available ? providerResult.observation : null;
+  const observedMs = Date.parse(observation?.observed_at ?? "");
+  const fresh = observation && Number.isFinite(observedMs) && nowMs - observedMs <= freshnessMs && nowMs >= observedMs;
+  const sourceStatus = !providerResult?.available ? "unavailable" : fresh ? "available" : "stale";
+  const nearby = nearestRailStations(center, 10, TRAIN_RADAR_RADIUS_METERS, "SOFSE")
+    .filter((station) => TRAIN_RADAR_STATION_NAMES.has(foldText(station.name)) && railLineIdentity(station.line) === "sarmiento")
+    .slice(0, 3);
+  return {
+    source_status: sourceStatus,
+    radius_meters: TRAIN_RADAR_RADIUS_METERS,
+    source: TRAIN_RADAR_SOURCE,
+    stations: nearby.map((station) => {
+      const times = fresh ? observation.service.stations[station.name] ?? null : null;
+      return {
+        source: TRAIN_RADAR_SOURCE,
+        observed_at: fresh ? observation.observed_at : null,
+        temporal_state: times ? "scheduled" : "unknown",
+        station: {
+          id: `rail:${station.catalog_id}`,
+          name: station.name,
+          coordinates: { lat: station.lat, lon: station.lon },
+          distance_meters: station.distance_meters,
+          catalog_source: station.source_id
+        },
+        line: "Sarmiento",
+        branch: times ? observation.branch : null,
+        service: times ? { days: observation.service.days, scheduled_times: [...times] } : null
+      };
+    })
+  };
+}
 var JURISDICTION_BY_ID = new Map(JURISDICTIONS.jurisdictions.map((item) => [item.province_id, item]));
 var cityKey = /* @__PURE__ */ __name((provinceId, localitySlug) => `${String(provinceId ?? "")}:${String(localitySlug ?? "")}`, "cityKey");
 var CITY_BY_KEY = new Map(CITY_INTEGRATIONS.cities.map((item) => [cityKey(item.province_id, item.slug), item]));
@@ -1853,6 +1959,12 @@ async function apiResponse(request, env, deps) {
     const payload = await parseSmallJsonBody(request);
     return json(await reverseLocation(payload, fetchImpl));
   }
+  if (url.pathname === "/api/radar/trains/nearby") {
+    if (request.method !== "POST") return methodNotAllowed(["POST"]);
+    const payload = await parseSmallJsonBody(request);
+    const providerResult = await deps.trainServiceAdapter.read();
+    return json({ ok: true, radar: buildTrainRadarSnapshot({ coordinates: payload.coordinates, providerResult, nowMs: Date.now() }) });
+  }
   if (url.pathname.startsWith("/api/coverage/")) {
     if (request.method !== "GET") return methodNotAllowed(["GET"]);
     const parts = url.pathname.split("/").filter(Boolean);
@@ -1896,12 +2008,14 @@ async function apiResponse(request, env, deps) {
 }
 __name(apiResponse, "apiResponse");
 function createRequestHandler(deps = {}) {
+  const trainServiceAdapter = deps.trainServiceAdapter ?? createSarmientoScheduledAdapter({ fetchImpl: deps.upstreamFetch ?? fetch });
+  const requestDeps = { ...deps, trainServiceAdapter };
   return /* @__PURE__ */ __name(async function handle(request, env = {}) {
     const started = Date.now();
     const url = new URL(request.url);
     let response;
     try {
-      if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, deps);
+      if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, requestDeps);
       else if (!env.ASSETS) response = json({ ok: false, error: "assets_binding_unavailable" }, 503);
       else response = withSecurity(await env.ASSETS.fetch(request));
     } catch (error) {
@@ -1934,6 +2048,9 @@ export {
   dedupeDestinationCandidates,
   rankDestinationCandidates,
   nearestRailStations,
+  buildTrainRadarSnapshot,
+  createSarmientoScheduledAdapter,
+  parseSarmientoScheduledService,
   normalizeGeoRefPlace,
   resolveAddress,
   resolveDestinationSelection,
