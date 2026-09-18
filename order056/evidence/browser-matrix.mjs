@@ -85,7 +85,7 @@ async function interactionChecks(browserName,browser){
   const keyboardPage=await keyboardContext.newPage();await stubTelemetry(keyboardPage);
   const keyboardErrors=[];keyboardPage.on('console',m=>{if(m.type()==='error')keyboardErrors.push(m.text())});keyboardPage.on('pageerror',e=>keyboardErrors.push(String(e)));
   await keyboardPage.route('**/api/destinations/suggest',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture)}));
-  await keyboardPage.route('**/api/destinations/resolve',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result_class:'resolved',provider:'photon_georef_contextual',destination:{...fixture.suggestions[0],label:'San Martín'},territory_verified:true})}));
+  await keyboardPage.route('**/api/destinations/resolve',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result_class:'resolved',provider:'photon_georef_contextual',destination:{...fixture.suggestions[0],label:'San Martín'},territory_verified:true,mobility_decision:{state:'handoff',destination:{...fixture.suggestions[0],label:'San Martín'},integration_slug:null,coverage:'T0_TERRITORY_ONLY',available_modes:[],source_class:'handoff',freshness:{state:'unknown'},provenance:[],facts:[],handoffs:[],next_actions:[]}})}));
   await keyboardPage.route('https://tile.openstreetmap.org/**',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlIh8sAAAAASUVORK5CYII=','base64')}));
   await keyboardPage.goto(ROOT,{waitUntil:'networkidle'});
 
