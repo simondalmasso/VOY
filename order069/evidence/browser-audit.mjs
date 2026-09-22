@@ -133,14 +133,18 @@ try{
 
       let panelContextPreserved=true;
       if(vp.mobile){
-        await page.locator('[data-mode-card="bus"]').scrollIntoViewIfNeeded();
-        panelContextPreserved=await page.evaluate(()=>{
-          const map=document.querySelector('#map-shell').getBoundingClientRect();
+        const scrollProbe=await page.evaluate(()=>{
           const planner=document.querySelector('.planner');
-          const bus=document.querySelector('[data-mode-card="bus"]').getBoundingClientRect();
-          return map.top<innerHeight&&map.bottom>0&&bus.top<innerHeight&&bus.bottom>0&&planner.scrollTop>0;
+          const bus=document.querySelector('[data-mode-card="bus"]');
+          const overflowY=getComputedStyle(planner).overflowY;
+          const scrollable=planner.scrollHeight>planner.clientHeight+1&&['auto','scroll'].includes(overflowY);
+          planner.scrollTop=Math.max(0,bus.offsetTop-planner.offsetTop-12);
+          const map=document.querySelector('#map-shell').getBoundingClientRect();
+          const br=bus.getBoundingClientRect();
+          return {scrollable,overflowY,scrollTop:planner.scrollTop,windowScrollY:scrollY,mapVisible:map.top<innerHeight&&map.bottom>0,busVisible:br.top<innerHeight&&br.bottom>0};
         });
-        assert(panelContextPreserved,browserName+' mobile facts panel hides spatial context');
+        panelContextPreserved=scrollProbe.scrollable&&scrollProbe.scrollTop>0&&scrollProbe.windowScrollY===0&&scrollProbe.mapVisible&&scrollProbe.busVisible;
+        assert(panelContextPreserved,browserName+' mobile facts panel hides spatial context: '+JSON.stringify(scrollProbe));
       }
 
       const routeState=await page.evaluate(()=>{
