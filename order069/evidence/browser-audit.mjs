@@ -138,7 +138,8 @@ try{
           const bus=document.querySelector('[data-mode-card="bus"]');
           const overflowY=getComputedStyle(planner).overflowY;
           const scrollable=planner.scrollHeight>planner.clientHeight+1&&['auto','scroll'].includes(overflowY);
-          planner.scrollTop=Math.max(0,bus.offsetTop-planner.offsetTop-12);
+          planner.scrollTop=0;
+          bus.scrollIntoView({block:'nearest',inline:'nearest'});
           const map=document.querySelector('#map-shell').getBoundingClientRect();
           const br=bus.getBoundingClientRect();
           return {scrollable,overflowY,scrollTop:planner.scrollTop,windowScrollY:scrollY,mapVisible:map.top<innerHeight&&map.bottom>0,busVisible:br.top<innerHeight&&br.bottom>0};
