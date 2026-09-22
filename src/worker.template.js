@@ -1934,7 +1934,7 @@ function autoModeOption(route) {
   if (!route) return nonSelectableMode("auto", "route_unavailable", { price: null, disclosures: ["Precio no disponible"] });
   return routedModeOption("auto", route, null);
 }
-async function computeMobilityComputation(async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
+async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
   if (!payload || typeof payload !== "object") throw new VoyError("mobility_computation_invalid", 400);
   const origin = payload.origin, destination = payload.destination;
   if (!routeCoordinate(origin?.coordinates) || !routeCoordinate(destination?.coordinates)) throw new VoyError("mobility_computation_coordinates_required", 400);
