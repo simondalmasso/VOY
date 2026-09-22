@@ -42,3 +42,27 @@ r2_verify:
       - npm-audit.json
       - dist/BUILD_MANIFEST.json
   interruptible: true
+order069_browser:
+  stage: verify
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends wget gnupg ca-certificates >/dev/null
+    - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/google-chrome.deb
+    - apt-get install -y /tmp/google-chrome.deb >/dev/null
+    - wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-edge.gpg
+    - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-edge.gpg] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends microsoft-edge-stable >/dev/null
+  script:
+    - npm ci --ignore-scripts
+    - npm run build
+    - node order069/evidence/browser-audit.mjs
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - order069/evidence/browser/
+      - order069/evidence/browser-report.json
+  interruptible: true

@@ -56,7 +56,7 @@ async function suggestDestinationQuery(query,scope=state.searchScope){
   }catch(error){if(error.name==='AbortError')return;clearSuggestions();nationalSearch.hidden=true;if(error.payload?.error==='external_dependency_unavailable')setStatus('La búsqueda no está disponible ahora.','error');else if(error.status===429)setStatus('Probá de nuevo en un momento.','error');else setStatus('No pudimos buscar ese destino.','error')}
   finally{loading.hidden=true}
 }
-function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe')}
+function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe',false)}
 function clearMap(){renderInitialMap()}
 function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();mapTiles.querySelectorAll('.train-station-marker').forEach(marker=>marker.remove())}
 function radarObservedLabel(value){if(!value)return '';try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return ''}}
@@ -96,7 +96,7 @@ async function refreshTrainRadar(){
     renderTrainRadar({source_status:'unavailable',stations:[],source:null});updateTrainStationMarkers([]);
   }
 }
-function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');clearTrainRadar();clearMap();nationalSearch.hidden=true}
+function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');if(!state.origin)clearTrainRadar();if(state.origin)renderMap(state.origin.coordinates,'Mapa del origen');else clearMap();nationalSearch.hidden=true}
 destinationInput.addEventListener('input',()=>{resetDestinationState();clearSuggestions();clearTimeout(state.searchTimer);const q=destinationInput.value.trim();contextHelp.hidden=true;if(q.length<3){setStatus();return}state.searchTimer=setTimeout(()=>suggestDestinationQuery(q,'local'),220)});
 destinationInput.addEventListener('keydown',(event)=>{if(event.key==='ArrowDown'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex+1)}else if(event.key==='ArrowUp'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex-1)}else if(event.key==='Enter'){if(state.destinationActiveIndex>=0){event.preventDefault();selectDestination(state.destinationCandidates[state.destinationActiveIndex])}else if(destinationInput.value.trim().length>=3){event.preventDefault();clearTimeout(state.searchTimer);suggestDestinationQuery(destinationInput.value.trim(),state.searchScope)}}else if(event.key==='Escape'){clearSuggestions();nationalSearch.hidden=true}});
 document.addEventListener('click',(event)=>{if(!suggestions.contains(event.target)&&event.target!==destinationInput&&event.target!==nationalSearch)clearSuggestions()});
@@ -191,14 +191,14 @@ confirmHandoff.addEventListener('click',()=>{
   dialog.dataset.nonce='0';dialog.close('confirm');submitTelemetry('handoff_confirm',{endpoint_class:'handoff',result_class:'confirmed'});window.open(url,'_blank','noopener,noreferrer')
 });
 function worldPixel(lon,lat,z){const scale=256*Math.pow(2,z),x=(Number(lon)+180)/360*scale,r=Number(lat)*Math.PI/180,y=(1-Math.asinh(Math.tan(r))/Math.PI)/2*scale;return{x,y}}
-function renderMap(coords,label='Mapa del destino'){
+function renderMap(coords,label='Mapa del destino',showPin=true){
   state.mapCenter={lat:Number(coords.lat),lon:Number(coords.lon)};mapShell.setAttribute('aria-label',label);mapShell.hidden=false;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=false;
   const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(coords.lon,coords.lat,z),centerX=Math.floor(center.x/256),centerY=Math.floor(center.y/256),radius=APP_CONFIG.MAP_PROVIDER.tile_radius;let loaded=0,failed=0,total=0;
   for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
     total++;const x=centerX+dx,y=centerY+dy,img=document.createElement('img');img.className='map-tile';img.alt='';img.decoding='async';img.loading='eager';img.referrerPolicy='strict-origin-when-cross-origin';img.style.left=`calc(50% + ${x*256-center.x}px)`;img.style.top=`calc(50% + ${y*256-center.y}px)`;img.src=APP_CONFIG.MAP_PROVIDER.tile_template.replace('{z}',z).replace('{x}',x).replace('{y}',y);
     img.addEventListener('load',()=>{loaded++});img.addEventListener('error',()=>{failed++;if(failed===total&&loaded===0){mapFallback.hidden=false;mapAttribution.hidden=true;submitTelemetry('map_provider_error',{endpoint_class:'map',result_class:'all_tiles_failed'})}});mapTiles.appendChild(img)
   }
-  const pin=document.createElement('div');pin.className='selected-pin';pin.setAttribute('aria-hidden','true');mapTiles.appendChild(pin);
+  if(showPin){const pin=document.createElement('div');pin.className='selected-pin';pin.setAttribute('aria-hidden','true');mapTiles.appendChild(pin)}
 }
 function renderRouteGeometry(geometry){
   if(!state.destination?.coordinates||geometry?.type!=='LineString'||!Array.isArray(geometry.coordinates)||geometry.coordinates.length<2){renderMap(state.destination?.coordinates||{lat:0,lon:0});return}
@@ -258,6 +258,5 @@ assistantClose.addEventListener('click',closeAssistant);assistantAction.addEvent
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!assistantPanel.hidden)closeAssistant()});
 
-renderInitialMap();
 updateAssistant();
 

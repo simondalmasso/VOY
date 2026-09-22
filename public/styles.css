@@ -199,3 +199,18 @@ dialog{width:min(92vw,460px);border:1px solid var(--line);border-radius:22px;pad
   .option-row{gap:8px}
   .mode-actions{width:100%;min-width:0}
 }
+/* ORDER069 MAP-FIRST viewport persistence */
+@media (min-width:960px){
+  .app-shell{height:calc(100svh - 88px);min-height:620px}
+  .map-shell,body[data-view="resolved"] .map-shell{height:100%;min-height:0}
+  .planner,body[data-view="resolved"] .planner{max-height:100%;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding-right:4px}
+}
+@media (max-width:959px){
+  .app-shell{height:calc(100svh - 64px);min-height:0;grid-template-rows:minmax(45svh,52svh) minmax(0,1fr);overflow:hidden}
+  .map-shell,body[data-view="resolved"] .map-shell{height:100%;min-height:0}
+  .planner{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:18px}
+}
+@media (max-width:700px){
+  .app-shell{grid-template-rows:50svh minmax(0,1fr)}
+  .map-shell,body[data-view="resolved"] .map-shell{height:100%;min-height:0}
+}
