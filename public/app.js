@@ -5,6 +5,8 @@ const $=(sel)=>document.querySelector(sel);
 const escapeHtml=(value='')=>{const div=document.createElement('div');div.textContent=String(value);return div.innerHTML};
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 
+const DEFAULT_MAP_CENTER={lat:-31.6333,lon:-60.7000};
+
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
@@ -54,7 +56,8 @@ async function suggestDestinationQuery(query,scope=state.searchScope){
   }catch(error){if(error.name==='AbortError')return;clearSuggestions();nationalSearch.hidden=true;if(error.payload?.error==='external_dependency_unavailable')setStatus('La búsqueda no está disponible ahora.','error');else if(error.status===429)setStatus('Probá de nuevo en un momento.','error');else setStatus('No pudimos buscar ese destino.','error')}
   finally{loading.hidden=true}
 }
-function clearMap(){mapShell.hidden=true;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=true;state.mapCenter=null}
+function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe')}
+function clearMap(){renderInitialMap()}
 function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();mapTiles.querySelectorAll('.train-station-marker').forEach(marker=>marker.remove())}
 function radarObservedLabel(value){if(!value)return '';try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return ''}}
 function renderTrainRadar(radar){
@@ -137,28 +140,42 @@ function mobilityFactValue(fact){
   return String(fact?.value??'');
 }
 function formatArs(amount){try{return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(Number(amount))}catch{return `ARS ${Number(amount)}`}}
+function formatArsExact(amount){try{return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(amount))}catch{return `ARS ${Number(amount).toFixed(2)}`}}
 function computationModeLabel(mode){return mode==='walking'?'A pie':mode==='bicycle'?'Bici':mode==='auto'?'Auto':mode==='bus'?'Colectivo':mode==='rail'?'Tren':String(mode||'Movilidad')}
+function routedModeCard(option){
+  const selected=option.mode===state.selectedRouteMode;
+  const routed=option.route_available===true&&option.selectable===true;
+  const routeSummary=routed?'Recorrido calculado sobre red OpenStreetMap':'Recorrido no disponible ahora';
+  const routeMeta=routed?[option.distance_display||`${Math.round(option.distance_m)} m`,option.route?.attribution||'© OpenStreetMap contributors'].filter(Boolean).join(' · '):'Distancia no disponible';
+  const priceCopy=option.price_state==='unknown'?'Precio no disponible':option.price?.amount!=null?formatArs(option.price.amount):'Precio no aplica';
+  const action=routed?`<button class="option-action" data-route-mode="${escapeHtml(option.mode)}">${selected?'Recorrido visible':'Ver recorrido'}</button>`:'';
+  return `<article class="option-row mobility-trip${selected?' is-selected':''}" data-mode-card="${escapeHtml(option.mode)}" data-availability="${escapeHtml(option.availability_state||'unavailable')}"><div class="option-copy"><strong>${escapeHtml(computationModeLabel(option.mode))}</strong><p>${escapeHtml(routeSummary)}</p><div class="option-meta">${escapeHtml(routeMeta)}</div></div><div class="trip-value"><span class="option-value">${escapeHtml(priceCopy)}</span>${action}</div></article>`;
+}
+function busModeCard(option){
+  const fareCurrent=option.fare?.state==='current'&&option.fare?.primary;
+  const primary=fareCurrent?`Tarifa oficial · ${formatArsExact(option.fare.primary.amount)}`:'Tarifa oficial no verificada como vigente';
+  const frequent=fareCurrent&&option.fare?.frequent?`${option.fare.frequent.label}: ${formatArsExact(option.fare.frequent.amount)} · ${(option.fare.frequent.eligibility||[]).join(' · ')}`:'La tarifa vigente no está probada para esta sesión.';
+  const source=fareCurrent?`Decreto 00048/2026 · fuente ${fmtVerified(option.fare.source?.source_date)}`:'Sin importe vigente mostrado';
+  const actions=(option.actions||[]).filter(a=>a?.url).map(a=>`<button class="option-action option-action-secondary" data-handoff-url="${escapeHtml(a.url)}" data-handoff-label="${escapeHtml(a.label)}">${escapeHtml(a.label)}</button>`).join('');
+  return `<article class="option-row option-info mobility-bus" data-mode-card="bus" data-availability="${escapeHtml(option.availability_state||'partial')}"><div class="option-copy"><strong>Colectivo</strong><p>${escapeHtml(primary)}</p><div class="option-meta">${escapeHtml(frequent)}</div><div class="option-meta">${escapeHtml(source)} · Cuándo pasa: no integrado · Tiempo real no disponible en VOY</div></div><div class="mode-actions">${actions}</div></article>`;
+}
 function renderOptions(){
   options.replaceChildren();const mobility=state.mobilityDecision;if(!mobility)return;
   const rows=[];const computation=state.mobilityComputation;
   if(!state.origin){
-    rows.push('<article class="option-row option-row-primary"><div class="option-copy"><strong>Elegí un origen</strong><p>VOY necesita origen y destino para calcular un recorrido real, su distancia y el precio aplicable.</p></div><button class="option-action" data-origin-action>Elegir origen</button></article>');
+    rows.push('<article class="option-row option-row-primary"><div class="option-copy"><strong>Elegí un origen</strong><p>VOY necesita origen y destino para calcular recorridos disponibles y mostrar cada precio o tarifa con su estado real.</p></div><button class="option-action" data-origin-action>Elegir origen</button></article>');
   }else if(computation){
-    const selectable=computation.mode_options.filter(option=>option.selectable===true);
-    for(const option of selectable){
-      const selected=option.mode===state.selectedRouteMode;
-      const routeSummary='Recorrido calculado sobre red OpenStreetMap';
-      rows.push(`<article class="option-row mobility-trip${selected?' is-selected':''}" data-mode-card="${escapeHtml(option.mode)}"><div class="option-copy"><strong>${escapeHtml(computationModeLabel(option.mode))}</strong><p>${escapeHtml(routeSummary)}</p><div class="option-meta">${escapeHtml(option.distance_display||`${Math.round(option.distance_m)} m`)} · ${escapeHtml(option.route?.attribution||'© OpenStreetMap contributors')}</div></div><div class="trip-value"><span class="option-value">${escapeHtml(formatArs(option.price.amount))}</span><button class="option-action" data-route-mode="${escapeHtml(option.mode)}">${selected?'Recorrido visible':'Ver recorrido'}</button></div></article>`);
+    for(const option of computation.mode_options){
+      if(['walking','bicycle','auto'].includes(option.mode)) rows.push(routedModeCard(option));
+      else if(option.mode==='bus') rows.push(busModeCard(option));
     }
-    if(!selectable.length)rows.push('<p class="empty-options">No pudimos calcular un recorrido seleccionable ahora. VOY no muestra modos incompletos.</p>');
-    const hidden=computation.mode_options.filter(option=>option.selectable!==true);
-    if(hidden.length)rows.push(`<p class="mobility-disclosure">No mostramos ${escapeHtml(hidden.map(x=>computationModeLabel(x.mode)).join(', '))} porque falta recorrido o precio verificable.</p>`);
   }
-  const infoActions=(computation?.info_actions||mobility.handoffs||[]).filter(item=>item?.url);
+  const modeActionUrls=new Set((computation?.mode_options||[]).flatMap(o=>(o.actions||[]).map(a=>a.url)).filter(Boolean));
+  const infoActions=(computation?.info_actions||mobility.handoffs||[]).filter(item=>item?.url&&!modeActionUrls.has(item.url));
   for(const handoff of infoActions){const actionLabel=officialHandoffButtonLabel(handoff.label);rows.push(`<article class="option-row option-info"><div class="option-copy"><strong>Información oficial</strong><p>${escapeHtml(handoff.label||'Fuente oficial')}</p><div class="option-meta">${escapeHtml(sourceLine(handoff.source))}</div></div><button class="option-action option-action-secondary" data-handoff-url="${escapeHtml(handoff.url)}" data-handoff-label="${escapeHtml(handoff.label||'Fuente oficial')}">${escapeHtml(actionLabel)}</button></article>`)}
   options.innerHTML=rows.join('');
   options.querySelector('[data-origin-action]')?.addEventListener('click',()=>$('#manual-origin').click());
-  options.querySelectorAll('[data-route-mode]').forEach(button=>button.addEventListener('click',()=>{const option=state.mobilityComputation?.mode_options.find(item=>item.mode===button.dataset.routeMode&&item.selectable);if(!option)return;state.selectedRouteMode=option.mode;renderOptions();renderRouteGeometry(option.route.geometry);mapShell.scrollIntoView({block:'center',behavior:'smooth'})}));
+  options.querySelectorAll('[data-route-mode]').forEach(button=>button.addEventListener('click',()=>{const option=state.mobilityComputation?.mode_options.find(item=>item.mode===button.dataset.routeMode&&item.selectable&&item.route_available);if(!option)return;state.selectedRouteMode=option.mode;renderOptions();renderRouteGeometry(option.route.geometry);mapShell.scrollIntoView({block:'center',behavior:'smooth'})}));
   options.querySelectorAll('[data-handoff-url]').forEach(button=>button.addEventListener('click',()=>openOfficialHandoff(button.dataset.handoffUrl,button.dataset.handoffLabel)));
 }
 function officialHandoffButtonLabel(label){const raw=String(label||'Fuente oficial').trim();if(/^Consultar\s+/i.test(raw))return `Abrir ${raw.replace(/^Consultar\s+/i,'')}`;const lower=raw.charAt(0).toLocaleLowerCase('es-AR')+raw.slice(1);return `Abrir ${lower}`}
@@ -241,5 +258,6 @@ assistantClose.addEventListener('click',closeAssistant);assistantAction.addEvent
 
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!assistantPanel.hidden)closeAssistant()});
 
+renderInitialMap();
 updateAssistant();
 

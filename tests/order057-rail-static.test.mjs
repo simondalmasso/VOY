@@ -122,8 +122,8 @@ test('public disclosures state static-2022 scope and realtime rail remains off',
 test('frontend keeps rail/bus handoffs secondary and never promotes static facts to selectable trips',async()=>{
   const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
   assert.doesNotMatch(app,/modeLabel=mobility\.available_modes\.includes\('bus'\)/);
-  assert.match(app,/computation\.mode_options\.filter\(option=>option\.selectable===true\)/);
-  assert.match(app,/infoActions=\(computation\?\.info_actions\|\|mobility\.handoffs\|\|\[\]\)/);
+  assert.match(app,/else if\(option\.mode==='bus'\) rows\.push\(busModeCard\(option\)\)/);
+  assert.match(app,/infoActions=\(computation\?\.info_actions\|\|mobility\.handoffs\|\|\[\]\)\.filter/);
   assert.match(app,/Información oficial/);
   assert.match(app,/option-info/);
   assert.doesNotMatch(app,/fact\.mode/);

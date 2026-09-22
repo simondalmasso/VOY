@@ -13,8 +13,10 @@ test('final UI removes prototype and developer-facing copy',()=>{
   }
 });
 
-test('map is not a giant empty initial placeholder',()=>{
-  assert.match(html,/id="map-shell"[^>]*hidden/);
+test('ORDER069 map is the visible primary initial surface',()=>{
+  assert.match(html,/id="map-shell"/);
+  assert.doesNotMatch(html,/id="map-shell"[^>]*hidden/);
+  assert.ok(html.indexOf('id="map-shell"')<html.indexOf('class="planner"'));
   assert.equal(html.includes('El mapa aparece cuando hace falta.'),false);
 });
 

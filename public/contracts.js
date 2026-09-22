@@ -96,18 +96,32 @@ export function normalizeMobilityDecision(decision) {
 export function normalizeMobilityComputation(computation) {
   if (!computation || typeof computation !== 'object' || computation.server_authoritative !== true) return null;
   if (!computation.destination || !computation.origin || !Array.isArray(computation.mode_options)) return null;
+  const availabilityStates=new Set(['available','partial','unavailable']);
+  const priceStates=new Set(['known','unknown','not_applicable']);
   const options=[];
   for (const raw of computation.mode_options) {
     if (!raw || typeof raw !== 'object' || !raw.mode) continue;
-    const option={...raw,mode:String(raw.mode),selectable:raw.selectable===true};
-    if (option.selectable) {
+    const option={
+      ...raw,
+      mode:String(raw.mode),
+      selectable:raw.selectable===true,
+      route_available:raw.route_available===true,
+      availability_state:availabilityStates.has(raw.availability_state)?raw.availability_state:(raw.selectable===true?'available':'unavailable'),
+      price_state:priceStates.has(raw.price_state)?raw.price_state:(raw.price?.amount!=null?'known':'unknown')
+    };
+    if (option.selectable || option.route_available) {
       const coords=option.route?.geometry?.coordinates;
-      const distance=Number(option.distance_m), amount=Number(option.price?.amount);
+      const distance=Number(option.distance_m);
       if (option.route?.geometry?.type!=='LineString' || !Array.isArray(coords) || coords.length<2 || !coords.every(p=>Array.isArray(p)&&p.length>=2&&Number.isFinite(Number(p[0]))&&Number.isFinite(Number(p[1])))) return null;
       if (!Number.isFinite(distance) || distance<=0) return null;
-      if (option.price?.currency!=='ARS' || !Number.isFinite(amount)) return null;
-      option.distance_m=distance; option.price={...option.price,amount};
+      option.distance_m=distance;
     }
+    if (option.price_state==='known' && option.price!=null) {
+      const amount=Number(option.price?.amount);
+      if (option.price?.currency!=='ARS' || !Number.isFinite(amount)) return null;
+      option.price={...option.price,amount};
+    }
+    if (option.price_state==='unknown' && option.mode==='auto') option.price=null;
     options.push(option);
   }
   return {...computation,mode_options:options,selectable_modes:options.filter(o=>o.selectable).map(o=>o.mode),info_actions:Array.isArray(computation.info_actions)?[...computation.info_actions]:[],provenance:Array.isArray(computation.provenance)?[...computation.provenance]:[]};

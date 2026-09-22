@@ -25,6 +25,11 @@
 </header>
 
 <main class="app-shell">
+  <section id="map-shell" class="map-shell" aria-label="Mapa de VOY">
+    <div id="map-tiles" class="map-tiles" aria-hidden="true"></div>
+    <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
+    <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
+  </section>
   <section class="planner" aria-labelledby="destination-label">
     <div class="destination-hero">
 
@@ -137,11 +142,7 @@
     </section>
   </section>
 
-  <section id="map-shell" class="map-shell" aria-label="Mapa del destino" hidden>
-    <div id="map-tiles" class="map-tiles" aria-hidden="true"></div>
-    <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
-    <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
-  </section>
+
 </main>
 
 <footer class="footer">

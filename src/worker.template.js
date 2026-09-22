@@ -1710,6 +1710,80 @@ function buildMobilityDecision(destination, nowMs = Date.now()) {
   };
 }
 __name(buildMobilityDecision, "buildMobilityDecision");
+const SANTA_FE_BUS_FACTS = Object.freeze({
+  fare_source: Object.freeze({
+    id: "src_santa_fe_fare_20260515",
+    authority: "Municipalidad de Santa Fe",
+    canonical_url: "https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
+    source_date: "2026-05-15",
+    verified_at: "2026-09-22T18:20:00Z",
+    freshness_threshold_seconds: 2592000
+  }),
+  deviations_source: Object.freeze({
+    id: "src_santa_fe_deviations",
+    authority: "Municipalidad de Santa Fe",
+    canonical_url: "https://santafeciudad.gov.ar/desvios/",
+    source_date: "2026-09-21",
+    verified_at: "2026-09-22T18:20:00Z"
+  }),
+  transit_url: "https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/",
+  full_fare_ars: 2111.11,
+  frequent_fare_ars: 1900
+});
+function isVerifiedSantaFeCity(destination) {
+  if (destination?.territory_verified !== true || String(destination?.province?.id ?? "") !== "82") return false;
+  const slug = String(destination?.locality?.slug ?? destination?.integration_slug ?? "").toLowerCase();
+  const locality = foldText(destination?.locality?.name ?? "");
+  return slug === "santa-fe" || locality === "santa fe";
+}
+function sourceFreshAt(source, nowMs) {
+  const verified = Date.parse(source?.verified_at ?? "");
+  const ttl = Number(source?.freshness_threshold_seconds);
+  return Number.isFinite(verified) && Number.isFinite(ttl) && ttl > 0 && nowMs >= verified && nowMs - verified <= ttl * 1000;
+}
+function santaFeBusModeOption(destination, nowMs) {
+  if (!isVerifiedSantaFeCity(destination)) return null;
+  const fresh = sourceFreshAt(SANTA_FE_BUS_FACTS.fare_source, nowMs);
+  const fareSource = { ...SANTA_FE_BUS_FACTS.fare_source };
+  return {
+    mode: "bus",
+    selectable: false,
+    route_available: false,
+    availability_state: "partial",
+    price_state: fresh ? "known" : "unknown",
+    eta_state: "not_integrated",
+    realtime_state: "unavailable",
+    fare: {
+      state: fresh ? "current" : "unverified",
+      primary: fresh ? { label: "Tarifa plena", currency: "ARS", amount: SANTA_FE_BUS_FACTS.full_fare_ars } : null,
+      frequent: fresh ? {
+        label: "Boleto frecuente Santa Fe",
+        currency: "ARS",
+        amount: SANTA_FE_BUS_FACTS.frequent_fare_ars,
+        eligibility: [
+          "SUBE registrada a nombre de la persona usuaria",
+          "domicilio declarado en la ciudad de Santa Fe",
+          "pago prepago con SUBE física o SUBE Digital",
+          "no aplica a pagos con tarjeta de débito, crédito, billetera virtual ni QR"
+        ]
+      } : null,
+      source: fareSource
+    },
+    disclosures: [
+      "Cuándo pasa: no integrado",
+      "Tiempo real no disponible en VOY",
+      "La tarifa frecuente depende de elegibilidad; no es el precio exacto de cada viaje."
+    ],
+    actions: [
+      { id: "santa_fe_when_arrives", label: "Consultar cuándo pasa", url: SANTA_FE_BUS_FACTS.transit_url, source: { id: "src_santa_fe_bus", authority: "Municipalidad de Santa Fe", verified_at: SANTA_FE_BUS_FACTS.fare_source.verified_at } },
+      { id: "santa_fe_deviations", label: "Ver desvíos oficiales", url: SANTA_FE_BUS_FACTS.deviations_source.canonical_url, source: { ...SANTA_FE_BUS_FACTS.deviations_source } }
+    ],
+    provenance: [fareSource, { ...SANTA_FE_BUS_FACTS.deviations_source }]
+  };
+}
+__name(isVerifiedSantaFeCity, "isVerifiedSantaFeCity");
+__name(sourceFreshAt, "sourceFreshAt");
+__name(santaFeBusModeOption, "santaFeBusModeOption");
 const ROUTING_PROFILES = Object.freeze({
   walking: "routed-foot",
   bicycle: "routed-bike",
@@ -1829,24 +1903,38 @@ function routeDistanceDisplay(distanceM) {
   if (!Number.isFinite(n) || n <= 0) return null;
   return n < 1000 ? `${Math.round(n)} m` : `${(n / 1000).toFixed(n < 10000 ? 1 : 0)} km`;
 }
-function freeModeOption(mode, route) {
+function routedModeOption(mode, route, price) {
   if (!route) return null;
+  const priceState = price ? "known" : "unknown";
   return {
     mode,
     selectable: true,
+    route_available: true,
+    availability_state: "available",
+    price_state: priceState,
     route: { geometry: route.geometry, source: route.source, observed_at: route.observed_at, attribution: route.attribution },
     distance_m: route.distance_m,
     distance_display: routeDistanceDisplay(route.distance_m),
-    price: { currency: "ARS", amount: 0, kind: "free", source: "intrinsic_zero_marginal_fare" },
-    disclosures: ["Recorrido calculado sobre red OpenStreetMap; no implica estado del tránsito ni tiempo estimado."],
+    price: price ?? null,
+    disclosures: [
+      "Recorrido calculado sobre red OpenStreetMap; no implica estado del tránsito ni tiempo estimado.",
+      ...(priceState === "unknown" ? ["Precio no disponible"] : [])
+    ],
     provenance: [{ id: ROUTING_PROVIDER.id, authority: ROUTING_PROVIDER.authority, attribution: ROUTING_PROVIDER.attribution }],
     next_actions: []
   };
 }
-function nonSelectableMode(mode, reason, extra = {}) {
-  return { mode, selectable: false, reason, ...extra };
+function freeModeOption(mode, route) {
+  return routedModeOption(mode, route, route ? { currency: "ARS", amount: 0, kind: "free", source: "intrinsic_zero_marginal_fare" } : null);
 }
-async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
+function nonSelectableMode(mode, reason, extra = {}) {
+  return { mode, selectable: false, route_available: false, availability_state: "unavailable", price_state: "unknown", reason, ...extra };
+}
+function autoModeOption(route) {
+  if (!route) return nonSelectableMode("auto", "route_unavailable", { price: null, disclosures: ["Precio no disponible"] });
+  return routedModeOption("auto", route, null);
+}
+async function computeMobilityComputation(async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
   if (!payload || typeof payload !== "object") throw new VoyError("mobility_computation_invalid", 400);
   const origin = payload.origin, destination = payload.destination;
   if (!routeCoordinate(origin?.coordinates) || !routeCoordinate(destination?.coordinates)) throw new VoyError("mobility_computation_coordinates_required", 400);
@@ -1854,13 +1942,16 @@ async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Da
   const baseDecision = buildMobilityDecision(destination, nowMs);
   const walkingRoute = await acquireNetworkRoute("walking", origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
   const bicycleRoute = await acquireNetworkRoute("bicycle", origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
+  const autoRoute = await acquireNetworkRoute("auto", origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
   const modeOptions = [];
   const walking = freeModeOption("walking", walkingRoute);
   const bicycle = freeModeOption("bicycle", bicycleRoute);
   if (walking) modeOptions.push(walking); else modeOptions.push(nonSelectableMode("walking", "route_unavailable"));
   if (bicycle) modeOptions.push(bicycle); else modeOptions.push(nonSelectableMode("bicycle", "route_unavailable"));
-  modeOptions.push(nonSelectableMode("auto", "truthful_current_price_input_unavailable", { price: null }));
-  if (baseDecision.integration_slug || baseDecision.handoffs.some((h) => h.mode === "bus")) modeOptions.push(nonSelectableMode("bus", "truthful_route_and_applicable_fare_not_jointly_available", { price: null }));
+  modeOptions.push(autoModeOption(autoRoute));
+  const santaFeBus = santaFeBusModeOption(destination, nowMs);
+  if (santaFeBus) modeOptions.push(santaFeBus);
+  else if (baseDecision.integration_slug || baseDecision.handoffs.some((h) => h.mode === "bus")) modeOptions.push(nonSelectableMode("bus", "route_and_fare_unavailable", { price: null }));
   if ((baseDecision.facts ?? []).some((f) => f.mode === "rail") || (baseDecision.handoffs ?? []).some((h) => h.mode === "rail")) modeOptions.push(nonSelectableMode("rail", "truthful_route_and_applicable_fare_not_jointly_available", { price: null }));
   return {
     server_authoritative: true,

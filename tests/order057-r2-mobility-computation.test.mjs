@@ -32,7 +32,7 @@ test('R2 computes truthful walking and bicycle network routes with explicit ARS 
   assert.equal(walk.distance_m,1180); assert.equal(bike.distance_m,1310);
   assert.equal(walk.price.amount,0); assert.equal(walk.price.kind,'free');
   assert.equal(bike.price.amount,0); assert.equal(bike.price.kind,'free');
-  assert.equal(c.mode_options.some(x=>x.mode==='auto'&&x.selectable),false,'auto must not appear without truthful price input');
+  const auto=c.mode_options.find(x=>x.mode==='auto'); assert.equal(auto.selectable,true); assert.equal(auto.price_state,'unknown'); assert.equal(auto.price,null);
   assert.equal(c.mode_options.some(x=>x.mode==='bus'&&x.selectable),false,'official handoff/fare metadata alone cannot become a bus trip');
 });
 
@@ -61,8 +61,8 @@ test('R2 HTTP compute endpoint is server-authoritative and does not coerce missi
   const req=new Request('https://voy.test/api/mobility/compute',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({origin,destination})});
   const res=await handler(req,{}); assert.equal(res.status,200);
   const payload=await res.json(); assert.equal(payload.ok,true); assert.equal(payload.computation.server_authoritative,true);
-  for(const option of payload.computation.mode_options.filter(x=>x.selectable)) assertSelectableContract(option);
-  assert.equal(payload.computation.mode_options.some(x=>x.selectable&&x.price==null),false);
+  for(const option of payload.computation.mode_options.filter(x=>x.selectable&&x.mode!=='auto')) assertSelectableContract(option);
+  const auto=payload.computation.mode_options.find(x=>x.mode==='auto'); assert.equal(auto.selectable,true); assert.equal(auto.price_state,'unknown'); assert.equal(auto.price,null);
 });
 
 
@@ -76,11 +76,11 @@ test('R2 production routing is globally coordinated before calling public upstre
 
   const c=await computeMobilityComputation({origin,destination},fetch,Date.parse('2026-09-07T00:00:00Z'),env);
 
-  assert.equal(c.mode_options.filter(x=>x.selectable).length,2);
+  assert.equal(c.mode_options.filter(x=>x.selectable).length,3);
 
-  assert.equal(calls.length,2);
+  assert.equal(calls.length,3);
 
-  assert.deepEqual(calls.map(x=>x.body.mode),['walking','bicycle']);
+  assert.deepEqual(calls.map(x=>x.body.mode),['walking','bicycle','auto']);
 
 });
 
