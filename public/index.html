@@ -30,7 +30,7 @@
     <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
     <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
   </section>
-  <section class="planner" aria-labelledby="destination-label">
+  <div class="map-controls">
     <div class="destination-hero">
 
       <label id="destination-label" for="destination">¿A dónde vas?</label>
@@ -116,6 +116,8 @@
 
     </div>
 
+</div>
+  <section class="planner" aria-labelledby="destination-label">
     <section id="decision" class="decision" hidden aria-live="polite">
       <div class="destination-summary">
         <div class="summary-icon" aria-hidden="true">
@@ -140,14 +142,15 @@
       </div>
       <div id="train-radar-list" class="train-radar-list"></div>
     </section>
+    <footer class="footer">
+  <nav aria-label="Información"><a href="/coverage.html">Cobertura</a><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a><a href="/sources.html">Fuentes</a></nav>
+</footer>
   </section>
 
 
 </main>
 
-<footer class="footer">
-  <nav aria-label="Información"><a href="/coverage.html">Cobertura</a><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a><a href="/sources.html">Fuentes</a></nav>
-</footer>
+
 
 <dialog id="handoff-dialog" aria-labelledby="handoff-title">
   <form method="dialog" class="dialog-card">

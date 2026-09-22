@@ -214,3 +214,58 @@ dialog{width:min(92vw,460px);border:1px solid var(--line);border-radius:22px;pad
   .app-shell{grid-template-rows:50svh minmax(0,1fr)}
   .map-shell,body[data-view="resolved"] .map-shell{height:100%;min-height:0}
 }
+/* ORDER069 MAP-FIRST app shell: controls overlay map; facts scroll independently */
+body{height:100svh;overflow:hidden}
+.app-shell{position:relative;flex:0 0 auto;overflow:hidden}
+.map-controls{z-index:20;min-width:0}
+.planner{z-index:18;min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.planner>.footer{width:100%;padding:16px 4px 22px;margin-top:14px}
+.map-controls .destination-hero{box-shadow:0 10px 30px rgba(0,0,0,.16)}
+.map-controls .context-rail{background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(12px);border-radius:16px;padding:8px 10px;margin-top:8px;box-shadow:0 8px 22px rgba(0,0,0,.12)}
+
+@media (min-width:960px){
+  .app-shell{height:calc(100svh - 78px);min-height:0;grid-template-columns:minmax(560px,1.65fr) minmax(340px,.72fr);grid-template-rows:minmax(0,1fr);grid-template-areas:"map planner";gap:24px;padding-top:12px;padding-bottom:12px}
+  .map-shell,body[data-view="resolved"] .map-shell{grid-area:map;position:relative;top:auto;height:100%;min-height:0;margin:0}
+  .planner,body[data-view="resolved"] .planner{grid-area:planner;height:100%;max-height:none;padding:0 4px 0 0}
+  .map-controls{position:absolute;top:34px;left:34px;width:min(560px,calc(64% - 68px));max-width:calc(100% - 430px);pointer-events:none}
+  .map-controls>*{pointer-events:auto}
+  .map-controls .destination-hero,body[data-view="resolved"] .map-controls .destination-hero{min-height:138px;padding:16px 18px 14px;border-radius:22px 19px 28px 16px}
+  .map-controls .destination-hero>label,body[data-view="resolved"] .map-controls .destination-hero>label{font-size:28px}
+  .map-controls .destination-control{min-height:50px}
+}
+
+@media (max-width:959px){
+  .app-shell{height:calc(100svh - 64px);min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:50svh minmax(0,1fr);grid-template-areas:"map" "planner";gap:0;padding:0 12px 0}
+  .map-shell,body[data-view="resolved"] .map-shell{grid-area:map;position:relative;top:auto;order:0;height:100%;min-height:0;margin:0;border-radius:24px 20px 0 0}
+  .planner,body[data-view="resolved"] .planner{grid-area:planner;display:block;order:1;height:100%;max-height:none;background:var(--bg);padding:12px 2px 20px;border-radius:0 0 24px 20px}
+  .map-controls{position:absolute;top:10px;left:22px;right:22px;pointer-events:none}
+  .map-controls>*{pointer-events:auto}
+  .map-controls .destination-hero,body[data-view="resolved"] .map-controls .destination-hero{min-height:118px;padding:12px 14px 11px;border-radius:20px 18px 25px 14px}
+  .map-controls .destination-hero>label,body[data-view="resolved"] .map-controls .destination-hero>label{font-size:25px;line-height:1}
+  .map-controls .hero-support{margin-top:4px;min-height:18px;padding-bottom:2px}
+  .map-controls .destination-control{min-height:48px;padding-inline:12px}
+  .map-controls .destination-control input{font-size:16px;padding-block:8px}
+  .map-controls .context-rail{margin-top:6px;padding:6px 8px}
+  .map-controls .origin-bar{min-height:44px}
+  .decision{margin-top:0}
+  .footer{display:block}
+}
+
+@media (max-width:700px){
+  .app-shell{grid-template-rows:50svh minmax(0,1fr);padding:0 10px}
+  .map-shell,body[data-view="resolved"] .map-shell{height:100%;min-height:0;margin:0}
+  .map-controls{left:18px;right:18px;top:8px}
+  .map-controls .destination-hero,body[data-view="resolved"] .map-controls .destination-hero{min-height:112px;padding:11px 12px 10px}
+  .map-controls .destination-hero>label,body[data-view="resolved"] .map-controls .destination-hero>label{font-size:24px}
+  .planner{padding-inline:2px}
+}
+
+@media (max-height:460px) and (orientation:landscape){
+  body{height:100svh;overflow:hidden}
+  .app-shell{height:calc(100svh - 52px);display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr);grid-template-rows:minmax(0,1fr);grid-template-areas:"map planner";gap:12px;padding:4px 10px}
+  .map-shell,body[data-view="resolved"] .map-shell{grid-area:map;height:100%;min-height:0}
+  .planner,body[data-view="resolved"] .planner{grid-area:planner;height:100%;overflow-y:auto}
+  .map-controls{top:10px;left:20px;width:min(430px,50%);right:auto}
+  .map-controls .destination-hero{min-height:104px;padding:10px 12px}
+  .map-controls .destination-hero>label{font-size:22px}
+}
