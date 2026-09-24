@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "realtime_source_present": false,
+  "santa_fe_live_bus": false,
+  "scheduled_vehicle_animation": 0,
+  "layers": {
+    "realtime": {
+      "vehicle_marker": true,
+      "interpolation": "fresh_verified_geometry_only"
+    },
+    "predicted": {
+      "vehicle_marker": true,
+      "interpolation": false,
+      "visual_state": "predicted"
+    },
+    "scheduled": {
+      "vehicle_marker": false,
+      "interpolation": false,
+      "visual_state": "station_route_schedule_only"
+    },
+    "unknown": {
+      "vehicle_marker": false,
+      "interpolation": false,
+      "visual_state": "hidden"
+    }
+  }
+}
