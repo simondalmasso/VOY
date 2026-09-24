@@ -464,6 +464,23 @@ var TRAIN_RADAR_SOURCE = Object.freeze({
 var TRAIN_RADAR_CACHE_TTL_MS = 300000;
 var TRAIN_RADAR_RADIUS_METERS = 8000;
 var TRAIN_RADAR_STATION_NAMES = new Set(["once", "haedo", "moreno"]);
+var TRAIN_RADAR_COVERAGE_POINTS = Object.freeze([
+  Object.freeze({ name: "Once", lat: -34.60827979749716, lon: -58.4075158087721 }),
+  Object.freeze({ name: "Haedo", lat: -34.644477144900506, lon: -58.59194588896136 }),
+  Object.freeze({ name: "Moreno", lat: -34.65055409620922, lon: -58.7896992362823 })
+]);
+function trainRadarCoverageSupported(coordinates) {
+  const center = validCoordinates(coordinates);
+  if (!center) return false;
+  return TRAIN_RADAR_COVERAGE_POINTS.some((station) => (haversineMeters(center, station) ?? Infinity) <= TRAIN_RADAR_RADIUS_METERS);
+}
+__name(trainRadarCoverageSupported, "trainRadarCoverageSupported");
+function unsupportedTrainRadarSnapshot(coordinates) {
+  const center = validCoordinates(coordinates);
+  if (!center) throw new VoyError("invalid_coordinates", 400);
+  return { source_status: "unsupported", radius_meters: TRAIN_RADAR_RADIUS_METERS, source: null, stations: [] };
+}
+__name(unsupportedTrainRadarSnapshot, "unsupportedTrainRadarSnapshot");
 
 function decodeTrainSourceHtml(value) {
   return String(value ?? "")
@@ -567,7 +584,6 @@ var destinationWindow = { startedAt: 0, count: 0 };
 var DESTINATION_PROVIDER = DESTINATION_PROVIDERS.production_provider;
 const ROUTER_QUEUE_MAX=32;
 const ROUTE_CACHE_MAX=96;
-const ROUTE_CACHE_SCAN_LIMIT=ROUTE_CACHE_MAX+1;
 var SECURITY_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
   "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -584,36 +600,71 @@ var NominatimCoordinator = class {
     this.env = env;
     this.tail = Promise.resolve();
     this.pendingAdmissions = 0;
+    this.routeCache = new Map();
+    this.lastFetchAt = 0;
+    this.circuitUntil = 0;
+  }
+  validateBatch(payload) {
+    const modes = Array.isArray(payload?.modes) ? payload.modes.map((mode) => String(mode)) : [];
+    const origin = routeCoordinate(payload?.origin), destination = routeCoordinate(payload?.destination);
+    if (!origin || !destination || modes.length < 1 || modes.length > 3) return null;
+    if (new Set(modes).size !== modes.length) return null;
+    if (modes.some((mode) => !ROUTING_PROFILES[mode])) return null;
+    return { modes, origin, destination };
   }
   async fetch(request) {
     if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "method_not_allowed" }), { status: 405, headers: JSON_HEADERS });
     const payload = await request.json().catch(() => null);
-    if(this.pendingAdmissions>=ROUTER_QUEUE_MAX)return new Response(JSON.stringify({ok:false,error:"router_queue_full"}),{status:503,headers:JSON_HEADERS});
-    this.pendingAdmissions+=1;
-    const job=this.tail.then(()=>this.route(payload));
-    this.tail=job.catch(()=>null);
-    try{
-      const value=await job.catch(()=>null);
+    const batch = this.validateBatch(payload);
+    if (!batch) return new Response(JSON.stringify({ ok: false, error: "invalid_route_batch" }), { status: 400, headers: JSON_HEADERS });
+    if (this.pendingAdmissions >= ROUTER_QUEUE_MAX) return new Response(JSON.stringify({ ok: false, error: "router_queue_full" }), { status: 503, headers: JSON_HEADERS });
+    this.pendingAdmissions += 1;
+    const job = this.tail.then(() => this.routeBatch(batch));
+    this.tail = job.catch(() => null);
+    try {
+      const value = await job.catch(() => null);
       return new Response(JSON.stringify(value ?? { ok: false, error: "route_unavailable" }), { status: value?.ok ? 200 : 503, headers: JSON_HEADERS });
-    }finally{this.pendingAdmissions=Math.max(0,this.pendingAdmissions-1);}
+    } finally { this.pendingAdmissions = Math.max(0, this.pendingAdmissions - 1); }
+  }
+  readMemoryCache(key, now) {
+    const cached = this.routeCache.get(key);
+    if (!cached) return null;
+    if (now - Number(cached.stored_at) >= ROUTING_PROVIDER.cache_ttl_ms) { this.routeCache.delete(key); return null; }
+    this.routeCache.delete(key);
+    this.routeCache.set(key, cached);
+    return { ...cached.value, cache_hit: true };
+  }
+  writeMemoryCache(key, value, now) {
+    this.routeCache.delete(key);
+    this.routeCache.set(key, { stored_at: now, value });
+    while (this.routeCache.size > ROUTE_CACHE_MAX) this.routeCache.delete(this.routeCache.keys().next().value);
+  }
+  async routeBatch({ modes, origin, destination }) {
+    const routes = {}, errors = {};
+    for (const mode of modes) {
+      const result = await this.routeOne(mode, origin, destination);
+      if (result?.ok && result.route) routes[mode] = result.route;
+      else errors[mode] = result?.error ?? "route_unavailable";
+    }
+    return { ok: true, routes, errors };
   }
   async route(payload) {
     const mode = String(payload?.mode ?? "");
-    const profile = ROUTING_PROFILES[mode];
     const origin = routeCoordinate(payload?.origin), destination = routeCoordinate(payload?.destination);
-    if (!profile || !origin || !destination) return { ok: false, error: "invalid_route_request" };
+    if (!ROUTING_PROFILES[mode] || !origin || !destination) return { ok: false, error: "invalid_route_request" };
+    return this.routeOne(mode, origin, destination);
+  }
+  async routeOne(mode, origin, destination) {
+    const profile = ROUTING_PROFILES[mode];
+    if (!profile) return { ok: false, error: "invalid_route_request" };
     const key = routeCacheKey(mode, origin, destination);
     const now = Date.now();
-    const cacheKey=`cache:${key}`;
-    const cached = await this.state.storage.get(cacheKey);
-    if (cached && now - Number(cached.stored_at) < ROUTING_PROVIDER.cache_ttl_ms) return { ok: true, route: { ...cached.value, cache_hit: true } };
-    if(cached)await this.state.storage.delete(cacheKey);
-    const circuitUntil = Number(await this.state.storage.get("circuit_until") ?? 0);
-    if (now < circuitUntil) return { ok: false, error: "circuit_open" };
-    const lastFetch = Number(await this.state.storage.get("last_fetch_at") ?? 0);
-    const wait = Math.max(0, 1000 - (Date.now() - lastFetch));
+    const cached = this.readMemoryCache(key, now);
+    if (cached) return { ok: true, route: cached };
+    if (now < this.circuitUntil) return { ok: false, error: "circuit_open" };
+    const wait = Math.max(0, 1000 - (Date.now() - this.lastFetchAt));
     if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-    await this.state.storage.put("last_fetch_at", Date.now());
+    this.lastFetchAt = Date.now();
     const coords = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
     const url = `${ROUTING_PROVIDER.base_url}/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
     const controller = new AbortController();
@@ -621,7 +672,7 @@ var NominatimCoordinator = class {
     try {
       const response = await fetch(url, { method: "GET", headers: { "User-Agent": "VOY-Mobility/1.0 (+https://voy-app.simondalmasso44.workers.dev/)", "Accept": "application/json" }, signal: controller.signal });
       if (!response.ok) {
-        if (response.status >= 500 || response.status === 429) await this.state.storage.put("circuit_until", Date.now() + ROUTING_PROVIDER.circuit_open_ms);
+        if (response.status >= 500 || response.status === 429) this.circuitUntil = Date.now() + ROUTING_PROVIDER.circuit_open_ms;
         return { ok: false, error: `upstream_${response.status}` };
       }
       const body = await response.json();
@@ -630,12 +681,10 @@ var NominatimCoordinator = class {
       const distance = Number(candidate?.distance);
       if (!geometry || !Number.isFinite(distance) || distance <= 0) return { ok: false, error: "invalid_upstream_route" };
       const value = { geometry, distance_m: Math.round(distance), source: ROUTING_PROVIDER.id, source_class: "network_route", observed_at: new Date().toISOString(), attribution: ROUTING_PROVIDER.attribution, cache_hit: false };
-      const storedAt=Date.now();
-      await prunePersistentRouteCacheForInsert(this.state.storage,cacheKey,storedAt);
-      await this.state.storage.put(cacheKey, { stored_at: storedAt, value });
+      this.writeMemoryCache(key, value, Date.now());
       return { ok: true, route: value };
     } catch {
-      await this.state.storage.put("circuit_until", Date.now() + ROUTING_PROVIDER.circuit_open_ms);
+      this.circuitUntil = Date.now() + ROUTING_PROVIDER.circuit_open_ms;
       return { ok: false, error: "upstream_unavailable" };
     } finally { clearTimeout(timer); }
   }
@@ -1799,27 +1848,6 @@ const ROUTING_PROVIDER = Object.freeze({
   cache_ttl_ms: 120000,
   circuit_open_ms: 30000
 });
-const routingRuntime = { lastRealFetchAt: 0, circuitUntil: 0, cache: new Map() };
-async function prunePersistentRouteCacheForInsert(storage,incomingKey,nowMs=Date.now()){
-  let page=await storage.list({prefix:"cache:",limit:ROUTE_CACHE_SCAN_LIMIT});
-  let entries=[...page.entries()];
-  while(page.size===ROUTE_CACHE_SCAN_LIMIT){
-    const lastKey=[...page.keys()].at(-1);
-    page=await storage.list({prefix:"cache:",startAfter:lastKey,limit:ROUTE_CACHE_SCAN_LIMIT});
-    if(!page.size)break;
-    entries.push(...page.entries());
-  }
-  const active=[];
-  for(const [key,record] of entries){
-    if(key===incomingKey)continue;
-    const storedAt=Number(record?.stored_at);
-    if(!Number.isFinite(storedAt)||nowMs-storedAt>=ROUTING_PROVIDER.cache_ttl_ms){await storage.delete(key);continue;}
-    active.push({key,stored_at:storedAt});
-  }
-  active.sort((a,b)=>a.stored_at-b.stored_at||String(a.key).localeCompare(String(b.key)));
-  while(active.length>=ROUTE_CACHE_MAX){const victim=active.shift();await storage.delete(victim.key);}
-}
-__name(prunePersistentRouteCacheForInsert,"prunePersistentRouteCacheForInsert");
 function validRoutePoint(pair) {
   return Array.isArray(pair) && pair.length >= 2 && Number.isFinite(Number(pair[0])) && Number.isFinite(Number(pair[1])) && Number(pair[0]) >= -180 && Number(pair[0]) <= 180 && Number(pair[1]) >= -90 && Number(pair[1]) <= 90;
 }
@@ -1837,60 +1865,23 @@ function routeCacheKey(mode, origin, destination) {
   const round = (n) => Number(n).toFixed(5);
   return `${mode}:${round(origin.lat)},${round(origin.lon)}:${round(destination.lat)},${round(destination.lon)}`;
 }
-async function acquireNetworkRoute(mode, originInput, destinationInput, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
+async function acquireNetworkRoute(mode, originInput, destinationInput, fetchImpl = fetch, nowMs = Date.now()) {
   const profile = ROUTING_PROFILES[mode];
   const origin = routeCoordinate(originInput), destination = routeCoordinate(destinationInput);
   if (!profile || !origin || !destination) return null;
-  const key = routeCacheKey(mode, origin, destination);
-  const isRealFetch = fetchImpl === fetch;
-  if (isRealFetch) {
-    const coordinator = env?.ROUTING_COORDINATOR;
-    if (!coordinator?.idFromName || !coordinator?.get) return null;
-    try {
-      const stub = coordinator.get(coordinator.idFromName("global"));
-      const response = await stub.fetch("https://routing-coordinator.internal/route", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, origin, destination }) });
-      if (!response.ok) return null;
-      const body = await response.json();
-      return body?.ok && body?.route ? body.route : null;
-    } catch { return null; }
-  }
-  const cached = isRealFetch ? routingRuntime.cache.get(key) : null;
-  if (cached && nowMs - cached.stored_at < ROUTING_PROVIDER.cache_ttl_ms) return { ...cached.value, cache_hit: true };
-  if (isRealFetch && Date.now() < routingRuntime.circuitUntil) return null;
-  if (isRealFetch) {
-    const wait = Math.max(0, 1000 - (Date.now() - routingRuntime.lastRealFetchAt));
-    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-    routingRuntime.lastRealFetchAt = Date.now();
-  }
   const coords = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
   const url = `${ROUTING_PROVIDER.base_url}/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ROUTING_PROVIDER.timeout_ms);
   try {
     const response = await fetchImpl(url, { method: "GET", headers: { "User-Agent": "VOY-Mobility/1.0 (+https://voy-app.simondalmasso44.workers.dev/)", "Accept": "application/json" }, signal: controller.signal });
-    if (!response?.ok) {
-      if (isRealFetch && Number(response?.status) >= 500) routingRuntime.circuitUntil = Date.now() + ROUTING_PROVIDER.circuit_open_ms;
-      return null;
-    }
+    if (!response?.ok) return null;
     const payload = await response.json();
     const route = Array.isArray(payload?.routes) ? payload.routes[0] : null;
     const geometry = validateRouteGeometry(route?.geometry);
     const distance = Number(route?.distance);
     if (!geometry || !Number.isFinite(distance) || distance <= 0) return null;
-    const value = {
-      geometry,
-      distance_m: Math.round(distance),
-      source: ROUTING_PROVIDER.id,
-      source_class: "network_route",
-      observed_at: new Date(nowMs).toISOString(),
-      attribution: ROUTING_PROVIDER.attribution,
-      cache_hit: false
-    };
-    if (isRealFetch) {
-      routingRuntime.cache.set(key, { stored_at: nowMs, value });
-      if (routingRuntime.cache.size > 96) routingRuntime.cache.delete(routingRuntime.cache.keys().next().value);
-    }
-    return value;
+    return { geometry, distance_m: Math.round(distance), source: ROUTING_PROVIDER.id, source_class: "network_route", observed_at: new Date(nowMs).toISOString(), attribution: ROUTING_PROVIDER.attribution, cache_hit: false };
   } catch {
     return null;
   } finally {
@@ -1898,6 +1889,28 @@ async function acquireNetworkRoute(mode, originInput, destinationInput, fetchImp
   }
 }
 __name(acquireNetworkRoute, "acquireNetworkRoute");
+async function acquireNetworkRoutes(modes, originInput, destinationInput, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
+  const origin = routeCoordinate(originInput), destination = routeCoordinate(destinationInput);
+  const empty = () => Object.fromEntries(modes.map((mode) => [mode, null]));
+  if (!origin || !destination) return empty();
+  if (fetchImpl === fetch) {
+    const coordinator = env?.ROUTING_COORDINATOR;
+    if (!coordinator?.idFromName || !coordinator?.get) return empty();
+    try {
+      const stub = coordinator.get(coordinator.idFromName("global"));
+      const response = await stub.fetch("https://routing-coordinator.internal/routes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ modes, origin, destination }) });
+      if (!response.ok) return empty();
+      const body = await response.json();
+      return Object.fromEntries(modes.map((mode) => [mode, body?.routes?.[mode] ?? null]));
+    } catch {
+      return empty();
+    }
+  }
+  const routes = {};
+  for (const mode of modes) routes[mode] = await acquireNetworkRoute(mode, origin, destination, fetchImpl, nowMs);
+  return routes;
+}
+__name(acquireNetworkRoutes, "acquireNetworkRoutes");
 function routeDistanceDisplay(distanceM) {
   const n = Number(distanceM);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -1940,9 +1953,8 @@ async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Da
   if (!routeCoordinate(origin?.coordinates) || !routeCoordinate(destination?.coordinates)) throw new VoyError("mobility_computation_coordinates_required", 400);
   if (destination?.territory_verified !== true) throw new VoyError("mobility_computation_destination_unverified", 409);
   const baseDecision = buildMobilityDecision(destination, nowMs);
-  const walkingRoute = await acquireNetworkRoute("walking", origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
-  const bicycleRoute = await acquireNetworkRoute("bicycle", origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
-  const autoRoute = await acquireNetworkRoute("auto", origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
+  const routes = await acquireNetworkRoutes(["walking", "bicycle", "auto"], origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
+  const walkingRoute = routes.walking, bicycleRoute = routes.bicycle, autoRoute = routes.auto;
   const modeOptions = [];
   const walking = freeModeOption("walking", walkingRoute);
   const bicycle = freeModeOption("bicycle", bicycleRoute);
@@ -2053,6 +2065,8 @@ async function apiResponse(request, env, deps) {
   if (url.pathname === "/api/radar/trains/nearby") {
     if (request.method !== "POST") return methodNotAllowed(["POST"]);
     const payload = await parseSmallJsonBody(request);
+    if (!validCoordinates(payload.coordinates)) throw new VoyError("invalid_coordinates", 400);
+    if (!trainRadarCoverageSupported(payload.coordinates)) return json({ ok: true, radar: unsupportedTrainRadarSnapshot(payload.coordinates) });
     const providerResult = await deps.trainServiceAdapter.read();
     return json({ ok: true, radar: buildTrainRadarSnapshot({ coordinates: payload.coordinates, providerResult, nowMs: Date.now() }) });
   }
@@ -2139,6 +2153,7 @@ export {
   dedupeDestinationCandidates,
   rankDestinationCandidates,
   nearestRailStations,
+  trainRadarCoverageSupported,
   buildTrainRadarSnapshot,
   createSarmientoScheduledAdapter,
   parseSarmientoScheduledService,

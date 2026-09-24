@@ -66,44 +66,22 @@ test('R2 HTTP compute endpoint is server-authoritative and does not coerce missi
 });
 
 
-test('R2 production routing is globally coordinated before calling public upstream',async()=>{
-
+test('R2 production routing is globally coordinated in one bounded batch before calling public upstream',async()=>{
   const calls=[];
-
-  const fakeStub={fetch:async(url,init)=>{calls.push({url:String(url),body:JSON.parse(init.body)});return new Response(JSON.stringify({ok:true,route:{geometry:{type:'LineString',coordinates:[[-60.7042,-31.6412],[-60.7,-31.6333]]},distance_m:1200,source:'routing_openstreetmap_de',source_class:'network_route',observed_at:'2026-09-07T00:00:00Z',attribution:'© OpenStreetMap contributors',cache_hit:false}}),{status:200});}};
-
+  const route={geometry:{type:'LineString',coordinates:[[-60.7042,-31.6412],[-60.7,-31.6333]]},distance_m:1200,source:'routing_openstreetmap_de',source_class:'network_route',observed_at:'2026-09-07T00:00:00Z',attribution:'© OpenStreetMap contributors',cache_hit:false};
+  const fakeStub={fetch:async(url,init)=>{calls.push({url:String(url),body:JSON.parse(init.body)});return new Response(JSON.stringify({ok:true,routes:{walking:route,bicycle:route,auto:route},errors:{}}),{status:200});}};
   const env={ROUTING_COORDINATOR:{idFromName:(name)=>{assert.equal(name,'global');return 'global-id'},get:(id)=>{assert.equal(id,'global-id');return fakeStub}}};
-
   const c=await computeMobilityComputation({origin,destination},fetch,Date.parse('2026-09-07T00:00:00Z'),env);
-
   assert.equal(c.mode_options.filter(x=>x.selectable).length,3);
-
-  assert.equal(calls.length,3);
-
-  assert.deepEqual(calls.map(x=>x.body.mode),['walking','bicycle','auto']);
-
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].body.modes,['walking','bicycle','auto']);
 });
 
-
-function fakeStorage(seed=[]){
-  const map=new Map(seed);
-  return {
-    map,
-    get:async k=>map.get(k),
-    put:async(k,v)=>{map.set(k,v)},
-    delete:async k=>{map.delete(k)},
-    list:async({prefix='',startAfter='',limit=1000}={})=>new Map([...map.entries()]
-      .filter(([k])=>String(k).startsWith(prefix)&&(!startAfter||String(k)>String(startAfter)))
-      .sort(([a],[b])=>String(a).localeCompare(String(b))).slice(0,limit))
-  };
-}
-
 test('R2 global public-router coordinator fails closed when bounded queue is full',async()=>{
-  const storage=fakeStorage();
-  const coordinator=new NominatimCoordinator({storage},{});
+  const coordinator=new NominatimCoordinator({storage:{}},{});
   let release; const gate=new Promise(r=>{release=r});
-  coordinator.route=async()=>{await gate;return {ok:true,route:{distance_m:1}}};
-  const makeReq=()=>new Request('https://voy.internal/route',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'walking',origin:{lat:-31.64,lon:-60.70},destination:{lat:-31.63,lon:-60.69}})});
+  coordinator.routeBatch=async()=>{await gate;return {ok:true,routes:{walking:{distance_m:1}},errors:{}}};
+  const makeReq=()=>new Request('https://voy.internal/routes',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({modes:['walking'],origin:{lat:-31.64,lon:-60.70},destination:{lat:-31.63,lon:-60.69}})});
   const pending=Array.from({length:33},()=>coordinator.fetch(makeReq()));
   await new Promise(r=>setTimeout(r,15));
   release();
@@ -116,38 +94,33 @@ test('R2 global public-router coordinator fails closed when bounded queue is ful
   assert.equal((await coordinator.fetch(makeReq())).status,200,'coordinator must accept work again after drain');
 });
 
-test('R2 durable routing cache evicts persistently and stays bounded',async()=>{
-  const now=Date.now();
-  const seed=[];
-  for(let i=0;i<96;i++) seed.push([`cache:old-${i}`,{stored_at:now-1000,value:{distance_m:100+i}}]);
-  const storage=fakeStorage(seed);
+test('R2 route cache is bounded in DO memory and never depends on durable storage',async()=>{
+  const storage=new Proxy({}, {get(){return async()=>{throw new Error('durable_storage_forbidden')}}});
   const coordinator=new NominatimCoordinator({storage},{});
   const originalFetch=globalThis.fetch;
   globalThis.fetch=async()=>routeResponse(1777);
   try{
-    const out=await coordinator.route({mode:'walking',origin:{lat:-31.64,lon:-60.70},destination:{lat:-31.62,lon:-60.68}});
-    assert.equal(out.ok,true);
-    let cacheKeys=[...storage.map.keys()].filter(k=>String(k).startsWith('cache:'));
-    assert.ok(cacheKeys.length<=96,`persistent route cache must be <=96 entries, got ${cacheKeys.length}`);
-    const restarted=new NominatimCoordinator({storage},{});
-    await restarted.route({mode:'bicycle',origin:{lat:-31.65,lon:-60.71},destination:{lat:-31.61,lon:-60.67}});
-    cacheKeys=[...storage.map.keys()].filter(k=>String(k).startsWith('cache:'));
-    assert.ok(cacheKeys.length<=96,`restart reconstruction must preserve <=96 entries, got ${cacheKeys.length}`);
+    for(let i=0;i<100;i++){
+      coordinator.lastFetchAt=0;
+      const out=await coordinator.route({mode:'walking',origin:{lat:-31.64,lon:-60.70},destination:{lat:-31.62+(i/100000),lon:-60.68}});
+      assert.equal(out.ok,true);
+    }
+    assert.ok(coordinator.routeCache.size<=96);
   }finally{globalThis.fetch=originalFetch;}
 });
 
-test('R2 durable routing cache preserves cache hits and TTL expiry',async()=>{
-  const storage=fakeStorage();
-  const coordinator=new NominatimCoordinator({storage},{});
+test('R2 DO-memory route cache preserves cache hits within TTL',async()=>{
+  const coordinator=new NominatimCoordinator({storage:{}},{});
   const originalFetch=globalThis.fetch; let calls=0;
   globalThis.fetch=async()=>{calls++;return routeResponse(1666)};
   const payload={mode:'walking',origin:{lat:-31.64,lon:-60.70},destination:{lat:-31.63,lon:-60.68}};
   try{
+    coordinator.lastFetchAt=0;
     const first=await coordinator.route(payload); const second=await coordinator.route(payload);
     assert.equal(first.ok,true); assert.equal(second.route.cache_hit,true); assert.equal(calls,1);
-    const key=[...storage.map.keys()].find(k=>String(k).startsWith('cache:'));
-    const record=storage.map.get(key); storage.map.set(key,{...record,stored_at:Date.now()-121000});
-    storage.map.set('last_fetch_at',0);
+    const key=[...coordinator.routeCache.keys()][0];
+    const record=coordinator.routeCache.get(key); coordinator.routeCache.set(key,{...record,stored_at:Date.now()-121000});
+    coordinator.lastFetchAt=0;
     const third=await coordinator.route(payload);
     assert.equal(third.ok,true); assert.equal(third.route.cache_hit,false); assert.equal(calls,2);
   }finally{globalThis.fetch=originalFetch;}
