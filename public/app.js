@@ -6,11 +6,22 @@ const escapeHtml=(value='')=>{const div=document.createElement('div');div.textCo
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 
 const DEFAULT_MAP_CENTER={lat:-31.6333,lon:-60.7000};
+const SUGGEST_DEBOUNCE_MS=400;
+const SUGGEST_CACHE_TTL_MS=45000;
+const SUGGEST_CACHE_MAX=20;
+const TRAIN_RADAR_RADIUS_METERS=8000;
+const TRAIN_RADAR_COVERAGE_POINTS=Object.freeze([
+  Object.freeze({name:'Once',lat:-34.60827979749716,lon:-58.4075158087721}),
+  Object.freeze({name:'Haedo',lat:-34.644477144900506,lon:-58.59194588896136}),
+  Object.freeze({name:'Moreno',lat:-34.65055409620922,lon:-58.7896992362823})
+]);
+const suggestionCache=new Map();
+const suggestionInFlight=new Map();
 
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
-  locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
+  originRevision:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
 };
 
 const destinationInput=$('#destination'),suggestions=$('#destination-suggestions'),loading=$('#destination-loading'),contextHelp=$('#destination-context'),nationalSearch=$('#national-search');
@@ -25,8 +36,13 @@ const assistantToggle=$('#assistant-toggle'),assistantPanel=$('#assistant-panel'
 function setStatus(text='',kind='neutral'){statusLine.textContent=text;statusLine.dataset.state=kind;updateAssistant()}
 function approxDistance(meters){if(!Number.isFinite(meters))return '';return meters<1000?`${Math.max(50,Math.round(meters/50)*50)} m`:meters<10000?`${(meters/1000).toFixed(1).replace('.',',')} km`:`${Math.round(meters/1000)} km`}
 function fmtVerified(value){try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'medium'}).format(new Date(value))}catch{return ''}}
-function submitTelemetry(event,dimensions={}){fetch('/api/telemetry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event,dimensions}),keepalive:true}).catch(()=>{})}
 function destinationContext(){if(!state.origin)return {search_scope:state.searchScope};return {search_scope:state.searchScope,origin:{locality:state.origin.locality?.name||'',province:state.origin.province?.name||'',province_id:state.origin.province?.id||'',coordinates:state.origin.coordinates||null}}}
+function suggestionCacheKey(query,scope){return `${String(scope||'local')}|${state.originRevision}|${String(query||'').trim().toLocaleLowerCase('es-AR')}`}
+function readSuggestionCache(key,now=Date.now()){const hit=suggestionCache.get(key);if(!hit)return null;if(now-hit.storedAt>SUGGEST_CACHE_TTL_MS){suggestionCache.delete(key);return null}suggestionCache.delete(key);suggestionCache.set(key,hit);return hit.payload}
+function writeSuggestionCache(key,payload,now=Date.now()){suggestionCache.delete(key);suggestionCache.set(key,{storedAt:now,payload});while(suggestionCache.size>SUGGEST_CACHE_MAX)suggestionCache.delete(suggestionCache.keys().next().value)}
+function invalidateSuggestionOriginContext(){state.originRevision+=1;suggestionCache.clear()}
+function trainRadarDistanceMeters(a,b){const rad=n=>Number(n)*Math.PI/180,dLat=rad(Number(b.lat)-Number(a.lat)),dLon=rad(Number(b.lon)-Number(a.lon)),la1=rad(a.lat),la2=rad(b.lat),q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*6371000*Math.asin(Math.min(1,Math.sqrt(q)))}
+function trainRadarCoverageSupportedClient(coords){const lat=Number(coords?.lat),lon=Number(coords?.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return false;return TRAIN_RADAR_COVERAGE_POINTS.some(point=>trainRadarDistanceMeters({lat,lon},point)<=TRAIN_RADAR_RADIUS_METERS)}
 async function apiJson(url,options={}){const response=await fetch(url,options);let payload={};try{payload=await response.json()}catch{}if(!response.ok){const error=new Error(payload.error||`http_${response.status}`);error.status=response.status;error.payload=payload;throw error}return payload}
 
 function effectiveDark(){if(state.theme==='dark')return true;if(state.theme==='light')return false;return matchMedia('(prefers-color-scheme: dark)').matches}
@@ -47,10 +63,22 @@ function renderSuggestions(candidates,showNational=false){
 }
 function updateActiveSuggestion(next){const buttons=[...suggestions.querySelectorAll('.suggestion')];if(!buttons.length)return;state.destinationActiveIndex=(next+buttons.length)%buttons.length;buttons.forEach((button,index)=>{const active=index===state.destinationActiveIndex;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active))});destinationInput.setAttribute('aria-activedescendant',buttons[state.destinationActiveIndex].id);buttons[state.destinationActiveIndex].scrollIntoView({block:'nearest'})}
 
+async function fetchDestinationSuggestions(query,scope){
+  const key=suggestionCacheKey(query,scope),cached=readSuggestionCache(key);
+  if(cached)return cached;
+  const existing=suggestionInFlight.get(key);if(existing)return existing.promise;
+  if(state.searchController)state.searchController.abort();
+  const controller=new AbortController();state.searchController=controller;
+  const promise=apiJson('/api/destinations/suggest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,context:destinationContext(),session_token:state.sessionToken}),signal:controller.signal})
+    .then(payload=>{writeSuggestionCache(key,payload);return payload})
+    .finally(()=>{if(suggestionInFlight.get(key)?.promise===promise)suggestionInFlight.delete(key);if(state.searchController===controller)state.searchController=null});
+  suggestionInFlight.set(key,{promise,controller});
+  return promise;
+}
 async function suggestDestinationQuery(query,scope=state.searchScope){
-  if(state.searchController)state.searchController.abort();state.searchController=new AbortController();loading.hidden=false;contextHelp.hidden=true;state.searchScope=scope;nationalSearch.hidden=true;setStatus();
+  loading.hidden=false;contextHelp.hidden=true;state.searchScope=scope;nationalSearch.hidden=true;setStatus();
   try{
-    const payload=await apiJson('/api/destinations/suggest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,context:destinationContext(),session_token:state.sessionToken}),signal:state.searchController.signal});
+    const payload=await fetchDestinationSuggestions(query,scope);
     const candidates=(payload.suggestions||[]).map(normalizeDestinationSuggestion).filter(Boolean);renderSuggestions(candidates,Boolean(payload.requires_national_expansion));
     if(!candidates.length){contextHelp.hidden=false;setStatus(scope==='national'?'No encontramos una coincidencia.':'No encontramos una coincidencia cercana.')}
   }catch(error){if(error.name==='AbortError')return;clearSuggestions();nationalSearch.hidden=true;if(error.payload?.error==='external_dependency_unavailable')setStatus('La búsqueda no está disponible ahora.','error');else if(error.status===429)setStatus('Probá de nuevo en un momento.','error');else setStatus('No pudimos buscar ese destino.','error')}
@@ -88,7 +116,8 @@ function updateTrainStationMarkers(stations=[]){
 async function refreshTrainRadar(){
   if(!state.origin?.coordinates){clearTrainRadar();return}
   const center=state.origin.coordinates,sameCenter=state.mapCenter&&Math.abs(state.mapCenter.lat-center.lat)<1e-7&&Math.abs(state.mapCenter.lon-center.lon)<1e-7;
-  if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa de estaciones de tren cercanas');
+  if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa del origen');
+  if(!trainRadarCoverageSupportedClient(center)){clearTrainRadar();return}
   try{
     const payload=await apiJson('/api/radar/trains/nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({coordinates:center})});
     renderTrainRadar(payload.radar);updateTrainStationMarkers(payload.radar?.stations||[]);
@@ -97,7 +126,7 @@ async function refreshTrainRadar(){
   }
 }
 function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');if(!state.origin)clearTrainRadar();if(state.origin)renderMap(state.origin.coordinates,'Mapa del origen');else clearMap();nationalSearch.hidden=true}
-destinationInput.addEventListener('input',()=>{resetDestinationState();clearSuggestions();clearTimeout(state.searchTimer);const q=destinationInput.value.trim();contextHelp.hidden=true;if(q.length<3){setStatus();return}state.searchTimer=setTimeout(()=>suggestDestinationQuery(q,'local'),220)});
+destinationInput.addEventListener('input',()=>{resetDestinationState();clearSuggestions();clearTimeout(state.searchTimer);const q=destinationInput.value.trim();contextHelp.hidden=true;if(q.length<3){setStatus();return}state.searchTimer=setTimeout(()=>suggestDestinationQuery(q,'local'),SUGGEST_DEBOUNCE_MS)});
 destinationInput.addEventListener('keydown',(event)=>{if(event.key==='ArrowDown'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex+1)}else if(event.key==='ArrowUp'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex-1)}else if(event.key==='Enter'){if(state.destinationActiveIndex>=0){event.preventDefault();selectDestination(state.destinationCandidates[state.destinationActiveIndex])}else if(destinationInput.value.trim().length>=3){event.preventDefault();clearTimeout(state.searchTimer);suggestDestinationQuery(destinationInput.value.trim(),state.searchScope)}}else if(event.key==='Escape'){clearSuggestions();nationalSearch.hidden=true}});
 document.addEventListener('click',(event)=>{if(!suggestions.contains(event.target)&&event.target!==destinationInput&&event.target!==nationalSearch)clearSuggestions()});
 nationalSearch.addEventListener('click',()=>suggestDestinationQuery(destinationInput.value.trim(),'national'));
@@ -118,9 +147,9 @@ async function selectDestination(suggestion){
 
 $('#manual-origin').addEventListener('click',()=>{const opening=originEditor.hidden;originEditor.hidden=!opening;$('#manual-origin').setAttribute('aria-expanded',String(opening));if(opening)originInput.focus()});
 $('#resolve-origin').addEventListener('click',resolveManualOrigin);originInput.addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();resolveManualOrigin()}});
-async function resolveManualOrigin(){const query=originInput.value.trim();if(query.length<3){setStatus('Escribí un origen un poco más preciso.');return}try{const payload=await apiJson('/api/origin/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});if(payload.result_class==='ambiguous'){setStatus('Agregá localidad o provincia para ubicar ese origen.');return}const candidate=normalizeResolvedCandidate(payload.candidates?.[0]);if(!candidate)throw new Error('invalid_origin');state.origin=candidate;state.locationGranted=false;originLabel.textContent=[candidate.label,candidate.locality?.name].filter(Boolean).join(' · ');$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch(error){setStatus(error.payload?.error==='external_dependency_unavailable'?'No pudimos ubicar ese origen ahora.':'No pudimos ubicar ese origen.','error')}}
-$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;state.locationGranted=true;originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
-$('#clear-location').addEventListener('click',()=>{state.origin=null;state.locationGranted=false;state.mobilityComputation=null;state.selectedRouteMode=null;clearTrainRadar();clearMap();originInput.value='';originLabel.textContent='Sin origen elegido';$('#clear-location').hidden=true;$('#use-location').hidden=false;$('#manual-origin').hidden=false;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination){renderMap(state.destination.coordinates);renderOptions();setStatus('Elegí un origen para calcular recorridos y precios.')}else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')});
+async function resolveManualOrigin(){const query=originInput.value.trim();if(query.length<3){setStatus('Escribí un origen un poco más preciso.');return}try{const payload=await apiJson('/api/origin/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});if(payload.result_class==='ambiguous'){setStatus('Agregá localidad o provincia para ubicar ese origen.');return}const candidate=normalizeResolvedCandidate(payload.candidates?.[0]);if(!candidate)throw new Error('invalid_origin');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=false;originLabel.textContent=[candidate.label,candidate.locality?.name].filter(Boolean).join(' · ');$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch(error){setStatus(error.payload?.error==='external_dependency_unavailable'?'No pudimos ubicar ese origen ahora.':'No pudimos ubicar ese origen.','error')}}
+$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=true;originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
+$('#clear-location').addEventListener('click',()=>{state.origin=null;invalidateSuggestionOriginContext();state.locationGranted=false;state.mobilityComputation=null;state.selectedRouteMode=null;clearTrainRadar();clearMap();originInput.value='';originLabel.textContent='Sin origen elegido';$('#clear-location').hidden=true;$('#use-location').hidden=false;$('#manual-origin').hidden=false;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination){renderMap(state.destination.coordinates);renderOptions();setStatus('Elegí un origen para calcular recorridos y precios.')}else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')});
 
 async function refreshMobilityComputation(){
   if(!state.destination||!state.origin){state.mobilityComputation=null;state.selectedRouteMode=null;renderOptions();return}
@@ -179,16 +208,16 @@ function renderOptions(){
   options.querySelectorAll('[data-handoff-url]').forEach(button=>button.addEventListener('click',()=>openOfficialHandoff(button.dataset.handoffUrl,button.dataset.handoffLabel)));
 }
 function officialHandoffButtonLabel(label){const raw=String(label||'Fuente oficial').trim();if(/^Consultar\s+/i.test(raw))return `Abrir ${raw.replace(/^Consultar\s+/i,'')}`;const lower=raw.charAt(0).toLocaleLowerCase('es-AR')+raw.slice(1);return `Abrir ${lower}`}
-function openOfficialHandoff(url,label){if(!isSafeOfficialHandoff(url)){setStatus('No pudimos abrir ese enlace.','error');return}submitTelemetry('handoff_confirm',{endpoint_class:'handoff',result_class:'confirmed'});window.open(url,'_blank','noopener,noreferrer')}
+function openOfficialHandoff(url,label){if(!isSafeOfficialHandoff(url)){setStatus('No pudimos abrir ese enlace.','error');return}window.open(url,'_blank','noopener,noreferrer')}
 function prepareNavigationHandoff(travelMode,label){if(!buildExternalNavigationUrl(state.destination?.coordinates,travelMode)){setStatus('No pudimos preparar esa consulta.','error');return}state.handoff={kind:'navigation',travelMode,label};state.handoffNonce+=1;dialog.dataset.nonce=String(state.handoffNonce);$('#handoff-title').textContent=label||'Consultar indicaciones';$('#handoff-copy').textContent='Al continuar, Google Maps recibirá las coordenadas de destino y, si elegiste un origen, también las de origen. VOY no las registra en telemetría.';$('#handoff-destination').textContent='Google Maps';dialog.showModal()}
-cancelHandoff.addEventListener('click',()=>{dialog.dataset.nonce='0';dialog.close('cancel');submitTelemetry('handoff_cancel',{endpoint_class:'handoff',result_class:'cancelled'})});
+cancelHandoff.addEventListener('click',()=>{dialog.dataset.nonce='0';dialog.close('cancel');});
 confirmHandoff.addEventListener('click',()=>{
   const nonce=Number(dialog.dataset.nonce||0),handoff=state.handoff;if(!nonce||!handoff){dialog.close('blocked');return}
   let url=null;
   if(handoff.kind==='official'&&isSafeOfficialHandoff(handoff.url))url=handoff.url;
   if(handoff.kind==='navigation')url=buildExternalNavigationUrl(state.destination?.coordinates,handoff.travelMode,state.origin?.coordinates);
   if(!url||(handoff.kind==='navigation'&&!isSafeExternalNavigationUrl(url))){dialog.dataset.nonce='0';dialog.close('blocked');return}
-  dialog.dataset.nonce='0';dialog.close('confirm');submitTelemetry('handoff_confirm',{endpoint_class:'handoff',result_class:'confirmed'});window.open(url,'_blank','noopener,noreferrer')
+  dialog.dataset.nonce='0';dialog.close('confirm');window.open(url,'_blank','noopener,noreferrer')
 });
 function worldPixel(lon,lat,z){const scale=256*Math.pow(2,z),x=(Number(lon)+180)/360*scale,r=Number(lat)*Math.PI/180,y=(1-Math.asinh(Math.tan(r))/Math.PI)/2*scale;return{x,y}}
 function renderMap(coords,label='Mapa del destino',showPin=true){
@@ -196,7 +225,7 @@ function renderMap(coords,label='Mapa del destino',showPin=true){
   const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(coords.lon,coords.lat,z),centerX=Math.floor(center.x/256),centerY=Math.floor(center.y/256),radius=APP_CONFIG.MAP_PROVIDER.tile_radius;let loaded=0,failed=0,total=0;
   for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
     total++;const x=centerX+dx,y=centerY+dy,img=document.createElement('img');img.className='map-tile';img.alt='';img.decoding='async';img.loading='eager';img.referrerPolicy='strict-origin-when-cross-origin';img.style.left=`calc(50% + ${x*256-center.x}px)`;img.style.top=`calc(50% + ${y*256-center.y}px)`;img.src=APP_CONFIG.MAP_PROVIDER.tile_template.replace('{z}',z).replace('{x}',x).replace('{y}',y);
-    img.addEventListener('load',()=>{loaded++});img.addEventListener('error',()=>{failed++;if(failed===total&&loaded===0){mapFallback.hidden=false;mapAttribution.hidden=true;submitTelemetry('map_provider_error',{endpoint_class:'map',result_class:'all_tiles_failed'})}});mapTiles.appendChild(img)
+    img.addEventListener('load',()=>{loaded++});img.addEventListener('error',()=>{failed++;if(failed===total&&loaded===0){mapFallback.hidden=false;mapAttribution.hidden=true;}});mapTiles.appendChild(img)
   }
   if(showPin){const pin=document.createElement('div');pin.className='selected-pin';pin.setAttribute('aria-hidden','true');mapTiles.appendChild(pin)}
 }
@@ -209,7 +238,7 @@ function renderRouteGeometry(geometry){
   const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('points',points);line.setAttribute('fill','none');line.setAttribute('stroke','currentColor');line.setAttribute('stroke-width','6');line.setAttribute('stroke-linecap','round');line.setAttribute('stroke-linejoin','round');line.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(line);mapTiles.appendChild(svg);
 }
 clearMap();
-window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').then(()=>submitTelemetry('pwa_sw_registered',{endpoint_class:'pwa',result_class:'registered'})).catch(()=>submitTelemetry('pwa_sw_failed',{endpoint_class:'pwa',result_class:'failed'}))});
+window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});
 
 
 function assistantModel(){
