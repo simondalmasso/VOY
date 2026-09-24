@@ -42,7 +42,7 @@ r2_verify:
       - npm-audit.json
       - dist/BUILD_MANIFEST.json
   interruptible: true
-order069_browser:
+order070_browser:
   stage: verify
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -63,11 +63,11 @@ order069_browser:
   script:
     - npm ci --ignore-scripts
     - npm run build
-    - node order069/evidence/browser-audit.mjs
+    - node order070/evidence/browser-budget-audit.mjs
   artifacts:
     when: always
     expire_in: 14 days
     paths:
-      - order069/evidence/browser/
-      - order069/evidence/browser-report.json
+      - order070/evidence/browser/
+      - order070/evidence/browser-report.json
   interruptible: true
