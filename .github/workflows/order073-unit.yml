@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/order073-mapfirst-live3d
+      - fix/order074-release-hardening
     paths:
       - public/**
       - src/**
