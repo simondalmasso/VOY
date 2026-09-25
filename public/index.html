@@ -27,6 +27,13 @@
 <main class="app-shell">
   <section id="map-shell" class="map-shell" aria-label="Mapa de VOY">
     <div id="map-tiles" class="map-tiles" aria-hidden="true"></div>
+    <div id="map-3d-layer" class="map-3d-layer" aria-hidden="true" hidden></div>
+    <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
+      <button type="button" data-map-mode="2d" aria-pressed="true">2D</button>
+      <button type="button" data-map-mode="3d" aria-pressed="false">3D</button>
+    </div>
+    <p id="map-3d-status" class="map-3d-status" aria-live="polite"></p>
+    <div id="map-3d-attribution" class="map-3d-attribution" hidden>Topología 3D · © OpenStreetMap contributors · alturas genéricas/inferidas</div>
     <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
     <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
   </section>

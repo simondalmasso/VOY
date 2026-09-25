@@ -21,15 +21,38 @@ const suggestionInFlight=new Map();
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
-  originRevision:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
+  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
 };
 
 const destinationInput=$('#destination'),suggestions=$('#destination-suggestions'),loading=$('#destination-loading'),contextHelp=$('#destination-context'),nationalSearch=$('#national-search');
 const originInput=$('#origin'),originEditor=$('#origin-editor'),originLabel=$('#origin-label');
 const statusLine=$('#destination-status'),decision=$('#decision'),options=$('#options');
 const dialog=$('#handoff-dialog'),confirmHandoff=$('#confirm-handoff'),cancelHandoff=$('#cancel-handoff');
-const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution');
+const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),map3dLayer=$('#map-3d-layer'),map3dStatus=$('#map-3d-status'),map3dAttribution=$('#map-3d-attribution'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
+
+const mapModeButtons=[...document.querySelectorAll('[data-map-mode]')];
+function currentSelectedRouteGeometry(){return state.mobilityComputation?.mode_options?.find(item=>item.mode===state.selectedRouteMode&&item.route_available)?.route?.geometry??null}
+function current3DTransportEntities(){return []}
+function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
+function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
+function activate2D(message=''){
+  state.mapMode='2d';setMapModeButtons('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;mapTiles.hidden=false;mapAttribution.hidden=false;map3dStatus.textContent=message;
+}
+async function activate3D(){
+  if(state.mapMode==='3d'&&state.threeController)return;
+  map3dStatus.textContent='Cargando topología 3D…';
+  try{
+    state.threeModulePromise??=import('./3d/voy3d.js');
+    const mod=await state.threeModulePromise;
+    state.threeController??=await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>activate2D('3D no disponible en este equipo; seguimos en 2D.'),routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities()});
+    state.mapMode='3d';setMapModeButtons('3d');mapTiles.hidden=true;mapAttribution.hidden=true;map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dStatus.textContent='3D local · alturas genéricas/inferidas';sync3DTopology();
+  }catch(error){
+    activate2D('3D no disponible en este equipo; seguimos en 2D.');
+  }
+}
+mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.dataset.mapMode==='3d'?activate3D():activate2D()));
+
 
 const assistantToggle=$('#assistant-toggle'),assistantPanel=$('#assistant-panel'),assistantClose=$('#assistant-close'),assistantCopy=$('#assistant-copy'),assistantAction=$('#assistant-action');
 
@@ -221,7 +244,7 @@ confirmHandoff.addEventListener('click',()=>{
 });
 function worldPixel(lon,lat,z){const scale=256*Math.pow(2,z),x=(Number(lon)+180)/360*scale,r=Number(lat)*Math.PI/180,y=(1-Math.asinh(Math.tan(r))/Math.PI)/2*scale;return{x,y}}
 function renderMap(coords,label='Mapa del destino',showPin=true){
-  state.mapCenter={lat:Number(coords.lat),lon:Number(coords.lon)};mapShell.setAttribute('aria-label',label);mapShell.hidden=false;mapTiles.replaceChildren();mapFallback.hidden=true;mapAttribution.hidden=false;
+  state.mapCenter={lat:Number(coords.lat),lon:Number(coords.lon)};mapShell.setAttribute('aria-label',label);mapShell.hidden=false;mapTiles.replaceChildren();mapTiles.hidden=state.mapMode==='3d';mapFallback.hidden=true;mapAttribution.hidden=state.mapMode==='3d';
   const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(coords.lon,coords.lat,z),centerX=Math.floor(center.x/256),centerY=Math.floor(center.y/256),radius=APP_CONFIG.MAP_PROVIDER.tile_radius;let loaded=0,failed=0,total=0;
   for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
     total++;const x=centerX+dx,y=centerY+dy,img=document.createElement('img');img.className='map-tile';img.alt='';img.decoding='async';img.loading='eager';img.referrerPolicy='strict-origin-when-cross-origin';img.style.left=`calc(50% + ${x*256-center.x}px)`;img.style.top=`calc(50% + ${y*256-center.y}px)`;img.src=APP_CONFIG.MAP_PROVIDER.tile_template.replace('{z}',z).replace('{x}',x).replace('{y}',y);
@@ -235,7 +258,7 @@ function renderRouteGeometry(geometry){
   const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(state.destination.coordinates.lon,state.destination.coordinates.lat,z),width=Math.max(1,mapTiles.clientWidth||mapShell.clientWidth||600),height=Math.max(1,mapTiles.clientHeight||mapShell.clientHeight||420);
   const points=geometry.coordinates.map(pair=>{const p=worldPixel(pair[0],pair[1],z);return`${(width/2+p.x-center.x).toFixed(1)},${(height/2+p.y-center.y).toFixed(1)}`}).join(' ');
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('route-overlay');svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.setAttribute('aria-label',`Recorrido ${computationModeLabel(state.selectedRouteMode)}`);
-  const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('points',points);line.setAttribute('fill','none');line.setAttribute('stroke','currentColor');line.setAttribute('stroke-width','6');line.setAttribute('stroke-linecap','round');line.setAttribute('stroke-linejoin','round');line.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(line);mapTiles.appendChild(svg);
+  const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('points',points);line.setAttribute('fill','none');line.setAttribute('stroke','currentColor');line.setAttribute('stroke-width','6');line.setAttribute('stroke-linecap','round');line.setAttribute('stroke-linejoin','round');line.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(line);mapTiles.appendChild(svg);sync3DTopology();
 }
 clearMap();
 window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});

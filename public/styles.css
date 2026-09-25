@@ -269,3 +269,13 @@ body{height:100svh;overflow:hidden}
   .map-controls .destination-hero{min-height:104px;padding:10px 12px}
   .map-controls .destination-hero>label{font-size:22px}
 }
+/* ORDER071 — lazy local 3D topology */
+.map-3d-layer{position:absolute;inset:0;z-index:4;background:#090c10;overflow:hidden}
+.map-3d-layer canvas{display:block;width:100%;height:100%;touch-action:none}
+.map-mode-toggle{position:absolute;left:10px;bottom:10px;z-index:24;display:flex;gap:4px;padding:4px;border-radius:14px;background:rgba(10,13,17,.84);backdrop-filter:blur(10px);box-shadow:0 4px 18px rgba(0,0,0,.22)}
+.map-mode-toggle button{min-width:48px;min-height:44px;border:0;border-radius:10px;background:transparent;color:#fff;font:700 12px/1 system-ui;cursor:pointer}
+.map-mode-toggle button[aria-pressed="true"]{background:#fff;color:#111}
+.map-3d-status{position:absolute;left:12px;bottom:62px;z-index:23;margin:0;max-width:min(360px,70%);padding:6px 9px;border-radius:10px;background:rgba(10,13,17,.74);color:#fff;font-size:11px;line-height:1.3;pointer-events:none}
+.map-3d-status:empty{display:none}
+.map-3d-attribution{position:absolute;right:10px;bottom:10px;z-index:24;max-width:55%;padding:6px 9px;border-radius:10px;background:rgba(255,255,255,.9);color:#111;font-size:9px;line-height:1.25}
+@media(max-width:520px){.map-mode-toggle{left:8px;bottom:8px}.map-3d-attribution{right:8px;bottom:8px;max-width:52%;font-size:8px}.map-3d-status{left:8px;bottom:60px;max-width:78%}}

@@ -1,6 +1,8 @@
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
+node scripts/build-order071-topology.mjs
+if($LASTEXITCODE -ne 0){throw 'ORDER071 geometry build failed'}
 $sha=(git rev-parse HEAD).Trim()
 $tracked=git ls-files | Sort-Object
 $lines=@()
@@ -15,6 +17,11 @@ $publicFiles=@('_headers','app.js','contracts.js','coverage.html','index.html','
 foreach($f in $publicFiles){Copy-Item (Join-Path 'public' $f) (Join-Path 'dist\client' $f) -Force}
 New-Item -ItemType Directory -Force dist\client\icons | Out-Null
 Copy-Item public\icons\* dist\client\icons -Force
+New-Item -ItemType Directory -Force dist\client\3d,dist\client\vendor | Out-Null
+Copy-Item public\3d\* dist\client\3d -Recurse -Force
+Copy-Item node_modules\three\build\three.module.js dist\client\vendor\three.module.js -Force
+Copy-Item node_modules\three\build\three.core.js dist\client\vendor\three.core.js -Force
+Copy-Item node_modules\three\LICENSE dist\client\vendor\THREE-LICENSE.txt -Force
 $textClientFiles=@('index.html','styles.css','app.js','contracts.js','runtime-config.js','sw.js')
 foreach($tf in $textClientFiles){
   $tp=Join-Path $root ('dist\client\'+$tf)
