@@ -104,7 +104,7 @@ async function activate3D(page){
   await page.waitForFunction(()=>document.querySelector('[data-map-mode="3d"]')?.getAttribute('aria-pressed')==='true'&&Boolean(document.querySelector('.voy-3d-canvas')),{timeout:10000});
 }
 async function assertFallback(page){
-  await page.waitForFunction(()=>document.querySelector('[data-map-mode="2d"]')?.getAttribute('aria-pressed')==='true'&&!document.querySelector('.voy-3d-canvas'),{timeout:10000});
+  await page.waitForFunction(()=>document.querySelector('[data-map-mode="2d"]')?.getAttribute('aria-pressed')==='true'&&!document.querySelector('.voy-3d-canvas')&&/3D no disponible/.test(document.querySelector('#map-3d-status')?.textContent||''),{timeout:10000});
   assert.match(await page.locator('#map-3d-status').textContent(),/3D no disponible/);
   assert.equal(await page.locator('#result-title').textContent(),'Puente Colgante');
 }
