@@ -24,6 +24,7 @@ permissions:
   contents: read
 
 env:
+  TEST_SHA: ${{ github.sha }}
   BASE_SHA: 9233f11ff50b329e5f81a2268627d510bc7fb90c
   EXPECTED_TOPOLOGY_SHA: 0c4a79f656fccd722de6cb20db504ebc09b2626b6d3caeccf2f78176788c75a2
   EXPECTED_RAW_SHA: a4a07ee50e139e3c603deb04950ac31f704a2993c6cda30cb4e36bda7489cf80
