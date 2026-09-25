@@ -1,6 +1,9 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import crypto from 'node:crypto';
-const source=JSON.parse(await readFile(new URL('../order071/source/santa-fe-osm-snapshot.json',import.meta.url),'utf8'));
+const sourceUrl=new URL('../order071/source/santa-fe-osm-snapshot.json',import.meta.url);
+const sourceText=await readFile(sourceUrl,'utf8');
+const source=JSON.parse(sourceText);
+const rawInputSha=crypto.createHash('sha256').update(sourceText).digest('hex');
 const center={lon:-60.71,lat:-31.6555};
 const metersPerDegLat=111320;
 const metersPerDegLon=111320*Math.cos(center.lat*Math.PI/180);
@@ -25,10 +28,11 @@ const roads=source.elements.filter(x=>x.kind==='road').map(item=>({
 const chunk={schema_version:1,id:'santa-fe-centro-0',center,extent_m:[-180,-150,380,180],buildings,roads,draw_groups:{buildings:2,roads:1},generated_from:'order071/source/santa-fe-osm-snapshot.json'};
 const chunkText=JSON.stringify(chunk);
 const chunkSha=crypto.createHash('sha256').update(chunkText).digest('hex');
-const manifest={schema_version:1,renderer:'three-lazy',lru_max:16,initial_chunks:[{id:chunk.id,url:'./chunk-santa-fe-centro-0.json',sha256:chunkSha}],geometry_source:{authority:source.provenance.authority,source_url:source.provenance.source_url,bbox:source.provenance.bbox,snapshot_at:source.provenance.fetched_at,osm_base_timestamp:source.provenance.osm_base_timestamp,license:source.provenance.license,attribution:source.provenance.attribution,runtime_queries:false},height_policy:{actual_height:'osm_tag_height',inferred_height:'levels_inferred_3m',missing_height_class:'generic_inferred',generic_height_m:9,claim:'Heights are source-tagged, inferred from levels, or generic; generic/inferred heights are never presented as measured.'}};
+const manifest={schema_version:1,renderer:'three-lazy',lru_max:16,initial_chunks:[{id:chunk.id,url:'./chunk-santa-fe-centro-0.json',sha256:chunkSha}],geometry_source:{authority:source.provenance.authority,source_url:source.provenance.source_url,bbox:source.provenance.bbox,snapshot_at:source.provenance.fetched_at,osm_base_timestamp:source.provenance.osm_base_timestamp,license:source.provenance.license,attribution:source.provenance.attribution,raw_input_sha256:rawInputSha,runtime_queries:false},height_policy:{actual_height:'osm_tag_height',inferred_height:'levels_inferred_3m',missing_height_class:'generic_inferred',generic_height_m:9,claim:'Heights are source-tagged, inferred from levels, or generic; generic/inferred heights are never presented as measured.'}};
 await mkdir(new URL('../public/3d/topology/',import.meta.url),{recursive:true});
 await writeFile(new URL('../public/3d/topology/chunk-santa-fe-centro-0.json',import.meta.url),chunkText+'\n');
 await writeFile(new URL('../public/3d/topology/manifest.json',import.meta.url),JSON.stringify(manifest,null,2)+'\n');
 console.log(`BUILDINGS=${buildings.length}`);
 console.log(`ROADS=${roads.length}`);
+console.log(`RAW_INPUT_SHA256=${rawInputSha}`);
 console.log(`CHUNK_SHA256=${chunkSha}`);
