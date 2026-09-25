@@ -1,6 +1,7 @@
-import * as THREE from '/vendor/three.module.js';
-import {presentTransportEntity} from './temporal.js';
+import * as THREE from '/vendor/three.module.js?v=__BUILD_ID__';
+import {presentTransportEntity} from './temporal.js?v=__BUILD_ID__';
 
+export const BUILD_ID='__BUILD_ID__';
 export const THREE_VERSION='0.186.0';
 export const DPR_CAP=1.5;
 export const LRU_MAX=16;
@@ -21,6 +22,7 @@ class LruChunkCache{
   clear(){this.map.clear()}
 }
 function fallbackTo2D(onFallback,reason='unsupported_webgl2'){onFallback?.(reason);return {ok:false,reason}}
+function versionedUrl(input,base=location.href){const url=new URL(input,base);url.searchParams.set('v',BUILD_ID);return url}
 function canUseWebGL2(){const probe=document.createElement('canvas');return Boolean(probe.getContext('webgl2'))}
 function llProjectFactory(center){const latM=111320,lonM=111320*Math.cos(Number(center.lat)*Math.PI/180);return ([lon,lat])=>[(Number(lon)-Number(center.lon))*lonM,(Number(lat)-Number(center.lat))*latM]}
 function resolveQualityProfile(requested='auto'){
@@ -52,59 +54,81 @@ function buildChunkObject(chunk){
   const roads=new THREE.LineSegments(roadGeometry(chunk.roads||[]),new THREE.LineBasicMaterial({color:0x70777c,transparent:true,opacity:.75}));roads.frustumCulled=true;group.add(roads);
   return group;
 }
-function installCameraControls(canvas,camera,render){let dragging=false,last=null,yaw=.78,pitch=.76,distance=250,target=new THREE.Vector3(0,0,0);const update=()=>{pitch=Math.max(.22,Math.min(1.32,pitch));distance=Math.max(70,Math.min(620,distance));camera.position.set(target.x+Math.cos(yaw)*Math.sin(pitch)*distance,target.y+Math.cos(pitch)*distance,target.z+Math.sin(yaw)*Math.sin(pitch)*distance);camera.lookAt(target);render()};canvas.addEventListener('pointerdown',e=>{dragging=true;last=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!dragging)return;const dx=e.clientX-last[0],dy=e.clientY-last[1];last=[e.clientX,e.clientY];yaw-=dx*.006;pitch-=dy*.005;update()});canvas.addEventListener('pointerup',()=>{dragging=false});canvas.addEventListener('wheel',e=>{e.preventDefault();distance*=Math.exp(e.deltaY*.001);update()},{passive:false});update();return{update}}
+function installCameraControls(canvas,camera,render){let dragging=false,last=null,yaw=.78,pitch=.76,distance=250,target=new THREE.Vector3(0,0,0);const update=()=>{pitch=Math.max(.22,Math.min(1.32,pitch));distance=Math.max(70,Math.min(620,distance));camera.position.set(target.x+Math.cos(yaw)*Math.sin(pitch)*distance,target.y+Math.cos(pitch)*distance,target.z+Math.sin(yaw)*Math.sin(pitch)*distance);camera.lookAt(target);render()};const down=e=>{dragging=true;last=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)},move=e=>{if(!dragging)return;const dx=e.clientX-last[0],dy=e.clientY-last[1];last=[e.clientX,e.clientY];yaw-=dx*.006;pitch-=dy*.005;update()},up=()=>{dragging=false},wheel=e=>{e.preventDefault();distance*=Math.exp(e.deltaY*.001);update()};canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);canvas.addEventListener('wheel',wheel,{passive:false});update();return{update,dispose(){canvas.removeEventListener('pointerdown',down);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',up);canvas.removeEventListener('pointercancel',up);canvas.removeEventListener('wheel',wheel)}}}
 
 export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initialRoute=null,transport=[],quality='auto',reducedMotion=false}={}){
   if(!mount)throw new Error('mount_required');
   if(!canUseWebGL2())return fallbackTo2D(onFallback,'unsupported_webgl2');
   const {name:qualityName,profile}=resolveQualityProfile(quality);
-  const canvas=document.createElement('canvas');canvas.className='voy-3d-canvas';canvas.setAttribute('aria-label','Vista 3D suplementaria de Santa Fe');mount.appendChild(canvas);
-  const renderer=new THREE.WebGLRenderer({canvas,antialias:profile.antialias,alpha:false,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,profile.dpr,DPR_CAP));renderer.setClearColor(0x0d1114,1);
-  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(48,1,.1,2000),cache=new LruChunkCache();
-  scene.add(new THREE.HemisphereLight(0xe8f5ff,0x20272b,1.5));const key=new THREE.DirectionalLight(0xffffff,1.9);key.position.set(100,180,80);scene.add(key);
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(1000,1000),new THREE.MeshLambertMaterial({color:0x171d20}));ground.rotation.x=-Math.PI/2;ground.position.y=-.05;ground.frustumCulled=true;scene.add(ground);
-  const manifest=await fetch('./3d/topology/manifest.json',{cache:'force-cache'}).then(r=>{if(!r.ok)throw new Error('topology_manifest_unavailable');return r.json()});
-  if(!Array.isArray(manifest.initial_chunks)||manifest.initial_chunks.length>INITIAL_CHUNK_LIMIT)throw new Error('initial_chunk_budget_exceeded');
-  const center={lon:-60.71,lat:-31.6555};
-  for(const descriptor of manifest.initial_chunks){const url=new URL(descriptor.url,new URL('./3d/topology/manifest.json',location.href));let chunk=cache.get(url.href);if(!chunk){chunk=await fetch(url,{cache:'force-cache'}).then(r=>{if(!r.ok)throw new Error('topology_chunk_unavailable');return r.json()});cache.set(url.href,chunk)}scene.add(buildChunkObject(chunk))}
-
-  const vehicleGeometry=new THREE.BoxGeometry(3.2,2,1.6);
-  const realtimeMaterial=new THREE.MeshBasicMaterial({color:0x36d7ff});
-  const predictedMaterial=new THREE.MeshBasicMaterial({color:0xffb54a,transparent:true,opacity:.7});
-  const realtimeVehicles=new THREE.InstancedMesh(vehicleGeometry,realtimeMaterial,64);
-  const predictedVehicles=new THREE.InstancedMesh(vehicleGeometry,predictedMaterial,64);
-  realtimeVehicles.count=0;predictedVehicles.count=0;realtimeVehicles.frustumCulled=true;predictedVehicles.frustumCulled=true;
-  scene.add(realtimeVehicles,predictedVehicles);
-
-  let routeLine=null;const routeMaterial=new THREE.LineBasicMaterial({color:0xffd23f});
-  function setRouteGeometry(geometry){if(routeLine){scene.remove(routeLine);routeLine.geometry.dispose();routeLine=null}const g=routeGeometry(geometry,center);if(g){routeLine=new THREE.LineSegments(g,routeMaterial);routeLine.frustumCulled=true;scene.add(routeLine)}scheduleRender()}
-  function setTransportEntities(entries=[]){
-    let realtimeCount=0,predictedCount=0;const matrix=new THREE.Matrix4(),project=llProjectFactory(center);
-    for(const entry of entries){
-      const presented=presentTransportEntity(entry.previous,entry.next,Date.now(),{
-        freshnessMs:REALTIME_FRESHNESS_MS,
-        maxSpeedMps:REALTIME_MAX_SPEED_MPS,
-        maxSnapMeters:ROUTE_SNAP_MAX_METERS,
-        reducedMotion:reducedMotion,
-        verifiedGeometry:entry.verifiedGeometry
-      });
-      if(!presented.render||!['realtime','predicted'].includes(presented.temporal_state))continue;
-      const [x,z]=project([presented.position.lon,presented.position.lat]);matrix.makeTranslation(x,2,-z);
-      if(presented.visual_state==='predicted'){
-        if(predictedCount>=64)continue;
-        predictedVehicles.setMatrixAt(predictedCount,matrix);predictedCount++;
-      }else{
-        if(realtimeCount>=64)continue;
-        realtimeVehicles.setMatrixAt(realtimeCount,matrix);realtimeCount++;
-      }
-    }
-    realtimeVehicles.count=realtimeCount;predictedVehicles.count=predictedCount;
-    realtimeVehicles.instanceMatrix.needsUpdate=true;predictedVehicles.instanceMatrix.needsUpdate=true;scheduleRender();
+  let canvas=null,renderer=null,scene=null,camera=null,ro=null,controls=null,routeLine=null,raf=0,disposed=false;
+  const cache=new LruChunkCache();
+  function cleanup(){
+    if(disposed)return;
+    disposed=true;
+    try{ro?.disconnect?.()}catch{}
+    try{controls?.dispose?.()}catch{}
+    cancelAnimationFrame(raf);
+    if(canvas)canvas.removeEventListener('webglcontextlost',handleContextLost);
+    try{routeLine?.geometry?.dispose?.()}catch{}
+    try{renderer?.dispose?.()}catch{}
+    canvas?.remove();
+    cache.clear();
   }
-  function resize(){const w=Math.max(1,mount.clientWidth),h=Math.max(1,mount.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
-  let raf=0;function render(){resize();renderer.render(scene,camera)}function scheduleRender(){cancelAnimationFrame(raf);raf=requestAnimationFrame(render)}
-  const controls=installCameraControls(canvas,camera,scheduleRender);const ro=new ResizeObserver(scheduleRender);ro.observe(mount);setRouteGeometry(initialRoute);setTransportEntities(transport);scheduleRender();
-  function update({routeGeometry:nextRoute=null,transportEntities=[]}={}){setRouteGeometry(nextRoute);setTransportEntities(transportEntities)}
-  return{ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,quality:qualityName,quality_profile:profile,movement_policy:{maxSpeedMps:REALTIME_MAX_SPEED_MPS,maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion:reducedMotion},draw_calls_design:{building_lod:1,roads:1,vehicle_instances:2},update,setRouteGeometry,setTransportEntities,setCenter(){controls.update()},dispose(){ro.disconnect();cancelAnimationFrame(raf);renderer.dispose();canvas.remove();cache.clear();}};
+  function handleContextLost(event){event.preventDefault();cleanup();onFallback?.('webgl_context_lost')}
+  try{
+    canvas=document.createElement('canvas');canvas.className='voy-3d-canvas';canvas.setAttribute('aria-label','Vista 3D suplementaria de Santa Fe');mount.appendChild(canvas);
+    renderer=new THREE.WebGLRenderer({canvas,antialias:profile.antialias,alpha:false,powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,profile.dpr,DPR_CAP));renderer.setClearColor(0x0d1114,1);
+    scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,2000);
+    scene.add(new THREE.HemisphereLight(0xe8f5ff,0x20272b,1.5));const key=new THREE.DirectionalLight(0xffffff,1.9);key.position.set(100,180,80);scene.add(key);
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(1000,1000),new THREE.MeshLambertMaterial({color:0x171d20}));ground.rotation.x=-Math.PI/2;ground.position.y=-.05;ground.frustumCulled=true;scene.add(ground);
+    const manifestUrl=versionedUrl('./3d/topology/manifest.json');
+    const manifest=await fetch(manifestUrl,{cache:'force-cache'}).then(async r=>{if(!r.ok)throw new Error('topology_manifest_unavailable');try{return await r.json()}catch{throw new Error('topology_manifest_malformed')}});
+    if(!Array.isArray(manifest.initial_chunks)||manifest.initial_chunks.length>INITIAL_CHUNK_LIMIT||manifest.initial_chunks.some(item=>typeof item?.url!=='string'))throw new Error('initial_chunk_budget_exceeded');
+    const center={lon:-60.71,lat:-31.6555};
+    for(const descriptor of manifest.initial_chunks){
+      const url=new URL(descriptor.url,manifestUrl);url.searchParams.set('v',BUILD_ID);
+      let chunk=cache.get(url.href);
+      if(!chunk){
+        chunk=await fetch(url,{cache:'force-cache'}).then(async r=>{if(!r.ok)throw new Error('topology_chunk_unavailable');try{return await r.json()}catch{throw new Error('topology_chunk_malformed')}});
+        if(!chunk||typeof chunk!=='object'||!Array.isArray(chunk.buildings)||!Array.isArray(chunk.roads))throw new Error('topology_chunk_malformed');
+        cache.set(url.href,chunk);
+      }
+      scene.add(buildChunkObject(chunk));
+    }
+    const vehicleGeometry=new THREE.BoxGeometry(3.2,2,1.6);
+    const realtimeMaterial=new THREE.MeshBasicMaterial({color:0x36d7ff});
+    const predictedMaterial=new THREE.MeshBasicMaterial({color:0xffb54a,transparent:true,opacity:.7});
+    const realtimeVehicles=new THREE.InstancedMesh(vehicleGeometry,realtimeMaterial,64);
+    const predictedVehicles=new THREE.InstancedMesh(vehicleGeometry,predictedMaterial,64);
+    realtimeVehicles.count=0;predictedVehicles.count=0;realtimeVehicles.frustumCulled=true;predictedVehicles.frustumCulled=true;
+    scene.add(realtimeVehicles,predictedVehicles);
+    const routeMaterial=new THREE.LineBasicMaterial({color:0xffd23f});
+    function setRouteGeometry(geometry){
+      if(routeLine){scene.remove(routeLine);routeLine.geometry.dispose();routeLine=null}
+      const g=routeGeometry(geometry,center);
+      if(g){routeLine=new THREE.LineSegments(g,routeMaterial);routeLine.name='voy-selected-route';routeLine.frustumCulled=true;scene.add(routeLine)}
+      canvas.dataset.routeActive=String(Boolean(routeLine));scheduleRender();
+    }
+    function setTransportEntities(entries=[]){
+      let realtimeCount=0,predictedCount=0;const matrix=new THREE.Matrix4(),project=llProjectFactory(center);
+      for(const entry of entries){
+        const presented=presentTransportEntity(entry.previous,entry.next,Date.now(),{freshnessMs:REALTIME_FRESHNESS_MS,maxSpeedMps:REALTIME_MAX_SPEED_MPS,maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion:reducedMotion,verifiedGeometry:entry.verifiedGeometry});
+        if(!presented.render||!['realtime','predicted'].includes(presented.temporal_state))continue;
+        const [x,z]=project([presented.position.lon,presented.position.lat]);matrix.makeTranslation(x,2,-z);
+        if(presented.visual_state==='predicted'){if(predictedCount>=64)continue;predictedVehicles.setMatrixAt(predictedCount,matrix);predictedCount++}
+        else{if(realtimeCount>=64)continue;realtimeVehicles.setMatrixAt(realtimeCount,matrix);realtimeCount++}
+      }
+      realtimeVehicles.count=realtimeCount;predictedVehicles.count=predictedCount;realtimeVehicles.instanceMatrix.needsUpdate=true;predictedVehicles.instanceMatrix.needsUpdate=true;scheduleRender();
+    }
+    function resize(){const w=Math.max(1,mount.clientWidth),h=Math.max(1,mount.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+    function render(){if(disposed)return;resize();renderer.render(scene,camera);canvas.dataset.renderCalls=String(renderer.info.render.calls);canvas.dataset.renderTriangles=String(renderer.info.render.triangles);canvas.dataset.renderObjects=String(scene.children.length);canvas.dataset.quality=qualityName}
+    function scheduleRender(){if(disposed)return;cancelAnimationFrame(raf);raf=requestAnimationFrame(render)}
+    canvas.addEventListener('webglcontextlost',handleContextLost);
+    controls=installCameraControls(canvas,camera,scheduleRender);
+    ro=new ResizeObserver(scheduleRender);ro.observe(mount);
+    setRouteGeometry(initialRoute);setTransportEntities(transport);scheduleRender();
+    function update({routeGeometry:nextRoute=null,transportEntities=[]}={}){setRouteGeometry(nextRoute);setTransportEntities(transportEntities)}
+    return{ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,build_id:BUILD_ID,quality:qualityName,quality_profile:profile,movement_policy:{maxSpeedMps:REALTIME_MAX_SPEED_MPS,maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion:reducedMotion},draw_calls_design:{building_lod:1,roads:1,vehicle_instances:2},update,setRouteGeometry,setTransportEntities,setCenter(){controls.update()},dispose:cleanup};
+  }catch(error){cleanup();return fallbackTo2D(onFallback,error?.message||'three_init_failed')}
 }

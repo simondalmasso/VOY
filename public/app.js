@@ -1,6 +1,8 @@
 import { APP_CONFIG } from './runtime-config.js?v=__BUILD_ID__';
 import { isSafeOfficialHandoff, isSafeExternalNavigationUrl, buildExternalNavigationUrl, normalizeResolvedCandidate, normalizeDestinationSuggestion, normalizeMobilityDecision, normalizeMobilityComputation } from './contracts.js?v=__BUILD_ID__';
 
+const CLIENT_BUILD_ID='__BUILD_ID__';
+
 const $=(sel)=>document.querySelector(sel);
 const escapeHtml=(value='')=>{const div=document.createElement('div');div.textContent=String(value);return div.innerHTML};
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
@@ -21,7 +23,7 @@ const suggestionInFlight=new Map();
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
-  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
+  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
 };
 
 const destinationInput=$('#destination'),suggestions=$('#destination-suggestions'),loading=$('#destination-loading'),contextHelp=$('#destination-context'),nationalSearch=$('#national-search');
@@ -40,18 +42,24 @@ function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.t
 function activate2D(message=''){
   state.mapMode='2d';setMapModeButtons('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;mapTiles.hidden=false;mapAttribution.hidden=false;map3dStatus.textContent=message;
 }
+function loadVoy3DModule(){
+  return state.threeImportAttempt===0
+    ? import('./3d/voy3d.js?v=__BUILD_ID__')
+    : import(`./3d/voy3d.js?v=__BUILD_ID__&retry=${state.threeImportAttempt}`);
+}
 async function activate3D(){
   if(state.mapMode==='3d'&&state.threeController?.ok)return;
   map3dStatus.textContent='Cargando topología 3D…';
   try{
-    state.threeModulePromise??=import('./3d/voy3d.js');
+    state.threeModulePromise??=loadVoy3DModule();
     const mod=await state.threeModulePromise;
-    const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>activate2D('3D no disponible en este equipo; seguimos en 2D.'),routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
+    if(mod.BUILD_ID!==CLIENT_BUILD_ID)throw new Error('3d_build_identity_mismatch');
+    const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
     state.mapMode='3d';setMapModeButtons('3d');mapTiles.hidden=true;mapAttribution.hidden=true;map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dStatus.textContent='3D local · alturas genéricas/inferidas';sync3DTopology();
   }catch(error){
-    state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');
+    state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
 }
 mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.dataset.mapMode==='3d'?activate3D():activate2D()));

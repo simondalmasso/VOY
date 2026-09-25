@@ -22,9 +22,14 @@ Copy-Item public\3d\* dist\client\3d -Recurse -Force
 Copy-Item node_modules\three\build\three.module.js dist\client\vendor\three.module.js -Force
 Copy-Item node_modules\three\build\three.core.js dist\client\vendor\three.core.js -Force
 Copy-Item node_modules\three\LICENSE dist\client\vendor\THREE-LICENSE.txt -Force
+$threeModulePath=Join-Path $root 'dist\client\vendor\three.module.js'
+$threeModule=[IO.File]::ReadAllText($threeModulePath,[Text.Encoding]::UTF8).Replace('./three.core.js',("./three.core.js?v="+$buildId))
+[IO.File]::WriteAllText($threeModulePath,$threeModule,(New-Object Text.UTF8Encoding($false)))
 $textClientFiles=@('index.html','styles.css','app.js','contracts.js','runtime-config.js','sw.js')
-foreach($tf in $textClientFiles){
-  $tp=Join-Path $root ('dist\client\'+$tf)
+$textClientPaths=@()
+foreach($tf in $textClientFiles){$textClientPaths += Join-Path $root ('dist\client\'+$tf)}
+Get-ChildItem (Join-Path $root 'dist\client\3d') -File -Recurse | Where-Object {$_.Extension -in '.js','.json'} | ForEach-Object {$textClientPaths += $_.FullName}
+foreach($tp in $textClientPaths){
   $txt=[IO.File]::ReadAllText($tp,[Text.Encoding]::UTF8).Replace('__BUILD_ID__',$buildId)
   [IO.File]::WriteAllText($tp,$txt,(New-Object Text.UTF8Encoding($false)))
 }
