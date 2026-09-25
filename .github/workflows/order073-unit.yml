@@ -1,0 +1,44 @@
+name: ORDER-073 unit verification
+
+on:
+  push:
+    branches:
+      - feat/order073-mapfirst-live3d
+    paths:
+      - public/**
+      - src/**
+      - scripts/**
+      - tests/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/order073-unit.yml
+      - ORDER073_REPORT.md
+  workflow_dispatch:
+
+concurrency:
+  group: order073-unit
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify branch ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e 9233f11ff50b329e5f81a2268627d510bc7fb90c^{commit}
+          git merge-base --is-ancestor 9233f11ff50b329e5f81a2268627d510bc7fb90c HEAD
+      - run: npm test
