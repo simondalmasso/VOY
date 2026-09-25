@@ -193,12 +193,18 @@ try{
     await fallbackPage.addInitScript(()=>{const orig=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...args){if(kind==='webgl2')return null;return orig.call(this,kind,...args)}});
     await fallbackPage.goto(baseUrl,{waitUntil:'domcontentloaded'});await fallbackPage.click('[data-map-mode="3d"]');
     await fallbackPage.waitForFunction(()=>document.querySelector('[data-map-mode="2d"]')?.getAttribute('aria-pressed')==='true');
-    const fallbackStatus=await fallbackPage.locator('#map-3d-status').textContent();
-    if(!/3D no disponible/.test(fallbackStatus||''))throw new Error(`${vp.name}:webgl2_fallback_status_missing`);
+    const fallbackState=await fallbackPage.evaluate(()=>({
+      mode2d:document.querySelector('[data-map-mode="2d"]')?.getAttribute('aria-pressed'),
+      mode3d:document.querySelector('[data-map-mode="3d"]')?.getAttribute('aria-pressed'),
+      canvas:Boolean(document.querySelector('.voy-3d-canvas')),
+      tilesHidden:document.querySelector('#map-tiles')?.hidden,
+      status:document.querySelector('#map-3d-status')?.textContent||''
+    }));
+    if(fallbackState.mode2d!=='true'||fallbackState.mode3d!=='false'||fallbackState.canvas||fallbackState.tilesHidden)throw new Error(`${vp.name}:webgl2_fallback_not_2d:${JSON.stringify(fallbackState)}`);
     await fallbackPage.close();
 
     const raw=await rawWebglControl(context,{width:vp.width,height:vp.height});
-    summaries.viewports[vp.name]={map:mapMetric,trip,baseline_2d_3d_asset_fetches:baseline3d.length,extra_dynamic_worker_calls_3d:apiAfter-apiBefore,initial_3d_requests:first3d.map(r=>new URL(r.url).pathname),initial_chunks:topologyChunks.length,perf,raw_webgl_control:raw,touch_targets:touch,errors};
+    summaries.viewports[vp.name]={map:mapMetric,trip,baseline_2d_3d_asset_fetches:baseline3d.length,extra_dynamic_worker_calls_3d:apiAfter-apiBefore,initial_3d_requests:first3d.map(r=>new URL(r.url).pathname),initial_chunks:topologyChunks.length,perf,raw_webgl_control:raw,webgl2_fallback:fallbackState,touch_targets:touch,errors};
     await writeFile(path.join(outDir,`${browserName}-${vp.name}-requests.json`),JSON.stringify(requests,null,2)+'\n');
     await writeFile(path.join(outDir,`${browserName}-${vp.name}-console.json`),JSON.stringify(errors,null,2)+'\n');
     if(errors.length)throw new Error(`${vp.name}:browser_errors:${errors.join('|')}`);
