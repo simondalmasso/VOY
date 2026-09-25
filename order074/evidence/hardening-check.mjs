@@ -46,7 +46,7 @@ function apiPayload(p){
 }
 
 const requestLog=[];
-const faults={moduleOnce:0,manifest:null,chunk:null};
+const faults={moduleOnce:0,manifest:null,chunk:null,navigationOnce:0};
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.txt':'text/plain; charset=utf-8'};
 const root=path.resolve(sourceDir,'dist','client');
 const server=createServer(async(req,res)=>{
@@ -54,6 +54,7 @@ const server=createServer(async(req,res)=>{
   requestLog.push({method:req.method,path:u.pathname,search:u.search,ts:Date.now()});
   try{
     if(u.pathname.startsWith('/api/')){const body=JSON.stringify(apiPayload(u.pathname));res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end(body);return}
+    if(u.pathname==='/'&&u.searchParams.get('offline')==='1'&&faults.navigationOnce>0){faults.navigationOnce-=1;req.socket.destroy();return}
     if(u.pathname==='/3d/voy3d.js'&&faults.moduleOnce>0){faults.moduleOnce-=1;res.writeHead(503,{'content-type':'text/plain','cache-control':'no-store'});res.end('order074_module_once');return}
     if(u.pathname==='/3d/topology/manifest.json'&&faults.manifest==='malformed'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end('{');return}
     if(u.pathname.startsWith('/3d/topology/chunk-')&&faults.chunk==='missing'){res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({error:'order074_chunk_missing'}));return}
@@ -71,7 +72,7 @@ const transparentPng=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAA
 const browser=await chromium.launch({executablePath:exe,headless:true,args:['--enable-webgl','--ignore-gpu-blocklist','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const evidence={test_sha:TEST_SHA,build_id:buildId,chrome_executable:exe,checks:{},requests:{}};
 
-function resetFaults(){faults.moduleOnce=0;faults.manifest=null;faults.chunk=null}
+function resetFaults(){faults.moduleOnce=0;faults.manifest=null;faults.chunk=null;faults.navigationOnce=0}
 async function freshContext({viewport={width:1440,height:900},reducedMotion='no-preference',initScript=null}={}){
   resetFaults();
   const context=await browser.newContext({viewport,deviceScaleFactor:1,serviceWorkers:'allow',reducedMotion});
@@ -143,13 +144,13 @@ try{
       const sw=await page.evaluate(async()=>{const reg=await navigator.serviceWorker.ready;const keys=await caches.keys();const offline=await caches.match('/offline.html');return {controller:Boolean(navigator.serviceWorker.controller),script_url:reg.active?.scriptURL||'',cache_keys:keys,offline_cached:Boolean(offline)}});
       assert.equal(sw.controller,true);assert.ok(sw.script_url.endsWith('/sw.js'));assert.ok(sw.cache_keys.includes(`voy-static-${buildId}`));assert.equal(sw.offline_cached,true);
       assert.equal(lazyRequests(segment(start)).length,0,'pwa_shell_eager_3d');
-      await context.setOffline(true);
+      faults.navigationOnce=1;
       await page.goto(baseUrl+'/?offline=1',{waitUntil:'domcontentloaded'});
-      await page.waitForSelector('h1');
-      assert.equal((await page.locator('h1').textContent()).trim(),'Sin conexión');
+      await page.waitForFunction(()=>document.title==='VOY — Sin conexión');
+      assert.equal((await page.locator('main h1').textContent()).trim(),'Sin conexión');
       await page.screenshot({path:path.join(outDir,'chrome-pwa-offline.png')});
       evidence.checks.pwa={...sw,offline_navigation:'PASS',lazy_before_3d:0};
-    }finally{await context.setOffline(false).catch(()=>{});await context.close()}
+    }finally{await context.close()}
   }
 
   {
