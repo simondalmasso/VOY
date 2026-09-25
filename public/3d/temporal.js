@@ -43,7 +43,7 @@ function rendered(state,position,sourceObservation,extra={}){
 export function presentTransportEntity(previous,next,nowMs,{
   freshnessMs=20000,
   verifiedGeometry=null,
-  maxSpeedMps=90,
+  maxSpeedMps=Infinity,
   maxSnapMeters=60,
   reducedMotion=false
 }={}){
