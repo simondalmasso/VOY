@@ -290,3 +290,9 @@ body{height:100svh;overflow:hidden}
   .app-shell{grid-template-rows:50svh minmax(0,1fr);}
   .map-3d-quality{max-width:104px;font-size:10px;padding-inline:8px}
 }
+
+/* ORDER074 — preserve required actions at 200% text scaling */
+.option-row{min-width:0;flex-wrap:wrap}
+.option-copy{flex:1 1 180px}
+.trip-value,.mode-actions{min-width:0;max-width:100%}
+.option-action{max-width:100%;white-space:normal;overflow-wrap:anywhere}
