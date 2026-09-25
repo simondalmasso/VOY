@@ -86,7 +86,7 @@ export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initi
         freshnessMs:REALTIME_FRESHNESS_MS,
         maxSpeedMps:REALTIME_MAX_SPEED_MPS,
         maxSnapMeters:ROUTE_SNAP_MAX_METERS,
-        reducedMotion,
+        reducedMotion:reducedMotion,
         verifiedGeometry:entry.verifiedGeometry
       });
       if(!presented.render||!['realtime','predicted'].includes(presented.temporal_state))continue;
@@ -106,11 +106,5 @@ export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initi
   let raf=0;function render(){resize();renderer.render(scene,camera)}function scheduleRender(){cancelAnimationFrame(raf);raf=requestAnimationFrame(render)}
   const controls=installCameraControls(canvas,camera,scheduleRender);const ro=new ResizeObserver(scheduleRender);ro.observe(mount);setRouteGeometry(initialRoute);setTransportEntities(transport);scheduleRender();
   function update({routeGeometry:nextRoute=null,transportEntities=[]}={}){setRouteGeometry(nextRoute);setTransportEntities(transportEntities)}
-  return{
-    ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,quality:qualityName,quality_profile:profile,
-    movement_policy:{maxSpeedMps:REALTIME_MAX_SPEED_MPS,maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion},
-    draw_calls_design:{building_lod:1,roads:1,vehicle_instances:2},
-    update,setRouteGeometry,setTransportEntities,setCenter(){controls.update()},
-    dispose(){ro.disconnect();cancelAnimationFrame(raf);renderer.dispose();canvas.remove();cache.clear();}
-  };
+  return{ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,quality:qualityName,quality_profile:profile,movement_policy:{maxSpeedMps:REALTIME_MAX_SPEED_MPS,maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion:reducedMotion},draw_calls_design:{building_lod:1,roads:1,vehicle_instances:2},update,setRouteGeometry,setTransportEntities,setCenter(){controls.update()},dispose(){ro.disconnect();cancelAnimationFrame(raf);renderer.dispose();canvas.remove();cache.clear();}};
 }
