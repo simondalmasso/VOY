@@ -1,0 +1,187 @@
+name: ORDER-072 exact-SHA verification
+
+on:
+  push:
+    branches:
+      - ci/order072-order071-verify
+    paths:
+      - .github/workflows/order072-verify.yml
+      - order072/evidence/**
+  workflow_dispatch:
+
+concurrency:
+  group: order072-order071-verify
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TEST_SHA: 9233f11ff50b329e5f81a2268627d510bc7fb90c
+  BASE_SHA: ad9e50b6f48ba444e0c4ac1b7bc2ad0f24a3cc4b
+  EXPECTED_TOPOLOGY_SHA: 0c4a79f656fccd722de6cb20db504ebc09b2626b6d3caeccf2f78176788c75a2
+
+jobs:
+  linux-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout CI evidence
+        uses: actions/checkout@v4
+        with:
+          path: ci
+      - name: Checkout exact source SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TEST_SHA }}
+          path: source
+          fetch-depth: 0
+      - name: Prove exact checkout and CI-only diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$TEST_SHA"
+          git -C source cat-file -e "$BASE_SHA^{commit}"
+          git -C source merge-base --is-ancestor "$BASE_SHA" "$TEST_SHA"
+          ci_head="$(git -C ci rev-parse HEAD)"
+          git -C ci diff --name-only "$TEST_SHA..$ci_head" | tee ci/order072/evidence/ci-only-diff.txt
+          if grep -Ev '^(\.github/workflows/order072-verify\.yml|order072/evidence/)' ci/order072/evidence/ci-only-diff.txt | grep -q .; then
+            echo "CI_ONLY_DIFF=FAIL" >&2; exit 31
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - name: Install exact source dependencies
+        working-directory: source
+        run: npm ci --ignore-scripts
+      - name: Provide powershell alias on Ubuntu for repo build script
+        shell: bash
+        run: sudo ln -sf "$(command -v pwsh)" /usr/local/bin/powershell
+      - name: Test exact source
+        working-directory: source
+        run: npm test
+      - name: Build exact source
+        working-directory: source
+        run: npm run build
+      - name: Deterministic topology regeneration
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(node scripts/build-order071-topology.mjs)"
+          echo "$out"
+          echo "$out" | grep "CHUNK_SHA256=$EXPECTED_TOPOLOGY_SHA"
+      - name: Verify source identity, provenance and runtime audit
+        shell: bash
+        env:
+          SOURCE_DIR: ${{ github.workspace }}/source
+          EVIDENCE_DIR: ${{ github.workspace }}/ci/order072/evidence/linux
+        run: node ci/order072/evidence/verify-source.mjs
+      - name: Package verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f source/dist/BUILD_MANIFEST.json
+          test -f source/dist/client/vendor/three.module.js
+          test -f source/dist/client/vendor/three.core.js
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('source/dist/BUILD_MANIFEST.json','utf8'));if(m.source_commit!==process.env.TEST_SHA)process.exit(42);console.log('PACKAGE=PASS client_files='+m.client_file_count)"
+      - name: Wrangler dry-run only
+        working-directory: source
+        run: npx wrangler deploy --dry-run --outdir .order072-wrangler-dry-run
+      - name: NPM runtime dependency audit
+        working-directory: source
+        run: npm audit --omit=dev --audit-level=high
+      - name: Upload Linux evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: order072-linux-evidence
+          path: |
+            ci/order072/evidence/linux/
+            ci/order072/evidence/ci-only-diff.txt
+            source/dist/BUILD_MANIFEST.json
+          retention-days: 3
+
+  chrome-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ci
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TEST_SHA }}
+          path: source
+          fetch-depth: 0
+      - name: Prove exact source
+        shell: bash
+        run: test "$(git -C source rev-parse HEAD)" = "$TEST_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - working-directory: source
+        run: npm ci --ignore-scripts
+      - name: Provide powershell alias
+        shell: bash
+        run: sudo ln -sf "$(command -v pwsh)" /usr/local/bin/powershell
+      - working-directory: source
+        run: npm run build
+      - name: Chrome desktop + mobile exact-SHA browser evidence
+        shell: bash
+        env:
+          BROWSER: chrome
+          SOURCE_DIR: ${{ github.workspace }}/source
+          CI_DIR: ${{ github.workspace }}/ci
+          EVIDENCE_DIR: ${{ github.workspace }}/ci/order072/evidence/chrome
+        run: node ci/order072/evidence/browser-check.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order072-chrome-evidence
+          path: ci/order072/evidence/chrome/
+          retention-days: 3
+
+  edge-browser:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ci
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TEST_SHA }}
+          path: source
+          fetch-depth: 0
+      - name: Prove exact source and real Edge
+        shell: pwsh
+        run: |
+          if ((git -C source rev-parse HEAD).Trim() -ne $env:TEST_SHA) { throw 'exact_sha_mismatch' }
+          $edge1='C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          $edge2='C:\Program Files\Microsoft\Edge\Application\msedge.exe'
+          if (!(Test-Path $edge1) -and !(Test-Path $edge2)) { throw 'real_edge_not_found' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - working-directory: source
+        run: npm ci --ignore-scripts
+      - working-directory: source
+        run: npm run build
+      - name: Edge desktop + mobile exact-SHA browser evidence
+        shell: pwsh
+        env:
+          BROWSER: edge
+          SOURCE_DIR: ${{ github.workspace }}\source
+          CI_DIR: ${{ github.workspace }}\ci
+          EVIDENCE_DIR: ${{ github.workspace }}\ci\order072\evidence\edge
+        run: node ci/order072/evidence/browser-check.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order072-edge-evidence
+          path: ci/order072/evidence/edge/
+          retention-days: 3
