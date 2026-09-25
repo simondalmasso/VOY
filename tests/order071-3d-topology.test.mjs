@@ -114,8 +114,9 @@ test('ORDER071 renderer exposes an immediate 2D fallback when WebGL2 is unsuppor
 
 test('ORDER071 pins Three locally and avoids CDN/runtime Worker coupling',async()=>{
   const [pkg,renderer,build]=await Promise.all([json('package.json'),text('public/3d/voy3d.js'),text('scripts/build.ps1')]);
-  assert.equal(pkg.devDependencies.three,'0.186.0');
-  assert.match(renderer,/from '\/vendor\/three\.module\.js'/);
+  assert.equal(pkg.dependencies.three,'0.186.0');
+  assert.equal(pkg.devDependencies.three,undefined);
+  assert.match(renderer,/from '\/vendor\/three\.module\.js\?v=__BUILD_ID__'/);
   assert.doesNotMatch(renderer,/cdn\.jsdelivr|unpkg|esm\.sh/i);
   assert.match(build,/three\\build\\three\.module\.js/);
   assert.match(build,/three\\build\\three\.core\.js/);
