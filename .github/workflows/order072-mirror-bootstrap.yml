@@ -1,0 +1,71 @@
+name: ORDER-072 exact mirror bootstrap
+
+on:
+  push:
+    branches:
+      - ops/order072-mirror-bootstrap
+    paths:
+      - .github/workflows/order072-mirror-bootstrap.yml
+  workflow_dispatch:
+
+concurrency:
+  group: order072-mirror-bootstrap
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_REPO: https://gitlab.com/simondalmasso/voy.git
+  SOURCE_SHA: 9233f11ff50b329e5f81a2268627d510bc7fb90c
+  SOURCE_BASE: ad9e50b6f48ba444e0c4ac1b7bc2ad0f24a3cc4b
+  MIRROR_BRANCH: mirror/order071-9233f11
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout bootstrap branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch exact GitLab object and prove source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add gitlab "$SOURCE_REPO"
+          git fetch --no-tags gitlab "$SOURCE_SHA" "$SOURCE_BASE"
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE_SHA" || {
+            echo "SOURCE_DRIFT: fetched $(git rev-parse FETCH_HEAD), expected $SOURCE_SHA" >&2
+            exit 20
+          }
+          git cat-file -e "$SOURCE_SHA^{commit}"
+          git cat-file -e "$SOURCE_BASE^{commit}"
+          git merge-base --is-ancestor "$SOURCE_BASE" "$SOURCE_SHA"
+          {
+            echo "source_sha=$(git rev-parse "$SOURCE_SHA")"
+            echo "tree_sha=$(git rev-parse "$SOURCE_SHA^{tree}")"
+            echo "parent_sha=$(git rev-parse "$SOURCE_SHA^")"
+            echo "base_sha=$(git rev-parse "$SOURCE_BASE")"
+          } | tee order072-mirror-identity.txt
+
+      - name: Push exact object to mirror branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "$SOURCE_SHA:refs/heads/$MIRROR_BRANCH"
+          readback="$(git ls-remote --heads origin "refs/heads/$MIRROR_BRANCH" | awk '{print $1}')"
+          test "$readback" = "$SOURCE_SHA" || {
+            echo "MIRROR_MISMATCH: readback=$readback expected=$SOURCE_SHA" >&2
+            exit 21
+          }
+          echo "mirror_sha=$readback" | tee -a order072-mirror-identity.txt
+
+      - name: Upload exact-source identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: order072-mirror-identity
+          path: order072-mirror-identity.txt
+          retention-days: 1
