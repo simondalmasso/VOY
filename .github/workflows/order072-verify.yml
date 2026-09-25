@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ci
+          fetch-depth: 0
       - name: Checkout exact source SHA
         uses: actions/checkout@v4
         with:
@@ -139,6 +140,7 @@ jobs:
           EVIDENCE_DIR: ${{ github.workspace }}/ci/order072/evidence/chrome
         run: node ci/order072/evidence/browser-check.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: order072-chrome-evidence
           path: ci/order072/evidence/chrome/
@@ -170,8 +172,12 @@ jobs:
           cache-dependency-path: source/package-lock.json
       - working-directory: source
         run: npm ci --ignore-scripts
-      - working-directory: source
-        run: npm run build
+      - name: Build exact source with PowerShell 7
+        shell: pwsh
+        working-directory: source
+        run: |
+          Import-Module Microsoft.PowerShell.Utility
+          ./scripts/build.ps1
       - name: Edge desktop + mobile exact-SHA browser evidence
         shell: pwsh
         env:
@@ -181,6 +187,7 @@ jobs:
           EVIDENCE_DIR: ${{ github.workspace }}\ci\order072\evidence\edge
         run: node ci/order072/evidence/browser-check.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: order072-edge-evidence
           path: ci/order072/evidence/edge/
