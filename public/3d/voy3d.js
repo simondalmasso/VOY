@@ -59,5 +59,6 @@ export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initi
   function resize(){const w=Math.max(1,mount.clientWidth),h=Math.max(1,mount.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
   let raf=0;function render(){resize();renderer.render(scene,camera)}function scheduleRender(){cancelAnimationFrame(raf);raf=requestAnimationFrame(render)}
   const controls=installCameraControls(canvas,camera,scheduleRender);const ro=new ResizeObserver(scheduleRender);ro.observe(mount);setRouteGeometry(initialRoute);setTransportEntities(transport);scheduleRender();
-  return{ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,draw_calls_design:{building_lod:1,roads:1,vehicle_instances:1},setRouteGeometry,setTransportEntities,setCenter(){controls.update()},dispose(){ro.disconnect();cancelAnimationFrame(raf);renderer.dispose();canvas.remove();cache.clear();}};
+  function update({routeGeometry:nextRoute=null,transportEntities=[]}={}){setRouteGeometry(nextRoute);setTransportEntities(transportEntities)}
+  return{ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,draw_calls_design:{building_lod:1,roads:1,vehicle_instances:1},update,setRouteGeometry,setTransportEntities,setCenter(){controls.update()},dispose(){ro.disconnect();cancelAnimationFrame(raf);renderer.dispose();canvas.remove();cache.clear();}};
 }

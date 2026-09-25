@@ -40,15 +40,17 @@ function activate2D(message=''){
   state.mapMode='2d';setMapModeButtons('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;mapTiles.hidden=false;mapAttribution.hidden=false;map3dStatus.textContent=message;
 }
 async function activate3D(){
-  if(state.mapMode==='3d'&&state.threeController)return;
+  if(state.mapMode==='3d'&&state.threeController?.ok)return;
   map3dStatus.textContent='Cargando topología 3D…';
   try{
     state.threeModulePromise??=import('./3d/voy3d.js');
     const mod=await state.threeModulePromise;
-    state.threeController??=await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>activate2D('3D no disponible en este equipo; seguimos en 2D.'),routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities()});
+    const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>activate2D('3D no disponible en este equipo; seguimos en 2D.'),routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities()});
+    if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
+    state.threeController=controller;
     state.mapMode='3d';setMapModeButtons('3d');mapTiles.hidden=true;mapAttribution.hidden=true;map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dStatus.textContent='3D local · alturas genéricas/inferidas';sync3DTopology();
   }catch(error){
-    activate2D('3D no disponible en este equipo; seguimos en 2D.');
+    state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
 }
 mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.dataset.mapMode==='3d'?activate3D():activate2D()));

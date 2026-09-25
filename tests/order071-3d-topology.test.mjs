@@ -121,3 +121,13 @@ test('ORDER071 pins Three locally and avoids CDN/runtime Worker coupling',async(
   assert.match(build,/three\\build\\three\.core\.js/);
   assert.doesNotMatch(renderer,/fetch\(['"]\/api\//);
 });
+
+
+test('ORDER071 app and renderer share a live update contract and fail closed to 2D',async()=>{
+  const [app,renderer]=await Promise.all([text('public/app.js'),text('public/3d/voy3d.js')]);
+  assert.match(app,/threeController\.update\(\{routeGeometry:/);
+  assert.match(renderer,/function update\(\{routeGeometry:nextRoute=null,transportEntities=\[\]\}=\{\}\)/);
+  assert.match(renderer,/return\{ok:true,[^\n]*update,/);
+  assert.match(app,/if\(!controller\?\.ok\)\{state\.threeController=null;activate2D/);
+  assert.doesNotMatch(app,/threeController\?\?=await mod\.activateVoy3D/);
+});
