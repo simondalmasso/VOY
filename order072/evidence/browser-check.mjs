@@ -1,4 +1,4 @@
-import {chromium} from 'playwright-core';
+import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 import {readFile, stat, mkdir, writeFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
@@ -9,6 +9,8 @@ import zlib from 'node:zlib';
 
 const sourceDir=path.resolve(process.env.SOURCE_DIR||'source');
 const ciDir=path.resolve(process.env.CI_DIR||process.cwd());
+const require=createRequire(path.join(sourceDir,'package.json'));
+const {chromium}=require('playwright-core');
 const outDir=path.resolve(process.env.EVIDENCE_DIR||path.join(ciDir,'order072-browser-evidence'));
 const browserName=(process.env.BROWSER||'chrome').toLowerCase();
 const TEST_SHA=process.env.TEST_SHA||'9233f11ff50b329e5f81a2268627d510bc7fb90c';
@@ -78,7 +80,7 @@ function apiPayload(pathname){
   return {ok:false,error:'not_found'};
 }
 function gpuInitScript(){
-  return `()=>{window.__voyGpuEvidence={draw_calls:0,triangles:0};const P=globalThis.WebGL2RenderingContext&&WebGL2RenderingContext.prototype;if(!P)return;const wrap=(name,tri)=>{const orig=P[name];if(typeof orig!=='function')return;P[name]=function(...args){window.__voyGpuEvidence.draw_calls++;try{window.__voyGpuEvidence.triangles+=Math.max(0,Math.floor(tri(...args)))}catch{}return orig.apply(this,args)}};wrap('drawElements',(mode,count)=>mode===4?count/3:0);wrap('drawArrays',(mode,first,count)=>mode===4?count/3:0);wrap('drawElementsInstanced',(mode,count,type,offset,instances)=>mode===4?(count/3)*instances:0);wrap('drawArraysInstanced',(mode,first,count,instances)=>mode===4?(count/3)*instances:0);}`;
+  return `(()=>{window.__voyGpuEvidence={draw_calls:0,triangles:0};const P=globalThis.WebGL2RenderingContext&&WebGL2RenderingContext.prototype;if(!P)return;const wrap=(name,tri)=>{const orig=P[name];if(typeof orig!=='function')return;P[name]=function(...args){window.__voyGpuEvidence.draw_calls++;try{window.__voyGpuEvidence.triangles+=Math.max(0,Math.floor(tri(...args)))}catch{}return orig.apply(this,args)}};wrap('drawElements',(mode,count)=>mode===4?count/3:0);wrap('drawArrays',(mode,first,count)=>mode===4?count/3:0);wrap('drawElementsInstanced',(mode,count,type,offset,instances)=>mode===4?(count/3)*instances:0);wrap('drawArraysInstanced',(mode,first,count,instances)=>mode===4?(count/3)*instances:0);})()`;
 }
 async function installRoutes(page,requestLog){
   page.on('request',r=>requestLog.push({url:r.url(),method:r.method(),type:r.resourceType(),ts:Date.now()}));
