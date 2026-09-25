@@ -7,11 +7,11 @@
     "test": "node --test tests/*.test.mjs",
     "generate:rail-catalog": "node --use-system-ca scripts/generate-rail-station-catalog.mjs"
   },
+  "dependencies": {
+    "three": "0.186.0"
+  },
   "devDependencies": {
     "playwright-core": "1.55.0",
     "wrangler": "4.125.0"
-  },
-  "dependencies": {
-    "three": "0.186.0"
   }
 }
