@@ -22,7 +22,8 @@
     "osm_base_timestamp": "2025-12-15T15:11:56Z",
     "license": "ODbL-1.0",
     "attribution": "© OpenStreetMap contributors",
-    "runtime_queries": false
+    "runtime_queries": false,
+    "raw_input_sha256": "a4a07ee50e139e3c603deb04950ac31f704a2993c6cda30cb4e36bda7489cf80"
   },
   "height_policy": {
     "actual_height": "osm_tag_height",
