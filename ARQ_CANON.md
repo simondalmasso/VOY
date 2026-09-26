@@ -4,6 +4,7 @@
 - PROJECT: VOY
 - PURPOSE: map-first mobility app with truthful route/mode facts, low-weight 3D and fail-closed temporal semantics.
 - REPO: https://github.com/simondalmasso/VOY
+- MIRROR: https://gitlab.com/simondalmasso/voy
 - LIVE: https://voy-app.simondalmasso44.workers.dev/
 
 ## LAST_VERIFIED / BRANCH / HEAD
@@ -12,40 +13,45 @@
 - LAST_RUNTIME_HEAD: `8a00f0e5bf6fffdbca423f7381540acf397b2fea`
 - BASE_HEAD: `95fd3b540ab1e72b3abeaf09fa69f6a255616b97`
 - `main`: `12e0fd006ed20d255496fbdcc883849038fe301f` — DO NOT USE.
-- Canon refresh may create a docs-only descendant; preserve it and continue from latest branch ref.
+- Docs/mirror-infrastructure descendants after LAST_RUNTIME_HEAD are non-runtime; resume from latest branch ref after verifying that diff.
 
 ## CANONICAL LINKS
 - ORDER-074: https://github.com/simondalmasso/VOY/issues/54
 - ORDER-073 RC/evidence: https://github.com/simondalmasso/VOY/issues/51
 - $0/agent-stack decision (consumed): https://github.com/simondalmasso/VOY/issues/55
 - Migration/compute proof: https://github.com/simondalmasso/VOY/issues/50
+- GitLab mirror: https://gitlab.com/simondalmasso/voy
 
 ## CURRENT STATE
 - ORDER-074 hardening implementation is already in progress; DO NOT restart.
-- Runtime HEAD `8a00f0e...` is 11 commits ahead of ORDER-073 RC.
-- Unit Actions `36188395695`: PASS `219/219`.
+- Last runtime HEAD `8a00f0e...`; unit Actions `36188395695`: PASS `219/219`.
 - Full RC Actions `36188395677`: Linux PASS; Edge PASS; normal Chrome PASS; focused ORDER-074 Chrome hardening FAIL.
 - Failure is deterministic: at 390x844 with 200% text, `.app-shell` is 429px wide for a 390px viewport.
 - `PWA_OFFLINE=PASS` already passed in that same hardening run before zoom stress failed.
+- `.github/workflows/mirror-gitlab.yml` now mirrors GitHub branches/tags one-way into GitLab `github/*` refs, with `ci.skip` and no Cloudflare calls.
+- Mirror becomes active when repository secret `GITLAB_MIRROR_TOKEN` exists; never store the token in source/chat.
 
 ## DONE
 - Do not repeat ORDER-072 migration or ORDER-073 implementation.
 - Do not re-implement lazy-3D BUILD_ID binding, retry, cleanup, WebGL context-loss fallback, Three runtime dependency classification, hardening harness, or route/render observability unless a current failing test proves a defect.
 - Agent-stack research is closed for current architecture: no runtime addition; `USE_NOW=EMPTY`.
+- Mirror mechanism is configured; it intentionally preserves GitLab historical refs and isolates GitHub copies under `github/*`.
 
 ## ACTIVE WORK
 - One ARQ only.
 - Finish ORDER-074 release hardening on the existing branch.
 
 ## PENDING
-1. Fix the 390x844/200% horizontal overflow by root cause.
-2. Keep all current 219 tests green.
-3. Make the focused ORDER-074 Chrome hardening harness green without relaxing assertions.
-4. Run one final full release-candidate workflow at final runtime HEAD.
-5. Stop at `CHECKPOINT_HARDENED_RC` and hand evidence to AUD.
+1. If mirror secret is not yet configured, do not work around it in code; human adds `GITLAB_MIRROR_TOKEN` once.
+2. Fix the 390x844/200% horizontal overflow by root cause.
+3. Keep all current 219 tests green.
+4. Make the focused ORDER-074 Chrome hardening harness green without relaxing assertions.
+5. Run one final full release-candidate workflow at final runtime HEAD.
+6. Stop at `CHECKPOINT_HARDENED_RC` and hand evidence to AUD.
 
 ## BLOCKERS / RISKS
-- Current blocker: mobile 200% text overflow.
+- Current release blocker: mobile 200% text overflow.
+- Mirror write is credential-gated until the repository secret exists.
 - Desktop software-WebGL performance is still a known miss/debt, not this order's scope unless the hardening change regresses it.
 - No authorized Santa Fe realtime feed: keep live vehicles absent/fail-closed.
 - Avoid CI churn: diagnose locally/focused before pushing.
@@ -53,20 +59,23 @@
 ## DO_NOT_TOUCH
 - NO `main`, merge, deploy, production probe, Cloudflare runtime mutation, GitLab CI.
 - NO ARQ2/ARQ3 parallel work; do not continue Issue #56.
-- NO agent/LLM/runtime framework, new service, DB, secret or extra Worker call.
+- NO agent/LLM/runtime framework, new service, DB, secret-in-source or extra Worker call.
 - NO stale PR #42/#49.
 - NO weakening/removing existing tests to obtain green.
+- NO direct writes to GitLab historical refs; the mirror owns only GitLab `github/*`.
 
 ## AUTHORITIES / GATES
 - Issue #54 is the active work contract.
-- Active branch is authoritative for implementation.
+- Active GitHub branch is authoritative for implementation.
+- GitLab `github/*` is downstream mirror only, never current authority.
 - Final gate must preserve: exact lineage, 219+ tests, build/package, Wrangler dry-run, runtime/dependency audit, Chrome desktop/mobile, focused Chrome PWA/SW+keyboard+zoom+3D failure cases, real Edge desktop/mobile, healthy Santa Fe Worker calls <=4, 3D extra dynamic Worker calls=0, no Cloudflare/prod mutation.
 - AUD alone decides promotion after ARQ checkpoint.
 
 ## WHERE_TO_RESUME
-1. Fetch `fix/order074-release-hardening`.
-2. If HEAD is a canon-only descendant of `8a00f0e...`, verify `git diff --name-only 8a00f0e...HEAD` contains only `AUD_CANON.md` and `ARQ_CANON.md`.
-3. Resume from the latest branch ref; do not reset.
+1. Fetch latest `fix/order074-release-hardening`.
+2. Verify descendants after `8a00f0e...`: canon/mirror infrastructure must not change runtime semantics.
+3. Resume from latest branch ref; do not reset.
+4. Do not wait on mirror credential to continue product hardening.
 
 ## WHAT_TO_DO_NOW
 Reproduce the exact failing `zoomStress` case from `order074/evidence/hardening-check.mjs` at 390x844/200%; inspect which child forces `.app-shell` from 390px to 429px; make the smallest layout/CSS correction; rerun `npm test` and the focused hardening check locally; only then push and let the final full GitHub gate run.
@@ -77,6 +86,7 @@ Reproduce the exact failing `zoomStress` case from `order074/evidence/hardening-
 - ARQ2 OSS-agent research.
 - Already-green ORDER-074 hardening contracts.
 - Broad redesign, FPS project, live-feed hunting, offline routing, or new infra.
+- Do not build another mirroring system; use `.github/workflows/mirror-gitlab.yml`.
 
 ## ACCEPTANCE / STOP CONDITIONS
 PASS only when the final exact runtime HEAD has:

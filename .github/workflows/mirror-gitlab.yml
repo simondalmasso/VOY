@@ -1,0 +1,55 @@
+name: Mirror GitHub refs to GitLab
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitlab-mirror
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITLAB_REPO_URL: https://gitlab.com/simondalmasso/voy.git
+      GITLAB_MIRROR_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
+    steps:
+      - name: Mirror inactive until credential is configured
+        if: env.GITLAB_MIRROR_TOKEN == ''
+        run: |
+          echo "::notice title=GitLab mirror inactive::Add repository secret GITLAB_MIRROR_TOKEN with GitLab write_repository scope."
+
+      - name: Mirror GitHub branches and tags into GitLab github/* namespace
+        if: env.GITLAB_MIRROR_TOKEN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mirror_root="$(mktemp -d)"
+          trap 'rm -rf "$mirror_root"' EXIT
+          repo="$mirror_root/repo.git"
+
+          git init --bare "$repo"
+          cd "$repo"
+
+          source_url="https://github.com/${GITHUB_REPOSITORY}.git"
+
+          # Isolated destination namespace prevents any overwrite of GitLab's
+          # historical main/branches while still preserving exact Git objects.
+          git fetch --force --prune --no-tags "$source_url"             '+refs/heads/*:refs/heads/github/*'
+          git fetch --force --prune "$source_url"             '+refs/tags/*:refs/tags/github/*'
+
+          basic_auth="$(printf 'oauth2:%s' "$GITLAB_MIRROR_TOKEN" | base64 -w0)"
+
+          # --prune only applies to the github/* destination namespace.
+          # ci.skip prevents mirrored pushes from consuming GitLab CI minutes.
+          git -c http.extraHeader="Authorization: Basic $basic_auth"             push --force --prune "$GITLAB_REPO_URL"             '+refs/heads/github/*:refs/heads/github/*'             '+refs/tags/github/*:refs/tags/github/*'             -o ci.skip
