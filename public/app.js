@@ -7,6 +7,7 @@ const $=(sel)=>document.querySelector(sel);
 const escapeHtml=(value='')=>{const div=document.createElement('div');div.textContent=String(value);return div.innerHTML};
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 
+const CLIENT_BUILD_ID='__BUILD_ID__';
 const DEFAULT_MAP_CENTER={lat:-31.6333,lon:-60.7000};
 const SUGGEST_DEBOUNCE_MS=400;
 const SUGGEST_CACHE_TTL_MS=45000;
