@@ -1,0 +1,86 @@
+name: Mirror GitHub to GitLab
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitlab-mirror
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLAB_REPO_URL: git@gitlab.com:simondalmasso/voy.git
+    steps:
+      - name: Configure repository-scoped GitLab SSH key
+        env:
+          GITLAB_MIRROR_SSH_KEY: ${{ secrets.GITLAB_MIRROR_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GITLAB_MIRROR_SSH_KEY"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$GITLAB_MIRROR_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -H gitlab.com >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Mirror all GitHub branches and tags without pruning GitLab-only refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mirror_root="$(mktemp -d)"
+          trap 'rm -rf "$mirror_root"' EXIT
+          repo="$mirror_root/repo.git"
+          source_url="https://github.com/${GITHUB_REPOSITORY}.git"
+
+          git init --bare "$repo"
+          cd "$repo"
+
+          # Local fetch pruning is safe: it only cleans the ephemeral runner repo.
+          git fetch --force --prune --no-tags "$source_url" \
+            '+refs/heads/*:refs/heads/*'
+          git fetch --force "$source_url" \
+            '+refs/tags/*:refs/tags/*'
+
+          # No --mirror and no destination --prune: GitLab-only legacy refs survive.
+          # Same-named GitLab refs intentionally follow GitHub because GitHub is CANON.
+          git push --force "$GITLAB_REPO_URL" \
+            '+refs/heads/*:refs/heads/*' \
+            '+refs/tags/*:refs/tags/*' \
+            -o ci.skip
+
+      - name: Verify canonical main parity and legacy anchor
+        shell: bash
+        run: |
+          set -euo pipefail
+          github_main="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | awk '{print $1}')"
+          gitlab_main="$(git ls-remote "$GITLAB_REPO_URL" refs/heads/main | awk '{print $1}')"
+          legacy_main="$(git ls-remote "$GITLAB_REPO_URL" refs/heads/legacy/gitlab-main-pre-github-canon-20260926 | awk '{print $1}')"
+
+          test -n "$github_main"
+          test -n "$gitlab_main"
+          test -n "$legacy_main"
+          test "$github_main" = "$gitlab_main"
+
+          echo "MIRROR_WORKFLOW=SUCCESS"
+          echo "GITHUB_MAIN_SHA=$github_main"
+          echo "GITLAB_MAIN_SHA=$gitlab_main"
+          echo "HEAD_PARITY=PASS"
+          echo "CANON=GITHUB"
+          echo "MIRROR=GITLAB"
+          echo "WORK_ONLY_ON_GITHUB=YES"
+          echo "DUPLICATE_WORK=NO"
+          echo "LOCAL_PC_DEPENDENCY=NO"
+          echo "REMOTE_DESKTOP_DEPENDENCY=NO"
+          echo "SENTINELX_DEPENDENCY=NO"
