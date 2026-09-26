@@ -296,3 +296,7 @@ body{height:100svh;overflow:hidden}
 .option-copy{flex:1 1 180px}
 .trip-value,.mode-actions{min-width:0;max-width:100%}
 .option-action{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+@media (max-width:700px){
+  .map-controls .destination-hero::before,body[data-view="resolved"] .map-controls .destination-hero::before{right:0}
+}
