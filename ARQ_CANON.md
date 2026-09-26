@@ -2,100 +2,85 @@
 
 ## PROJECT / PURPOSE / REPO / LIVE
 - PROJECT: VOY
-- PURPOSE: map-first mobility app with truthful route/mode facts, low-weight 3D and fail-closed temporal semantics.
-- REPO: https://github.com/simondalmasso/VOY
-- MIRROR: https://gitlab.com/simondalmasso/voy
+- PURPOSE: map-first mobility app with truthful mode/route facts, fail-closed temporal tracker and low-weight 3D.
+- CANON/WORK REPO: https://github.com/simondalmasso/VOY
+- DOWNSTREAM MIRROR ONLY: https://gitlab.com/simondalmasso/voy
 - LIVE: https://voy-app.simondalmasso44.workers.dev/
 
 ## LAST_VERIFIED / BRANCH / HEAD
-- LAST_VERIFIED: 2026-09-25 22:11 ART
+- LAST_VERIFIED: 2026-09-26 03:21 ART
 - WORK_BRANCH: `fix/order074-release-hardening`
 - LAST_RUNTIME_HEAD: `8a00f0e5bf6fffdbca423f7381540acf397b2fea`
+- VERIFIED_PRE_CANON_REFRESH_HEAD: `0af01d7eee5e7d6f66598697da46dcb33cbc00c5`
 - BASE_HEAD: `95fd3b540ab1e72b3abeaf09fa69f6a255616b97`
-- `main`: `12e0fd006ed20d255496fbdcc883849038fe301f` — DO NOT USE.
-- Docs/mirror-infrastructure descendants after LAST_RUNTIME_HEAD are non-runtime; resume from latest branch ref after verifying that diff.
+- GITHUB_MAIN: `1ac1c691487cf9c542fd1db9d08c0ccadfe89f13` — mirror-infra-only descendant of old main, not current product source.
 
 ## CANONICAL LINKS
 - ORDER-074: https://github.com/simondalmasso/VOY/issues/54
-- ORDER-073 RC/evidence: https://github.com/simondalmasso/VOY/issues/51
-- $0/agent-stack decision (consumed): https://github.com/simondalmasso/VOY/issues/55
-- Migration/compute proof: https://github.com/simondalmasso/VOY/issues/50
-- GitLab mirror: https://gitlab.com/simondalmasso/voy
+- ORDER-073 RC: https://github.com/simondalmasso/VOY/issues/51
+- Compute/migration proof: https://github.com/simondalmasso/VOY/issues/50
+- Mirror workflow: https://github.com/simondalmasso/VOY/actions/workflows/mirror-gitlab.yml
+- Green mirror proof: https://github.com/simondalmasso/VOY/actions/runs/36223488205
 
 ## CURRENT STATE
-- ORDER-074 hardening implementation is already in progress; DO NOT restart.
-- Last runtime HEAD `8a00f0e...`; unit Actions `36188395695`: PASS `219/219`.
-- Full RC Actions `36188395677`: Linux PASS; Edge PASS; normal Chrome PASS; focused ORDER-074 Chrome hardening FAIL.
-- Failure is deterministic: at 390x844 with 200% text, `.app-shell` is 429px wide for a 390px viewport.
-- `PWA_OFFLINE=PASS` already passed in that same hardening run before zoom stress failed.
-- `.github/workflows/mirror-gitlab.yml` now mirrors GitHub branches/tags one-way into GitLab `github/*` refs, with `ci.skip` and no Cloudflare calls.
-- Mirror becomes active when repository secret `GITLAB_MIRROR_TOKEN` exists; never store the token in source/chat.
+- ONE ARQ only. Do not restart.
+- Unit run `36188395695`: PASS `219/219`.
+- Full RC run `36188395677`: Linux PASS, Edge PASS, normal Chrome PASS; focused ORDER-074 Chrome hardening fails only at 390x844/200% text with `.app-shell` 429px > 390px.
+- GitHub is the only work/source-of-truth repo.
+- GitHub Actions automatically mirrors all GitHub branches/tags to same-named GitLab refs using repo-scoped SSH key; GitLab-only refs are not pruned; GitLab CI is skipped.
+- Mirror run `36223488205`: SUCCESS; `main` parity PASS.
+- GitLab legacy pre-canon main is preserved at `legacy/gitlab-main-pre-github-canon-20260926`.
+- No PC/Brave/Remote Desktop/SentinelX dependency exists after bootstrap.
 
 ## DONE
-- Do not repeat ORDER-072 migration or ORDER-073 implementation.
-- Do not re-implement lazy-3D BUILD_ID binding, retry, cleanup, WebGL context-loss fallback, Three runtime dependency classification, hardening harness, or route/render observability unless a current failing test proves a defect.
-- Agent-stack research is closed for current architecture: no runtime addition; `USE_NOW=EMPTY`.
-- Mirror mechanism is configured; it intentionally preserves GitLab historical refs and isolates GitHub copies under `github/*`.
+- Do not repeat ORDER-072 migration.
+- Do not repeat ORDER-073 tracker/3D/product work.
+- Do not rebuild already-green ORDER-074 hardening contracts unless a current failing test proves a defect.
+- Do not repeat agent-stack research; runtime decision is `USE_NOW=EMPTY`.
+- Do not configure another mirror. Current GitHub→GitLab mirror is live and verified.
 
 ## ACTIVE WORK
-- One ARQ only.
-- Finish ORDER-074 release hardening on the existing branch.
+- Finish ORDER-074 on the existing GitHub branch.
 
 ## PENDING
-1. If mirror secret is not yet configured, do not work around it in code; human adds `GITLAB_MIRROR_TOKEN` once.
-2. Fix the 390x844/200% horizontal overflow by root cause.
-3. Keep all current 219 tests green.
-4. Make the focused ORDER-074 Chrome hardening harness green without relaxing assertions.
-5. Run one final full release-candidate workflow at final runtime HEAD.
-6. Stop at `CHECKPOINT_HARDENED_RC` and hand evidence to AUD.
+1. Fix 390x844/200% horizontal overflow by root cause.
+2. Keep 219+ tests green.
+3. Make focused ORDER-074 Chrome hardening green without weakening assertions.
+4. Run one final full release-candidate workflow at final runtime HEAD.
+5. Stop at `CHECKPOINT_HARDENED_RC` for AUD.
 
 ## BLOCKERS / RISKS
-- Current release blocker: mobile 200% text overflow.
-- Mirror write is credential-gated until the repository secret exists.
-- Desktop software-WebGL performance is still a known miss/debt, not this order's scope unless the hardening change regresses it.
-- No authorized Santa Fe realtime feed: keep live vehicles absent/fail-closed.
-- Avoid CI churn: diagnose locally/focused before pushing.
+- Release blocker: mobile 200% text overflow.
+- Desktop software-WebGL FPS remains debt, not this order's scope unless regressed.
+- No authorized Santa Fe realtime feed: keep moving vehicles absent/fail-closed.
+- Avoid unnecessary pushes/CI while diagnosing.
 
 ## DO_NOT_TOUCH
-- NO `main`, merge, deploy, production probe, Cloudflare runtime mutation, GitLab CI.
-- NO ARQ2/ARQ3 parallel work; do not continue Issue #56.
-- NO agent/LLM/runtime framework, new service, DB, secret-in-source or extra Worker call.
-- NO stale PR #42/#49.
-- NO weakening/removing existing tests to obtain green.
-- NO direct writes to GitLab historical refs; the mirror owns only GitLab `github/*`.
+- NO development in GitLab; never manually reconcile mirrored refs.
+- NO ARQ2/ARQ3 parallel lanes.
+- NO merge/deploy/production probe/Cloudflare mutation.
+- NO new framework/service/DB/secret-in-source/extra Worker call.
+- NO weakening tests.
+- NO deletion of GitLab legacy main anchor or mirror key/config.
 
 ## AUTHORITIES / GATES
-- Issue #54 is the active work contract.
-- Active GitHub branch is authoritative for implementation.
-- GitLab `github/*` is downstream mirror only, never current authority.
-- Final gate must preserve: exact lineage, 219+ tests, build/package, Wrangler dry-run, runtime/dependency audit, Chrome desktop/mobile, focused Chrome PWA/SW+keyboard+zoom+3D failure cases, real Edge desktop/mobile, healthy Santa Fe Worker calls <=4, 3D extra dynamic Worker calls=0, no Cloudflare/prod mutation.
-- AUD alone decides promotion after ARQ checkpoint.
+- Issue #54 + GitHub work branch own implementation.
+- GitHub owns repository truth; GitLab is downstream mirror only.
+- User-authorized GitHub `main` mirror workflow commit is infrastructure-only and is not a product merge.
+- Final runtime gate must preserve: 219+ tests, build/package/Wrangler/runtime dependency audit, Chrome desktop/mobile, focused PWA/SW+keyboard+zoom+3D failure cases, real Edge desktop/mobile, request budgets, no production mutation.
+- AUD decides promotion.
 
 ## WHERE_TO_RESUME
-1. Fetch latest `fix/order074-release-hardening`.
-2. Verify descendants after `8a00f0e...`: canon/mirror infrastructure must not change runtime semantics.
-3. Resume from latest branch ref; do not reset.
-4. Do not wait on mirror credential to continue product hardening.
+1. Fetch latest GitHub `fix/order074-release-hardening`.
+2. Confirm changes after `8a00f0e...` are only canon/mirror infrastructure until new product work begins.
+3. Resume from latest ref; do not reset.
+4. Ignore GitLab for implementation; it mirrors automatically.
 
 ## WHAT_TO_DO_NOW
-Reproduce the exact failing `zoomStress` case from `order074/evidence/hardening-check.mjs` at 390x844/200%; inspect which child forces `.app-shell` from 390px to 429px; make the smallest layout/CSS correction; rerun `npm test` and the focused hardening check locally; only then push and let the final full GitHub gate run.
+Reproduce `zoomStress` from `order074/evidence/hardening-check.mjs` at 390x844/200%; identify the child forcing `.app-shell` to 429px; apply the smallest CSS/layout correction; run `npm test` and focused hardening locally; then push once and run the final full GitHub gate.
 
 ## WHAT_NOT_TO_REPEAT
-- ORDER-072 mirror/compute migration.
-- ORDER-073 tracker/3D/product work.
-- ARQ2 OSS-agent research.
-- Already-green ORDER-074 hardening contracts.
-- Broad redesign, FPS project, live-feed hunting, offline routing, or new infra.
-- Do not build another mirroring system; use `.github/workflows/mirror-gitlab.yml`.
+ORDER-072, ORDER-073, agent-stack research, mirror setup, already-green ORDER-074 contracts, broad redesign, FPS project, live-feed hunting, offline routing, or new infra.
 
 ## ACCEPTANCE / STOP CONDITIONS
-PASS only when the final exact runtime HEAD has:
-- unit tests >=219 with 0 failures;
-- Linux/build/package/Wrangler/runtime dependency audit PASS;
-- Chrome desktop/mobile happy path PASS;
-- ORDER-074 focused Chrome PWA/SW, retry/cleanup/context-loss, keyboard and 200% zoom, 3D route/draw evidence PASS;
-- real Edge desktop/mobile PASS;
-- request budgets unchanged;
-- `CLOUDFLARE_CALLS=0`, `PROD_MUTATION=NO`, `GITHUB_MAIN_CHANGED=NO`.
-
-Then stop as `CHECKPOINT_HARDENED_RC`. Do not merge or deploy; return evidence to AUD.
+Stop at `CHECKPOINT_HARDENED_RC` only when final runtime HEAD has 219+ tests with 0 failures; Linux/build/package/Wrangler/runtime audit PASS; Chrome desktop/mobile + focused hardening PASS; real Edge desktop/mobile PASS; request budgets unchanged; `CLOUDFLARE_CALLS=0`; `PROD_MUTATION=NO`. Do not merge or deploy. GitLab parity is automatic and must not require duplicate work.
