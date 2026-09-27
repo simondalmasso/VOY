@@ -5,6 +5,7 @@ on:
     branches:
       - feat/order073-mapfirst-live3d
       - fix/order074-release-hardening
+      - feat/order075-mapfirst-trackerview
     paths:
       - public/**
       - src/**
