@@ -124,3 +124,38 @@ graceful 2D fallback
 - Objetivo: presencia visual/atmósfera de CABA_OS + verdad temporal VOY + 3D contextual/lazy.
 - No copiar GIS dashboard, peso runtime, terrain/LiDAR ni features ajenas.
 - Cualquier polish estético futuro debe preservar los gates actuales y volver a invalidar/recrear evidencia si toca runtime.
+
+
+## PHASE_VISUAL_PIVOT_CABA_OS
+
+```text
+DEPLOY_HOLD=YES
+REASON=AESTHETIC_DELTA_CABA_OS
+REFERENCE=https://caba.os.nicopoore.com/
+BASELINE_SOURCE=2a6457b0f40a4263a402f115a56b70c449240ac5
+BASELINE_BUILD=0a306d0ae153798faa73949a
+BASELINE_FUNCTIONAL_EVIDENCE=GREEN
+DEPLOY_EXECUTED=NO
+```
+
+Owner feedback: CABA_OS is substantially stronger aesthetically. Treat this as a visual-direction correction before production.
+
+Rules for the visual delta:
+- preserve MAP_FIRST / TRUTH_FIRST / LOW_COST / FAIL_CLOSED;
+- preserve all ORDER-076 semantics and no-fake-live behavior;
+- preserve 2D baseline zero 3D asset cost;
+- preserve contextual/lazy selected-only 3D;
+- borrow visual composition only: map treatment, hierarchy, surfaces, density, typography, overlays;
+- do not copy misleading "live" semantics, ornamental animation, backend, framework, or runtime architecture;
+- any runtime/CSS/HTML mutation creates a new source SHA/build and invalidates the previous browser evidence for release.
+
+Brand-new agent exact continuation:
+1. NO RESET.
+2. Do NOT deploy baseline 2a6457b.
+3. Inspect CABA_OS visual system and identify a bounded visual delta.
+4. Modify presentation only unless a concrete interaction issue requires otherwise.
+5. Add/adjust visual contract tests before implementation.
+6. Commit new source SHA.
+7. Run full unit suite and build.
+8. Re-run Edge + Chrome matrix, 100/150/200%, keyboard, reduced motion, WebGL2 unavailable, context loss, real vector, raster fallback, 3D zero-load/contextual gates.
+9. Only then persist remote, CI, mirror, deploy exact head and reconcile production.
