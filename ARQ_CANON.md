@@ -1,86 +1,87 @@
 # VOY — ARQ_CANON
 
-## PROJECT / PURPOSE / REPO / LIVE
-- PROJECT: VOY
-- PURPOSE: MAP-FIRST / MOBILE-FIRST movilidad Argentina; truthful TrackerView; low-weight optional 3D.
-- WORK/CANON: https://github.com/simondalmasso/VOY
-- MIRROR ONLY: https://gitlab.com/simondalmasso/voy
-- LIVE: https://voy-app.simondalmasso44.workers.dev/
+## AUTHORITY
+- ROLE: ARQ1 — sole canonical implementation owner.
+- ORDER: https://github.com/simondalmasso/VOY/issues/57
+- BASE EXACT: `dd7fc408b5b1fdc6032a27f524246d4a89febe13`
+- CREATE/USE: `feat/order075-mapfirst-trackerview`
+- NEVER BASE PRODUCT WORK ON: `main`
+- CONVERGENCE: `AUD_ORDER075_CONVERGENCE.md`
 
-## LAST_VERIFIED / BRANCH / HEAD
-- LAST_VERIFIED: 2026-09-27 ART
-- RECIBE: ARQ1
-- CURRENT_ORDER: https://github.com/simondalmasso/VOY/issues/57
-- ORDER075_BASE_HEAD: \`dd7fc408b5b1fdc6032a27f524246d4a89febe13\`
-- LAST_RUNTIME_HEAD_FOR_ORDER075_BASE: \`8a00f0e5bf6fffdbca423f7381540acf397b2fea\`
-- TARGET_BRANCH_WHEN_RELEASED_BY_AUD: \`feat/order075-mapfirst-trackerview\`
-- TARGET_BRANCH_CURRENTLY_EXISTS: NO
-- NEVER BASE PRODUCT WORK ON: \`main\`
+## HOLD STATUS
+`ARQ_HOLD=RELEASED`
 
-## RECOVERY STATE
-- CONTINUE/NO_RESET.
-- Previous AUD session deleted both CANON files and the mirror workflow from \`fix/order074-release-hardening\`; recovery is additive and preserves the deletion commits as evidence.
-- ORDER-074 remains superseded; later hero polishing on that branch does not become the ORDER-075 base.
-- The experimental bakeoff happened before ARQ1 canonical implementation and must be synthesized before ARQ1 starts.
+The experimental bakeoff is complete enough for convergence.
+Do not start a new architecture. Do not replay ORDER-072/073/074.
 
-## BAKEOFF INPUTS
-- Grokbot #58: AUD PARTIAL; useful UX ideas, framework rewrite rejected.
-- Sonnet #60: AUD PARTIAL; useful tracker/time ideas, framework rewrite and fail-closed marker defect rejected.
-- GLM #59: AUD PARTIAL_REAL; real VOY integration, 266/266 independently reproduced, pointer/follow fix verified in artifact, but terminal browser evidence still incomplete.
-- Codex Sol lane from broken chat: UNBOUND local checkpoint only, not an audited candidate.
+## AUDITED IMPLEMENTATION BASELINE
+GLM source commit:
+`6f882c3b7d712151c2354d95c518885d12729054`
 
-## GLM EVIDENCE STILL REQUIRED
-- Correct stale D6/architecture wording.
-- Focused follow/drag stability 30/30 on exact final artifact.
-- Full browser matrix stability 10/10 on exact final artifact.
-- Real OpenFreeMap Liberty browser E2E or BLOCKED_EVIDENCE.
-- Real Edge desktop/mobile, reduced-motion, WebGL2 unavailable and live context-loss gates where available; unsupported = BLOCKED_EVIDENCE.
-- Regenerated final artifact/report hash after evidence, with no runtime edits afterward.
+Evidence/report commit on the lab branch:
+`00e9718`
 
-## ARQ HOLD
-ARQ1 MUST NOT start canonical runtime implementation yet. The previous CANON instruction to immediately create the feature branch is superseded by the later bakeoff/recovery state.
+The source commit is exactly one commit above `dd7fc408...` and contains the real VOY-tree implementation. Use that source commit for canonical porting; the evidence tip is evidence, not the build base.
 
-Wait for one AUD convergence comment/order in #57 that explicitly states:
-- accepted pieces from each alternate;
-- rejected pieces;
-- exact base remains \`dd7fc408...\`;
-- exact canonical branch name;
-- test/evidence gates;
-- no merge/deploy.
+## REQUIRED CANONICAL DIRECTION
+Preserve:
+- existing VOY Worker/planner/PWA plumbing;
+- `public/3d/temporal.js` as temporal authority;
+- `public/3d/voy3d.js` / Three.js 0.186.0 as lazy 3D authority;
+- fail-closed vehicle movement/render semantics;
+- Santa Fe explicit no-live until an authorized reusable realtime feed exists.
 
-## EXPECTED CONVERGENCE DIRECTION — NOT YET AN IMPLEMENTATION ORDER
-Preserve existing VOY architecture and authorities:
-- current Worker/planner/PWA plumbing;
-- \`public/3d/temporal.js\` as temporal authority;
-- \`public/3d/voy3d.js\` / Three.js 0.186.0 as lazy 3D authority;
-- fail-closed renderer semantics;
-- no fake Santa Fe live.
+Port from the audited GLM source:
+- MAP-FIRST/mobile-first shell;
+- search as secondary sheet/chip;
+- bounded MapLibre 6.11.2 + OpenFreeMap async vector upgrade;
+- existing OSM raster fallback;
+- tracker observation/store/fixture modules;
+- source-only bounded session trail;
+- zero-fetch recent-time rail;
+- follow/suspend/resume;
+- >=8 px early pointer-drag intent fail-safe that only suspends follow;
+- 2D default / lazy existing 3D;
+- ORDER-075 tests/build updates.
 
-Candidate pieces to consider only after AUD final comparison:
-- GLM real-repo map-first integration, tracker/store modules, bounded MapLibre/OpenFreeMap upgrade + raster fallback, pointer-drag follow suspension fix;
-- Grokbot/Sonnet interaction and visual ideas only where they improve the canonical implementation without bringing their framework rewrites.
+## GROKBOT / SONNET SALVAGE
+Use as design/test references only; do not import their framework apps.
+The strong ideas (compact truth pill, secondary search, bottom sheet, no-live state, follow, bounded trail, time rail, deterministic fixtures) are already represented in the accepted baseline.
 
-## DO_NOT_TOUCH
-- NO GitLab implementation.
-- NO main product merge, deploy or production probe.
-- NO fake realtime or unverified data.
-- NO new backend/DB/persistence/telemetry.
-- NO InsForge/Floot/Convex/etc. integration for this order.
-- NO React rewrite, R3F, Cesium, deck.gl, GeoLibre whole app, new 3D engine.
-- NO duplicate temporal authority.
-- NO parallel ARQ lanes.
+Do not port:
+- React/Vite/Tailwind replacement architecture;
+- duplicated temporal engines;
+- replacement Three renderer;
+- single-file lazy-3D bundling;
+- unsourced atlas/routes/POIs;
+- always-on 2D RAF;
+- raw observation markers when `render=false`.
 
-## FINAL CONTRACT AFTER AUD RELEASE
-- Base exact: \`dd7fc408...\`.
-- MAP-FIRST mobile 390x844.
-- Search secondary.
-- Truth status always explicit.
-- Scheduled/unknown/stale/rejected realtime vehicle markers/movement = 0.
-- Tracker history session-only.
-- Scrub/follow/pan/3D visual Worker-call delta=0.
-- Baseline 2D Three/topology fetches=0.
-- Chrome + real Edge desktop/mobile, 200% text, reduced motion, WebGL/context-loss.
-- Stop at RC. MERGE=NO. DEPLOY=NO.
+## EXECUTION
+1. Fetch GitHub.
+2. Verify `feat/order075-mapfirst-trackerview` does not already contain unrelated work.
+3. Create it from exact `dd7fc408...`.
+4. Port/cherry-pick the audited source commit `6f882c3...`.
+5. Resolve only canonical metadata/branch identity; do not redesign.
+6. Run fresh unit/build verification.
+7. Run final browser/network/a11y/runtime gates against canonical exact HEAD.
+8. Stop at `CHECKPOINT_MAPFIRST_TRACKERVIEW_RC`.
 
-## WHAT_TO_DO_NOW
-No runtime mutation. Read #57 and the eventual AUD convergence order when posted. Do not recreate the old yellow hero work and do not start a fourth architecture.
+## FINAL GATES
+- units all green;
+- MAP-FIRST 390x844; search secondary; 200% no horizontal overflow;
+- scheduled/unknown/stale/rejected/missing-geometry vehicle movement/render = 0;
+- follow physical drag suspends and explicit resume restores;
+- baseline 2D Three/topology fetches=0;
+- tracker/pan/scrub/3D visual Worker-call delta=0;
+- Chrome + real Edge desktop/mobile;
+- reduced motion;
+- WebGL2 unavailable fallback;
+- live context-loss fallback;
+- real OpenFreeMap path + raster fallback;
+- no fake live, persistence, telemetry or new backend.
+
+## STOP
+MERGE=NO
+DEPLOY=NO
+PROD_PROBE=NO
