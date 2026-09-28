@@ -112,3 +112,31 @@ UNKNOWN != UNAVAILABLE
 
 No fabricar movimiento, ETA, cobertura, disponibilidad, precio ni realtime.
 3D = optional + lazy + contextual + selected-only + zero baseline 2D cost + graceful 2D fallback.
+
+## PHASE_BROWSER_TERMINAL
+
+```text
+SOURCE_COMMIT=2a6457b0f40a4263a402f115a56b70c449240ac5
+BUILD_ID=0a306d0ae153798faa73949a
+UNITS=269/269 PASS
+EDGE=13/13 PASS
+CHROME=13/13 PASS
+REDUCED_MOTION=PASS
+WEBGL2_UNAVAILABLE=PASS
+CONTEXT_LOSS=PASS
+REAL_OPENFREEMAP=PASS
+PROD_NPM_AUDIT=0 vulnerabilities
+RUNTIME_MUTATION_AFTER_BUILD=0
+```
+
+Current next exact steps for a brand-new agent:
+1. NO RESET and do not edit runtime.
+2. Worktree: `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+3. Confirm HEAD is `2a6457b0f40a4263a402f115a56b70c449240ac5`.
+4. Persist branch `feat/order076-astra-truth-first` to GitHub at that exact source if possible.
+5. Verify GitHub CI and GitLab mirror against the remote source head.
+6. Keep browser evidence separate from runtime source.
+7. Deploy only after remote source, CI and mirror are reconciled.
+8. After deploy, read production and prove deployed source/build identity matches the audited source/build.
+9. Verify production MAP-FIRST, truth-first copy, no fake realtime, and 3D remains lazy/contextual.
+10. Record deployment/evidence in audit branch and update this checkpoint.
