@@ -1,4 +1,5 @@
 import type { TravelMode } from '../../core/duration';
+import type { OfficialHandoffPresentation } from './officialHandoffs';
 export type PriceDisplay =
   | { kind: 'regulated_estimate'; value: number; source: string; verifiedAt: string }
   | { kind: 'app_only' }
@@ -12,5 +13,6 @@ export interface ProviderOptionModel {
   price: PriceDisplay;
   detail: string;
   external: boolean;
+  handoff?: OfficialHandoffPresentation | null;
   rank: number;
 }

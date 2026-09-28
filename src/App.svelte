@@ -22,7 +22,7 @@
   import { resolveRoute } from './features/trip/trip.service';
   import type { ProviderOptionModel } from './features/providers/provider.types';
   import { providerOptions } from './features/providers/provider.registry';
-  import { consumeExternalAction, createExternalAction, type ExternalAction } from './features/providers/provider.actions';
+  import { consumeExternalAction, createExternalAction, createOfficialHandoffAction, type ExternalAction } from './features/providers/provider.actions';
   import { health, type HealthPayload } from './lib/api';
   import { loadPreferences, savePreferences, type Preferences } from './lib/storage';
 
@@ -241,6 +241,11 @@
   function setMode(value: TravelMode): void { mode = value; sheetSnap = 'peek'; void calculate(); }
 
   function choose(option: ProviderOptionModel): void {
+    if (option.id === 'bus' && option.handoff?.kind === 'santa_fe_municipal_transit') {
+      if (localCoverageKey !== 'santa-fe' || option.available || option.external) return;
+      action = createOfficialHandoffAction(option.handoff.kind);
+      return;
+    }
     if (!origin || !isRouteEligibleDestination(selectedDestination) || localCoverageKey !== 'santa-fe' || !option.available || !option.external || (option.id !== 'uber' && option.id !== 'didi')) return;
     action = createExternalAction(option.id, origin, selectedDestination.coordinates);
   }

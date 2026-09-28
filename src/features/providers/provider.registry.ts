@@ -2,6 +2,7 @@ import type { TravelMode } from '../../core/duration';
 import { regulatedMeterFare } from '../../core/pricing';
 import { capabilitySnapshot, type CoverageKey } from '../capabilities/capabilityBroker';
 import type { RouteResult } from '../trip/trip.types';
+import { officialHandoffPresentation } from './officialHandoffs';
 import type { ProviderOptionModel } from './provider.types';
 
 interface MeterRegistry { diurno: { bajada: number; ficha: number; distFicha: number }; source: string; verified_at: string; status: string }
@@ -40,7 +41,9 @@ export async function providerOptions(route: RouteResult | null, selectedMode: T
   if (selectedMode === 'bus') return [{
     id: 'bus', name: 'Colectivo', mode: 'bus', available: false, etaMin: null,
     price: { kind: 'unavailable', label: capabilities.publicTransport === 'VERIFIED_CURRENT' ? 'Sin planificación verificada' : 'Sin datos locales verificados' },
-    detail: 'VOY no afirma líneas, paradas, frecuencias ni tarifas sin una fuente territorial vigente y un planificador validado.', external: false, rank: 99
+    detail: 'VOY no afirma líneas, paradas, frecuencias ni tarifas sin una fuente territorial vigente y un planificador validado.', external: false,
+    handoff: normalizedCoverageKey === 'santa-fe' ? officialHandoffPresentation('santa_fe_municipal_transit') : null,
+    rank: 99
   }];
   if (!route) return [];
 
