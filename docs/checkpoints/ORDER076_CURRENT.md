@@ -104,3 +104,66 @@ UNKNOWN != UNAVAILABLE
 
 No fabricar movimiento, ETA, cobertura, disponibilidad, precio ni realtime.
 3D = optional + lazy + contextual + selected-only + zero baseline 2D cost + graceful 2D fallback.
+
+
+## PHASE_CABA_VISUAL_COMMITTED_PREBUILD
+
+```text
+DEPLOY_HOLD=YES
+DEPLOY_EXECUTED=NO
+RUNTIME_BRANCH=feat/order076-astra-truth-first
+LOCAL_SOURCE_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
+COMMIT=feat(order076): apply CABA-inspired visual discipline
+PRECOMMIT_FULL_TESTS=274/274 PASS
+VISUAL_CONTRACTS=8/8 PASS
+REMOTE_RUNTIME_HEAD_LAST_KNOWN=51cdf7730a2c60b5eac55fcc179754513ba9689f
+```
+
+Present state:
+- CABA_OS-inspired visual layer is committed locally.
+- Pan/vector-center fix and remote visual-test history were preserved by merge; NO RESET / NO REBASE / NO force-push.
+- Production has NOT been deployed.
+- Previous browser/build evidence is release-stale because CSS/HTML/app changed after it.
+- Before build, source hygiene must be closed: `public/styles.css` had mixed EOL and `git diff --check` reported trailing-whitespace/EOF issues; `public/index.html` is CRLF.
+- Untracked inspector/evidence directories must stay out of source commits.
+
+Brand-new agent exact continuation:
+1. NO RESET.
+2. Open `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+3. Confirm `git rev-parse HEAD` = `b858568848f6bf5abd6853ee13c77f2e65c63735`.
+4. Read back exact committed `public/styles.css`, `public/app.js`, `public/index.html`; verify final CABA contract:
+   - `--hud-ink:#e0ecde`
+   - `--hud-muted:#8c9b8f`
+   - `--hud-panel:rgba(3,7,5,.82)`
+   - transparent fixed topbar
+   - full-screen app shell
+   - dark/desaturated map filter
+   - mono temporal metadata
+   - selected ring `animation:none`
+   - no CRT/flicker/music and no new assets/dependencies.
+5. Fix ONLY EOL/trailing whitespace. Do not redesign.
+6. Require `git diff --check` clean and commit hygiene as a follow-up commit if any tracked bytes change.
+7. Run fresh full suite; expected test count >=274 and fail=0.
+8. Build exact final SHA with `scripts/build.ps1`; capture SOURCE_COMMIT + BUILD_ID.
+9. If topology files appear dirty, compare HEAD blob vs working-tree hash; do not commit identical blobs.
+10. Run `npm audit --omit=dev`.
+11. Run fresh release evidence on final build:
+    - Edge full ORDER076 matrix 13/13
+    - Chrome full 13/13
+    - 100/150/200% text/no overflow
+    - keyboard
+    - raster fallback
+    - 3D no-context zero load
+    - truth-first contextual 3D
+    - reduced motion
+    - WebGL2 unavailable
+    - live webglcontextlost
+    - real OpenFreeMap vector
+    - Worker deltas=0.
+12. Persist exact runtime branch to GitHub.
+13. Dispatch `order073-unit.yml` manually on exact ORDER076 branch and require full PASS.
+14. Verify GitLab mirror exact SHA.
+15. Wrangler dry-run, then deploy exact final build using:
+    `npx wrangler deploy --config wrangler.jsonc`
+16. Post-deploy prove production source/build identity and verify MAP-FIRST + truth-first + CABA visual layer + no fake live.
+17. Persist final evidence and update this checkpoint again.
