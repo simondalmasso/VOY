@@ -26,7 +26,7 @@ function distanceMeters(a, b) {
 
 export function createMapSubstrate({
   tilesEl, canvasEl, fallbackEl, attributionEl, config, buildId = '__BUILD_ID__',
-  onUserInteraction = () => {}, onSelectMarker = () => {}, onVectorReady = () => {}, onVectorFailed = () => {},
+  onUserInteraction = () => {}, onViewportChange = () => {}, onSelectMarker = () => {}, onVectorReady = () => {}, onVectorFailed = () => {},
   reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 } = {}) {
   if (!tilesEl || !canvasEl || !config) throw new Error('substrate_args_required');
@@ -208,6 +208,12 @@ export function createMapSubstrate({
           for (const gesture of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) {
             map.on(gesture, () => emitUserInteraction('map_' + gesture));
           }
+          map.on('moveend', () => {
+            const next = map?.getCenter?.();
+            if (!next || !Number.isFinite(Number(next.lat)) || !Number.isFinite(Number(next.lng))) return;
+            center = { lat: Number(next.lat), lon: Number(next.lng) };
+            onViewportChange({ ...center });
+          });
           map.on('error', () => { /* post-load tile hiccups tolerated; init failure handled by timeout */ });
           vectorTimer = setTimeout(() => finish(false), VECTOR_LOAD_TIMEOUT_MS);
           map.on('load', () => finish(true));

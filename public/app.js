@@ -89,6 +89,7 @@ function updateTruthPill(){
 const substrate=createMapSubstrate({
   tilesEl:mapTiles,canvasEl:mapCanvas,fallbackEl:mapFallback,attributionEl:mapAttribution,config:APP_CONFIG,buildId:CLIENT_BUILD_ID,
   onUserInteraction:()=>{trackerStore.userPanSuspend();updateFollowUI()},
+  onViewportChange:()=>syncTrackerOverlays(),
   onSelectMarker:id=>selectTrackerEntity(id),
   onVectorReady:()=>{state.substrateState='vector'},
   onSubstrateChange:null,

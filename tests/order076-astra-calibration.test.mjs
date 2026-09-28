@@ -27,6 +27,17 @@ test('ORDER076 selected truth shows conclusion, source and update separately',as
   assert.match(css,/\.truth-meta\{/);
 });
 
+test('ORDER076 native MapLibre pan synchronizes logical center and nearby overlays',async()=>{
+  const [substrate,app]=await Promise.all([read('public/map/substrate.js'),read('public/app.js')]);
+  assert.match(substrate,/onViewportChange\s*=\s*\(\)\s*=>\s*\{\}/);
+  assert.match(substrate,/map\.on\('moveend'/);
+  assert.match(substrate,/getCenter/);
+  assert.match(substrate,/center\s*=\s*\{\s*lat:[\s\S]*lon:/);
+  assert.match(substrate,/onViewportChange\(\{\s*\.\.\.center\s*\}\)/);
+  assert.match(app,/onViewportChange:\(\)=>\{?syncTrackerOverlays\(\)/);
+  assert.doesNotMatch(substrate,/\/api\//,'viewport sync must remain Worker-silent');
+});
+
 test('ORDER076 3D stays contextual, lazy and selected-only',async()=>{
   const [html,app]=await Promise.all([read('public/index.html'),read('public/app.js')]);
   assert.match(html,/id="map-3d-quality"[^>]*hidden/);
