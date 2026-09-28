@@ -140,3 +140,27 @@ Current next exact steps for a brand-new agent:
 8. After deploy, read production and prove deployed source/build identity matches the audited source/build.
 9. Verify production MAP-FIRST, truth-first copy, no fake realtime, and 3D remains lazy/contextual.
 10. Record deployment/evidence in audit branch and update this checkpoint.
+
+
+## PHASE_REMOTE_RECONCILED
+
+```text
+RUNTIME_REMOTE=feat/order076-astra-truth-first@2a6457b0f40a4263a402f115a56b70c449240ac5
+GITLAB_MIRROR=2a6457b0f40a4263a402f115a56b70c449240ac5
+MIRROR_RUN=36387690772 SUCCESS
+GITHUB_CI_MANUAL=PASS
+GITHUB_CI_RUN=36388368992
+GITHUB_CI_TESTS=269
+GITHUB_CI_PASS=269
+GITHUB_CI_FAIL=0
+```
+
+Brand-new agent next exact steps:
+1. DO NOT modify runtime source.
+2. Inspect canonical deploy mechanism (`wrangler.toml`, package scripts, deploy workflow/history).
+3. Deploy exact runtime branch/source only: `2a6457b0...`.
+4. Do not merge to main as part of deploy unless explicitly required by the existing deploy mechanism.
+5. After deploy, query production and reconcile source/build identity.
+6. If deployed identity differs, STOP and do not call production current.
+7. If identity matches, verify MAP-FIRST, truth-first copy, no fake live, and 3D lazy/contextual behavior.
+8. Persist deployment evidence and update this checkpoint.
