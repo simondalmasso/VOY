@@ -1,6 +1,6 @@
 # VOY — ORDER-076 WORK CHECKPOINT
 
-LAST_UPDATE=2026-09-28T03:20-03:00
+LAST_UPDATE=2026-09-28T04:21-03:00
 ROLE=AUD+IMPLEMENTER
 MODE=NO_RESET / CONTINUE
 RUNTIME_WORKTREE=C:\GPT-SANDBOX\VOY-ORDER076-ASTRA
@@ -59,7 +59,7 @@ The old real-vector failure belonged to PRE-POLISH build 0a306d0a... and is supe
 ## PENDIENTE ACTUAL
 
 Only terminal stability + remote/deploy reconciliation remain:
-- focused physical follow-drag 30/30 consecutive;
+- focused physical follow-drag 30/30 consecutive (CURRENTLY 25/30 PASS, zero failures);
 - full Edge matrix 10 consecutive complete runs, each 13/13;
 - persist exact source to GitHub;
 - verify GitHub CI + GitLab mirror;
@@ -101,3 +101,19 @@ UNKNOWN != UNAVAILABLE
 
 No fabricar movimiento, ETA, cobertura, disponibilidad, precio ni realtime.
 3D = optional + lazy + contextual + selected-only + zero baseline 2D cost + graceful 2D fallback.
+
+
+## LIVE CHECKPOINT 25/30
+
+```text
+SOURCE_SHA=b858568848f6bf5abd6853ee13c77f2e65c63735
+BUILD_ID=c150cf0f431b55fcbdbb8278
+FOLLOW_STABILITY=25/30 PASS
+FOLLOW_FAILURES=0
+GITHUB_RUNTIME_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
+GITLAB_MIRROR_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
+CI_DISPATCH_RUN=36391139662
+DEPLOYED=NO
+```
+
+For a zero-context agent: do NOT restart. Wait for the active 30x loop to finish. If it reaches 30/30, immediately run the full Edge matrix 10 consecutive complete times on the SAME source/build without runtime edits. Persist every run. If any failure appears, stop and classify product vs harness before changing anything.
