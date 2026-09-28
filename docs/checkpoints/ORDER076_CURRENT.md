@@ -229,3 +229,44 @@ Brand-new agent exact continuation:
 7. Implement bounded presentation delta primarily in CSS + dark default theme.
 8. New source SHA/build invalidates all earlier release evidence.
 9. Re-run full unit/build/browser/special gates before any deploy.
+
+
+## PHASE_VISUAL_TDD_RED
+
+```text
+DEPLOY_HOLD=YES
+LOCAL_MERGE=COMPLETE
+LOCAL_RUNTIME_FIX=7bf7630d7cb38b7035fc4ba06b896b66aefdd53d
+REMOTE_VISUAL_TEST=51cdf7730a2c60b5eac55fcc179754513ba9689f
+VISUAL_TESTS=8
+VISUAL_PASS=4
+VISUAL_FAIL=4
+DEPLOYED=NO
+```
+
+Current interpretation:
+- a partial local restyle existed already (cyan/yellow, square HUD, vignette);
+- live CABA_OS extraction shows black canvas + Inter + monospace time/HUD + pale green-white ink + transparent controls + subtle inset vignette;
+- the partial cyan/yellow guess is being corrected, not discarded blindly;
+- temporal/store/TrackerView semantics remain unchanged.
+
+Brand-new agent exact continuation:
+1. NO RESET.
+2. Worktree `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+3. Preserve merge history and pan fix.
+4. GREEN only the four failing visual contracts by editing:
+   - `public/index.html` default theme;
+   - `public/app.js` default theme;
+   - `public/styles.css` presentation layer.
+5. Required visual target:
+   - full viewport map;
+   - transparent fixed topbar;
+   - black/dark map treatment;
+   - pale green-white HUD ink;
+   - mono temporal metadata;
+   - compact dark translucent sheet/HUD;
+   - subtle inset vignette, no CRT scanline/flicker/music;
+   - static selected ring (no decorative pulse);
+   - zero new assets/dependencies.
+6. Run visual tests first, then full suite.
+7. New source SHA/build after GREEN invalidates all prior browser evidence.
