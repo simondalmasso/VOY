@@ -1,6 +1,6 @@
 # VOY — ORDER-076 WORK CHECKPOINT
 
-LAST_UPDATE=2026-09-28T04:25-03:00
+LAST_UPDATE=2026-09-28T04:32-03:00
 ROLE=AUD+IMPLEMENTER
 MODE=NO_RESET / CONTINUE
 RUNTIME_WORKTREE=C:\GPT-SANDBOX\VOY-ORDER076-ASTRA
@@ -126,7 +126,7 @@ SOURCE_SHA=b858568848f6bf5abd6853ee13c77f2e65c63735
 BUILD_ID=c150cf0f431b55fcbdbb8278
 FOLLOW_STABILITY=30/30 PASS
 FOLLOW_FAILURES=0
-EDGE_FULL_STABILITY=NEXT
+EDGE_FULL_STABILITY=RUNNING
 GITHUB_RUNTIME_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
 GITLAB_MIRROR_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
 CI_DISPATCH_RUN=36391139662
@@ -141,3 +141,36 @@ Zero-context continuation:
 5. Run Wrangler dry-run from exact HEAD.
 6. Persist evidence on audit/order076-terminal-evidence only.
 7. Deploy exact verified source/build only after all gates above are green.
+
+
+## CI CLASSIFICATION — EXACT HEAD
+
+GitHub Actions run 36391139662 on exact source b858568848f6bf5abd6853ee13c77f2e65c63735:
+```text
+linux-verify=PASS
+chrome-browser=FAIL_LEGACY_HARNESS
+edge-browser=FAIL_LEGACY_HARNESS
+CI_LEGACY_BROWSER_GATE=OBSOLETE_HARNESS
+PRODUCT_BUG_FROM_CI=NO
+```
+
+Failure is deterministic and contradictory to ORDER-076 MAP-FIRST:
+- inherited ORDER-072 harness requires desktop map width_ratio between 0.55 and 0.80;
+- ORDER-076 intentionally full-bleed reports width_ratio=1;
+- current ORDER-076 Edge and Chrome terminal matrices each independently pass 13/13 on BUILD_ID c150cf0f431b55fcbdbb8278;
+- do NOT regress product layout or mutate runtime to satisfy the obsolete width gate.
+
+## LIVE CHECKPOINT — FULL EDGE STABILITY RUNNING
+
+The exact-head full Edge 10x runner is active from:
+`C:\GPT-SANDBOX\TEMP\order076-edge-full-10x.ps1`
+
+Ledger target:
+`C:\GPT-SANDBOX\VOY-ORDER076-ASTRA\experiments\order076\evidence\stability\edge-full-10x.txt`
+
+Zero-context agent:
+1. NO RESET.
+2. Check the ledger and active process.
+3. Require 10 consecutive PASS rows, each build=c150cf0f431b55fcbdbb8278 pass=13 fail=0.
+4. If it completes 10/10, proceed to evidence persistence + final dry-run/deploy reconciliation.
+5. If it fails, stop and classify before touching runtime.
