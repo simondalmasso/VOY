@@ -40,7 +40,7 @@ test('ORDER075 temporal truth pill is visible, stateful and not color-only',asyn
   assert.match(html,/id="truth-pill"[^>]*aria-live="polite"/);
   assert.match(css,/\.truth-pill\{/);
   assert.match(app,/TRUTH_STATES|truthPill/);
-  for(const label of ['En vivo','Estimado','Programado','Sin señal']){
+  for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
     assert.ok(app.includes(`'${label}'`)||app.includes(`"${label}"`)||app.includes(label),'missing truth label: '+label);
   }
   assert.ok(app.includes('Tiempo real no disponible'),'coverage-unavailable state must exist');

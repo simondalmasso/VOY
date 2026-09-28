@@ -62,6 +62,8 @@ button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible{o
 .map-hud>*{pointer-events:auto}
 .truth-pill{margin:0;display:inline-flex;align-items:center;gap:7px;max-width:min(64vw,320px);min-height:44px;padding:5px 12px 5px 10px;border-radius:999px;background:color-mix(in srgb,var(--surface) 92%,transparent);border:1px solid color-mix(in srgb,var(--line) 80%,transparent);backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:12px;font-weight:730;line-height:1.25;color:var(--text);overflow-wrap:anywhere}
 .truth-icon{font-size:13px;line-height:1;flex:0 0 auto}
+.truth-copy{display:flex;min-width:0;flex-direction:column;gap:1px}
+.truth-meta{font-size:9.5px;font-weight:620;line-height:1.15;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
 .truth-pill[data-state="realtime"] .truth-icon{color:#0a8f5c}
 html[data-theme="dark"] .truth-pill[data-state="realtime"] .truth-icon{color:#65d2a9}
 .truth-pill[data-state="realtime"]{border-color:color-mix(in srgb,var(--success) 45%,transparent)}

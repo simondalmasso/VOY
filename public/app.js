@@ -40,7 +40,7 @@ const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapCanvas=$('#map-canvas
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary'),searchChip=$('#search-chip');
-const truthPill=$('#truth-pill'),truthLabel=$('#truth-label'),truthIcon=truthPill?.querySelector('.truth-icon');
+const truthPill=$('#truth-pill'),truthLabel=$('#truth-label'),truthMeta=$('#truth-meta'),truthIcon=truthPill?.querySelector('.truth-icon');
 const trackerFacts=$('#tracker-facts'),factsLine=$('#facts-line'),factsClose=$('#facts-close'),factsRows=$('#facts-rows'),fixtureBanner=$('#fixture-banner');
 const followButton=$('#follow-button'),returnToNow=$('#return-to-now'),timeRailWrap=$('#time-rail-wrap'),timeRail=$('#time-rail'),timeRailMeta=$('#time-rail-meta');
 
@@ -51,25 +51,38 @@ const TRUTH_STATES={
   realtime:{icon:'●',label:'En vivo'},
   predicted:{icon:'◔',label:'Estimado'},
   scheduled:{icon:'◷',label:'Programado'},
-  unknown:{icon:'○',label:'Sin señal'},
+  unknown:{icon:'○',label:'Estado desconocido'},
   no_coverage:{icon:'◍',label:'Tiempo real no disponible en esta cobertura'}
 };
 function truthStateLabel(key){return TRUTH_STATES[key]||TRUTH_STATES.no_coverage}
+function truthConclusion(cls,observation,{historical=false}={}){
+  if(historical)return 'Observación histórica de esta sesión; no describe la posición actual.';
+  if(cls.state==='realtime')return 'Posición observada recientemente por la fuente.';
+  if(cls.state==='predicted')return 'Posición estimada; no es una observación en vivo.';
+  if(cls.state==='scheduled')return 'Horario publicado; no representa una posición actual del vehículo.';
+  if(cls.reason==='stale_source')return 'La última observación está vencida; no podemos inferir la posición actual.';
+  return 'No hay evidencia suficiente para ubicar este servicio ahora.';
+}
 function updateTruthPill(){
   if(!truthPill)return;
-  let entry=TRUTH_STATES.no_coverage,detail='';
+  let entry=TRUTH_STATES.no_coverage,meta='';
   const selected=trackerStore.selected();
   if(selected){
-    const cls=classifyObservation(selected.entity.observation,Date.now());
+    const observation=selected.entity.observation;
+    const cls=classifyObservation(observation,Date.now());
     entry=truthStateLabel(cls.state);
-    if(cls.state==='realtime')detail=` · ${ageLabel(cls.age_ms)}`;
-    else if(cls.state==='unknown'&&cls.reason==='stale_source')detail=' · fuente vencida';
+    const parts=[];
+    if(Number.isFinite(cls.age_ms))parts.push(ageLabel(cls.age_ms));
+    if(observation.source_id)parts.push(observation.synthetic_fixture?'fixture demo':observation.source_id);
+    meta=parts.join(' · ');
   } else if(state.fixtureOn){
     entry=TRUTH_STATES.no_coverage;
+    meta='Fixture demo activado';
   }
   truthPill.dataset.state=selected?(classifyObservation(selected.entity.observation,Date.now()).state):'no_coverage';
   truthIcon.textContent=entry.icon;
-  truthLabel.textContent=entry.label+detail;
+  truthLabel.textContent=entry.label;
+  if(truthMeta){truthMeta.textContent=meta;truthMeta.hidden=!meta}
 }
 
 // ---------- map stage + substrate ----------
@@ -94,16 +107,30 @@ function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa 
 function clearMap(){renderInitialMap()}
 
 // ---------- 2D/3D mode (existing lazy Three architecture preserved) ----------
-function current3DTransportEntities(){return trackerStore.transportEntries()}
+function current3DTransportEntities(){
+  const selected=trackerStore.selected();
+  if(!selected)return[];
+  const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
+  if(!frame.render)return[];
+  return trackerStore.transportEntries().filter(entity=>entity.id===selected.id);
+}
 function currentSelectedRouteGeometry(){
   const trackerSelection=trackerStore.selected();
   if(trackerSelection?.entity?.observation?.verified_geometry)return {type:'LineString',coordinates:trackerSelection.entity.observation.verified_geometry};
   return state.mobilityComputation?.mode_options?.find(item=>item.mode===state.selectedRouteMode&&item.route_available)?.route?.geometry??null;
 }
+function has3DContext(){
+  const selected=trackerStore.selected();
+  if(selected){
+    const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
+    if(frame.render&&frame.position)return true;
+  }
+  return Boolean(currentSelectedRouteGeometry());
+}
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
 function activate2D(message=''){
-  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
+  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
 }
 function loadVoy3DModule(){
   return state.threeImportAttempt===0
@@ -112,6 +139,7 @@ function loadVoy3DModule(){
 }
 async function activate3D(){
   if(state.mapMode==='3d'&&state.threeController?.ok)return;
+  if(!has3DContext()){activate2D('Seleccioná un servicio o recorrido para abrir 3D.');return}
   map3dStatus.textContent='Cargando topología 3D…';
   try{
     state.threeModulePromise??=loadVoy3DModule();
@@ -120,7 +148,7 @@ async function activate3D(){
     const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
-    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dStatus.textContent='3D local · alturas genéricas/inferidas';sync3DTopology();
+    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dQuality.hidden=false;map3dStatus.textContent='3D contextual · selección actual · alturas genéricas/inferidas';sync3DTopology();
   }catch(error){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
@@ -223,12 +251,13 @@ function updateFactsSheet(){
   const rows=[];
   rows.push(factsRow('Identidad',[observation.line?`Línea ${observation.line}`:'',selected.id].filter(Boolean).join(' · ')));
   rows.push(factsRow('Estado temporal',time.mode==='scrub'?'Histórico de esta sesión':truthStateLabel(cls.state).label+(cls.state==='unknown'&&cls.reason==='stale_source'?' (fuente vencida)':'')));
-  if(Number.isFinite(cls.age_ms))rows.push(factsRow('Edad de la fuente',ageLabel(cls.age_ms)));
+  rows.push(factsRow('Qué sabemos',truthConclusion(cls,observation,{historical:time.mode==='scrub'})));
+  if(Number.isFinite(cls.age_ms))rows.push(factsRow('Actualizado',ageLabel(cls.age_ms)));
   if(observation.next_stop)rows.push(factsRow('Próxima parada',observation.next_stop));
   if(Number.isFinite(observation.delay_seconds))rows.push(factsRow('Demora',`${Math.round(observation.delay_seconds/60)} min`));
   if(Number.isFinite(observation.speed_mps))rows.push(factsRow('Velocidad',`${Math.round(observation.speed_mps*3.6)} km/h${observation.synthetic_fixture?' (fixture)':''}`));
   if(Array.isArray(observation.scheduled_times)&&observation.scheduled_times.length)rows.push(factsRow('Servicios publicados',observation.scheduled_times.slice(0,7).join(' · ')));
-  if(observation.source_id)rows.push(factsRow('Fuente',observation.synthetic_fixture?`${observation.source_id} (synthetic fixture)`:`${observation.source_id} · ${new Date(observation.observed_at).toLocaleTimeString('es-AR')}`));
+  if(observation.source_id)rows.push(factsRow('Fuente',observation.synthetic_fixture?`${observation.source_id} (synthetic fixture)`:observation.source_id));
   factsRows.innerHTML=rows.join('');
   factsLine.textContent=[observation.line?`Línea ${observation.line}`:'',selected.id].filter(Boolean).join(' · ');
   fixtureBanner.hidden=observation.synthetic_fixture!==true;
