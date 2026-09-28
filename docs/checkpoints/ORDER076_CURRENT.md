@@ -270,3 +270,40 @@ Brand-new agent exact continuation:
    - zero new assets/dependencies.
 6. Run visual tests first, then full suite.
 7. New source SHA/build after GREEN invalidates all prior browser evidence.
+
+
+## PHASE_VISUAL_GREEN_FULL_SUITE
+
+```text
+DEPLOY_HOLD=YES
+LOCAL_HEAD_BEFORE_VISUAL_COMMIT=c0d03dd948a3662575287d4d7d904a6b0b5982d0
+FULL_TESTS=274
+FULL_PASS=274
+FULL_FAIL=0
+VISUAL_TESTS=8/8 PASS
+DIRTY_SOURCE=public/app.js,public/index.html,public/styles.css,tests/order076-astra-calibration.test.mjs
+UNTRACKED_NOT_FOR_SOURCE=.inspect-caba-os.mjs,.order076-wrangler-dry-run/,experiments/
+DEPLOYED=NO
+```
+
+Current visual state:
+- default theme is dark for new users;
+- map is full viewport;
+- topbar is fixed/transparent;
+- map is desaturated/darkened;
+- HUD uses pale green-white ink and mono temporal metadata;
+- bottom sheet/HUD are compact translucent black;
+- selected marker ring is static (no decorative pulse);
+- no new assets, fonts, dependencies, shaders, CRT effects or music;
+- TrackerView/temporal/3D semantics unchanged.
+
+Brand-new agent exact continuation:
+1. NO RESET.
+2. Worktree `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+3. Run `git diff --check`.
+4. Commit only the four dirty source/test files above. Do NOT add untracked inspector/evidence directories.
+5. Record new source SHA.
+6. Run fresh full suite on committed SHA.
+7. Build exact SHA; verify clean tracked tree / false-dirty topology by blob hash if needed.
+8. Re-run Edge + Chrome + 150/200% + keyboard + 3D zero-load/contextual + raster fallback + reduced motion + WebGL2 unavailable + context loss + real vector.
+9. Persist exact source to GitHub, verify CI + GitLab mirror, then deploy exact build only.
