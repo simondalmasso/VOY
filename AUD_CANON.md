@@ -1,6 +1,7 @@
 # VOY — AUD_CANON
 
 ## AUTHORITY
+- CANON_DOC_SYNC: 2026-09-28 RC authority
 - PROJECT: VOY
 - CANON: https://github.com/simondalmasso/VOY
 - MIRROR ONLY: https://gitlab.com/simondalmasso/voy
