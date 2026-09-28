@@ -14,92 +14,93 @@ DEPLOYED=NO
 
 ORDER-076 aplica la calibración Astra sin re-arquitectura:
 - MAP-FIRST preservado.
-- TrackerView separa estado, conclusión ("Qué sabemos"), actualización y fuente.
-- UNKNOWN se presenta como "Estado desconocido"; UNKNOWN != UNAVAILABLE.
-- stale no implica posición actual.
+- TrackerView separa estado, conclusión "Qué sabemos", actualización y fuente.
+- UNKNOWN => "Estado desconocido"; UNKNOWN != UNAVAILABLE.
+- stale explica que la observación venció y no infiere posición actual.
 - 3D sigue Three.js 0.186 existente, optional/lazy.
-- 3D no carga sin selección renderizable o recorrido verificado.
-- baseline 2D oculta control de calidad 3D.
-- entrada 3D usa sólo el tracker seleccionado.
-- no backend/framework/GIS/persistencia/telemetría nuevos.
+- 3D sin selección renderizable/recorrido verificado => se queda en 2D y carga cero assets 3D.
+- 3D usa únicamente la selección tracker actual.
+- selector de calidad 3D oculto en baseline 2D, visible sólo en 3D activo.
+- sin backend/framework/GIS/persistencia/telemetría nuevos.
 
-Runtime cambiado:
-- public/app.js
-- public/index.html
-- public/styles.css
-
-Contratos/plan:
-- tests/order075-shell.test.mjs
-- tests/order076-astra-calibration.test.mjs
-- docs/superpowers/plans/2026-09-28-order076-astra-truth-first.md
-
-## VERIFICACIÓN COMPLETADA
+## SOURCE / BUILD
 
 ```text
 SOURCE_COMMIT=2a6457b0f40a4263a402f115a56b70c449240ac5
+RELEASE_ID=order057-2a6457b0f40a-0a306d0a
 BUILD_ID=0a306d0ae153798faa73949a
+CLIENT_FILES=34
 UNITS=269/269 PASS
 PROD_NPM_AUDIT=0 vulnerabilities
-TOPOLOGY_FALSE_DIRTY=CONFIRMED (HEAD blob == working-tree blob for both files)
-TRACKED_TREE_AFTER_REFRESH=CLEAN
+TOPOLOGY_FALSE_DIRTY=CONFIRMED
 ```
 
-Edge full browser pass #1:
+## BROWSER / RUNTIME VERIFICATION
+
+Edge terminal matrix:
 ```text
-PASS=12
-FAIL=1
-RUNTIME_FAILURES=0
-HARNESS_FALSE_NEGATIVE=1
+13/13 PASS
 ```
 
-PASS includes:
-- MAP_FIRST mobile 390x844
-- no-live Santa Fe truth
-- secondary search
-- TrackerView follow/pan/resume
-- selection 2D→3D→2D
-- desktop map
-- 200% text
-- keyboard
-- raster fallback
+Chrome terminal matrix:
+```text
+13/13 PASS
+```
+
+Covered by those matrices:
+- MAP-FIRST mobile 390x844
+- Santa Fe no-live truthful
+- search secondary
+- TrackerView selection/follow/pan/resume/time rail
+- 2D→3D→2D selection continuity
+- stale => Estado desconocido + zero live marker
+- desktop map dominance
+- 150% and 200% text no horizontal overflow; 100% baseline
+- keyboard/focus
+- vector failure => raster fallback
 - 3D without context => zero Three/voy3d/topology load
 - truth-first contextual 3D
-- 150% text
+- required Worker-call deltas=0
 
-Only FAIL:
-`STALE_TRANSITION_ZERO_MOVEMENT` because evidence regex expected uppercase `Última...` while actual correct UI text is `La última observación está vencida...`. Runtime behavior is correct; only harness needs case-insensitive/correct phrase.
+Special gates on exact BUILD_ID:
+```text
+REDUCED_MOTION=PASS
+WEBGL2_UNAVAILABLE=PASS
+WEBGL_CONTEXT_LOSS=PASS
+REAL_OPENFREEMAP_VECTOR=PASS
+```
+
+The earlier stale browser red was a harness-only case-sensitive regex; runtime was correct. Harness was corrected and stale passed in isolation and in both terminal matrices. No runtime mutation followed the exact build.
+
+## PENDIENTE
+
+1. Persistir evidencia con nombres separados (Edge, Chrome, special gates) sin tocar runtime.
+2. Persistir `feat/order076-astra-truth-first` remoto.
+3. Verificar GitHub CI y GitLab mirror exactos.
+4. Desplegar exactamente el source/build verificado.
+5. Verificar producción y reconciliar SHA/BUILD_ID.
+6. Registrar evidencia/deploy final y actualizar este checkpoint.
+7. OpenAI OSS permanece fuera de esta pista.
 
 ## AGENTE NUEVO — SEGUIR EXACTAMENTE ASÍ
 
-1. NO RESET. NO modificar runtime antes de cerrar evidencia.
-2. Abrir `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
-3. Confirmar `git rev-parse HEAD` = `2a6457b0f40a4263a402f115a56b70c449240ac5`.
-4. Corregir SOLO el regex stale en:
-   `experiments/order076/evidence/order076-browser-check.mjs`
-   para aceptar `La última observación está vencida...`.
-5. Correr primero:
-   `ONLY_CHECK=STALE_TRANSITION_ZERO_MOVEMENT` en Edge.
-6. Si PASS, correr matriz Edge completa y exigir 13/13 PASS.
-7. Correr matriz Chrome completa y exigir 13/13 PASS.
-8. Reutilizar/adaptar gates especiales del RC ORDER-075:
-   - reduced motion
-   - WebGL2 unavailable
-   - live webglcontextlost
-   - real OpenFreeMap vector path
-   - raster fallback
-9. No tocar runtime si sólo cambia harness.
-10. Si cualquier gate revela un bug real, TDD -> nuevo source commit -> rebuild -> invalidar evidencia previa.
-11. Si todo verde, persistir `feat/order076-astra-truth-first` en GitHub.
-12. Verificar GitHub CI y GitLab mirror exactos.
-13. Desplegar sólo el exact source/build verificado.
-14. Después del deploy, reconciliar producción:
-    - deployed source SHA exacto
-    - deployed BUILD_ID exacto
+1. NO RESET.
+2. NO editar runtime salvo que un gate revele bug real.
+3. Worktree: `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+4. Confirmar HEAD local `2a6457b0f40a4263a402f115a56b70c449240ac5`.
+5. Confirmar BUILD_ID `0a306d0ae153798faa73949a`.
+6. Guardar/copiAR evidencia terminal por navegador/gate en `experiments/order076/evidence/`.
+7. Si se modifica runtime: INVALIDAR toda evidencia, crear nuevo commit, correr 269+ tests, rebuild y todos los browser gates otra vez.
+8. Persistir rama remota `feat/order076-astra-truth-first` sin force-push.
+9. Verificar CI remoto y mirror GitLab.
+10. Desplegar sólo el exact source/build verificado.
+11. Post-deploy comprobar:
+    - producción responde
     - MAP-FIRST visible
-    - truth-first actual
+    - truth pill actual
     - no fake live
-15. Registrar deploy/evidencia y actualizar este checkpoint otra vez.
-16. OpenAI OSS queda fuera de esta pista.
+    - deployed build/source reconciliables con el exact-head.
+12. Crear/actualizar rama de evidencia y este checkpoint con SHAs finales.
 
 ## REGLAS
 
