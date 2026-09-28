@@ -9,45 +9,66 @@
 - ORDER075_BASE_HEAD: `dd7fc408b5b1fdc6032a27f524246d4a89febe13`
 - LAST_RUNTIME_HEAD_BEFORE_ORDER075: `8a00f0e5bf6fffdbca423f7381540acf397b2fea`
 - RECOVERY_COMMIT: `6bc18b2f3bf406e0b102cefd7ef224ff8a3ce6a6`
+- TERMINAL_CONVERGENCE_COMMIT: `62526ae75f551bc359311c0c911c1d9ad5b42a51`
 
-## RECOVERY STATUS
-The prior AUD corruption is recovered without history rewrite.
-Deleted CANON/mirror surfaces were restored and the bakeoff was reconstructed from GitHub + the recovered chat + supplied artifacts.
-See `AUD_RECOVERY_ORDER075.md`.
+## RECOVERY / BAKEOFF
+`RECOVERY=COMPLETE`
+`BAKEOFF=CONVERGED`
 
-## BAKEOFF TERMINAL STATE
-- Grokbot #58: `AUD_PARTIAL`. High design signal; standalone React/Vite rewrite and evidence/temporal/lazy-3D issues make source non-portable as-is.
-- Sonnet #60: `AUD_PARTIAL`. High design / medium-high logic signal; standalone React/Vite rewrite, duplicate temporal/3D authority and fail-closed 2D marker defect make source non-portable as-is.
-- GLM #59: `AUD_ACCEPTED_FOR_CONVERGENCE`.
+- Grokbot #58: AUD_PARTIAL / design reference only.
+- Sonnet #60: AUD_PARTIAL / logic+UX/test reference only.
+- GLM #59: AUD_ACCEPTED_FOR_CONVERGENCE.
+- #58/#59/#60 are closed completed; #57 remains the sole active canonical order.
 
-GLM durable GitHub layers:
-- audited source commit: `6f882c3b7d712151c2354d95c518885d12729054`
-- terminal evidence/report tip: `00e9718`
-- source tree local audit identity: `62bb5c284335579f55f28e913aace67dc16c33ad`
+GLM durable authority:
+- audited source: `6f882c3b7d712151c2354d95c518885d12729054`
+- evidence/report tip: `00e97187da9127e6d406887b91276ed60b9b5f1d`
 - BUILD_ID: `c26d7cefe5ee2d15d0cce7b8`
 - final ZIP SHA256: `f0216b67468ba7a380f3db90c6e2b358349234bf10d9b2936693210771769937`
-- final ZIP files: 152; traversal=0; forbidden .git/node_modules/dist=0; CRC bad=None.
 
-## GLM FRESH EVIDENCE
-- units: 266/266 PASS.
-- build.ps1: SOURCE_COMMIT=62bb5c2..., BUILD_ID=c26d7cef..., CLIENT_FILES=34.
-- focused follow/physical-drag stability: 30/30 consecutive PASS.
-- full Edge browser matrix: 10 consecutive complete runs, each 10/10 PASS.
-- Edge post-build matrix: 10/10 PASS.
-- Chrome post-build matrix: 10/10 PASS.
-- real OpenFreeMap Liberty/PBF/glyph/attribution/pan/overlay smoke: PASS; Worker delta=0.
-- reduced motion: PASS.
-- WebGL2 unavailable -> raster/useful 2D: PASS.
-- live WEBGL_lose_context -> useful 2D, facts preserved: PASS.
-- final tracked runtime/source diff after build: empty.
+Terminal GLM evidence includes 266/266 units, follow-drag 30/30, ten full Edge matrices x10/10, post-build Edge 10/10, post-build Chrome 10/10, real OpenFreeMap path, reduced motion, WebGL2 unavailable and live context-loss PASS.
 
-The initial WebGL2-unavailable failure was a test-harness false negative: it waited for the already-selected 2D button instead of the async fallback status. Corrected audit harness proved the runtime path without runtime mutation.
+## CANONICAL ARQ REALITY — RECONCILED AFTER CONCURRENT START
+ARQ1 already created the canonical branch before terminal AUD convergence completed:
 
-## CONVERGENCE
-The bakeoff is closed. ONE convergence order is now authoritative:
-`AUD_ORDER075_CONVERGENCE.md`
+```text
+BRANCH=feat/order075-mapfirst-trackerview
+CURRENT_HEAD=5ca22b7f7b7625aa1c52f0b9f81074c126a91afe
+BASE_EXACT=dd7fc408b5b1fdc6032a27f524246d4a89febe13
+AHEAD_BY=7
+BEHIND_BY=0
+```
 
-ARQ1 is released from HOLD.
+This is valid in-flight TDD work and MUST NOT be reset or replaced.
+
+Current canonical delta contains:
+- ORDER-075 unit TDD workflow gate;
+- RED network/shell/tracker contracts;
+- normalized tracker observations;
+- bounded session tracker store;
+- opt-in deterministic tracker fixtures.
+
+Current CI at HEAD:
+```text
+TESTS=266
+PASS=250
+FAIL=16
+CLASSIFICATION=EXPECTED_RED_TDD / IMPLEMENTATION_INCOMPLETE
+```
+
+The 16 failures identify missing convergence surfaces, chiefly:
+- `public/map/substrate.js`;
+- MAP-FIRST shell / secondary search / truth pill / tracker sheet;
+- rail/follow wiring in `app.js`;
+- OpenFreeMap CSP + SW cache wiring;
+- raster/vector fallback and map marker/a11y contracts.
+
+## ARQ CONTINUATION RULE
+NO RESET. Do NOT recreate the branch. Do NOT blindly cherry-pick the whole GLM source commit over the seven canonical commits.
+
+ARQ1 continues from `5ca22b7...` and uses `6f882c3...` as the audited implementation reference for the missing GREEN work. Preserve the canonical RED tests and already-implemented tracker modules unless a concrete diff/test proves a correction is required.
+
+The target is semantic convergence with the audited source/invariants, not commit-identity convergence.
 
 ## DO NOT TOUCH
 - no GitLab implementation;
@@ -56,7 +77,8 @@ ARQ1 is released from HOLD.
 - no new backend/database/persistence/telemetry;
 - no React/R3F/Cesium/deck.gl/GeoLibre whole-app rewrite;
 - no duplicate temporal authority or 3D engine;
-- no fourth architecture lane.
+- no fourth architecture lane;
+- no reset/rebase-away of canonical ARQ work.
 
 ## NEXT EXACT ACTION
-ARQ1: create `feat/order075-mapfirst-trackerview` from exact `dd7fc408...`, read `AUD_ORDER075_CONVERGENCE.md`, port the audited GLM source commit `6f882c3...` as the implementation baseline, then verify the canonical RC. MERGE=NO. DEPLOY=NO.
+ARQ1: continue existing `feat/order075-mapfirst-trackerview@5ca22b7...`; GREEN the 16 currently failing ORDER-075 contracts by selectively porting the missing audited GLM surfaces, then run fresh canonical build/browser/runtime evidence at final exact HEAD. Stop at `CHECKPOINT_MAPFIRST_TRACKERVIEW_RC`. MERGE=NO. DEPLOY=NO.
