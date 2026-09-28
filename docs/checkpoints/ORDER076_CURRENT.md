@@ -1,6 +1,6 @@
 # VOY — ORDER-076 WORK CHECKPOINT
 
-LAST_UPDATE=2026-09-28T04:21-03:00
+LAST_UPDATE=2026-09-28T04:25-03:00
 ROLE=AUD+IMPLEMENTER
 MODE=NO_RESET / CONTINUE
 RUNTIME_WORKTREE=C:\GPT-SANDBOX\VOY-ORDER076-ASTRA
@@ -59,7 +59,7 @@ The old real-vector failure belonged to PRE-POLISH build 0a306d0a... and is supe
 ## PENDIENTE ACTUAL
 
 Only terminal stability + remote/deploy reconciliation remain:
-- focused physical follow-drag 30/30 consecutive (CURRENTLY 25/30 PASS, zero failures);
+- focused physical follow-drag 30/30 consecutive = PASS;
 - full Edge matrix 10 consecutive complete runs, each 13/13;
 - persist exact source to GitHub;
 - verify GitHub CI + GitLab mirror;
@@ -108,7 +108,7 @@ No fabricar movimiento, ETA, cobertura, disponibilidad, precio ni realtime.
 ```text
 SOURCE_SHA=b858568848f6bf5abd6853ee13c77f2e65c63735
 BUILD_ID=c150cf0f431b55fcbdbb8278
-FOLLOW_STABILITY=25/30 PASS
+FOLLOW_STABILITY=30/30 PASS
 FOLLOW_FAILURES=0
 GITHUB_RUNTIME_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
 GITLAB_MIRROR_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
@@ -116,4 +116,28 @@ CI_DISPATCH_RUN=36391139662
 DEPLOYED=NO
 ```
 
-For a zero-context agent: do NOT restart. Wait for the active 30x loop to finish. If it reaches 30/30, immediately run the full Edge matrix 10 consecutive complete times on the SAME source/build without runtime edits. Persist every run. If any failure appears, stop and classify product vs harness before changing anything.
+For a zero-context agent: do NOT restart. The focused follow loop is complete at 30/30 PASS. Immediately run the full Edge matrix 10 consecutive complete times on the SAME source/build without runtime edits. Persist every run. If any failure appears, stop and classify product vs harness before changing anything.
+
+
+## LIVE CHECKPOINT 30/30
+
+```text
+SOURCE_SHA=b858568848f6bf5abd6853ee13c77f2e65c63735
+BUILD_ID=c150cf0f431b55fcbdbb8278
+FOLLOW_STABILITY=30/30 PASS
+FOLLOW_FAILURES=0
+EDGE_FULL_STABILITY=NEXT
+GITHUB_RUNTIME_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
+GITLAB_MIRROR_HEAD=b858568848f6bf5abd6853ee13c77f2e65c63735
+CI_DISPATCH_RUN=36391139662
+DEPLOYED=NO
+```
+
+Zero-context continuation:
+1. NO RESET and no runtime edits.
+2. Run 10 consecutive complete Edge ORDER076 matrices; each must be 13/13 PASS on BUILD_ID c150cf0f431b55fcbdbb8278.
+3. Persist every JSON/log and a 10-run ledger. Any failure stops the series.
+4. When 10/10 is green, check CI run 36391139662 and mirror parity.
+5. Run Wrangler dry-run from exact HEAD.
+6. Persist evidence on audit/order076-terminal-evidence only.
+7. Deploy exact verified source/build only after all gates above are green.
