@@ -164,3 +164,37 @@ Brand-new agent next exact steps:
 6. If deployed identity differs, STOP and do not call production current.
 7. If identity matches, verify MAP-FIRST, truth-first copy, no fake live, and 3D lazy/contextual behavior.
 8. Persist deployment evidence and update this checkpoint.
+
+
+## PHASE_PREDEPLOY_READY
+
+```text
+SOURCE_SHA=2a6457b0f40a4263a402f115a56b70c449240ac5
+BUILD_ID=0a306d0ae153798faa73949a
+EDGE=13/13 PASS
+CHROME=13/13 PASS
+REDUCED_MOTION=PASS
+WEBGL2_UNAVAILABLE=PASS
+CONTEXT_LOSS=PASS
+REAL_OPENFREEMAP=PASS
+GITHUB_CI_RUN=36388368992 SUCCESS (269/269)
+GITLAB_MIRROR=2a6457b0... EXACT
+WRANGLER_DRY_RUN=PASS
+WRANGLER_VERSION=4.125.0
+ASSET_FILES=40
+DEPLOYED=NO
+```
+
+Exact deploy command from worktree:
+`npx wrangler deploy --config wrangler.jsonc`
+
+A brand-new agent must:
+1. Confirm HEAD remains `2a6457b0...`.
+2. Confirm `dist/BUILD_MANIFEST.json` still says BUILD_ID `0a306d0ae153798faa73949a`.
+3. Do NOT rebuild or edit runtime before deploy; otherwise browser evidence is stale.
+4. Run the exact deploy command above.
+5. Capture Wrangler deployment/version output.
+6. Query production `/api/health` or equivalent release metadata endpoint if available.
+7. Fetch production HTML/assets and prove MAP-FIRST + truth-first current surface.
+8. Prove deployed build/source identity is reconciled to this exact source/build. If identity cannot be proven, mark deploy as DEPLOYED_UNRECONCILED and STOP.
+9. Persist deploy evidence and update this checkpoint.
