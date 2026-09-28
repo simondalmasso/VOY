@@ -38,6 +38,20 @@ test('ORDER076 native MapLibre pan synchronizes logical center and nearby overla
   assert.doesNotMatch(substrate,/\/api\//,'viewport sync must remain Worker-silent');
 });
 
+test('ORDER076 CABA_OS-inspired urban HUD is dark-first, full-bleed and restrained',async()=>{
+  const [html,app,css]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/styles.css')]);
+  assert.match(html,/<html[^>]*data-theme="dark"/);
+  assert.match(app,/localStorage\.getItem\('voy-theme'\)\|\|'dark'/);
+  assert.match(css,/ORDER076 CABA_OS VISUAL DISCIPLINE/);
+  assert.match(css,/\.app-shell\{[^}]*position:fixed;[^}]*inset:0/s);
+  assert.match(css,/\.topbar\.voy-topbar\{[^}]*position:fixed;[^}]*background:transparent/s);
+  assert.match(css,/\.map-shell\.voy-map-stage::after\{/);
+  assert.match(css,/\.truth-meta\{[^}]*font-family:ui-monospace/s);
+  assert.match(css,/\.map-mode-toggle\{[^}]*border:1px solid rgba\(224,236,222,/s);
+  assert.match(css,/\.voy-sheet\{[^}]*background:var\(--hud-panel\)/s);
+  assert.doesNotMatch(css,/crt-flicker|crt-overlay|background-music/i);
+});
+
 test('ORDER076 3D stays contextual, lazy and selected-only',async()=>{
   const [html,app]=await Promise.all([read('public/index.html'),read('public/app.js')]);
   assert.match(html,/id="map-3d-quality"[^>]*hidden/);

@@ -42,6 +42,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible{o
 .app-shell{position:relative;flex:1 1 auto;min-width:0;min-height:0;overflow:hidden}
 .map-shell.voy-map-stage{position:absolute;inset:0;width:100%;height:100%;margin:0;border-radius:0;overflow:hidden;background:var(--map);display:block}
 .map-tiles{position:absolute;inset:0;overflow:hidden;background:var(--map)}
+.map-tiles,#map-canvas canvas{filter:grayscale(.52) saturate(.62) contrast(1.06) brightness(.88)}
 .map-tiles.is-underlay{visibility:hidden}
 .map-tile{position:absolute;width:256px;height:256px;max-width:none;user-select:none;filter:saturate(.78) contrast(.98)}
 #map-canvas{position:absolute;inset:0;z-index:2}
@@ -76,7 +77,7 @@ html[data-theme="dark"] .truth-pill[data-state="realtime"] .truth-icon{color:#65
 .map-mode-toggle button[aria-pressed="true"]{background:#fff;color:#111}
 .map-3d-quality{min-height:44px;max-width:118px;border:0;border-radius:10px;padding:0 28px 0 9px;background:#1d2228;color:#fff;font:700 11px/1 system-ui;cursor:pointer}
 .map-3d-quality:focus-visible{outline:3px solid #ffd23f;outline-offset:2px}
-.map-3d-status{position:absolute;left:12px;bottom:12px;z-index:23;margin:0;max-width:min(360px,70%);padding:6px 9px;border-radius:10px;background:rgba(10,13,17,.74);color:#fff;font-size:11px;line-height:1.3;pointer-events:none}
+.map-3d-status{position:absolute;left:12px;bottom:12px;z-index:23;margin:0;max-width:min(360px,70%);padding:6px 9px;border-radius:0;background:var(--hud-panel);color:var(--hud-ink);font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;font-size:11px;line-height:1.3;pointer-events:none}
 .map-3d-status:empty{display:none}
 .map-3d-attribution{position:absolute;right:10px;bottom:10px;z-index:24;max-width:55%;padding:6px 9px;border-radius:10px;background:rgba(255,255,255,.9);color:#111;font-size:9px;line-height:1.25}
 
@@ -87,7 +88,7 @@ html[data-theme="dark"] .truth-pill[data-state="realtime"] .truth-icon{color:#65
 .tracker-marker-predicted::before{background:#e8a200;border-style:dashed;opacity:.85}
 .tracker-marker-unknown::before{background:var(--muted);opacity:.5}
 .tracker-marker.is-selected{z-index:9}
-.tracker-marker.is-selected::after{content:"";position:absolute;width:34px;height:34px;border-radius:50%;border:3px solid var(--accent);animation:markerPulse 1.8s var(--ease) infinite}
+.tracker-marker.is-selected::after{content:"";position:absolute;width:34px;height:34px;border-radius:50%;border:2px solid var(--hud-cyan);animation:none;box-shadow:0 0 14px color-mix(in srgb,var(--hud-cyan) 42%,transparent)}
 .tracker-marker.is-selected::before{background:#0aa06a}
 .train-station-marker{position:absolute;z-index:7;margin-left:-7px;margin-top:-7px;display:flex;align-items:center;gap:5px;pointer-events:none}
 .station-dot{width:14px;height:14px;border-radius:50%;border:3px solid #fff;background:#111;box-shadow:0 2px 8px rgba(0,0,0,.3);flex:0 0 auto}
@@ -154,7 +155,7 @@ html[data-theme="dark"] .truth-pill[data-state="realtime"] .truth-icon{color:#65
 .time-rail-wrap{margin-top:12px;padding-top:10px;border-top:1px dashed color-mix(in srgb,var(--line) 70%,transparent);display:grid;gap:6px}
 .time-rail-label{font-size:11px;font-weight:760;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .time-rail{width:100%;min-height:44px;accent-color:var(--accent)}
-.time-rail-meta{font-size:11px;color:var(--muted)}
+.time-rail-meta{font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;font-size:11px;color:var(--muted)}
 
 /* planner inside sheet */
 .planner{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
@@ -254,3 +255,92 @@ dialog{width:min(92vw,460px);border:1px solid var(--line);border-radius:22px;pad
 .option-copy{flex:1 1 180px}
 .trip-value,.mode-actions{min-width:0;max-width:100%}
 .option-action{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+/* ORDER076 CABA_OS VISUAL DISCIPLINE
+   Visual reference only: full-bleed dark map, sparse HUD, temporal mono.
+   No copied branding, CRT effects, music, assets, shaders or runtime dependencies. */
+:root{
+  --mono:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;
+  --hud-ink:#172019;
+  --hud-muted:#69746b;
+  --hud-panel:rgba(250,250,247,.88);
+  --hud-line:rgba(23,32,25,.18);
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#000;--surface:#07100a;--surface-2:#0d1610;--text:#e0ecde;--muted:#8c9b8f;--line:#26352b;
+  --accent:#d8ff79;--accent-2:#d8b563;--accent-ink:#0a100b;--success:#9fffc3;--danger:#ff8e83;--map:#020403;
+  --hud-ink:#e0ecde;--hud-muted:#8c9b8f;--hud-panel:rgba(3,7,5,.82);--hud-line:rgba(224,236,222,.18);
+  --shadow-soft:0 18px 44px rgba(0,0,0,.42);--shadow-float:0 28px 78px rgba(0,0,0,.62);
+}
+@media (prefers-color-scheme:dark){html[data-theme="system"]{
+  color-scheme:dark;
+  --bg:#000;--surface:#07100a;--surface-2:#0d1610;--text:#e0ecde;--muted:#8c9b8f;--line:#26352b;
+  --accent:#d8ff79;--accent-2:#d8b563;--accent-ink:#0a100b;--success:#9fffc3;--danger:#ff8e83;--map:#020403;
+  --hud-ink:#e0ecde;--hud-muted:#8c9b8f;--hud-panel:rgba(3,7,5,.82);--hud-line:rgba(224,236,222,.18);
+}}
+.app-shell{position:fixed;inset:0;min-width:0;min-height:0;overflow:hidden}
+.topbar.voy-topbar{position:fixed;inset:0 0 auto 0;height:56px;padding:0 14px;z-index:50;background:transparent;border:0;backdrop-filter:none;pointer-events:none}
+.topbar.voy-topbar .brand-lockup,.topbar.voy-topbar .theme-button{pointer-events:auto}
+.brand-lockup{color:var(--accent);filter:drop-shadow(0 2px 10px rgba(0,0,0,.72))}
+.brand-wordmark{color:var(--hud-ink)}
+.theme-button{border-radius:8px;border:1px solid var(--hud-line);background:rgba(0,0,0,.28);color:var(--hud-ink);backdrop-filter:blur(10px)}
+.theme-button:hover{background:var(--hud-ink);border-color:var(--hud-ink);color:#050806}
+.map-shell.voy-map-stage::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.22),transparent 18%,transparent 72%,rgba(0,0,0,.18));box-shadow:inset 0 0 72px rgba(0,0,0,.30),inset 0 0 260px rgba(0,0,0,.18)}
+.map-tiles,#map-canvas canvas{filter:grayscale(.72) saturate(.35) brightness(.66) contrast(1.13)}
+.map-hud{top:64px;left:14px;right:14px}
+.truth-pill{margin:0;display:inline-flex;align-items:center;gap:8px;max-width:min(70vw,390px);min-height:44px;padding:7px 11px;border-radius:8px;background:var(--hud-panel);border:1px solid var(--hud-line);backdrop-filter:blur(14px);box-shadow:0 14px 34px rgba(0,0,0,.34);font-size:12px;font-weight:650;line-height:1.2;color:var(--hud-ink)}
+.truth-meta{font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;font-size:9.5px;font-weight:520;letter-spacing:.07em;color:var(--hud-muted)}
+.truth-pill[data-state="realtime"] .truth-icon{color:var(--success)}
+.truth-pill[data-state="predicted"] .truth-icon{color:var(--accent-2)}
+.truth-pill[data-state="unknown"] .truth-icon,.truth-pill[data-state="no_coverage"] .truth-icon{color:var(--hud-muted)}
+.map-mode-toggle{display:flex;align-items:center;gap:0;padding:0;border:1px solid rgba(224,236,222,.22);border-radius:8px;background:var(--hud-panel);backdrop-filter:blur(14px);box-shadow:0 14px 34px rgba(0,0,0,.32)}
+.map-mode-toggle button{min-width:48px;min-height:44px;border:0;border-radius:0;background:transparent;color:var(--hud-ink);font:620 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase}
+.map-mode-toggle button:first-child{border-radius:7px 0 0 7px}
+.map-mode-toggle button:last-of-type{border-radius:0 7px 7px 0}
+.map-mode-toggle button[aria-pressed="true"]{background:var(--hud-ink);color:#050806}
+.map-3d-quality{border-radius:0 7px 7px 0;background:#0b120d;color:var(--hud-ink);border-left:1px solid var(--hud-line);font:600 10px/1 var(--mono)}
+.map-3d-status{font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;border-radius:7px;background:var(--hud-panel);color:var(--hud-ink);border:1px solid var(--hud-line);backdrop-filter:blur(12px)}
+.map-attribution,.map-3d-attribution{border-radius:6px;background:rgba(3,7,5,.78);color:var(--hud-muted);border:1px solid var(--hud-line);backdrop-filter:blur(10px)}
+.tracker-marker::before{width:15px;height:15px;border:2px solid #061009;box-shadow:0 0 0 1px rgba(224,236,222,.72),0 4px 12px rgba(0,0,0,.48)}
+.tracker-marker-tracker-realtime::before{background:var(--success);border-color:#061009}
+.tracker-marker-predicted::before{background:var(--accent-2);border-style:dashed}
+.tracker-marker-unknown::before{background:var(--hud-muted);opacity:.6}
+.tracker-marker.is-selected::after{content:"";position:absolute;width:31px;height:31px;border-radius:50%;border:1px solid var(--hud-ink);animation:none;box-shadow:0 0 0 1px rgba(0,0,0,.64)}
+.tracker-marker.is-selected::before{background:var(--success)}
+.trail-connector{color:var(--hud-ink);opacity:.34}
+.trail-dot{background:var(--hud-ink);border-color:#061009}
+.trail-dot.is-scrub{background:var(--accent)}
+.voy-sheet{background:var(--hud-panel);border:1px solid var(--hud-line);border-bottom:0;border-radius:12px 12px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.48);backdrop-filter:blur(18px)}
+.sheet-handle{font-family:var(--mono);font-size:10px;font-weight:560;letter-spacing:.12em;color:var(--hud-muted)}
+.sheet-grip{height:2px;border-radius:0;background:var(--hud-line)}
+.sheet-summary,.summary-kicker,.fact-row dt,.time-rail-label,.time-rail-meta,.fixture-banner,.status-line{font-family:var(--mono)}
+.time-rail-meta{font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;color:var(--hud-muted)}
+.summary-kicker,.fact-row dt,.time-rail-label{letter-spacing:.08em;text-transform:uppercase}
+.voy-chip,.destination-control,.suggestions,.tracker-facts,.origin-editor,.assistant-panel,.train-station-card,.mobility-disclosure{background:rgba(3,7,5,.90);border-color:var(--hud-line);border-radius:8px;color:var(--hud-ink)}
+.voy-chip:hover,.suggestion:hover,.suggestion.active{background:rgba(224,236,222,.08)}
+.destination-control:focus-within{border-color:var(--hud-ink);box-shadow:0 0 0 1px rgba(224,236,222,.34)}
+.destination-control input{color:var(--hud-ink);caret-color:var(--accent)}
+.destination-control input::placeholder{color:var(--hud-muted)}
+.fact-row{border-top-color:var(--hud-line)}
+.context-rail{border-top-color:var(--hud-line)}
+.sheet-action,.option-action,.quiet-action,.origin-action,.assistant-action{border-radius:7px}
+.sheet-action{background:var(--hud-ink);color:#050806}
+.sheet-action[aria-pressed="true"]{background:var(--accent);color:#050806}
+.fixture-banner{border-radius:6px;background:rgba(216,181,99,.10);border-color:rgba(216,181,99,.44);color:#ead9a6}
+.map-fallback{background:#020403;color:var(--hud-muted)}
+dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:var(--hud-line)}
+@media (min-width:960px){
+  .topbar.voy-topbar{height:64px;padding-inline:18px}
+  .voy-sheet{top:72px;bottom:18px;right:18px;width:min(390px,34vw);max-height:none;border:1px solid var(--hud-line);border-radius:10px}
+  .map-hud{top:72px;left:18px;right:calc(min(390px,34vw) + 36px)}
+  .sheet-expanded{padding:2px 16px 18px}
+  .sheet-collapsed{padding:2px 16px 12px}
+}
+@media (max-width:700px){
+  .map-hud{top:62px;left:8px;right:8px}
+  .truth-pill{max-width:62vw}
+  .voy-sheet{background:rgba(3,7,5,.90)}
+  .assistant-panel{border-radius:8px!important}
+}
+

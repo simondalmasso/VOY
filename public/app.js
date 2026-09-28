@@ -27,7 +27,7 @@ const suggestionInFlight=new Map();
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
-  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system',
+  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
   substrateState:'raster',stationModels:[],sheetPane:'collapsed',fixtureOn:false
 };
 
@@ -347,7 +347,7 @@ function scheduleVectorUpgrade(){
 
 // ---------- theme ----------
 function effectiveDark(){if(state.theme==='dark')return true;if(state.theme==='light')return false;return matchMedia('(prefers-color-scheme: dark)').matches}
-function applyTheme(){document.documentElement.dataset.theme=state.theme;const button=$('#theme');button.querySelector('span').textContent=state.theme==='light'?'☀':state.theme==='dark'?'●':'◐';button.setAttribute('aria-label',state.theme==='light'?'Tema claro':state.theme==='dark'?'Tema oscuro':'Tema del sistema');document.querySelector('meta[name="theme-color"]')?.setAttribute('content',effectiveDark()?'#0b0b0a':'#f4f3ef')}
+function applyTheme(){document.documentElement.dataset.theme=state.theme;const button=$('#theme');button.querySelector('span').textContent=state.theme==='light'?'☀':state.theme==='dark'?'●':'◐';button.setAttribute('aria-label',state.theme==='light'?'Tema claro':state.theme==='dark'?'Tema oscuro':'Tema del sistema');document.querySelector('meta[name="theme-color"]')?.setAttribute('content',effectiveDark()?'#000000':'#f4f3ef')}
 $('#theme').addEventListener('click',()=>{const values=['system','light','dark'];state.theme=values[(values.indexOf(state.theme)+1)%values.length];localStorage.setItem('voy-theme',state.theme);applyTheme()});
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(state.theme==='system')applyTheme()});applyTheme();
 
