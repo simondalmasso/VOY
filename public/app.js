@@ -1,5 +1,9 @@
 import { APP_CONFIG } from './runtime-config.js?v=__BUILD_ID__';
 import { isSafeOfficialHandoff, isSafeExternalNavigationUrl, buildExternalNavigationUrl, normalizeResolvedCandidate, normalizeDestinationSuggestion, normalizeMobilityDecision, normalizeMobilityComputation } from './contracts.js?v=__BUILD_ID__';
+import { createTrackerStore, TRAIL_MAX_OBSERVATIONS } from './tracker/store.js?v=__BUILD_ID__';
+import { fixtureEnabled, createFixtureEngine, FIXTURE_LABEL, FIXTURE_SOURCE_ID, FIXTURE_TICK_PARAM, FIXTURE_DEFAULT_TICK_MS } from './tracker/fixtures.js?v=__BUILD_ID__';
+import { classifyObservation, ageLabel } from './tracker/observations.js?v=__BUILD_ID__';
+import { createMapSubstrate } from './map/substrate.js?v=__BUILD_ID__';
 
 const CLIENT_BUILD_ID='__BUILD_ID__';
 
@@ -23,24 +27,83 @@ const suggestionInFlight=new Map();
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
-  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system'
+  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'system',
+  substrateState:'raster',stationModels:[],sheetPane:'collapsed',fixtureOn:false
 };
 
+// ---------- DOM refs ----------
 const destinationInput=$('#destination'),suggestions=$('#destination-suggestions'),loading=$('#destination-loading'),contextHelp=$('#destination-context'),nationalSearch=$('#national-search');
 const originInput=$('#origin'),originEditor=$('#origin-editor'),originLabel=$('#origin-label');
 const statusLine=$('#destination-status'),decision=$('#decision'),options=$('#options');
 const dialog=$('#handoff-dialog'),confirmHandoff=$('#confirm-handoff'),cancelHandoff=$('#cancel-handoff');
-const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),map3dLayer=$('#map-3d-layer'),map3dStatus=$('#map-3d-status'),map3dAttribution=$('#map-3d-attribution'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution'),map3dQuality=$('#map-3d-quality');
+const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapCanvas=$('#map-canvas'),map3dLayer=$('#map-3d-layer'),map3dStatus=$('#map-3d-status'),map3dAttribution=$('#map-3d-attribution'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution'),map3dQuality=$('#map-3d-quality');
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
+const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary'),searchChip=$('#search-chip');
+const truthPill=$('#truth-pill'),truthLabel=$('#truth-label'),truthIcon=truthPill?.querySelector('.truth-icon');
+const trackerFacts=$('#tracker-facts'),factsLine=$('#facts-line'),factsClose=$('#facts-close'),factsRows=$('#facts-rows'),fixtureBanner=$('#fixture-banner');
+const followButton=$('#follow-button'),returnToNow=$('#return-to-now'),timeRailWrap=$('#time-rail-wrap'),timeRail=$('#time-rail'),timeRailMeta=$('#time-rail-meta');
 
 const mapModeButtons=[...document.querySelectorAll('[data-map-mode]')];
-function currentSelectedRouteGeometry(){return state.mobilityComputation?.mode_options?.find(item=>item.mode===state.selectedRouteMode&&item.route_available)?.route?.geometry??null}
-function current3DTransportEntities(){return []}
+
+// ---------- truth states (icon shape + text; never color alone) ----------
+const TRUTH_STATES={
+  realtime:{icon:'●',label:'En vivo'},
+  predicted:{icon:'◔',label:'Estimado'},
+  scheduled:{icon:'◷',label:'Programado'},
+  unknown:{icon:'○',label:'Sin señal'},
+  no_coverage:{icon:'◍',label:'Tiempo real no disponible en esta cobertura'}
+};
+function truthStateLabel(key){return TRUTH_STATES[key]||TRUTH_STATES.no_coverage}
+function updateTruthPill(){
+  if(!truthPill)return;
+  let entry=TRUTH_STATES.no_coverage,detail='';
+  const selected=trackerStore.selected();
+  if(selected){
+    const cls=classifyObservation(selected.entity.observation,Date.now());
+    entry=truthStateLabel(cls.state);
+    if(cls.state==='realtime')detail=` · ${ageLabel(cls.age_ms)}`;
+    else if(cls.state==='unknown'&&cls.reason==='stale_source')detail=' · fuente vencida';
+  } else if(state.fixtureOn){
+    entry=TRUTH_STATES.no_coverage;
+  }
+  truthPill.dataset.state=selected?(classifyObservation(selected.entity.observation,Date.now()).state):'no_coverage';
+  truthIcon.textContent=entry.icon;
+  truthLabel.textContent=entry.label+detail;
+}
+
+// ---------- map stage + substrate ----------
+const substrate=createMapSubstrate({
+  tilesEl:mapTiles,canvasEl:mapCanvas,fallbackEl:mapFallback,attributionEl:mapAttribution,config:APP_CONFIG,buildId:CLIENT_BUILD_ID,
+  onUserInteraction:()=>{trackerStore.userPanSuspend();updateFollowUI()},
+  onSelectMarker:id=>selectTrackerEntity(id),
+  onVectorReady:()=>{state.substrateState='vector'},
+  onSubstrateChange:null,
+  onVectorFailed:reason=>{console.warn('[voy] vector substrate failed:',reason);state.substrateState='vector_failed';setSheetSummary()}
+});
+function onSubstrateChange(reason){state.substrateState=reason==='openfreemap_maplibre'?'vector':'vector_failed';setSheetSummary()}
+
+function renderMap(coords,label='Mapa del destino',showPin=true){
+  state.mapCenter={lat:Number(coords.lat),lon:Number(coords.lon)};
+  mapShell.setAttribute('aria-label',label);
+  mapShell.hidden=false;
+  substrate.setCenter(state.mapCenter,{label,showPin});
+  syncTrackerOverlays();
+}
+function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe',false)}
+function clearMap(){renderInitialMap()}
+
+// ---------- 2D/3D mode (existing lazy Three architecture preserved) ----------
+function current3DTransportEntities(){return trackerStore.transportEntries()}
+function currentSelectedRouteGeometry(){
+  const trackerSelection=trackerStore.selected();
+  if(trackerSelection?.entity?.observation?.verified_geometry)return {type:'LineString',coordinates:trackerSelection.entity.observation.verified_geometry};
+  return state.mobilityComputation?.mode_options?.find(item=>item.mode===state.selectedRouteMode&&item.route_available)?.route?.geometry??null;
+}
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
 function activate2D(message=''){
-  state.mapMode='2d';setMapModeButtons('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;mapTiles.hidden=false;mapAttribution.hidden=false;map3dStatus.textContent=message;
+  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
 }
 function loadVoy3DModule(){
   return state.threeImportAttempt===0
@@ -57,7 +120,7 @@ async function activate3D(){
     const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
-    state.mapMode='3d';setMapModeButtons('3d');mapTiles.hidden=true;mapAttribution.hidden=true;map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dStatus.textContent='3D local · alturas genéricas/inferidas';sync3DTopology();
+    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dStatus.textContent='3D local · alturas genéricas/inferidas';sync3DTopology();
   }catch(error){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
@@ -66,8 +129,199 @@ mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.datase
 async function restart3DForRenderPolicy(){if(state.mapMode!=='3d')return;state.threeController?.dispose?.();state.threeController=null;await activate3D()}
 map3dQuality.addEventListener('change',restart3DForRenderPolicy);
 reducedMotionMedia.addEventListener?.('change',restart3DForRenderPolicy);
+// orbiting in 3D is also user interaction: it suspends follow immediately
+map3dLayer.addEventListener('pointerdown',()=>{trackerStore.userPanSuspend();updateFollowUI()});
 
+// ---------- TrackerView ----------
+const trackerStore=createTrackerStore();
 
+function trackerMarkerModels(){
+  const center=substrate.getCenter()||DEFAULT_MAP_CENTER;
+  const entities=trackerStore.nearby(center);
+  const models=[];
+  for(const entity of entities){
+    const frame=trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches});
+    const kind=frame.temporal_state==='predicted'?'predicted':frame.temporal_state;
+    if(!frame.render||!frame.position)continue;
+    const cls=classifyObservation(entity.observation,Date.now());
+    models.push({
+      id:entity.id,kind,lat:frame.position.lat,lon:frame.position.lon,selected:trackerStore.selected()?.id===entity.id,
+      label:markerLabel(entity,frame,cls)
+    });
+  }
+  return models;
+}
+function markerLabel(entity,frame,cls){
+  const line=entity.observation.line?`Línea ${entity.observation.line}`:entity.id;
+  const stateText=frame.scrub?'Histórico de esta sesión':truthStateLabel(cls.state).label+(cls.state==='realtime'?` · ${ageLabel(cls.age_ms)}`:'');
+  const fixture=entity.observation.synthetic_fixture?' · fixture demo':'';
+  return `${line} · ${stateText} · ${entity.id}${fixture}`;
+}
+function selectedTrailDots(){
+  const selected=trackerStore.selected();
+  if(!selected)return {trail:[],scrubIndex:-1};
+  if(selected.entity.observation.temporal_state!=='realtime')return {trail:[],scrubIndex:-1};
+  const trail=trackerStore.trail(selected.id);
+  const newest=Date.parse(trail.at(-1)?.observed_at||'')||Date.now();
+  const oldest=Date.parse(trail[0]?.observed_at||'')||newest;
+  const span=Math.max(1,newest-oldest);
+  const time=trackerStore.timeState();
+  return {
+    trail:trail.map(point=>({lat:point.lat,lon:point.lon,ageRatio:Math.min(1,(newest-Date.parse(point.observed_at))/span)})),
+    scrubIndex:time.mode==='scrub'?time.index:-1
+  };
+}
+function selectedRouteForMap(){
+  const selected=trackerStore.selected();
+  if(selected?.entity?.observation?.verified_geometry)return selected.entity.observation.verified_geometry;
+  return state.mobilityComputation?.mode_options?.find(item=>item.mode===state.selectedRouteMode&&item.route_available)?.route?.geometry??null;
+}
+function syncTrackerOverlays(){
+  if(state.mapMode!=='2d')return;
+  const {trail,scrubIndex}=selectedTrailDots();
+  substrate.sync({markers:trackerMarkerModels(),stations:state.stationModels,routeGeometry:selectedRouteForMap(),trail,scrubIndex});
+}
+function trackerTick(){
+  if(document.hidden)return;
+  if(state.mapMode!=='2d')return;
+  if(trackerStore.entities().length===0)return;
+  const selected=trackerStore.selected();
+  if(trackerStore.follow()==='following'&&selected){
+    const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
+    if(frame.render&&frame.position)substrate.focusTo(frame.position);
+  }
+  syncTrackerOverlays();
+  updateTruthPill();
+  updateFactsSheet();
+}
+setInterval(trackerTick,250);
+
+function selectTrackerEntity(id){
+  if(!trackerStore.get(id))return;
+  trackerStore.select(id);
+  openSheetPane('facts');
+  updateFactsSheet();
+  updateTruthPill();
+  syncTrackerOverlays();
+  trackerFacts?.focus?.();
+}
+function factsRow(term,value){
+  return `<div class="fact-row"><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`;
+}
+let lastFactsSignature='';
+function updateFactsSheet(){
+  const selected=trackerStore.selected();
+  if(!selected){trackerFacts.hidden=true;lastFactsSignature='';return}
+  trackerFacts.hidden=false;
+  const observation=selected.entity.observation;
+  const freshClassification=classifyObservation(observation,Date.now());
+  const cls=freshClassification;
+  const signature=[selected.id,observation.observed_at,trackerStore.follow(),trackerStore.timeState().mode,trackerStore.timeState().index,trackerStore.trail(selected.id).length,cls.state,Math.round((cls.age_ms||0)/1000)].join('|');
+  if(signature===lastFactsSignature)return;
+  lastFactsSignature=signature;
+  const time=trackerStore.timeState();
+  const rows=[];
+  rows.push(factsRow('Identidad',[observation.line?`Línea ${observation.line}`:'',selected.id].filter(Boolean).join(' · ')));
+  rows.push(factsRow('Estado temporal',time.mode==='scrub'?'Histórico de esta sesión':truthStateLabel(cls.state).label+(cls.state==='unknown'&&cls.reason==='stale_source'?' (fuente vencida)':'')));
+  if(Number.isFinite(cls.age_ms))rows.push(factsRow('Edad de la fuente',ageLabel(cls.age_ms)));
+  if(observation.next_stop)rows.push(factsRow('Próxima parada',observation.next_stop));
+  if(Number.isFinite(observation.delay_seconds))rows.push(factsRow('Demora',`${Math.round(observation.delay_seconds/60)} min`));
+  if(Number.isFinite(observation.speed_mps))rows.push(factsRow('Velocidad',`${Math.round(observation.speed_mps*3.6)} km/h${observation.synthetic_fixture?' (fixture)':''}`));
+  if(Array.isArray(observation.scheduled_times)&&observation.scheduled_times.length)rows.push(factsRow('Servicios publicados',observation.scheduled_times.slice(0,7).join(' · ')));
+  if(observation.source_id)rows.push(factsRow('Fuente',observation.synthetic_fixture?`${observation.source_id} (synthetic fixture)`:`${observation.source_id} · ${new Date(observation.observed_at).toLocaleTimeString('es-AR')}`));
+  factsRows.innerHTML=rows.join('');
+  factsLine.textContent=[observation.line?`Línea ${observation.line}`:'',selected.id].filter(Boolean).join(' · ');
+  fixtureBanner.hidden=observation.synthetic_fixture!==true;
+  trackerFacts?.scrollIntoView?.({block:'nearest'});
+  updateFollowUI();
+  updateTimeRail();
+}
+function updateFollowUI(){
+  const selected=trackerStore.selected();
+  if(!selected){followButton.hidden=true;return}
+  followButton.hidden=false;
+  const mode=trackerStore.follow();
+  followButton.textContent=mode==='following'?'Siguiendo…':mode==='suspended'?'Reanudar seguimiento':'Seguir';
+  followButton.setAttribute('aria-pressed',String(mode==='following'));
+}
+followButton?.addEventListener('click',()=>{
+  const mode=trackerStore.follow();
+  if(mode==='following'){trackerStore.setFollow('suspended')}
+  else{trackerStore.resumeFollow()}
+  updateFollowUI();
+});
+function updateTimeRail(){
+  const selected=trackerStore.selected();
+  if(!selected){timeRailWrap.hidden=true;return}
+  const realtimeOnly=selected.entity.observation.temporal_state==='realtime';
+  const trail=trackerStore.trail(selected.id);
+  if(!realtimeOnly||trail.length<2){timeRailWrap.hidden=true;return}
+  const time=trackerStore.timeState();
+  timeRailWrap.hidden=false;
+  timeRail.max=String(trail.length-1);
+  timeRail.value=String(time.mode==='scrub'?time.index:trail.length-1);
+  timeRailMeta.textContent=`${trail.length} observaciones · máx ${TRAIL_MAX_OBSERVATIONS}`;
+  const observing=time.mode==='scrub';
+  returnToNow.hidden=!observing;
+}
+timeRail?.addEventListener('input',()=>{trackerStore.scrubTo(Number(timeRail.value));updateFactsSheet();syncTrackerOverlays()});
+returnToNow?.addEventListener('click',()=>{trackerStore.returnToNow();updateFactsSheet();syncTrackerOverlays();updateTruthPill()});
+factsClose?.addEventListener('click',()=>{trackerStore.clearSelection();trackerFacts.hidden=true;lastFactsSignature='';updateTruthPill();syncTrackerOverlays();setSheetSummary()});
+
+// ---------- deterministic fixtures ---------- (development evidence only)
+const urlParams=new URLSearchParams(location.search);
+if(fixtureEnabled(urlParams)){
+  state.fixtureOn=true;
+  const tickMs=Math.max(1200,Number(urlParams.get(FIXTURE_TICK_PARAM))||FIXTURE_DEFAULT_TICK_MS);
+  const engine=createFixtureEngine({push:observation=>trackerStore.ingest(observation),tickMs});
+  engine.start();
+  window.__voyFixtureEngine=engine;
+  window.__voyDebug={store:trackerStore,substrate,state};
+  fixtureBanner.hidden=false;
+  sheetSummary.textContent=`${FIXTURE_LABEL} · entidades sintéticas en movimiento`;
+}
+
+// ---------- bottom sheet ----------
+function setSheetPane(pane){
+  state.sheetPane=pane;
+  sheet.dataset.pane=pane;
+  const expanded=pane==='expanded';
+  sheetToggle.setAttribute('aria-expanded',String(expanded));
+  sheetToggleLabel.textContent=expanded?'Cerrar panel':'Abrir panel';
+  document.querySelector('.sheet-collapsed').hidden=expanded;
+  document.querySelector('.sheet-expanded').hidden=!expanded;
+  searchChip.setAttribute('aria-expanded',String(expanded));
+}
+function openSheetPane(pane){setSheetPane(pane==='facts'?'expanded':pane)}
+sheetToggle.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
+searchChip.addEventListener('click',()=>{setSheetPane('expanded');destinationInput.focus()});
+function setSheetSummary(){
+  const selected=trackerStore.selected();
+  if(selected){
+    const cls=classifyObservation(selected.entity.observation,Date.now());
+    sheetSummary.textContent=`${selected.entity.observation.line?`Línea ${selected.entity.observation.line} · `:''}${truthStateLabel(cls.state).label}${cls.state==='realtime'?` · ${ageLabel(cls.age_ms)}`:''} · seleccionada`;
+    return;
+  }
+  if(state.fixtureOn){sheetSummary.textContent=`${FIXTURE_LABEL} · entidades sintéticas para evidencia de desarrollo`;return}
+  if(state.substrateState==='vector_failed'){sheetSummary.textContent='Mapa vectorial no disponible; seguimos en mapa raster.';return}
+  sheetSummary.textContent='Cobertura: sin fuente de tiempo real autorizada para Santa Fe.';
+}
+trackerStore.onChange(()=>setSheetSummary());
+
+// ---------- vector upgrade after first paint (raster stays fallback) ----------
+function scheduleVectorUpgrade(){
+  const start=()=>substrate.upgradeToVector(state.mapCenter||DEFAULT_MAP_CENTER);
+  if('requestIdleCallback'in window)requestIdleCallback(start,{timeout:2500});
+  else setTimeout(start,400);
+}
+
+// ---------- theme ----------
+function effectiveDark(){if(state.theme==='dark')return true;if(state.theme==='light')return false;return matchMedia('(prefers-color-scheme: dark)').matches}
+function applyTheme(){document.documentElement.dataset.theme=state.theme;const button=$('#theme');button.querySelector('span').textContent=state.theme==='light'?'☀':state.theme==='dark'?'●':'◐';button.setAttribute('aria-label',state.theme==='light'?'Tema claro':state.theme==='dark'?'Tema oscuro':'Tema del sistema');document.querySelector('meta[name="theme-color"]')?.setAttribute('content',effectiveDark()?'#0b0b0a':'#f4f3ef')}
+$('#theme').addEventListener('click',()=>{const values=['system','light','dark'];state.theme=values[(values.indexOf(state.theme)+1)%values.length];localStorage.setItem('voy-theme',state.theme);applyTheme()});
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(state.theme==='system')applyTheme()});applyTheme();
+
+// ---------- planner: destination search (secondary, inside sheet) ----------
 const assistantToggle=$('#assistant-toggle'),assistantPanel=$('#assistant-panel'),assistantClose=$('#assistant-close'),assistantCopy=$('#assistant-copy'),assistantAction=$('#assistant-action');
 
 function setStatus(text='',kind='neutral'){statusLine.textContent=text;statusLine.dataset.state=kind;updateAssistant()}
@@ -81,11 +335,6 @@ function invalidateSuggestionOriginContext(){state.originRevision+=1;suggestionC
 function trainRadarDistanceMeters(a,b){const rad=n=>Number(n)*Math.PI/180,dLat=rad(Number(b.lat)-Number(a.lat)),dLon=rad(Number(b.lon)-Number(a.lon)),la1=rad(a.lat),la2=rad(b.lat),q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*6371000*Math.asin(Math.min(1,Math.sqrt(q)))}
 function trainRadarCoverageSupportedClient(coords){const lat=Number(coords?.lat),lon=Number(coords?.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return false;return TRAIN_RADAR_COVERAGE_POINTS.some(point=>trainRadarDistanceMeters({lat,lon},point)<=TRAIN_RADAR_RADIUS_METERS)}
 async function apiJson(url,options={}){const response=await fetch(url,options);let payload={};try{payload=await response.json()}catch{}if(!response.ok){const error=new Error(payload.error||`http_${response.status}`);error.status=response.status;error.payload=payload;throw error}return payload}
-
-function effectiveDark(){if(state.theme==='dark')return true;if(state.theme==='light')return false;return matchMedia('(prefers-color-scheme: dark)').matches}
-function applyTheme(){document.documentElement.dataset.theme=state.theme;const button=$('#theme');button.querySelector('span').textContent=state.theme==='light'?'☀':state.theme==='dark'?'●':'◐';button.setAttribute('aria-label',state.theme==='light'?'Tema claro':state.theme==='dark'?'Tema oscuro':'Tema del sistema');document.querySelector('meta[name="theme-color"]')?.setAttribute('content',effectiveDark()?'#0b0b0a':'#f4f3ef')}
-$('#theme').addEventListener('click',()=>{const values=['system','light','dark'];state.theme=values[(values.indexOf(state.theme)+1)%values.length];localStorage.setItem('voy-theme',state.theme);applyTheme()});
-matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(state.theme==='system')applyTheme()});applyTheme();
 
 function clearSuggestions(){suggestions.replaceChildren();suggestions.hidden=true;destinationInput.setAttribute('aria-expanded','false');destinationInput.removeAttribute('aria-activedescendant');state.destinationCandidates=[];state.destinationActiveIndex=-1}
 function renderSuggestions(candidates,showNational=false){
@@ -121,9 +370,8 @@ async function suggestDestinationQuery(query,scope=state.searchScope){
   }catch(error){if(error.name==='AbortError')return;clearSuggestions();nationalSearch.hidden=true;if(error.payload?.error==='external_dependency_unavailable')setStatus('La búsqueda no está disponible ahora.','error');else if(error.status===429)setStatus('Probá de nuevo en un momento.','error');else setStatus('No pudimos buscar ese destino.','error')}
   finally{loading.hidden=true}
 }
-function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe',false)}
-function clearMap(){renderInitialMap()}
-function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();mapTiles.querySelectorAll('.train-station-marker').forEach(marker=>marker.remove())}
+
+function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();state.stationModels=[];syncTrackerOverlays()}
 function radarObservedLabel(value){if(!value)return '';try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return ''}}
 function renderTrainRadar(radar){
   state.trainRadar=radar;trainRadar.hidden=false;trainRadarList.replaceChildren();
@@ -140,15 +388,12 @@ function renderTrainRadar(radar){
   }
 }
 function updateTrainStationMarkers(stations=[]){
-  mapTiles.querySelectorAll('.train-station-marker').forEach(marker=>marker.remove());
-  if(!state.mapCenter)return;
-  const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(state.mapCenter.lon,state.mapCenter.lat,z);
-  for(const item of stations){
-    const coords=item?.station?.coordinates;if(!coords)continue;const point=worldPixel(coords.lon,coords.lat,z);
-    const marker=document.createElement('div');marker.className='train-station-marker';marker.dataset.station=item.station.name;marker.title=item.station.name;
-    marker.style.cssText='position:absolute;width:14px;height:14px;border:3px solid white;border-radius:50%;background:#111;z-index:8;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.3)';
-    marker.style.left=`calc(50% + ${point.x-center.x}px)`;marker.style.top=`calc(50% + ${point.y-center.y}px)`;mapTiles.appendChild(marker);
-  }
+  state.stationModels=stations.map(item=>{
+    const coords=item?.station?.coordinates;
+    if(!coords)return null;
+    return {name:item.station.name,lat:Number(coords.lat),lon:Number(coords.lon)};
+  }).filter(Boolean);
+  syncTrackerOverlays();
 }
 async function refreshTrainRadar(){
   if(!state.origin?.coordinates){clearTrainRadar();return}
@@ -241,10 +486,10 @@ function renderOptions(){
   for(const handoff of infoActions){const actionLabel=officialHandoffButtonLabel(handoff.label);rows.push(`<article class="option-row option-info"><div class="option-copy"><strong>Información oficial</strong><p>${escapeHtml(handoff.label||'Fuente oficial')}</p><div class="option-meta">${escapeHtml(sourceLine(handoff.source))}</div></div><button class="option-action option-action-secondary" data-handoff-url="${escapeHtml(handoff.url)}" data-handoff-label="${escapeHtml(handoff.label||'Fuente oficial')}">${escapeHtml(actionLabel)}</button></article>`)}
   options.innerHTML=rows.join('');
   options.querySelector('[data-origin-action]')?.addEventListener('click',()=>$('#manual-origin').click());
-  options.querySelectorAll('[data-route-mode]').forEach(button=>button.addEventListener('click',()=>{const option=state.mobilityComputation?.mode_options.find(item=>item.mode===button.dataset.routeMode&&item.selectable&&item.route_available);if(!option)return;state.selectedRouteMode=option.mode;renderOptions();renderRouteGeometry(option.route.geometry);mapShell.scrollIntoView({block:'center',behavior:'smooth'})}));
+  options.querySelectorAll('[data-route-mode]').forEach(button=>button.addEventListener('click',()=>{const option=state.mobilityComputation?.mode_options.find(item=>item.mode===button.dataset.routeMode&&item.selectable&&item.route_available);if(!option)return;state.selectedRouteMode=option.mode;renderOptions();renderRouteGeometry(option.route.geometry)}));
   options.querySelectorAll('[data-handoff-url]').forEach(button=>button.addEventListener('click',()=>openOfficialHandoff(button.dataset.handoffUrl,button.dataset.handoffLabel)));
 }
-function officialHandoffButtonLabel(label){const raw=String(label||'Fuente oficial').trim();if(/^Consultar\s+/i.test(raw))return `Abrir ${raw.replace(/^Consultar\s+/i,'')}`;const lower=raw.charAt(0).toLocaleLowerCase('es-AR')+raw.slice(1);return `Abrir ${lower}`}
+function officialHandoffButtonLabel(label){const raw=String(label||'Fuente oficial').trim();if(/^Consultar\s+/i.test(raw))return `Abrir ${raw.replace(/^Consultar\s+/,'')}`;const lower=raw.charAt(0).toLocaleLowerCase('es-AR')+raw.slice(1);return `Abrir ${lower}`}
 function openOfficialHandoff(url,label){if(!isSafeOfficialHandoff(url)){setStatus('No pudimos abrir ese enlace.','error');return}window.open(url,'_blank','noopener,noreferrer')}
 function prepareNavigationHandoff(travelMode,label){if(!buildExternalNavigationUrl(state.destination?.coordinates,travelMode)){setStatus('No pudimos preparar esa consulta.','error');return}state.handoff={kind:'navigation',travelMode,label};state.handoffNonce+=1;dialog.dataset.nonce=String(state.handoffNonce);$('#handoff-title').textContent=label||'Consultar indicaciones';$('#handoff-copy').textContent='Al continuar, Google Maps recibirá las coordenadas de destino y, si elegiste un origen, también las de origen. VOY no las registra en telemetría.';$('#handoff-destination').textContent='Google Maps';dialog.showModal()}
 cancelHandoff.addEventListener('click',()=>{dialog.dataset.nonce='0';dialog.close('cancel');});
@@ -256,73 +501,41 @@ confirmHandoff.addEventListener('click',()=>{
   if(!url||(handoff.kind==='navigation'&&!isSafeExternalNavigationUrl(url))){dialog.dataset.nonce='0';dialog.close('blocked');return}
   dialog.dataset.nonce='0';dialog.close('confirm');window.open(url,'_blank','noopener,noreferrer')
 });
-function worldPixel(lon,lat,z){const scale=256*Math.pow(2,z),x=(Number(lon)+180)/360*scale,r=Number(lat)*Math.PI/180,y=(1-Math.asinh(Math.tan(r))/Math.PI)/2*scale;return{x,y}}
-function renderMap(coords,label='Mapa del destino',showPin=true){
-  state.mapCenter={lat:Number(coords.lat),lon:Number(coords.lon)};mapShell.setAttribute('aria-label',label);mapShell.hidden=false;mapTiles.replaceChildren();mapTiles.hidden=state.mapMode==='3d';mapFallback.hidden=true;mapAttribution.hidden=state.mapMode==='3d';
-  const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(coords.lon,coords.lat,z),centerX=Math.floor(center.x/256),centerY=Math.floor(center.y/256),radius=APP_CONFIG.MAP_PROVIDER.tile_radius;let loaded=0,failed=0,total=0;
-  for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
-    total++;const x=centerX+dx,y=centerY+dy,img=document.createElement('img');img.className='map-tile';img.alt='';img.decoding='async';img.loading='eager';img.referrerPolicy='strict-origin-when-cross-origin';img.style.left=`calc(50% + ${x*256-center.x}px)`;img.style.top=`calc(50% + ${y*256-center.y}px)`;img.src=APP_CONFIG.MAP_PROVIDER.tile_template.replace('{z}',z).replace('{x}',x).replace('{y}',y);
-    img.addEventListener('load',()=>{loaded++});img.addEventListener('error',()=>{failed++;if(failed===total&&loaded===0){mapFallback.hidden=false;mapAttribution.hidden=true;}});mapTiles.appendChild(img)
-  }
-  if(showPin){const pin=document.createElement('div');pin.className='selected-pin';pin.setAttribute('aria-hidden','true');mapTiles.appendChild(pin)}
-}
 function renderRouteGeometry(geometry){
   if(!state.destination?.coordinates||geometry?.type!=='LineString'||!Array.isArray(geometry.coordinates)||geometry.coordinates.length<2){renderMap(state.destination?.coordinates||{lat:0,lon:0});return}
   renderMap(state.destination.coordinates);
-  const z=APP_CONFIG.MAP_PROVIDER.zoom,center=worldPixel(state.destination.coordinates.lon,state.destination.coordinates.lat,z),width=Math.max(1,mapTiles.clientWidth||mapShell.clientWidth||600),height=Math.max(1,mapTiles.clientHeight||mapShell.clientHeight||420);
-  const points=geometry.coordinates.map(pair=>{const p=worldPixel(pair[0],pair[1],z);return`${(width/2+p.x-center.x).toFixed(1)},${(height/2+p.y-center.y).toFixed(1)}`}).join(' ');
-  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('route-overlay');svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.setAttribute('aria-label',`Recorrido ${computationModeLabel(state.selectedRouteMode)}`);
-  const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('points',points);line.setAttribute('fill','none');line.setAttribute('stroke','currentColor');line.setAttribute('stroke-width','6');line.setAttribute('stroke-linecap','round');line.setAttribute('stroke-linejoin','round');line.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(line);mapTiles.appendChild(svg);sync3DTopology();
+  syncTrackerOverlays();
 }
-clearMap();
+
+// ---------- boot: instant raster first paint, then vector upgrade ----------
+renderInitialMap();
+setSheetSummary();
+updateTruthPill();
+scheduleVectorUpgrade();
 window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});
 
-
+// ---------- contextual assistant (inside sheet, unchanged behavior) ----------
 function assistantModel(){
-
   const query=destinationInput.value.trim();
-
   if(statusLine.dataset.state==='error')return {copy:'No salió como esperábamos. Podés ajustar el destino o volver a intentarlo.',label:'Volver al destino',action:'destination'};
-
   if(state.destination){
-
     const mobility=state.mobilityDecision;
-
     if(mobility?.state==='handoff'||mobility?.state==='available')return {copy:'Hay información de movilidad disponible para este destino.',label:'Ver opciones',action:'options'};
-
     if(mobility?.state==='unknown')return {copy:'El destino está ubicado, pero la movilidad no está confirmada ahora.',label:'Ver mapa',action:'map'};
-
     if(mobility?.state==='unavailable')return {copy:'VOY todavía no tiene una integración de movilidad configurada para este destino.',label:mobility.next_actions?.[0]?.label||'Ver mapa',action:mobility.next_actions?.[0]?.type==='refine_destination'?'destination':'map'};
-
     return {copy:'Destino listo.',label:'Ver destino',action:'decision'};
-
   }
-
   if(query.length>=3){
-
     if(!nationalSearch.hidden)return {copy:'No alcanzó el contexto cercano. Podés ampliar la búsqueda sin cambiar lo que escribiste.',label:'Buscar en toda Argentina',action:'national'};
-
     return {copy:'Si el nombre se repite, agregá ciudad o provincia para afinar el resultado.',label:'Seguir escribiendo',action:'destination'};
-
   }
-
   if(state.origin)return {copy:'Con este origen, VOY prioriza resultados cercanos sin bloquear búsquedas en otras provincias.',label:'Buscar destino',action:'destination'};
-
   return {copy:'Podés buscar directo o usar tu ubicación para priorizar resultados cercanos.',label:'Usar mi ubicación',action:'location'};
-
 }
-
 function updateAssistant(){if(!assistantCopy||!assistantAction)return;const model=assistantModel();assistantCopy.textContent=model.copy;assistantAction.textContent=model.label;assistantAction.dataset.action=model.action}
-
 function closeAssistant(){assistantPanel.hidden=true;assistantToggle.setAttribute('aria-expanded','false')}
-
-function runAssistantAction(){const action=assistantAction.dataset.action;if(action==='location'){closeAssistant();$('#use-location').click();return}if(action==='national'){closeAssistant();nationalSearch.click();return}if(action==='options'){closeAssistant();options.scrollIntoView({block:'start',behavior:'smooth'});return}if(action==='map'){closeAssistant();mapShell.scrollIntoView({block:'center',behavior:'smooth'});return}if(action==='decision'){closeAssistant();decision.scrollIntoView({block:'start',behavior:'smooth'});return}closeAssistant();destinationInput.focus()}
-
+function runAssistantAction(){const action=assistantAction.dataset.action;if(action==='location'){closeAssistant();$('#use-location').click();return}if(action==='national'){closeAssistant();nationalSearch.click();return}if(action==='options'){closeAssistant();openSheetPane('expanded');options.scrollIntoView({block:'start',behavior:'smooth'});return}if(action==='map'){closeAssistant();setSheetPane('collapsed');return}if(action==='decision'){closeAssistant();openSheetPane('expanded');decision.scrollIntoView({block:'start',behavior:'smooth'});return}closeAssistant();destinationInput.focus()}
 assistantToggle.addEventListener('click',()=>{const opening=assistantPanel.hidden;assistantPanel.hidden=!opening;assistantToggle.setAttribute('aria-expanded',String(opening));if(opening)updateAssistant()});
-
 assistantClose.addEventListener('click',closeAssistant);assistantAction.addEventListener('click',runAssistantAction);
-
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!assistantPanel.hidden)closeAssistant()});
-
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!assistantPanel.hidden)closeAssistant();if(event.key==='Escape'&&state.sheetPane==='expanded'&&document.activeElement!==destinationInput&&!destinationInput.getAttribute('aria-expanded')?.includes('true'))setSheetPane('collapsed')});
 updateAssistant();
-

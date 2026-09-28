@@ -44,9 +44,10 @@ test('ORDER073 renderer applies explicit movement limits and reduced-motion poli
   assert.match(app,/prefers-reduced-motion:\s*reduce/);
 });
 
-test('ORDER073 desktop map allocation is intentionally widened while mobile stays map-first',async()=>{
+test('ORDER075 desktop keeps the map full-bleed with a bounded side sheet (map-first)',async()=>{
   const css=await text('public/styles.css');
-  assert.match(css,/ORDER073 MAP-FIRST/);
-  assert.match(css,/grid-template-columns:minmax\(0,2(?:\.\d+)?fr\) minmax\(3\d\dpx,/);
-  assert.match(css,/grid-template-rows:50svh minmax\(0,1fr\)/);
+  assert.match(css,/ORDER075 MAP-FIRST/);
+  assert.match(css,/\.map-shell\.voy-map-stage\{[^}]*position:absolute[^}]*inset:0/s);
+  assert.match(css,/@media \(min-width:960px\)\{[\s\S]*?\.voy-sheet\{[^}]*position:absolute[^}]*right:12px[^}]*width:min\(430px,38vw\)/s);
+  assert.doesNotMatch(css,/[.\w-]+\{[^}]*width:min\(100%[^\)]*\)\}[^@]*@media \(min-width:960px\)\{[\s\S]*?\.map-shell[^}]*position:sticky/s);
 });

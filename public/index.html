@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0b0a">
-  <meta name="description" content="VOY te ayuda a encontrar destinos y opciones de movilidad en Argentina.">
+  <meta name="description" content="VOY: mapa de movilidad de Argentina con verdad temporal. Tiempo real, programado o sin señal, sin datos inventados.">
   <title>VOY — Movilidad en Argentina</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml">
@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/styles.css?v=__BUILD_ID__">
 </head>
 <body>
-<header class="topbar">
+<header class="topbar voy-topbar">
   <a class="brand-lockup" href="/" aria-label="VOY inicio">
 
     <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="18" fill="currentColor"/><path d="M17 18c0 12 15 13 15 27M47 18c0 12-15 13-15 27" fill="none" stroke="#11110f" stroke-width="6" stroke-linecap="round"/><circle cx="32" cy="49" r="4.5" fill="#11110f"/></svg>
@@ -25,143 +25,177 @@
 </header>
 
 <main class="app-shell">
-  <section id="map-shell" class="map-shell" aria-label="Mapa de VOY">
+
+  <section id="map-shell" class="map-shell voy-map-stage" aria-label="Mapa de VOY">
     <div id="map-tiles" class="map-tiles" aria-hidden="true"></div>
+    <div id="map-canvas" class="map-canvas" hidden></div>
     <div id="map-3d-layer" class="map-3d-layer" aria-hidden="true" hidden></div>
-    <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
-      <button type="button" data-map-mode="2d" aria-pressed="true">2D</button>
-      <button type="button" data-map-mode="3d" aria-pressed="false">3D</button>
-      <select id="map-3d-quality" class="map-3d-quality" aria-label="Calidad 3D">
-        <option value="auto">Auto</option>
-        <option value="performance">Rendimiento</option>
-        <option value="quality">Calidad</option>
-      </select>
+    <div class="map-hud" aria-label="Estado del mapa">
+      <p id="truth-pill" class="truth-pill" role="status" aria-live="polite" data-state="no-coverage">
+        <span class="truth-icon" aria-hidden="true">◍</span>
+        <span id="truth-label">Tiempo real no disponible en esta cobertura</span>
+      </p>
+      <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
+        <button type="button" data-map-mode="2d" aria-pressed="true">2D</button>
+        <button type="button" data-map-mode="3d" aria-pressed="false">3D</button>
+        <select id="map-3d-quality" class="map-3d-quality" aria-label="Calidad 3D">
+          <option value="auto">Auto</option>
+          <option value="performance">Rendimiento</option>
+          <option value="quality">Calidad</option>
+        </select>
+      </div>
     </div>
     <p id="map-3d-status" class="map-3d-status" aria-live="polite"></p>
     <div id="map-3d-attribution" class="map-3d-attribution" hidden>Topología 3D · © OpenStreetMap contributors · alturas genéricas/inferidas</div>
     <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
     <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
   </section>
-  <div class="map-controls">
-    <div class="destination-hero">
 
-      <label id="destination-label" for="destination">¿A dónde vas?</label>
+  <section id="voy-sheet" class="voy-sheet" data-pane="collapsed" aria-label="Panel de VOY">
+    <button id="sheet-toggle" class="sheet-handle" type="button" aria-expanded="false" aria-controls="sheet-body">
+      <span class="sheet-grip" aria-hidden="true"></span>
+      <span id="sheet-toggle-label">Abrir panel</span>
+    </button>
+    <div id="sheet-body" class="sheet-body">
+      <div class="sheet-collapsed">
+        <button id="search-chip" class="voy-chip search-chip" type="button" aria-expanded="false" aria-controls="sheet-body">
+          <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 4.9 12l4.05 4.05 1.4-1.4L17.3 14.6A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/></svg>
+          <span>Buscar destino</span>
+        </button>
+        <p id="sheet-summary" class="sheet-summary" aria-live="polite">Cobertura: sin fuente de tiempo real autorizada para Santa Fe.</p>
+      </div>
+      <div class="sheet-expanded" hidden>
 
-      <div class="hero-support">
+        <div class="destination-search-stack">
 
-        <p id="destination-status" class="status-line" aria-live="polite" data-state="neutral"></p>
+          <label id="destination-label" for="destination" class="sr-only">Buscar destino</label>
 
-        <div class="search-aftercare">
+          <div class="destination-control">
 
-          <button id="national-search" class="quiet-action" type="button" hidden>Buscar en toda Argentina</button>
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 4.9 12l4.05 4.05 1.4-1.4L17.3 14.6A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/></svg>
 
-          <div id="destination-context" class="context-help" hidden>Probá agregando localidad o provincia.</div>
+            <input id="destination" autocomplete="off" maxlength="160" placeholder="Buscá un destino" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destination-suggestions" aria-describedby="destination-status">
+
+            <span id="destination-loading" class="search-progress" aria-hidden="true" hidden></span>
+
+          </div>
+
+          <div id="destination-suggestions" class="suggestions" role="listbox" aria-label="Resultados de destino" hidden></div>
+
+          <div class="hero-support">
+
+            <p id="destination-status" class="status-line" aria-live="polite" data-state="neutral"></p>
+
+            <div class="search-aftercare">
+
+              <button id="national-search" class="quiet-action" type="button" hidden>Buscar en toda Argentina</button>
+
+              <div id="destination-context" class="context-help" hidden>Probá agregando localidad o provincia.</div>
+
+            </div>
+
+          </div>
 
         </div>
 
-      </div>
+        <div class="context-rail">
 
-      <div class="destination-search-stack">
+          <div class="origin-bar">
+            <div class="origin-copy">
+              <span class="origin-dot" aria-hidden="true"></span>
+              <span id="origin-label">Sin origen elegido</span>
+            </div>
+            <div class="origin-actions">
+              <button id="use-location" type="button" class="origin-action">Usar mi ubicación</button>
+              <button id="manual-origin" type="button" class="origin-action" aria-expanded="false" aria-controls="origin-editor">Elegir origen</button>
+              <button id="clear-location" type="button" class="origin-action" hidden>Cambiar</button>
+            </div>
+          </div>
 
-        <div class="destination-control">
+          <div id="origin-editor" class="origin-editor" hidden>
+            <input id="origin" class="origin-input" maxlength="160" placeholder="Escribí un origen" aria-label="Origen">
+            <button id="resolve-origin" type="button">Usar origen</button>
+          </div>
 
-          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 4.9 12l4.05 4.05 1.4-1.4L17.3 14.6A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/></svg>
+          <aside id="voy-assistant" class="assistant" aria-label="Ayuda contextual de VOY">
 
-          <input id="destination" autocomplete="off" maxlength="160" placeholder="Buscá un destino" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destination-suggestions" aria-describedby="destination-status">
+            <button id="assistant-toggle" class="assistant-toggle" type="button" aria-expanded="false" aria-controls="assistant-panel">
 
-          <span id="destination-loading" class="search-progress" aria-hidden="true" hidden></span>
+              <span class="assistant-symbol" aria-hidden="true"><span></span></span>
+
+              <span>Ayuda</span>
+
+            </button>
+
+            <div id="assistant-panel" class="assistant-panel" hidden>
+
+              <div class="assistant-heading"><strong>VOY</strong><button id="assistant-close" type="button" aria-label="Cerrar ayuda">×</button></div>
+
+              <p id="assistant-copy">Podés buscar directo o usar tu ubicación para priorizar resultados cercanos.</p>
+
+              <button id="assistant-action" class="assistant-action" type="button" data-action="location">Usar mi ubicación</button>
+
+            </div>
+
+          </aside>
 
         </div>
 
-        <div id="destination-suggestions" class="suggestions" role="listbox" aria-label="Resultados de destino" hidden></div>
+        <section id="tracker-facts" class="tracker-facts" hidden tabindex="-1" aria-live="polite" aria-label="Datos de la entidad seleccionada">
+          <div class="facts-head">
+            <span class="summary-kicker">Entidad</span>
+            <strong id="facts-line">—</strong>
+            <button id="facts-close" type="button" aria-label="Cerrar datos de la entidad">×</button>
+          </div>
+          <p id="fixture-banner" class="fixture-banner" hidden>FIXTURE DEMO · no producción</p>
+          <dl id="facts-rows" class="facts-rows"></dl>
+          <div class="facts-actions">
+            <button id="follow-button" type="button" class="sheet-action">Seguir</button>
+            <button id="return-to-now" type="button" class="sheet-action" hidden>Volver a ahora</button>
+          </div>
+          <div id="time-rail-wrap" class="time-rail-wrap" hidden>
+            <span id="time-rail-label" class="time-rail-label">Histórico de esta sesión</span>
+            <input id="time-rail" type="range" min="0" max="0" step="1" value="0" aria-label="Observaciones de esta sesión">
+            <span id="time-rail-meta" class="time-rail-meta" aria-hidden="true"></span>
+          </div>
+        </section>
+
+        <section class="planner" aria-labelledby="destination-label">
+          <section id="decision" class="decision" hidden aria-live="polite">
+            <div class="destination-summary">
+              <div class="summary-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.15 7 13 7 13s7-7.85 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
+              </div>
+              <div class="summary-copy">
+                <span class="summary-kicker">Destino</span>
+                <h1 id="result-title"></h1>
+                <p id="result-meta"></p>
+              </div>
+            </div>
+            <div id="options" class="options" aria-label="Opciones de movilidad"></div>
+          </section>
+
+          <section id="train-radar" class="train-radar" hidden aria-live="polite" aria-labelledby="train-radar-title">
+            <div class="train-radar-heading">
+              <div>
+                <span class="summary-kicker">VOY Radar · Trenes</span>
+                <h2 id="train-radar-title">Estaciones cercanas</h2>
+              </div>
+              <p id="train-radar-meta"></p>
+            </div>
+            <div id="train-radar-list" class="train-radar-list"></div>
+          </section>
+        </section>
+
+        <footer class="footer">
+          <nav aria-label="Información"><a href="/coverage.html">Cobertura</a><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a><a href="/sources.html">Fuentes</a></nav>
+        </footer>
 
       </div>
-
     </div>
-
-
-
-    <div class="context-rail">
-
-      <div class="origin-bar">
-      <div class="origin-copy">
-        <span class="origin-dot" aria-hidden="true"></span>
-        <span id="origin-label">Sin origen elegido</span>
-      </div>
-      <div class="origin-actions">
-        <button id="use-location" type="button" class="origin-action">Usar mi ubicación</button>
-        <button id="manual-origin" type="button" class="origin-action" aria-expanded="false" aria-controls="origin-editor">Elegir origen</button>
-        <button id="clear-location" type="button" class="origin-action" hidden>Cambiar</button>
-      </div>
-    </div>
-
-    <div id="origin-editor" class="origin-editor" hidden>
-      <input id="origin" class="origin-input" maxlength="160" placeholder="Escribí un origen" aria-label="Origen">
-      <button id="resolve-origin" type="button">Usar origen</button>
-    </div>
-
-
-
-
-
-    <aside id="voy-assistant" class="assistant" aria-label="Ayuda contextual de VOY">
-
-      <button id="assistant-toggle" class="assistant-toggle" type="button" aria-expanded="false" aria-controls="assistant-panel">
-
-        <span class="assistant-symbol" aria-hidden="true"><span></span></span>
-
-        <span>Ayuda</span>
-
-      </button>
-
-      <div id="assistant-panel" class="assistant-panel" hidden>
-
-        <div class="assistant-heading"><strong>VOY</strong><button id="assistant-close" type="button" aria-label="Cerrar ayuda">×</button></div>
-
-        <p id="assistant-copy">Podés buscar directo o usar tu ubicación para priorizar resultados cercanos.</p>
-
-        <button id="assistant-action" class="assistant-action" type="button" data-action="location">Usar mi ubicación</button>
-
-      </div>
-
-    </aside>
-
-    </div>
-
-</div>
-  <section class="planner" aria-labelledby="destination-label">
-    <section id="decision" class="decision" hidden aria-live="polite">
-      <div class="destination-summary">
-        <div class="summary-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.15 7 13 7 13s7-7.85 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
-        </div>
-        <div class="summary-copy">
-          <span class="summary-kicker">Destino</span>
-          <h1 id="result-title"></h1>
-          <p id="result-meta"></p>
-        </div>
-      </div>
-      <div id="options" class="options" aria-label="Opciones de movilidad"></div>
-    </section>
-
-    <section id="train-radar" class="train-radar" hidden aria-live="polite" aria-labelledby="train-radar-title">
-      <div class="train-radar-heading">
-        <div>
-          <span class="summary-kicker">VOY Radar · Trenes</span>
-          <h2 id="train-radar-title">Estaciones cercanas</h2>
-        </div>
-        <p id="train-radar-meta"></p>
-      </div>
-      <div id="train-radar-list" class="train-radar-list"></div>
-    </section>
-    <footer class="footer">
-  <nav aria-label="Información"><a href="/coverage.html">Cobertura</a><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a><a href="/sources.html">Fuentes</a></nav>
-</footer>
   </section>
 
-
 </main>
-
 
 
 <dialog id="handoff-dialog" aria-labelledby="handoff-title">

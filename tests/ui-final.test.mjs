@@ -25,10 +25,13 @@ test('decorative mobility mode tabs are absent',()=>{
   assert.equal(html.includes('data-mode="Apps"'),false);
 });
 
-test('destination remains the primary app action',()=>{
-  assert.match(html,/class="destination-hero"/);
+test('ORDER075 destination search is secondary inside the sheet (map-first hierarchy)',()=>{
+  assert.doesNotMatch(html,/class="destination-hero"/);
+  assert.doesNotMatch(html,/¿A dónde vas\?/);
   assert.match(html,/id="destination"/);
   assert.match(html,/id="destination-suggestions"/);
+  assert.ok(html.indexOf('id="voy-sheet"')>html.indexOf('id="map-shell"'));
+  assert.ok(html.indexOf('id="destination"')>html.indexOf('id="voy-sheet"'),'search lives inside the sheet');
 });
 
 test('desktop and mobile layouts are explicitly designed',()=>{

@@ -6,22 +6,23 @@ const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8'
 const css=await readFile(new URL('../public/styles.css',import.meta.url),'utf8');
 const visualHarness=await readFile(new URL('../order056/evidence/visual-state-matrix.mjs',import.meta.url),'utf8');
 
-test('destination search is structurally embedded in the spatial hero',()=>{
+test('ORDER075 destination search is structurally embedded in the bottom sheet (no hero)',()=>{
   assert.match(html,/class="destination-search-stack"/);
-  assert.match(css,/\.destination-hero\{[^}]*min-height:/s);
-  assert.match(css,/\.destination-hero\{[^}]*radial-gradient/s);
+  assert.doesNotMatch(html,/class="destination-hero"/);
+  assert.doesNotMatch(css,/\.destination-hero\{/);
   assert.match(css,/\.destination-search-stack\{[^}]*position:relative/s);
 });
 
-test('initial desktop uses an intentional hero plus contextual counter-space',()=>{
+test('ORDER075 planner is a bounded grid region inside the sheet (secondary)',()=>{
   assert.match(html,/class="context-rail"/);
-  assert.match(css,/body:not\(\[data-view="resolved"\]\) \.planner\{[^}]*display:grid[^}]*grid-template-columns:/s);
+  assert.match(css,/\.planner\{[^}]*display:grid[^}]*grid-template-columns:minmax\(0,/s);
   assert.equal(css.includes('body:not([data-view="resolved"]) .planner{width:min(100%,760px)}'),false);
 });
 
-test('assistant belongs to the initial composition instead of floating detached',()=>{
+test('ORDER075 assistant belongs to the sheet composition instead of floating over the map',()=>{
   assert.match(css,/body:not\(\[data-view="resolved"\]\) \.assistant\{[^}]*position:(?:relative|static)/s);
-  assert.match(css,/body\[data-view="resolved"\] \.assistant\{[^}]*position:fixed/s);
+  assert.match(css,/body\[data-view="resolved"\] \.assistant\{[^}]*position:relative/s);
+  assert.doesNotMatch(css,/body\[data-view="resolved"\] \.assistant\{[^}]*position:fixed/s);
 });
 
 test('mobile and short landscape have purpose-built composition rules',()=>{
