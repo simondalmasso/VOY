@@ -1,0 +1,147 @@
+{
+  "build_id": "1ba08c651a7875afdba7149e",
+  "chrome": "C:\\PROGRA~2\\Google\\Chrome\\Application\\chrome.exe",
+  "only_follow": false,
+  "real_vector": false,
+  "evidence_tag": "canonical-chrome-final",
+  "checks": {},
+  "requests": {
+    "total": 309,
+    "api_total": 0,
+    "api_paths": []
+  },
+  "results": [
+    {
+      "name": "MAP_FIRST_MOBILE_390x844",
+      "status": "PASS",
+      "detail": {
+        "innerWidth": 390,
+        "innerHeight": 844,
+        "map": {
+          "x": 0,
+          "y": 56,
+          "w": 390,
+          "h": 788
+        },
+        "mapShare": 0.933649289099526,
+        "sheetHeightOverMap": 0.16140545685279187,
+        "pillVisible": true,
+        "toggleVisible": true,
+        "heroAbsent": true,
+        "destinationInSheet": true,
+        "docOverflow": false,
+        "bodyOverflow": false
+      }
+    },
+    {
+      "name": "NO_LIVE_SANTA_FE_TRUTHFUL",
+      "status": "PASS",
+      "detail": {
+        "truth": "Tiempo real no disponible en esta cobertura"
+      }
+    },
+    {
+      "name": "SEARCH_SECONDARY_SHEET",
+      "status": "PASS",
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "name": "TRACKERVIEW_FIXTURE_REALTIME_FOLLOW",
+      "status": "PASS",
+      "detail": {
+        "markerCount": 7,
+        "rail": "3",
+        "followApiDelta": 0
+      }
+    },
+    {
+      "name": "SELECTION_SURVIVES_2D_3D",
+      "status": "PASS",
+      "detail": {
+        "renderCalls": 5,
+        "workerDelta": 0
+      }
+    },
+    {
+      "name": "STALE_TRANSITION_ZERO_MOVEMENT",
+      "status": "PASS",
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "name": "DESKTOP_1440x900_MAP_CANVAS",
+      "status": "PASS",
+      "detail": {
+        "map": "1440x836",
+        "sheet": "430x176"
+      }
+    },
+    {
+      "name": "ZOOM_200_NO_OVERFLOW_390x844",
+      "status": "PASS",
+      "detail": {
+        "overflow": [
+          {
+            "sel": "html",
+            "overflow": false
+          },
+          {
+            "sel": "body",
+            "overflow": false
+          },
+          {
+            "sel": ".app-shell",
+            "overflow": false
+          },
+          {
+            "sel": ".planner",
+            "overflow": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "KEYBOARD_REACHES_TRACKERVIEW",
+      "status": "PASS",
+      "detail": {
+        "reached": [
+          [
+            "2d",
+            12
+          ],
+          [
+            "3d",
+            1
+          ],
+          [
+            "marker",
+            10
+          ],
+          [
+            "time-rail",
+            1
+          ]
+        ],
+        "focusVisible": {
+          "id": "time-rail",
+          "outline": "solid",
+          "width": "3px"
+        }
+      }
+    },
+    {
+      "name": "VECTOR_FAILURE_FALLBACK_RASTER",
+      "status": "PASS",
+      "detail": {
+        "ok": true
+      }
+    }
+  ],
+  "summary": {
+    "pass": 10,
+    "fail": 0
+  }
+}

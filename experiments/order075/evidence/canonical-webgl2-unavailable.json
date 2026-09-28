@@ -1,0 +1,29 @@
+{
+  "build_id": "1ba08c651a7875afdba7149e",
+  "chrome": "C:/PROGRA~2/Microsoft/Edge/Application/msedge.exe",
+  "only_follow": false,
+  "real_vector": false,
+  "evidence_tag": "canonical-webgl2-unavailable",
+  "checks": {},
+  "requests": {
+    "total": 29,
+    "api_total": 0,
+    "api_paths": []
+  },
+  "results": [
+    {
+      "name": "webgl2-unavailable",
+      "status": "PASS",
+      "detail": {
+        "webgl2": false,
+        "substrate": "vector_failed",
+        "raster": true,
+        "status": "3D no disponible en este equipo; seguimos en 2D."
+      }
+    }
+  ],
+  "summary": {
+    "pass": 1,
+    "fail": 0
+  }
+}

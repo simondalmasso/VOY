@@ -1,0 +1,28 @@
+{
+  "build_id": "1ba08c651a7875afdba7149e",
+  "chrome": "C:/PROGRA~2/Microsoft/Edge/Application/msedge.exe",
+  "only_follow": false,
+  "real_vector": false,
+  "evidence_tag": "canonical-reduced-motion",
+  "checks": {},
+  "requests": {
+    "total": 36,
+    "api_total": 0,
+    "api_paths": []
+  },
+  "results": [
+    {
+      "name": "reduced-motion",
+      "status": "PASS",
+      "detail": {
+        "media": true,
+        "transition": "1e-05s",
+        "animation": "1e-05s"
+      }
+    }
+  ],
+  "summary": {
+    "pass": 1,
+    "fail": 0
+  }
+}

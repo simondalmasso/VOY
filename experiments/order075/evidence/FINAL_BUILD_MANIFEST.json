@@ -1,0 +1,184 @@
+{
+    "schema_version":  1,
+    "source_commit":  "c3fd59e76bb349ad1177d349fae4aaac7a9cdff1",
+    "release_id":  "order057-c3fd59e76bb3-1ba08c65",
+    "build_id":  "1ba08c651a7875afdba7149e",
+    "source_digest":  "1ba08c651a7875afdba7149e0a4a2ce6b7e4bc82b39940d0eff2075f73e772c8",
+    "config_digest":  "9f31c041b70ed19c04248709cc6a71f42e5f0727b9c747469fd085a184ed5d88",
+    "registry_digest":  "1f1f2f0bdb3fad8a56dfa66b1d2bfcdd3b9ea9c8216bcb67bfcde56907b88f9f",
+    "worker_sha256":  "dcf7d67681e4d06e015a3d87cfb57bb5a8821fab2b02f462457b6e1d97b54426",
+    "client_file_count":  34,
+    "client_files":  [
+                         {
+                             "path":  "_headers",
+                             "size":  556,
+                             "sha256":  "1e0782e7325cbdce343b58c21253111e99cd341fd07079ad5e4081ef2ffe54d0"
+                         },
+                         {
+                             "path":  "3d\\temporal.js",
+                             "size":  5430,
+                             "sha256":  "cbfc9667923526257465568bdb342ce09f840837ac53bce3efac60d58a95491e"
+                         },
+                         {
+                             "path":  "3d\\topology\\chunk-santa-fe-centro-0.json",
+                             "size":  3128,
+                             "sha256":  "a90ea9a4c6c640c8d7d82364842420e5088ebafa66402566c5ca5f1188960524"
+                         },
+                         {
+                             "path":  "3d\\topology\\manifest.json",
+                             "size":  1148,
+                             "sha256":  "0f06458b991f5b166a0e7b7a02ca5c3077582a4a3cac99d15decd2cd852354ed"
+                         },
+                         {
+                             "path":  "3d\\transport-contract.json",
+                             "size":  657,
+                             "sha256":  "4a5d752207cdedaba8c68be283a7b7ade16096b3cd76f5db2acf2bfd95a0265a"
+                         },
+                         {
+                             "path":  "3d\\voy3d.js",
+                             "size":  12668,
+                             "sha256":  "77e99fac80d659a1116cc04dc90b6299df86f9af9f847736fe79f6b669b419c3"
+                         },
+                         {
+                             "path":  "app.js",
+                             "size":  50657,
+                             "sha256":  "66994d62c7bbb027ad42baca5d9bd13d79fd177140246395b51630b34d34ad1b"
+                         },
+                         {
+                             "path":  "contracts.js",
+                             "size":  7593,
+                             "sha256":  "f9c4edaee4b1766de03efdaadc222b2cc24ffb808fb27a3326491c660db450e6"
+                         },
+                         {
+                             "path":  "coverage.html",
+                             "size":  999,
+                             "sha256":  "b0ce502b795a1dbc73a35c0572080a7b36ecc3967bf0c8d53d331fb90ff1de9e"
+                         },
+                         {
+                             "path":  "icons\\app-icon.svg",
+                             "size":  359,
+                             "sha256":  "ef9d8116a01a402dc0e06b92dc7b39f7646b702694ff7989876f95bd8a528f63"
+                         },
+                         {
+                             "path":  "icons\\app-icon-192.png",
+                             "size":  2531,
+                             "sha256":  "2aa881bbe17b621972407aa5ddb62c45bea4e388232e16ccea4aa079c65289a6"
+                         },
+                         {
+                             "path":  "icons\\app-icon-512.png",
+                             "size":  7566,
+                             "sha256":  "5175e1236623f60d5df551b9cd32826c098f8654b7700b9e930642af92af4dd9"
+                         },
+                         {
+                             "path":  "icons\\brand-lockup.svg",
+                             "size":  718,
+                             "sha256":  "e3316dba8b637655a83d56545392da920fe366c322ac75b556192bb85fdeaf59"
+                         },
+                         {
+                             "path":  "index.html",
+                             "size":  11130,
+                             "sha256":  "ab894897d13b80339a038097e23753034b32661b2cf7e945113419842e5bec4d"
+                         },
+                         {
+                             "path":  "manifest.json",
+                             "size":  633,
+                             "sha256":  "bdef0c63ce7b7dd01fa3c9495f3f27dd9e5fc8b1ad239cd0007b7cf776ef0c22"
+                         },
+                         {
+                             "path":  "map\\substrate.js",
+                             "size":  19896,
+                             "sha256":  "3ba2e456f087ec482c96e2d19a3b31cea9bee928faabf7ffaa93f22bc870d42c"
+                         },
+                         {
+                             "path":  "offline.html",
+                             "size":  740,
+                             "sha256":  "b562ad3325b3325ec830ad76540db9c7e86fe4d929e51cf7f4949b674d1ab773"
+                         },
+                         {
+                             "path":  "privacy.html",
+                             "size":  1200,
+                             "sha256":  "0c14b97b15826c7fc7a8ec2aa00de98b88de28b1bb396028308caefdebfd0809"
+                         },
+                         {
+                             "path":  "runtime-config.js",
+                             "size":  2242,
+                             "sha256":  "9f31c041b70ed19c04248709cc6a71f42e5f0727b9c747469fd085a184ed5d88"
+                         },
+                         {
+                             "path":  "sources.html",
+                             "size":  1519,
+                             "sha256":  "1f2371b22fe5e93c38487516169885bfc6007a29c6291525b41c81c96c6dcf17"
+                         },
+                         {
+                             "path":  "styles.css",
+                             "size":  29595,
+                             "sha256":  "8997b753a4ba886c8dba4fb897eb069016c115afb5547505994d524a5bf20be3"
+                         },
+                         {
+                             "path":  "sw.js",
+                             "size":  1391,
+                             "sha256":  "97c20cc8080c5db26aabfcd7958c2b208943a7e390ee8b36c95ef71d0a785a17"
+                         },
+                         {
+                             "path":  "terms.html",
+                             "size":  672,
+                             "sha256":  "0f5739ca692538d9c71c452ba3c2056502cb3839a309529626abbeea73774b0e"
+                         },
+                         {
+                             "path":  "tracker\\fixtures.js",
+                             "size":  5616,
+                             "sha256":  "d15c61085ae9d1e3dbc6efda24e74451cdcb2d5eaf40bda960f83fcb7d8dcf45"
+                         },
+                         {
+                             "path":  "tracker\\observations.js",
+                             "size":  3648,
+                             "sha256":  "92c0488d7b9f459a7b362be58389d805cc0d1aae2f9fb828102f5b223b0380d2"
+                         },
+                         {
+                             "path":  "tracker\\store.js",
+                             "size":  8802,
+                             "sha256":  "42d8603e59b45f0a0067a80f3efc2697f140cfc306c16965d43cba1c85a61715"
+                         },
+                         {
+                             "path":  "vendor\\maplibre-gl.css",
+                             "size":  83310,
+                             "sha256":  "d8617d8421930e3fc6185365400e788c374c1a5d9fbe87999998c0bc14a202d3"
+                         },
+                         {
+                             "path":  "vendor\\maplibre-gl.mjs",
+                             "size":  590255,
+                             "sha256":  "26c950bf7d46e822cd618a149a08643ced2bc49d9d8b6bc10024ea1f506de013"
+                         },
+                         {
+                             "path":  "vendor\\maplibre-gl-shared.mjs",
+                             "size":  515924,
+                             "sha256":  "76b5f55bdee928c65d592684aaff2b913d50b6b17b0ec6334e88b09b6aa47960"
+                         },
+                         {
+                             "path":  "vendor\\maplibre-gl-worker.mjs",
+                             "size":  19133,
+                             "sha256":  "01ad197aa7f4cec258a890febd71b7515e96309881b036a7095befc01a45296e"
+                         },
+                         {
+                             "path":  "vendor\\MAPLIBRE-LICENSE.txt",
+                             "size":  5984,
+                             "sha256":  "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2"
+                         },
+                         {
+                             "path":  "vendor\\three.core.js",
+                             "size":  1458113,
+                             "sha256":  "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6"
+                         },
+                         {
+                             "path":  "vendor\\three.module.js",
+                             "size":  662826,
+                             "sha256":  "69d1c3115c07bdc502690cc2343167aee1ff6668bdf26e4f4025bd5aea50222f"
+                         },
+                         {
+                             "path":  "vendor\\THREE-LICENSE.txt",
+                             "size":  1081,
+                             "sha256":  "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc"
+                         }
+                     ],
+    "generated_at":  "2026-09-28T01:35:27.0542625Z"
+}

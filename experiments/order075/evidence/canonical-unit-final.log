@@ -1,0 +1,374 @@
+✔ address relevance rejects unrelated same-city entity (2.9898ms)
+✔ address relevance accepts matching street entity even when provider omits house number (2.9189ms)
+✔ typo relevance tolerates one-edit human input (0.478ms)
+✔ poi relevance requires entity terms, not territory alone (2.1307ms)
+✔ territorial expectation is evaluated separately (0.6617ms)
+✔ authority comparison detects false locality invention (0.4694ms)
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.029Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.043Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.056Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"local","outcome_class":"empty"}
+{"event":"territory_resolve_unverified","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.071Z","endpoint_class":"territory","result_class":"not_found"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.071Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"local","outcome_class":"empty"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.076Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"territory_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.078Z","endpoint_class":"reverse","province_id":"82","result_class":"resolved"}
+{"event":"territory_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.079Z","endpoint_class":"reverse","province_id":"82","result_class":"resolved"}
+{"event":"destination_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.079Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","province_id":"82","outcome_class":"resolved"}
+{"event":"upstream_5xx","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.086Z","endpoint_class":"georef","status_code_class":"5xx"}
+{"event":"upstream_5xx","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.086Z","endpoint_class":"georef","status_code_class":"5xx"}
+{"event":"destination_resolve_error","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.086Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","error_class":"external_dependency_unavailable","outcome_class":"map_resolvable_territory_unverified"}
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.094Z","endpoint_class":"api_nope","status_code_class":"4xx","latency_bucket":"lt100ms"}
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.097Z","endpoint_class":"api_destinations","status_code_class":"4xx","latency_bucket":"lt100ms"}
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.098Z","endpoint_class":"api_health","status_code_class":"2xx","latency_bucket":"lt100ms"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.106Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.115Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.124Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.129Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.134Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.138Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.149Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.167Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.237Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.260Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.277Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+✔ local context ranks local plausible result (202.0504ms)
+✔ explicit geography overrides origin (9.3098ms)
+✔ punctuation negative fails closed (12.2824ms)
+✔ nonsense numeric candidate fails closed (15.4364ms)
+✔ CABA provider territory canonicalized (4.7369ms)
+✔ successful GeoRef normalization marks official territory verified (0.8243ms)
+✔ reverseLocation preserves successful GeoRef verification contract (1.0088ms)
+✔ Puente Colgante resolution preserves verified Santa Fe integration (5.6838ms)
+✔ CABA GeoRef Comuna 1 preserves locality while binding caba mobility (0.5277ms)
+✔ selected photon remains map resolvable when GeoRef unavailable (1.5789ms)
+✔ invalid candidate ref rejected (1.0843ms)
+✔ telemetry forbids raw query (0.5708ms)
+✔ telemetry forbids exact coordinates (0.3022ms)
+✔ coverage false locality defaults T0 (0.3796ms)
+✔ Santa Fe truth remains handoff only (0.2655ms)
+✔ unknown API is JSON 404 (6.1544ms)
+✔ destination endpoint POST only (1.7262ms)
+✔ security headers applied (1.2052ms)
+✔ street named like origin province remains a destination entity (7.0082ms)
+✔ boulevard spelling is normalized for Photon discovery (9.4985ms)
+✔ address retries without house number when exact Photon pass misses local city (9.3022ms)
+✔ boulevard address retries without road-type prefix when Photon indexes only street name (4.822ms)
+✔ accented explicit geography uses an ASCII-stable Photon transport query (4.0287ms)
+✔ explicit comma geography is not treated as destination entity text (4.6485ms)
+✔ common transposition typo is corrected before semantic plausibility filtering (10.8111ms)
+✔ exact street intent outranks longer same-token street names (17.5955ms)
+✔ contradictory provider locality never overwrites nonempty province territory (70.1083ms)
+✔ official province with unproven provider locality remains partial and cannot bind mobility (23.213ms)
+✔ locality-bound mobility is withheld when official parent geometry does not contain the coordinate (16.5605ms)
+✔ ORDER075 destination search is structurally embedded in the bottom sheet (no hero) (2.054ms)
+✔ ORDER075 planner is a bounded grid region inside the sheet (secondary) (0.5835ms)
+✔ ORDER075 assistant belongs to the sheet composition instead of floating over the map (0.5927ms)
+✔ mobile and short landscape have purpose-built composition rules (0.9658ms)
+✔ visual motion stays within the authorized 180-420ms craft range (0.4401ms)
+✔ short landscape preserves 44px minimum touch targets (0.7716ms)
+✔ expanded assistant controls preserve 44px minimum touch targets (0.6061ms)
+✔ error-state harness allowlists only the intentional mocked suggest 503 (0.4924ms)
+✔ visual harness treats only the stubbed telemetry abort as expected network noise (0.3176ms)
+✔ assistant reveal motion never scales touch targets below their CSS size (0.413ms)
+{"event":"territory_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:08.959Z","endpoint_class":"reverse","province_id":"82","result_class":"resolved"}
+{"event":"destination_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:08.962Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","province_id":"82","outcome_class":"resolved"}
+{"event":"territory_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:08.994Z","endpoint_class":"reverse","province_id":"02","result_class":"resolved"}
+{"event":"destination_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:08.996Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","province_id":"02","outcome_class":"resolved"}
+{"event":"territory_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.151Z","endpoint_class":"reverse","province_id":"78","result_class":"resolved"}
+{"event":"destination_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.152Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","province_id":"78","outcome_class":"resolved"}
+{"event":"upstream_5xx","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.155Z","endpoint_class":"georef","status_code_class":"5xx"}
+{"event":"upstream_5xx","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.156Z","endpoint_class":"georef","status_code_class":"5xx"}
+{"event":"destination_resolve_error","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.156Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","error_class":"external_dependency_unavailable","outcome_class":"map_resolvable_territory_unverified"}
+{"event":"territory_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.159Z","endpoint_class":"reverse","province_id":"66","result_class":"resolved"}
+{"event":"destination_resolve_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.159Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","province_id":"66","outcome_class":"resolved"}
+✔ resolve returns server-authoritative MobilityDecision for Santa Fe (127.7146ms)
+✔ CABA Comuna 1 stays preserved while MobilityDecision binds caba (155.4252ms)
+✔ unintegrated verified destination returns explicit useful next action (7.477ms)
+✔ GeoRef outage remains fail-closed and MobilityDecision never fabricates mobility (2.4799ms)
+✔ MobilityDecision normalizer accepts authoritative contract without inferring availability (4.5168ms)
+✔ frontend consumes MobilityDecision and contains no mobility availability inference/fetch (26.6332ms)
+✔ buildMobilityDecision does not trust client-shaped integration fields (2.4154ms)
+✔ verified Santo Tome destination always exposes useful national mobility consultation actions (2.1445ms)
+✔ representative verified destination in all 24 Argentina jurisdictions has at least one useful mobility action (48.086ms)
+✔ origin success paths forcibly collapse the manual editor and reset aria-expanded (19.2592ms)
+✔ external navigation URL builder and validator are strict and privacy-safe (3.0547ms)
+✔ ORDER057-R1 integrated Santa Fe augments official handoff with useful multi-mode baseline (1.9477ms)
+✔ ORDER057-R1 integrated city baseline is not suppressed merely by integration_slug (15.5527ms)
+✔ ORDER057-R1 static official handoff is direct one-tap while navigation retains privacy confirmation (8.8304ms)
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.068Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.078Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.082Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.087Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.092Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.098Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.102Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.106Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.116Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.121Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.127Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.132Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.138Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.145Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.152Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.157Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.178Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.184Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.191Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+✔ explicit same-name destination head survives geography filtering: Córdoba, Córdoba (170.4237ms)
+✔ explicit same-name destination head survives geography filtering: Corrientes, Corrientes (4.4079ms)
+✔ explicit same-name destination head survives geography filtering: Formosa, Formosa (4.4149ms)
+✔ explicit same-name destination head survives geography filtering: La Rioja, La Rioja (4.5891ms)
+✔ explicit same-name destination head survives geography filtering: Mendoza, Mendoza (4.9276ms)
+✔ explicit same-name destination head survives geography filtering: Neuquén, Neuquén (5.9135ms)
+✔ explicit same-name destination head survives geography filtering: Salta, Salta (3.6002ms)
+✔ explicit same-name destination head survives geography filtering: San Juan, San Juan (4.4274ms)
+✔ explicit same-name destination head survives geography filtering: San Luis, San Luis (9.8987ms)
+✔ explicit same-name destination head survives geography filtering: Santa Fe, Santa Fe (5.6988ms)
+✔ explicit same-name destination head survives geography filtering: Santiago del Estero, Santiago del Estero (4.7859ms)
+✔ CABA explicit alias remains plausible for canonical Buenos Aires city candidate (4.577ms)
+✔ La Plata, Buenos Aires ranks the city feature above same-primary result in Berazategui (6.6941ms)
+✔ explicit capital intent prefers city feature with provider locality omitted over station (6.5409ms)
+✔ province-named capital prefers city feature over province state feature (7.0393ms)
+✔ CABA explicit alias is canonicalized before outbound Photon query (5.2371ms)
+✔ known locality with province suffix retries head-only when qualified Photon results are not a settlement (21.0767ms)
+✔ comma suffix matching a province does not hijack Rafaela intent as Santa Fe locality (5.4842ms)
+✔ unknown locality head with province suffix does not inherit province-capital locality bias (7.1829ms)
+✔ offline fallback is valid UTF-8 user copy with no mojibake or developer shell wording (13.436ms)
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.109Z","endpoint_class":"api_mobility","status_code_class":"2xx","latency_bucket":"lt100ms"}
+✔ R2 computes truthful walking and bicycle network routes with explicit ARS 0 prices (94.3205ms)
+✔ R2 routed distance is provider distance, not straight-line approximation (8.3663ms)
+✔ R2 provider failure fails one mode closed and preserves other truthful modes (5.8465ms)
+✔ R2 rejects malformed geometry instead of fabricating route/distance (4.2632ms)
+✔ R2 HTTP compute endpoint is server-authoritative and does not coerce missing paid prices to zero (14.6728ms)
+✔ R2 production routing is globally coordinated in one bounded batch before calling public upstream (9.6863ms)
+✔ R2 global public-router coordinator fails closed when bounded queue is full (33.6274ms)
+✔ R2 route cache is bounded in DO memory and never depends on durable storage (31.3071ms)
+✔ R2 DO-memory route cache preserves cache hits within TTL (1.2497ms)
+✔ official rail catalog is pinned, licensed and historical rather than realtime (4.4712ms)
+✔ nearest station geometry resolves Once/Sarmiento from official frozen catalog (7.4369ms)
+✔ nearest station geometry resolves La Plata/Roca identity without service claims (3.4183ms)
+✔ MobilityDecision adds rail as official static discovery + handoff only (151.3025ms)
+✔ rail coverage is geographic and does not depend on city_slug integration (3.7059ms)
+✔ frozen official station corpus preserves asserted identity and operator (28.1292ms)
+✔ duplicate FFCC line labels collapse deterministically for one station/operator (1.8458ms)
+✔ rail official handoff is allowlisted without query or fragment leakage (0.6104ms)
+✔ public disclosures state static-2022 scope and realtime rail remains off (55.7735ms)
+✔ frontend keeps rail/bus handoffs secondary and never promotes static facts to selectable trips (5.0236ms)
+✔ release build knows how to inline the pinned rail catalog (4.2618ms)
+✔ ORDER057-R2 frozen generalized Argentina search corpus meets binding gates (4063.5407ms)
+✔ ORDER057-R2 production source contains zero benchmark-query hardcodes (1.2684ms)
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.206Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.231Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.244Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.274Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.288Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"local","outcome_class":"empty"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.295Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.309Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.318Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.328Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.337Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.344Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"national","outcome_class":"empty"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.350Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"national","outcome_class":"empty"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.364Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.379Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.391Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.400Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.407Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.421Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"national","outcome_class":"empty"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.428Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.437Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"national","outcome_class":"results"}
+{"event":"territory_resolve_unverified","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.461Z","endpoint_class":"territory","result_class":"not_found"}
+{"event":"destination_suggest_empty","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.461Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"0","fallback_stage":"national","outcome_class":"empty"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.478Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.491Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.598Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.604Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.619Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.628Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.632Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.636Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.639Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.645Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.681Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.687Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.691Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.695Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"2_3","fallback_stage":"local","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.700Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.712Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+{"event":"destination_suggest_ok","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.719Z","endpoint_class":"destination","provider_id":"photon_georef_contextual","result_count_bucket":"1","fallback_stage":"national","outcome_class":"results"}
+✔ QueryNormalizer preserves original while normalizing Unicode, spacing and generic POI semantics (5.0003ms)
+✔ ContextPlanner always keeps original and treats local context as bounded soft expansion (2.384ms)
+✔ ContextPlanner explicit geography overrides local expansion (0.8959ms)
+✔ candidate dedupe is deterministic across multi-query retrieval (0.4945ms)
+✔ deterministic ranker tolerates typo and uses generic category compatibility (7.2568ms)
+✔ multi-query retrieval merges local contextual candidate without hard filtering distant candidates (177.6197ms)
+✔ explicit remote geography outranks local origin during multi-query retrieval (18.7333ms)
+✔ production search source contains no owner-query or POI-specific hardcoded patches (3.4533ms)
+✔ semantic alias retrieval remains active even when local-context expansion exists (9.704ms)
+✔ strong lexical entity match outranks a nearby category-only candidate even with opaque provider type (6.1214ms)
+✔ non-explicit local Photon focus uses coarse locality centroid, never exact origin GPS (23.2325ms)
+✔ multi-query Photon retrieval never exceeds three upstream variants (13.6257ms)
+✔ official locality authority recognizes a bare trailing locality without query-specific patches (7.3655ms)
+✔ generic category typo-2 is rewritten semantically before bounded retrieval (13.0857ms)
+✔ generic category abbreviation expands without owner-query hardcode (9.8505ms)
+✔ unique official locality prefix can complete a truncated geography suffix (9.9646ms)
+✔ explicit address with house number gets a bounded no-number retry while keeping locality geography (9.4889ms)
+✔ generic title abbreviation expands before bounded Photon retrieval (5.0937ms)
+✔ generic honorific abbreviation expands before bounded Photon retrieval (6.1334ms)
+✔ bare locality plus province suffix binds both geography levels before ranking (13.647ms)
+✔ unique one-edit province suffix typo is a soft explicit-geography correction (15.206ms)
+✔ terminal country qualifier does not hide a valid Argentina locality suffix (12.104ms)
+✔ province alias is never expanded into an unrelated locality prefix (8.3496ms)
+✔ ambiguous local entity name does not become a remote bare-locality override (7.3366ms)
+✔ explicit locality fails closed instead of returning contradictory localities (13.709ms)
+✔ non-comma explicit settlement accepts canonical settlement even when province tokens are not in primary label (6.7534ms)
+✔ capital name shared with province remains locality intent when preceded by a destination category (9.5057ms)
+✔ semantic category reduction emits category plus verified explicit locality within the three-query cap (23.4128ms)
+✔ local POI phrase that is also a remote locality keeps coarse local bias instead of becoming explicit geography (17.2281ms)
+✔ historical descriptor is optional lexical metadata and gets one bounded local retry without the descriptor (12.9083ms)
+✔ exact named city outranks same-name administrative boundary when query names settlement plus province (106.303ms)
+✔ local entity plus multi-token remote locality stays locally biased when no explicit separator is present (6.8592ms)
+✔ non-comma settlement plus verified province gets a bounded head-only retry (14.6706ms)
+✔ provider one-edit locality typo canonicalizes only when official match is unique in spatial province (8.3118ms)
+✔ ambiguous exact locality phrase never falls through to a shorter unrelated prefix locality (4.2153ms)
+✔ strong same-province entity name may satisfy explicit locality intent without falsifying provider locality (3.6839ms)
+✔ regional is optional descriptive metadata for category relevance (3.0389ms)
+✔ incomplete settlement before a province suffix can match a verified provider settlement without treating province words as entity terms (5.5979ms)
+✔ explicit locality may bind a same-province settlement whose provider primary name contains the official locality name (36.1619ms)
+✔ verified province prefix matching considers long multi-token locality names before shorter conflicting prefixes (5.6883ms)
+✔ road intent prefers a road feature over incidental POIs sharing the same name fragment (4.3981ms)
+✔ road name ending in a province name remains local entity intent under verified local context (3.7678ms)
+✔ named settlement uses its own official locality instead of provider parent city metadata (5.4365ms)
+✔ official locality initial abbreviation matches provider expanded settlement name (11.1857ms)
+✔ one-edit settlement before an explicit province uses a unique official locality correction (7.2206ms)
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.150Z","endpoint_class":"api_radar","status_code_class":"2xx","latency_bucket":"lt100ms"}
+✔ ORDER058 parser emits the minimal scheduled-service contract without invented realtime fields (11.7056ms)
+✔ ORDER058 parser fails closed when one required published station time is missing (12.4457ms)
+✔ ORDER058 adapter is one-entry bounded, TTL cached and never serves stale data after refresh failure (62.9265ms)
+✔ ORDER058 adapter isolates a source outage without fabricating a service observation (0.5744ms)
+✔ ORDER058 nearby snapshot stays bounded and joins real scheduled service to Once (79.2092ms)
+✔ ORDER058 stale observation degrades service temporal state to unknown (3.2441ms)
+✔ ORDER058 nearby endpoint keeps station geometry but fails service closed when official source is down (15.2354ms)
+✔ ORDER058 UI exposes a map-first train radar region and incremental station markers (42.0768ms)
+✔ ORDER058 origin acquisition actually refreshes the train radar and map center (11.1025ms)
+✔ ORDER058 clearing origin also clears the train radar (10.0479ms)
+{"event":"mobility_source_stale","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.140Z","endpoint_class":"mobility","province_id":"82","locality_coverage_tier":"T0_TERRITORY_ONLY","source_id":"src_santa_fe_bus","result_class":"degraded"}
+✔ ORDER069 auto routed-car is actionable with provider distance and unknown price (68.7413ms)
+✔ ORDER069 auto failure stays visible and preserves walking/bicycle (5.033ms)
+✔ ORDER069 Santa Fe bus is informational/partial with current official fare facts (5.2888ms)
+✔ ORDER069 stale fare fails closed while bus and official actions survive (7.5839ms)
+✔ ORDER069 official Cuándo Pasa and deviations handoffs are allowlisted (3.8935ms)
+✔ ORDER069 missing rideshare pricing can never leak into Auto price (8.4202ms)
+✔ ORDER069 frontend removes binary hide copy and renders four independent modes (30.2023ms)
+✔ ORDER069 mobility normalizer accepts routed Auto with unknown price and partial bus (10.4771ms)
+✔ ORDER069 Amendment A is map-first on desktop and mobile without new map libs (3.6019ms)
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.161Z","endpoint_class":"api_radar","status_code_class":"2xx","latency_bucket":"lt100ms"}
+{"event":"request_completed","release_id":"order056-a1e0e243117d-4b947280","timestamp":"2026-09-28T02:52:09.225Z","endpoint_class":"api_radar","status_code_class":"2xx","latency_bucket":"lt100ms"}
+✔ ORDER070 browser release emits no dedicated telemetry requests and uses bounded suggest debounce/cache (19.1946ms)
+✔ ORDER070 client has bounded F1 radar coverage and excludes Santa Fe Capital (1.0106ms)
+✔ ORDER070 radar endpoint fails cheap outside F1 coverage before reading source (65.9943ms)
+✔ ORDER070 supported radar origin reads source exactly once (59.7767ms)
+✔ ORDER070 production mobility uses one DO request with three bounded modes (8.0024ms)
+✔ ORDER070 routing coordinator batch uses zero Durable Object storage rows and memory cache only (2019.4572ms)
+✔ ORDER070 routing coordinator rejects duplicate unknown and unbounded batch modes (1.3402ms)
+✔ ORDER071 3D is opt-in lazy and the 2D shell has no eager 3D asset (50.1236ms)
+✔ ORDER071 topology manifest is bounded and fully static (23.3776ms)
+✔ ORDER071 renderer contract keeps DPR capped, LRU bounded and no Worker API calls (29.6014ms)
+✔ ORDER071 temporal presentation never invents movement or mutates observations (5.94ms)
+✔ ORDER071 realtime interpolation fails closed when stale or verified geometry is missing (0.7285ms)
+✔ ORDER071 current Santa Fe explicitly has no live bus source and no scheduled vehicle animation (4.4523ms)
+✔ ORDER071 build source pins provenance and never requires runtime Overpass (2.6312ms)
+✔ ORDER071 3D source does not expand the dynamic Worker API surface (63.7396ms)
+✔ ORDER071 renderer exposes an immediate 2D fallback when WebGL2 is unsupported (6.7192ms)
+✔ ORDER071 pins Three locally and avoids CDN/runtime Worker coupling (7.9013ms)
+✔ ORDER071 app and renderer share a live update contract and fail closed to 2D (4.9856ms)
+✔ ORDER073 topology manifest pins the raw input SHA (30.8582ms)
+✔ ORDER073 exposes only Auto Rendimiento Calidad as compact 3D quality tiers (4.9559ms)
+✔ ORDER073 renderer keeps predicted markers visually distinct from realtime (2.3366ms)
+✔ ORDER073 renderer applies explicit movement limits and reduced-motion policy (3.3737ms)
+✔ ORDER075 desktop keeps the map full-bleed with a bounded side sheet (map-first) (4.9163ms)
+✔ ORDER073 tracker rejects timestamp regression before deriving movement (2.7123ms)
+✔ ORDER073 tracker rejects physically impossible realtime jumps (0.936ms)
+✔ ORDER073 tracker enforces bounded route snapping (0.8048ms)
+✔ ORDER073 derived render state is separate from immutable source observations (3.3684ms)
+✔ ORDER073 predicted state is visibly distinct and never animated (0.5733ms)
+✔ ORDER073 reduced motion never invents interpolation (1.147ms)
+✔ ORDER074 lazy 3D graph is release-bound by the existing BUILD_ID (25.3049ms)
+✔ ORDER074 failed module import is retryable without page reload (9.7003ms)
+✔ ORDER074 renderer has exception-safe cleanup and post-activation context-loss fallback (9.4601ms)
+✔ ORDER074 exposes selected-route and per-render draw evidence without debug framework (7.4031ms)
+✔ ORDER074 shipped Three is covered by production dependency audit (10.9329ms)
+✔ ORDER075 map pan adds zero VOY Worker calls (substrate is network-silent to self API) (23.396ms)
+✔ ORDER075 TrackerView idle adds zero VOY Worker calls (tracker is pure) (4.819ms)
+✔ ORDER075 3D visual path adds zero dynamic VOY Worker calls (16.517ms)
+✔ ORDER075 scrub/follow/truth-pill perform zero Worker calls by wiring (3.198ms)
+✔ ORDER075 no tracker persistence, telemetry or new storage (10.0766ms)
+✔ ORDER075 baseline 2D keeps zero Three/topology fetches before opt-in (8.1054ms)
+✔ ORDER075 request budget: fixture stream performs no network IO (2.2131ms)
+✔ ORDER075 mobile first viewport is map-first (shell structure) (29.3974ms)
+✔ ORDER075 search is available but secondary (chip + sheet) (5.9906ms)
+✔ ORDER075 temporal truth pill is visible, stateful and not color-only (3.0794ms)
+✔ ORDER075 2D default with compact 2D|3D control and lazy three (5.2793ms)
+✔ ORDER075 map substrate: pinned MapLibre + OpenFreeMap with raster fallback (5.2597ms)
+✔ ORDER075 vector failure keeps raster map and tracker facts (5.2383ms)
+✔ ORDER075 map markers are accessible buttons with truthful labels (2.754ms)
+✔ ORDER075 tracker sheet exposes follow/resume, time rail and DOM facts (3.5922ms)
+✔ ORDER075 no horizontal overflow at 200% text (layout contracts) (3.3648ms)
+✔ ORDER075 keyboard can reach map controls, sheet, markers and follow (3.1664ms)
+✔ ORDER075 no secret/key/credential enters client source (14.3038ms)
+✔ ORDER075 CSP allows OpenFreeMap vector hosts and keeps strict defaults (4.2033ms)
+✔ ORDER075 service worker caches the new map-first shell including tracker modules (1.6041ms)
+✔ ORDER075 app wiring keeps planner behavior contracts alive (2.1333ms)
+✔ ORDER075 movement invariant: scheduled => zero movement (8.1158ms)
+✔ ORDER075 movement invariant: unknown => zero movement (0.7368ms)
+✔ ORDER075 movement invariant: stale realtime => zero movement and truthful degradation (1.4117ms)
+✔ ORDER075 movement invariant: realtime without verified geometry => zero movement (1.1982ms)
+✔ ORDER075 valid fresh realtime with geometry is renderable (1.5963ms)
+✔ ORDER075 impossible jump is rejected by the store presentation (0.6354ms)
+✔ ORDER075 selection survives mode/follow state changes and is store-owned (4.1866ms)
+✔ ORDER075 pan suspends follow immediately and only from following (0.3875ms)
+✔ ORDER075 resume requires an explicit action and a selection (0.7716ms)
+✔ ORDER075 nearby context is bounded and always includes the selection (2.9819ms)
+✔ ORDER075 actual source observations enter the trail (1.2272ms)
+✔ ORDER075 interpolated display points never enter the trail (1.2644ms)
+✔ ORDER075 trail observation cap is enforced (FIFO at 32) (1.7275ms)
+✔ ORDER075 trail age cap is enforced (120 seconds) (0.7245ms)
+✔ ORDER075 source/entity identity switch clears incompatible trail (0.5235ms)
+✔ ORDER075 scrub is zero-fetch by construction and walks real observations only (33.5581ms)
+✔ ORDER075 return-to-now restores the latest live presentation (0.9244ms)
+✔ ORDER075 reduced motion produces discrete observation steps (0.4582ms)
+✔ ORDER075 scheduled time rail never creates a vehicle (0.4449ms)
+✔ ORDER075 fixtures are opt-in only (Santa Fe stays truthful by default) (0.4107ms)
+✔ ORDER075 fixture engine is deterministic and labeled synthetic (6.6704ms)
+✔ ORDER075 fixture realtime entities render as realtime in the store (1.303ms)
+✔ ORDER075 fixture entity goes stale when its stream stops (truthful transition) (0.9701ms)
+✔ ORDER075 entity registry is bounded (0.4301ms)
+✔ ORDER075 malformed observations are rejected without placeholders (0.3736ms)
+✔ ORDER075 predicted never animates and is never styled as live (0.2177ms)
+✔ map-resolvable destination survives territorial verification outage without inventing locality (2.3114ms)
+✔ top-level unverified territory is authoritative when nested flag is missing (0.545ms)
+✔ missing nested territory verification never defaults to verified (0.383ms)
+✔ final UI removes prototype and developer-facing copy (3.2007ms)
+✔ ORDER069 map is the visible primary initial surface (0.9257ms)
+✔ decorative mobility mode tabs are absent (0.3647ms)
+✔ ORDER075 destination search is secondary inside the sheet (map-first hierarchy) (0.9687ms)
+✔ desktop and mobile layouts are explicitly designed (3.3173ms)
+✔ final result options do not depend on decorative mode switching (0.4695ms)
+✔ brand ships an original scalable mark and wordmark lockup (13.3838ms)
+✔ contextual assistant is visible, deterministic and state-driven (0.6151ms)
+✔ motion is restrained and reduced-motion aware (0.4012ms)
+✔ PWA branding is complete and build cache identity is immutable (11.075ms)
+✔ build inlines pinned GeoRef runtime authority into the deployable worker (17.2793ms)
+✔ destination status live region exists for runtime status and assistant state (0.5072ms)
+✔ final HTML has no replacement artifacts and exposes VOY favicon identity (0.2294ms)
+✔ mobile and footer interactive targets preserve at least 44px hit areas (0.2481ms)
+✔ assistant and footer touch targets remain at least 44px in both dimensions (0.3935ms)
+✔ destination keyboard focus remains visibly outlined after component styles (0.2132ms)
+✔ release build copies only the intentional public client allowlist (0.1794ms)
+ℹ tests 266
+ℹ suites 0
+ℹ pass 266
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4642.8249
