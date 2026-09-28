@@ -115,3 +115,12 @@ contextual
 selected-only
 zero baseline 2D cost
 graceful 2D fallback
+
+
+## DIRECCIÓN ESTÉTICA
+
+- CABA_OS (https://caba.os.nicopoore.com/) = referencia visual principal.
+- AhiVoy 3D = referencia funcional para seguimiento, replay/provenance y 3D, NO referencia estética principal.
+- Objetivo: presencia visual/atmósfera de CABA_OS + verdad temporal VOY + 3D contextual/lazy.
+- No copiar GIS dashboard, peso runtime, terrain/LiDAR ni features ajenas.
+- Cualquier polish estético futuro debe preservar los gates actuales y volver a invalidar/recrear evidencia si toca runtime.
