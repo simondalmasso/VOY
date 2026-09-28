@@ -5,114 +5,103 @@ ROLE=AUD+IMPLEMENTER
 MODE=NO_RESET / CONTINUE
 RUNTIME_WORKTREE=C:\GPT-SANDBOX\VOY-ORDER076-ASTRA
 RUNTIME_BRANCH=feat/order076-astra-truth-first
-BASE_REMOTE=origin/feat/order075-mapfirst-trackerview
 BASE_SHA=c3fd59e76bb349ad1177d349fae4aaac7a9cdff1
 CURRENT_LOCAL_SOURCE_SHA=2a6457b0f40a4263a402f115a56b70c449240ac5
 CURRENT_BUILD_ID=0a306d0ae153798faa73949a
 DEPLOYED=NO
 
-## ESTADO ACTUAL
+## ESTADO PRESENTE
 
-VOY está en una rama nueva derivada del RC ORDER-075. No se reseteó ni reescribió historia.
+ORDER-076 aplica la calibración Astra sin re-arquitectura:
+- MAP-FIRST preservado.
+- TrackerView separa estado, conclusión ("Qué sabemos"), actualización y fuente.
+- UNKNOWN se presenta como "Estado desconocido"; UNKNOWN != UNAVAILABLE.
+- stale no implica posición actual.
+- 3D sigue Three.js 0.186 existente, optional/lazy.
+- 3D no carga sin selección renderizable o recorrido verificado.
+- baseline 2D oculta control de calidad 3D.
+- entrada 3D usa sólo el tracker seleccionado.
+- no backend/framework/GIS/persistencia/telemetría nuevos.
 
-El delta ORDER-076 sigue la calibración de Astra:
-- MAP-FIRST se preserva.
-- TrackerView ahora distingue mejor qué se sabe, cuándo se actualizó y de qué fuente viene.
-- UNKNOWN deja de decir "Sin señal" y pasa a "Estado desconocido".
-- La UI agrega una conclusión explícita: "Qué sabemos".
-- 3D sigue usando Three.js 0.186 existente, lazy, sin engine nuevo.
-- 3D ahora es contextual: no debe cargar sin una selección renderizable o recorrido verificado.
-- El transporte enviado al 3D se limita a la entidad seleccionada.
-- El selector de calidad 3D permanece oculto en baseline 2D y sólo aparece al entrar correctamente en 3D.
-- No se tocó la autoridad temporal del store.
-- No se agregó backend, persistencia, telemetría, GIS platform ni framework.
-
-## ARCHIVOS DE RUNTIME CAMBIADOS
-
+Runtime cambiado:
 - public/app.js
 - public/index.html
 - public/styles.css
 
-## TESTS / PLAN CAMBIADOS
-
+Contratos/plan:
 - tests/order075-shell.test.mjs
 - tests/order076-astra-calibration.test.mjs
 - docs/superpowers/plans/2026-09-28-order076-astra-truth-first.md
 
-## VERIFICACIÓN YA COMPLETADA
+## VERIFICACIÓN COMPLETADA
 
-Fresh full suite on source SHA 2a6457b...:
-```text
-tests=269
-pass=269
-fail=0
-```
-
-Production dependency audit:
-```text
-npm audit --omit=dev
-high=0
-critical=0
-total=0
-```
-
-Build on exact source SHA:
 ```text
 SOURCE_COMMIT=2a6457b0f40a4263a402f115a56b70c449240ac5
-RELEASE_ID=order057-2a6457b0f40a-0a306d0a
 BUILD_ID=0a306d0ae153798faa73949a
-CLIENT_FILES=34
+UNITS=269/269 PASS
+PROD_NPM_AUDIT=0 vulnerabilities
+TOPOLOGY_FALSE_DIRTY=CONFIRMED (HEAD blob == working-tree blob for both files)
+TRACKED_TREE_AFTER_REFRESH=CLEAN
 ```
 
-## PENDIENTE INMEDIATO
+Edge full browser pass #1:
+```text
+PASS=12
+FAIL=1
+RUNTIME_FAILURES=0
+HARNESS_FALSE_NEGATIVE=1
+```
 
-El build marcó como modificados:
-- public/3d/topology/chunk-santa-fe-centro-0.json
-- public/3d/topology/manifest.json
+PASS includes:
+- MAP_FIRST mobile 390x844
+- no-live Santa Fe truth
+- secondary search
+- TrackerView follow/pan/resume
+- selection 2D→3D→2D
+- desktop map
+- 200% text
+- keyboard
+- raster fallback
+- 3D without context => zero Three/voy3d/topology load
+- truth-first contextual 3D
+- 150% text
 
-En ORDER-075 esto fue un false-dirty de Git/EOL. Falta terminar la comparación HEAD blob vs working-tree blob para confirmar si aquí ocurre lo mismo.
+Only FAIL:
+`STALE_TRANSITION_ZERO_MOVEMENT` because evidence regex expected uppercase `Última...` while actual correct UI text is `La última observación está vencida...`. Runtime behavior is correct; only harness needs case-insensitive/correct phrase.
 
 ## AGENTE NUEVO — SEGUIR EXACTAMENTE ASÍ
 
-1. NO RESET.
-2. NO tocar main todavía.
-3. Abrir `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
-4. Verificar:
-   - `git rev-parse HEAD` debe ser `2a6457b0f40a4263a402f115a56b70c449240ac5`.
-   - `git status --short`.
-5. Para cada archivo de topología marcado:
-   - comparar `git rev-parse HEAD:<path>`
-   - contra `git hash-object <path>`.
-   - Si hashes coinciden, refrescar sólo metadata/index; NO commitear contenido idéntico.
-   - Si hashes difieren, inspeccionar diff y NO seguir a navegador hasta reconciliar.
-6. Confirmar árbol tracked limpio.
-7. NO cambiar runtime después de esto sin volver a correr toda la evidencia.
-8. Ejecutar browser/runtime gates sobre BUILD_ID `0a306d0ae153798faa73949a`:
-   - Edge full matrix.
-   - Chrome full matrix.
-   - mobile 390x844.
-   - 100/150/200% text.
-   - keyboard.
-   - reduced motion.
-   - WebGL2 unavailable fallback.
-   - live webglcontextlost fallback.
-   - real OpenFreeMap vector path + raster fallback.
-   - baseline 2D Three/topology fetches=0.
-   - verify 3D button without context does NOT import Three/topology.
-   - verify selected entity in 3D is the only tracker entity transferred.
-   - required VOY Worker deltas=0.
-9. Si cualquier gate falla, corregir TDD, crear nuevo source commit, rebuild y descartar evidencia anterior.
-10. Si todo queda verde, persistir `feat/order076-astra-truth-first` remoto con exact source.
-11. Verificar GitHub CI + GitLab mirror.
-12. Desplegar sólo ese exact source/build.
-13. Después del deploy, consultar producción y reconciliar:
-    - deployed BUILD_ID == `0a306d0ae153798faa73949a`
-    - deployed source SHA == `2a6457b...`
-    - public UI muestra MAP-FIRST y truth-first actual.
-14. Registrar evidencia/deploy en una rama audit separada y actualizar este checkpoint.
-15. OpenAI OSS packaging queda fuera de esta pista.
+1. NO RESET. NO modificar runtime antes de cerrar evidencia.
+2. Abrir `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+3. Confirmar `git rev-parse HEAD` = `2a6457b0f40a4263a402f115a56b70c449240ac5`.
+4. Corregir SOLO el regex stale en:
+   `experiments/order076/evidence/order076-browser-check.mjs`
+   para aceptar `La última observación está vencida...`.
+5. Correr primero:
+   `ONLY_CHECK=STALE_TRANSITION_ZERO_MOVEMENT` en Edge.
+6. Si PASS, correr matriz Edge completa y exigir 13/13 PASS.
+7. Correr matriz Chrome completa y exigir 13/13 PASS.
+8. Reutilizar/adaptar gates especiales del RC ORDER-075:
+   - reduced motion
+   - WebGL2 unavailable
+   - live webglcontextlost
+   - real OpenFreeMap vector path
+   - raster fallback
+9. No tocar runtime si sólo cambia harness.
+10. Si cualquier gate revela un bug real, TDD -> nuevo source commit -> rebuild -> invalidar evidencia previa.
+11. Si todo verde, persistir `feat/order076-astra-truth-first` en GitHub.
+12. Verificar GitHub CI y GitLab mirror exactos.
+13. Desplegar sólo el exact source/build verificado.
+14. Después del deploy, reconciliar producción:
+    - deployed source SHA exacto
+    - deployed BUILD_ID exacto
+    - MAP-FIRST visible
+    - truth-first actual
+    - no fake live
+15. Registrar deploy/evidencia y actualizar este checkpoint otra vez.
+16. OpenAI OSS queda fuera de esta pista.
 
-## REGLAS QUE NO CAMBIAN
+## REGLAS
 
 MAP_FIRST
 TRUTH_FIRST
@@ -120,18 +109,5 @@ LOW_COST
 FAIL_CLOSED
 UNKNOWN != UNAVAILABLE
 
-No fabricar:
-- movimiento
-- ETA
-- cobertura
-- disponibilidad
-- precio
-- realtime
-
-3D:
-- optional
-- lazy
-- contextual
-- selected-only
-- zero baseline 2D cost
-- graceful 2D fallback
+No fabricar movimiento, ETA, cobertura, disponibilidad, precio ni realtime.
+3D = optional + lazy + contextual + selected-only + zero baseline 2D cost + graceful 2D fallback.
