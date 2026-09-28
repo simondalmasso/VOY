@@ -1,0 +1,30 @@
+{
+  "build_id": "c26d7cefe5ee2d15d0cce7b8",
+  "chrome": "C:\\PROGRA~2\\Microsoft\\Edge\\Application\\msedge.exe",
+  "only_follow": false,
+  "real_vector": true,
+  "evidence_tag": "final-real-vector",
+  "checks": {},
+  "requests": {
+    "total": 31,
+    "api_total": 0,
+    "api_paths": []
+  },
+  "results": [
+    {
+      "name": "real-vector",
+      "status": "PASS",
+      "detail": {
+        "style": "https://tiles.openfreemap.org/styles/liberty",
+        "pbf": "https://tiles.openfreemap.org/planet/20260913_164504_pt/13/2715/4856.pbf",
+        "glyph": "https://tiles.openfreemap.org/fonts/Noto%20Sans%20Italic/0-255.pbf",
+        "attribution": "OpenFreeMap © OpenMapTiles Data from OpenStreetMap",
+        "worker_delta": 0
+      }
+    }
+  ],
+  "summary": {
+    "pass": 1,
+    "fail": 0
+  }
+}

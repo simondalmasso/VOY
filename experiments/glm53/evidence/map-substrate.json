@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "measured_at": "2026-09-26T22:30:19.314Z",
+  "decision": "raster_instant_first_paint + async MapLibre 6.11.2 / OpenFreeMap vector upgrade + raster mandatory fallback",
+  "vendored_sizes": {
+    "maplibre-gl.mjs": {
+      "path": "node_modules/maplibre-gl/dist/maplibre-gl.mjs",
+      "raw": 590228,
+      "gzip": 149904
+    },
+    "maplibre-gl-shared.mjs": {
+      "path": "node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs",
+      "raw": 515924,
+      "gzip": 147737
+    },
+    "maplibre-gl-worker.mjs": {
+      "path": "node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs",
+      "raw": 19133,
+      "gzip": 6092
+    },
+    "maplibre-gl.css": {
+      "path": "node_modules/maplibre-gl/dist/maplibre-gl.css",
+      "raw": 83310,
+      "gzip": 10475
+    },
+    "three.module.js": {
+      "path": "node_modules/three/build/three.module.js",
+      "raw": 662772,
+      "gzip": 131133
+    },
+    "three.core.js": {
+      "path": "node_modules/three/build/three.core.js",
+      "raw": 1458113,
+      "gzip": 286903
+    }
+  },
+  "maplibre_totals": {
+    "raw": 1125285,
+    "gzip": 303733,
+    "note": "ESM module + shared + worker; CSS separate; off critical path (dynamic import after first paint)"
+  },
+  "first_paint_2d_boot": {
+    "files": [
+      "public/app.js",
+      "public/styles.css",
+      "public/tracker/observations.js",
+      "public/tracker/store.js",
+      "public/map/substrate.js"
+    ],
+    "raw": 112576,
+    "gzip": 31018,
+    "note": "app shell + tracker + substrate modules; excludes maplibre (lazy) and three (3D opt-in)"
+  },
+  "provider_reachability": [
+    {
+      "name": "openfreemap_style_liberty",
+      "url": "https://tiles.openfreemap.org/styles/liberty",
+      "status": 200,
+      "ok": true,
+      "ms": 82,
+      "bytes": 43079,
+      "content_type": "application/json"
+    },
+    {
+      "name": "openfreemap_tile_ne2_shaded",
+      "url": "https://tiles.openfreemap.org/natural_earth/ne2sr/3/2/3.png",
+      "status": 200,
+      "ok": true,
+      "ms": 26,
+      "bytes": 115139,
+      "content_type": "image/png"
+    },
+    {
+      "name": "openfreemap_tilejson_openmaptiles",
+      "url": "https://tiles.openfreemap.org/planet",
+      "status": 200,
+      "ok": true,
+      "ms": 24,
+      "bytes": 19254,
+      "content_type": "application/json"
+    },
+    {
+      "name": "openfreemap_tile_openmaptiles",
+      "url": "https://tiles.openfreemap.org/planet/20260913_164504_pt/13/3865/2457.pbf",
+      "status": 200,
+      "ok": true,
+      "ms": 17,
+      "bytes": 271,
+      "content_type": "application/vnd.mapbox-vector-tile"
+    },
+    {
+      "name": "openfreemap_glyphs",
+      "url": "https://tiles.openfreemap.org/fonts/Noto Sans Regular/0-255.pbf",
+      "status": 200,
+      "ok": true,
+      "ms": 15,
+      "bytes": 76580,
+      "content_type": "application/x-protobuf"
+    },
+    {
+      "name": "osm_raster_tile_z13",
+      "url": "https://tile.openstreetmap.org/13/3865/2457.png",
+      "status": 200,
+      "ok": true,
+      "ms": 349,
+      "bytes": 103,
+      "content_type": "image/png"
+    }
+  ],
+  "rationale": [
+    "Landing raster z13 grid paints with zero new JS; TrackerView interaction (pan/zoom to suspend follow) requires a real slippy map — reimplementing one is the forbidden GIS rewrite, MapLibre provides it pinned (6.11.2).",
+    "OpenFreeMap is keyless/registrationless with OSM-derived tiles and required attribution (verified 200 OK style + tiles); OSM raster stays as mandatory fallback substrate.",
+    "Cost is bounded and off the critical path: vector upgrade is a dynamic import after first useful paint; failure of import/style/tiles/WebGL2 keeps raster with tracker state intact."
+  ]
+}

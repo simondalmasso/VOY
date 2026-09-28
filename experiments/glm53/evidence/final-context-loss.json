@@ -1,0 +1,28 @@
+{
+  "build_id": "c26d7cefe5ee2d15d0cce7b8",
+  "chrome": "C:\\PROGRA~2\\Microsoft\\Edge\\Application\\msedge.exe",
+  "only_follow": false,
+  "real_vector": false,
+  "evidence_tag": "final-context-loss",
+  "checks": {},
+  "requests": {
+    "total": 36,
+    "api_total": 0,
+    "api_paths": []
+  },
+  "results": [
+    {
+      "name": "context-loss",
+      "status": "PASS",
+      "detail": {
+        "lost": true,
+        "status": "3D no disponible en este equipo; seguimos en 2D.",
+        "worker_delta": 0
+      }
+    }
+  ],
+  "summary": {
+    "pass": 1,
+    "fail": 0
+  }
+}
