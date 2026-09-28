@@ -159,3 +159,29 @@ Brand-new agent exact continuation:
 7. Run full unit suite and build.
 8. Re-run Edge + Chrome matrix, 100/150/200%, keyboard, reduced motion, WebGL2 unavailable, context loss, real vector, raster fallback, 3D zero-load/contextual gates.
 9. Only then persist remote, CI, mirror, deploy exact head and reconcile production.
+
+
+## CHECKPOINT — CABA POLISH DECISION
+
+```text
+CABA_POLISH_DECISION=APPLY_BEFORE_DEPLOY
+PRE_POLISH_SOURCE=2a6457b0f40a4263a402f115a56b70c449240ac5
+PRE_POLISH_BUILD=0a306d0ae153798faa73949a
+EDGE_PRE_POLISH=13/13 PASS
+CHROME_PRE_POLISH=13/13 PASS
+DEPLOY_PRE_POLISH=NO
+```
+
+The user explicitly chose CABA_OS as the dominant aesthetic reference. Therefore the current browser evidence is retained as a behavioral baseline but is NOT terminal deploy evidence.
+
+Exact next steps for a fresh agent:
+1. NO RESET.
+2. Add a small TDD contract for CABA-inspired VOY visual invariants.
+3. Apply only low-cost CSS/HTML/theme polish: black/dark default, thin borders, reduced rounding, mono microcopy, cold cyan for truth/realtime, yellow reserved for routes/actions, subtle map vignette.
+4. Do NOT add CRT/flicker, new assets, JS animation, new engine, GIS platform or framework.
+5. Preserve light theme as an explicit user option.
+6. Run 269+ unit tests.
+7. Create a NEW runtime source commit.
+8. Rebuild; previous BUILD_ID becomes non-terminal.
+9. Rerun Edge + Chrome full matrices and special gates.
+10. Only then persist remote and deploy exact-head.
