@@ -1,6 +1,6 @@
 const BUILD_ID='__BUILD_ID__';
 const CACHE=`voy-static-${BUILD_ID}`;
-const CORE=['/','/styles.css','/app.js','/contracts.js','/runtime-config.js','/manifest.json','/offline.html','/icons/app-icon.svg','/icons/app-icon-192.png','/icons/app-icon-512.png'];
+const CORE=['/','/styles.css','/app.js','/contracts.js','/runtime-config.js','/manifest.json','/offline.html','/icons/app-icon.svg','/icons/app-icon-192.png','/icons/app-icon-512.png','/tracker/store.js','/tracker/observations.js','/tracker/fixtures.js','/map/substrate.js'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

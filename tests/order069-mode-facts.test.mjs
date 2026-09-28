@@ -111,9 +111,9 @@ test('ORDER069 Amendment A is map-first on desktop and mobile without new map li
   ]);
   assert.ok(html.indexOf('id="map-shell"')<html.indexOf('class="planner"'));
   assert.doesNotMatch(html,/id="map-shell"[^>]*hidden/);
-  assert.match(css,/ORDER069 AMENDMENT A/);
-  assert.match(css,/grid-template-areas:"map planner"/);
-  assert.match(css,/grid-template-areas:"map" "planner"/);
+  assert.match(css,/ORDER075 GLM53 MAP-FIRST/);
+  assert.match(css,/\.map-shell\.voy-map-stage\{[^}]*position:absolute[^}]*inset:0/s);
+  assert.match(css,/\.voy-sheet\{[^}]*position:absolute[^}]*bottom:0/s);
   assert.match(app,/renderInitialMap\(\)/);
   assert.match(app,/renderMap\(DEFAULT_MAP_CENTER/);
   assert.doesNotMatch(app,/leaflet|mapbox|openlayers/i);
