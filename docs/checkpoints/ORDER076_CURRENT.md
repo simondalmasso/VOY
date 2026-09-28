@@ -185,3 +185,47 @@ Exact next steps for a fresh agent:
 8. Rebuild; previous BUILD_ID becomes non-terminal.
 9. Rerun Edge + Chrome full matrices and special gates.
 10. Only then persist remote and deploy exact-head.
+
+
+## PHASE_LOCAL_REMOTE_DIVERGENCE_RECONCILE
+
+```text
+DEPLOY_HOLD=YES
+LOCAL_HEAD=7bf7630d7cb38b7035fc4ba06b896b66aefdd53d
+LOCAL_COMMIT=fix(order076): sync logical center after vector pan
+REMOTE_HEAD=51cdf7730a2c60b5eac55fcc179754513ba9689f
+REMOTE_COMMIT=test(order076): define CABA-inspired visual discipline
+DIVERGENCE=LOCAL_AHEAD_1_REMOTE_AHEAD_1
+DIRTY_TRACKED=tests/order076-astra-calibration.test.mjs
+UNTRACKED=browser evidence + temporary CABA inspection artifacts
+DEPLOYED=NO
+```
+
+The local commit is a real runtime correction:
+- map substrate now emits `onViewportChange` on MapLibre `moveend`;
+- app resynchronizes tracker overlays after native vector pan;
+- Worker calls remain zero for viewport sync.
+
+The dirty test file contains an earlier CABA visual sketch. It must be reconciled with the live CABA_OS extraction before commit. Do not discard it blindly.
+
+Live CABA_OS extraction found:
+- black full-screen canvas;
+- Inter UI;
+- monospace temporal HUD;
+- pale green-white HUD ink around rgba(224,236,222,.94);
+- transparent controls;
+- minimal chrome;
+- fixed edge HUD;
+- subtle inset vignette;
+- no requirement for cyan/yellow, cards, or ornamental CRT behavior.
+
+Brand-new agent exact continuation:
+1. NO RESET / NO force-push.
+2. Worktree `C:\GPT-SANDBOX\VOY-ORDER076-ASTRA`.
+3. Merge `origin/feat/order076-astra-truth-first@51cdf77` into local `7bf7630`; remote adds only the visual contract file.
+4. Keep the local pan fix.
+5. Reconcile the dirty CABA tests to the measured live visual tokens; remove contradictory cyan/yellow guesses.
+6. Run visual tests and confirm RED before styling.
+7. Implement bounded presentation delta primarily in CSS + dark default theme.
+8. New source SHA/build invalidates all earlier release evidence.
+9. Re-run full unit/build/browser/special gates before any deploy.
