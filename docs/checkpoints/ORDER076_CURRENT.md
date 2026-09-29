@@ -240,3 +240,28 @@ Fresh-agent continuation:
 6. Production smoke must pass after deploy.
 7. If any gate fails, read that job log and modify only audit harness/workflow unless evidence shows a runtime bug.
 8. Update this checkpoint and Issue #57 after terminal result.
+
+
+## CHECKPOINT — EXACT-ARTIFACT RESUME RUN
+
+RESUME_RUN=36567605824
+SOURCE_RUN=36567131839
+RUNTIME_SHA=b858568848f6bf5abd6853ee13c77f2e65c63735
+SOURCE_ARTIFACT=order076-dist-36567131839
+DEPLOYED=NO
+
+Verified in resume run:
+- prior build exact runtime = PASS
+- prior Chrome terminal matrix = PASS
+- prior Edge terminal matrix 10x = PASS
+
+Current active step:
+- Windows Chrome special gates = IN_PROGRESS
+
+Exact continuation for a fresh agent:
+1. Follow run 36567605824 only.
+2. Do not rebuild and do not modify runtime.
+3. If Windows special gates pass, allow deploy job to use artifact order076-dist-36567131839.
+4. Post-deploy /api/health must match source_commit=b858568... and artifact build_id.
+5. Then production browser smoke must pass.
+6. Only after both, mark DEPLOYED=YES and update Issue #57/checkpoint.
