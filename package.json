@@ -1,6 +1,16 @@
 {
   "name": "voy",
+  "version": "0.1.0",
+  "description": "Truth-first, map-first mobility surface for Argentina.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simondalmasso/VOY.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "scripts": {
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
@@ -16,15 +26,5 @@
   "devDependencies": {
     "playwright-core": "1.55.0",
     "wrangler": "4.125.0"
-  },
-  "version": "0.1.0",
-  "description": "Truth-first, map-first mobility surface for Argentina.",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/simondalmasso/VOY.git"
-  },
-  "engines": {
-    "node": ">=22"
   }
 }
