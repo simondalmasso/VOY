@@ -1,7 +1,7 @@
 # VOY — OpenAI Codex for Open Source Readiness
 
 LAST_CHECK=2026-09-29 ART
-APPLICATION_STATUS=NOT_READY_PREMERGE
+APPLICATION_STATUS=PREMERGE_READY
 
 MAIN_CANONICAL=NO — main remains 1ac1c691487cf9c542fd1db9d08c0ccadfe89f13
 OSS_CANDIDATE=release/order076-oss-candidate
@@ -13,7 +13,7 @@ SECURITY_MD=ADDED_IN_CANDIDATE
 CONTRIBUTING_MD=ADDED_IN_CANDIDATE
 RELEASE_TAG=PLANNED_v0.1.0_NOT_CREATED
 PUBLIC_DEMO=RUNTIME_RECONCILED_TO_b858568 — post-main release reconciliation still required
-CI_TESTS=TERMINAL_RUNTIME_PASS + FINAL_CANDIDATE_CI_REQUIRED
+CI_TESTS=TERMINAL_RUNTIME_PASS + OSS_CANDIDATE_CI_PASS
 ACTIVE_MAINTENANCE=YES
 REPO_HYGIENE=MINIMAL_CANDIDATE_PASS
 OPENAI_ORG_ID=NOT_VERIFIED
@@ -39,7 +39,7 @@ VOY must not manufacture adoption metrics. Application claims should rely on dem
 
 ## Remaining blockers before application READY
 
-1. Promote candidate to canonical `main`.
+1. Promote candidate to canonical `main` after explicit merge authorization.
 2. Re-run canonical CI/build/browser smoke on exact reconciliation commit.
 3. Deploy/reconcile exact main artifact.
 4. Create and independently verify public tag/release `v0.1.0`.
@@ -48,3 +48,7 @@ VOY must not manufacture adoption metrics. Application claims should rely on dem
 7. Finalize and submit truthful <=500-character form texts.
 
 No product feature work is required.
+
+PREMERGE_CI_HEAD=82bf193b60f9862dececcb698b09d9bfc1ba62b7
+PREMERGE_CI_RUN=36622052699
+PREMERGE_CI=PASS
