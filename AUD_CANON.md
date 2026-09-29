@@ -1,35 +1,39 @@
 PROJECT=VOY
 ROLE=AUD
-MODE=OSS_READINESS_PREMERGE
+MODE=OSS_RELEASE_FINAL_SEAL
 NO_RESET=YES
+NO_NEW_ORDER=YES
 
 CANON_REPO=https://github.com/simondalmasso/VOY
 MIRROR=https://gitlab.com/simondalmasso/voy
 PUBLIC_DEMO=https://voy-app.simondalmasso44.workers.dev/
 
-OLD_MAIN=1ac1c691487cf9c542fd1db9d08c0ccadfe89f13
+HISTORICAL_MAIN=1ac1c691487cf9c542fd1db9d08c0ccadfe89f13
 VERIFIED_RUNTIME_SOURCE=b858568848f6bf5abd6853ee13c77f2e65c63735
-VERIFIED_PRODUCTION_BUILD=73b176a290ecc07e38d6ee1e
-VERIFIED_PRODUCTION_RELEASE=order057-b858568848f6-73b176a2
-TERMINAL_WORKFLOW_RUN=36568197731
-OSS_CANDIDATE_BRANCH=release/order076-oss-candidate
+PROMOTED_MAIN_PROOF=3f6f1e7581b464701bb92ae583c7439f49e2e85c
+PROMOTED_BUILD_PROOF=be57e6d76ef323ff87368c64
+RELEASE_TAG=v0.1.0
+APPLICATION_STATUS=READY
 
 PRODUCT_CONTRACT=MAP_FIRST|TRUTH_FIRST|LOW_COST|FAIL_CLOSED|UNKNOWN_NE_UNAVAILABLE
 RUNTIME_FEATURE_EXPANSION=NO
 OPENAI_APPLICATION_DRIVES_PRODUCT=NO
 
-PREMERGE_GATES=LICENSE|README|SECURITY|CONTRIBUTING|HYGIENE|TERMINAL_EVIDENCE|CANDIDATE_CI|CANON_PLAN|RELEASE_PLAN|CODEX_READINESS
+RELEASE_PROOF=
+candidate tree == promoted main tree
+canonical CI PASS
+GitHub/GitLab parity PASS
+Chrome PASS
+Edge 10x PASS
+special gates PASS
+exact artifact deploy PASS
+production smoke PASS
+v0.1.0 initial verification PASS
 
-CANON_RECONCILIATION=
-main and verified runtime have unrelated histories.
-Do not force-push or discard history.
-After explicit authorization, merge old main into candidate using --allow-unrelated-histories -s ours FROM THE CANDIDATE SIDE, verify tree identity, rerun exact-head gates, then fast-forward main.
+CURRENT_EXACT_ACTION=
+This documentation-only READY seal creates a new main SHA.
+Re-run exact-main build/tests/browser/runtime, deploy same artifact, then recreate v0.1.0 on final main SHA and verify demo/release/parity.
 
-STOP=PRE_MERGE
-MERGE=NO
-DEPLOY=NO
-TAG=NO
-PREMERGE_CANDIDATE_HEAD_VERIFIED=82bf193b60f9862dececcb698b09d9bfc1ba62b7
-PREMERGE_CI_RUN=36622052699
-PREMERGE_CI=PASS
-NEXT_EXACT_ACTION=stop and wait for explicit merge authorization
+MERGE=COMPLETE
+DEPLOY_OF_PROOF_SHA=COMPLETE
+FINAL_DOC_SEAL_RECONCILIATION=IN_PROGRESS

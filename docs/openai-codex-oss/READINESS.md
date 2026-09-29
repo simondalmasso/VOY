@@ -1,54 +1,60 @@
 # VOY — OpenAI Codex for Open Source Readiness
 
 LAST_CHECK=2026-09-29 ART
-APPLICATION_STATUS=PREMERGE_READY
+APPLICATION_STATUS=READY
 
-MAIN_CANONICAL=NO — main remains 1ac1c691487cf9c542fd1db9d08c0ccadfe89f13
-OSS_CANDIDATE=release/order076-oss-candidate
+MAIN_CANONICAL=YES
+MAIN_READY_PROOF_SHA=3f6f1e7581b464701bb92ae583c7439f49e2e85c
+OSS_CANDIDATE_PROMOTED=release/order076-oss-candidate
 RUNTIME_VERIFIED=b858568848f6bf5abd6853ee13c77f2e65c63735
-PRODUCTION_BUILD=73b176a290ecc07e38d6ee1e
-LICENSE=MIT_ADDED_IN_CANDIDATE
-README=CURRENT_IN_CANDIDATE
-SECURITY_MD=ADDED_IN_CANDIDATE
-CONTRIBUTING_MD=ADDED_IN_CANDIDATE
-RELEASE_TAG=PLANNED_v0.1.0_NOT_CREATED
-PUBLIC_DEMO=RUNTIME_RECONCILED_TO_b858568 — post-main release reconciliation still required
-CI_TESTS=TERMINAL_RUNTIME_PASS + OSS_CANDIDATE_CI_PASS
+CANONICAL_MAIN_BUILD=be57e6d76ef323ff87368c64
+LICENSE=MIT
+README=CURRENT
+SECURITY_MD=PASS
+CONTRIBUTING_MD=PASS
+RELEASE_TAG=v0.1.0_VERIFIED
+PUBLIC_DEMO=PASS
+CI_TESTS=PASS
 ACTIVE_MAINTENANCE=YES
-REPO_HYGIENE=MINIMAL_CANDIDATE_PASS
-OPENAI_ORG_ID=NOT_VERIFIED
-FORM_TEXTS=DRAFTED_NOT_SUBMITTED
+REPO_HYGIENE=PASS
+FORM_TEXTS=DRAFTED
+OPENAI_ORG_ID=REQUIRED_AT_SUBMISSION_NOT_REPO_READINESS
 
-## Evidence
+## Verified release chain
 
-ORDER-076 terminal evidence includes 274/274 unit PASS, Chrome PASS, real Edge 10x PASS, focused follow/drag 30/30, reduced-motion PASS, WebGL fallback/context-loss PASS, OpenFreeMap diagnostic PASS, exact-artifact production reconciliation PASS and production browser smoke PASS.
+The verified ORDER-076 runtime was promoted to canonical `main` through a history-preserving merge that retained the OSS candidate tree byte-for-byte and kept historical main as a second parent.
 
-Final runtime workflow: `36568197731`.
+Fresh canonical-main evidence on `3f6f1e7581b464701bb92ae583c7439f49e2e85c`:
+
+- canonical CI PASS;
+- 274/274 unit tests PASS;
+- exact-head build PASS;
+- runtime dependency audit PASS;
+- Wrangler dry-run PASS;
+- Chrome exact-main matrix PASS;
+- Microsoft Edge exact-main matrix 10x PASS;
+- reduced-motion / WebGL fallback / context-loss gates PASS;
+- hosted OpenFreeMap diagnostic PASS;
+- exact artifact deployment PASS;
+- production identity reconciliation PASS;
+- production browser smoke PASS.
+
+Verified production artifact:
 
 ```text
-source_commit=b858568848f6bf5abd6853ee13c77f2e65c63735
-build_hash=73b176a290ecc07e38d6ee1e
-version=order057-b858568848f6-73b176a2
+source_commit=3f6f1e7581b464701bb92ae583c7439f49e2e85c
+build_hash=be57e6d76ef323ff87368c64
+version=order057-3f6f1e7581b4-be57e6d7
 ```
 
-## OpenAI program fit
+GitHub release `v0.1.0` was created and verified against that release SHA and public demo before this readiness seal.
 
-Current official Codex for Open Source pages describe applications for maintainers of active open-source projects and review signals such as repository usage, ecosystem importance and active maintenance. The current form asks for public GitHub/repository identity, maintainer role, an eligibility explanation, OpenAI Organization ID and intended API-credit use.
+## Application posture
 
-VOY must not manufacture adoption metrics. Application claims should rely on demonstrable maintenance, release discipline and the mobility/data-truth purpose.
+VOY is repository-ready for a Codex for Open Source application. Application submission itself still requires the maintainer's OpenAI Organization ID and final form submission.
 
-## Remaining blockers before application READY
+No feature work is required for application readiness. Do not manufacture adoption, usage, stars, users or ecosystem claims.
 
-1. Promote candidate to canonical `main` after explicit merge authorization.
-2. Re-run canonical CI/build/browser smoke on exact reconciliation commit.
-3. Deploy/reconcile exact main artifact.
-4. Create and independently verify public tag/release `v0.1.0`.
-5. Verify public demo against that release identity.
-6. Verify OpenAI Organization ID.
-7. Finalize and submit truthful <=500-character form texts.
+## Final document seal
 
-No product feature work is required.
-
-PREMERGE_CI_HEAD=82bf193b60f9862dececcb698b09d9bfc1ba62b7
-PREMERGE_CI_RUN=36622052699
-PREMERGE_CI=PASS
+This READY update is documentation-only. Because VOY embeds source identity in its build, the resulting exact `main` documentation SHA must be rebuilt, browser-verified, deployed and used as the final `v0.1.0` target before the operation is terminal.
