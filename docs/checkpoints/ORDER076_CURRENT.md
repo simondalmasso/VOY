@@ -213,3 +213,30 @@ EXACT NEXT FOR A ZERO-CONTEXT AGENT:
 10. Post-deploy GET /api/health and require source_commit=b858568... and build_hash=artifact BUILD_ID.
 11. If post-deploy identity mismatch: fail and do not claim completion.
 12. Update this checkpoint and Issue #57 after production reconciliation.
+
+
+## CHECKPOINT — AUTHORITATIVE TERMINAL RUN IN PROGRESS
+
+AUTHORITATIVE_RUN=36567131839
+AUDIT_HARNESS_HEAD=21355707051aca0a733ef2351d69aaa6cb7c7e81
+RUNTIME_SHA=b858568848f6bf5abd6853ee13c77f2e65c63735
+DEPLOYED=NO
+
+Current run state:
+- Build exact runtime once = SUCCESS.
+- Exact dist artifact uploaded.
+- Edge terminal matrix 10x = QUEUED.
+- Chrome terminal matrix = QUEUED.
+- Reduced motion + WebGL + real vector = QUEUED.
+
+Previous run 36566917420 is NON-AUTHORITATIVE because its harness used Playwright pointer-click on overlapping synthetic markers. That red was harness-only; runtime was not changed.
+
+Fresh-agent continuation:
+1. Do not touch runtime b858568.
+2. Follow GitHub Actions run 36567131839 only.
+3. If Chrome/Edge/specials pass, let deploy job run automatically.
+4. Deploy job must use the uploaded exact dist; no rebuild.
+5. Post-deploy health must match source_commit=b858568... and build_hash from build job.
+6. Production smoke must pass after deploy.
+7. If any gate fails, read that job log and modify only audit harness/workflow unless evidence shows a runtime bug.
+8. Update this checkpoint and Issue #57 after terminal result.
