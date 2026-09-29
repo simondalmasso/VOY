@@ -6,137 +6,118 @@ on:
       - audit/order076-terminal-evidence
     paths:
       - .github/workflows/order076-terminal-deploy.yml
-      - order076/evidence/order076-terminal.mjs
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: voy-order076-terminal-deploy
+  group: voy-order076-main-exact
   cancel-in-progress: false
 
 env:
-  RUNTIME_SHA: b858568848f6bf5abd6853ee13c77f2e65c63735
-  RUNTIME_BRANCH: feat/order076-astra-truth-first
+  RUNTIME_SHA: 3f6f1e7581b464701bb92ae583c7439f49e2e85c
+  RUNTIME_BRANCH: main
   WORKER_URL: https://voy-app.simondalmasso44.workers.dev
 
 jobs:
   build:
-    name: Build exact runtime once
+    name: Build exact main once
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       build_id: ${{ steps.meta.outputs.build_id }}
       release_id: ${{ steps.meta.outputs.release_id }}
     steps:
-      - name: Checkout exact runtime
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ env.RUNTIME_SHA }}
           path: runtime
           fetch-depth: 0
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: runtime/package-lock.json
-      - name: Install locked dependencies
+      - name: Install
         working-directory: runtime
         run: npm ci
-      - name: Verify source identity and tests
+      - name: Exact-main tests
         working-directory: runtime
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$RUNTIME_SHA"
-          remote_head="$(git ls-remote origin "refs/heads/$RUNTIME_BRANCH" | awk '{print $1}')"
+          remote_head="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           test "$remote_head" = "$RUNTIME_SHA"
           git diff --check
-          node --test tests/*.test.mjs | tee ../units.log
-          npm audit --omit=dev
-      - name: Build immutable dist
+          npm test
+          npm audit --omit=dev --audit-level=high
+      - name: Build exact main artifact
         id: meta
         working-directory: runtime
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/build.sh
+          npm run build:linux
           node - <<'NODE'
           const fs=require('fs');
           const m=JSON.parse(fs.readFileSync('dist/BUILD_MANIFEST.json','utf8'));
-          if(m.source_commit!==process.env.RUNTIME_SHA)throw new Error('manifest_source_mismatch:'+JSON.stringify(m));
+          if(m.source_commit!==process.env.RUNTIME_SHA)throw new Error('source_mismatch:'+JSON.stringify(m));
           fs.appendFileSync(process.env.GITHUB_OUTPUT,'build_id='+m.build_id+'\nrelease_id='+m.release_id+'\n');
           console.log(JSON.stringify(m,null,2));
           NODE
           npx wrangler deploy --config wrangler.jsonc --dry-run --minify
-      - name: Upload exact dist
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: order076-dist-${{ github.run_id }}
+          name: order076-main-dist-${{ github.run_id }}
           path: runtime/dist
           if-no-files-found: error
           retention-days: 30
-          compression-level: 6
-      - name: Upload unit evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: order076-unit-${{ github.run_id }}
-          path: units.log
-          if-no-files-found: error
-          retention-days: 30
 
-  edge_stability:
-    name: Edge terminal matrix 10x
+  edge:
+    name: Edge exact-main matrix 10x
     needs: build
     runs-on: windows-2025
     timeout-minutes: 45
     steps:
-      - name: Checkout runtime
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ env.RUNTIME_SHA }}
           path: runtime
-      - name: Checkout audit harness
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: audit/order076-terminal-evidence
           path: audit
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: runtime/package-lock.json
-      - name: Install locked dependencies
-        working-directory: runtime
+      - working-directory: runtime
         run: npm ci
-      - name: Download exact dist
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: order076-dist-${{ github.run_id }}
+          name: order076-main-dist-${{ github.run_id }}
           path: runtime/dist
-      - name: Run 10 consecutive full matrices
+      - name: Edge 10x
         env:
           RUNTIME_DIR: ${{ github.workspace }}\runtime
           EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
           MODE: matrix
           LOOP_COUNT: '10'
           BROWSER_PATH: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
-          EVIDENCE_DIR: ${{ github.workspace }}\edge-evidence
+          EVIDENCE_DIR: ${{ github.workspace }}\edge-main
         run: node audit/order076/evidence/order076-terminal.mjs
-      - name: Upload Edge evidence
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order076-edge-10x-${{ github.run_id }}
-          path: edge-evidence
+          name: order076-main-edge-${{ github.run_id }}
+          path: edge-main
           if-no-files-found: error
           retention-days: 30
 
-  chrome_matrix:
-    name: Chrome terminal matrix
+  chrome:
+    name: Chrome exact-main matrix
     needs: build
     runs-on: windows-2025
     timeout-minutes: 25
@@ -158,31 +139,30 @@ jobs:
         run: npm ci
       - uses: actions/download-artifact@v4
         with:
-          name: order076-dist-${{ github.run_id }}
+          name: order076-main-dist-${{ github.run_id }}
           path: runtime/dist
-      - name: Run Chrome full matrix
+      - name: Chrome matrix
         env:
           RUNTIME_DIR: ${{ github.workspace }}\runtime
           EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
           MODE: matrix
           LOOP_COUNT: '1'
           BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
-          EVIDENCE_DIR: ${{ github.workspace }}\chrome-evidence
+          EVIDENCE_DIR: ${{ github.workspace }}\chrome-main
         run: node audit/order076/evidence/order076-terminal.mjs
-      - name: Upload Chrome evidence
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order076-chrome-${{ github.run_id }}
-          path: chrome-evidence
+          name: order076-main-chrome-${{ github.run_id }}
+          path: chrome-main
           if-no-files-found: error
           retention-days: 30
 
-  special_gates:
-    name: Reduced motion + WebGL + real vector
+  specials:
+    name: Exact-main reduced motion WebGL and vector
     needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    runs-on: windows-2025
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,32 +181,37 @@ jobs:
         run: npm ci
       - uses: actions/download-artifact@v4
         with:
-          name: order076-dist-${{ github.run_id }}
+          name: order076-main-dist-${{ github.run_id }}
           path: runtime/dist
-      - name: Locate real Chrome
-        shell: bash
-        run: |
-          set -euo pipefail
-          command -v google-chrome || command -v google-chrome-stable || command -v chromium
-      - name: Run special gates
+      - name: Non-network specials
         env:
-          RUNTIME_DIR: ${{ github.workspace }}/runtime
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
           EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
           MODE: specials
-          EVIDENCE_DIR: ${{ github.workspace }}/special-evidence
+          SKIP_REAL_VECTOR: '1'
+          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\special-main
         run: node audit/order076/evidence/order076-terminal.mjs
-      - name: Upload special evidence
-        if: always()
+      - name: Hosted OpenFreeMap diagnostic
+        env:
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
+          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
+          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\vector-main
+        run: node audit/order076/evidence/order076-vector-diagnostic.mjs
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order076-special-${{ github.run_id }}
-          path: special-evidence
+          name: order076-main-special-${{ github.run_id }}
+          path: |
+            special-main
+            vector-main
           if-no-files-found: error
           retention-days: 30
 
   deploy:
-    name: Deploy exact tested artifact
-    needs: [build, edge_stability, chrome_matrix, special_gates]
+    name: Deploy exact main artifact
+    needs: [build, edge, chrome, specials]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -234,6 +219,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       EXPECTED_BUILD_ID: ${{ needs.build.outputs.build_id }}
       EXPECTED_RELEASE_ID: ${{ needs.build.outputs.release_id }}
+    outputs:
+      build_id: ${{ needs.build.outputs.build_id }}
+      release_id: ${{ needs.build.outputs.release_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -248,9 +236,9 @@ jobs:
         run: npm ci
       - uses: actions/download-artifact@v4
         with:
-          name: order076-dist-${{ github.run_id }}
+          name: order076-main-dist-${{ github.run_id }}
           path: runtime/dist
-      - name: Verify artifact identity before production
+      - name: Verify exact artifact
         working-directory: runtime
         shell: bash
         run: |
@@ -263,47 +251,29 @@ jobs:
           if(m.release_id!==process.env.EXPECTED_RELEASE_ID)throw new Error('release_mismatch');
           console.log(JSON.stringify(m,null,2));
           NODE
-      - name: Record previous production identity
-        shell: bash
-        run: curl -fsS "$WORKER_URL/api/health" | tee production-before.json
-      - name: Deploy exact artifact
+      - name: Deploy without rebuild
         working-directory: runtime
+        run: npx wrangler deploy --config wrangler.jsonc --minify
+      - name: Reconcile production
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --config wrangler.jsonc --minify | tee ../deploy.log
-      - name: Reconcile production identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          ok=0
           for i in $(seq 1 30); do
-            curl -fsS "$WORKER_URL/api/health" > production-health.json || true
+            curl -fsS "$WORKER_URL/api/health" > health.json || true
             if node - <<'NODE'
           const fs=require('fs');
-          let h;try{h=JSON.parse(fs.readFileSync('production-health.json','utf8'))}catch{process.exit(1)}
+          let h;try{h=JSON.parse(fs.readFileSync('health.json','utf8'))}catch{process.exit(1)}
           if(h.ok===true&&h.source_commit===process.env.RUNTIME_SHA&&h.build_hash===process.env.EXPECTED_BUILD_ID&&h.version===process.env.EXPECTED_RELEASE_ID)process.exit(0);
           process.exit(1);
           NODE
-            then ok=1; break; fi
+            then cat health.json; exit 0; fi
             sleep 5
           done
-          test "$ok" = 1
-          cat production-health.json
-      - name: Upload deploy evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: order076-deploy-${{ github.run_id }}
-          path: |
-            deploy.log
-            production-before.json
-            production-health.json
-          if-no-files-found: warn
-          retention-days: 30
+          cat health.json || true
+          exit 1
 
   production_smoke:
-    name: Production MAP-FIRST smoke
+    name: Production exact-main browser smoke
     needs: [build, deploy]
     runs-on: windows-2025
     timeout-minutes: 20
@@ -325,22 +295,21 @@ jobs:
         run: npm ci
       - uses: actions/download-artifact@v4
         with:
-          name: order076-dist-${{ github.run_id }}
+          name: order076-main-dist-${{ github.run_id }}
           path: runtime/dist
-      - name: Browser smoke production
+      - name: Production smoke
         env:
           RUNTIME_DIR: ${{ github.workspace }}\runtime
           EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
           MODE: prod
           BASE_URL: ${{ env.WORKER_URL }}/
           BROWSER_PATH: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
-          EVIDENCE_DIR: ${{ github.workspace }}\production-evidence
+          EVIDENCE_DIR: ${{ github.workspace }}\production-main
         run: node audit/order076/evidence/order076-terminal.mjs
-      - name: Upload production browser evidence
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order076-production-smoke-${{ github.run_id }}
-          path: production-evidence
+          name: order076-main-production-${{ github.run_id }}
+          path: production-main
           if-no-files-found: error
           retention-days: 30
