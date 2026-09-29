@@ -1,0 +1,315 @@
+name: ORDER-076 exact-main verification and deploy
+
+on:
+  push:
+    branches:
+      - audit/order076-terminal-evidence
+    paths:
+      - .github/workflows/order076-main-exact.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-order076-main-exact
+  cancel-in-progress: false
+
+env:
+  RUNTIME_SHA: 3f6f1e7581b464701bb92ae583c7439f49e2e85c
+  RUNTIME_BRANCH: main
+  WORKER_URL: https://voy-app.simondalmasso44.workers.dev
+
+jobs:
+  build:
+    name: Build exact main once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      build_id: ${{ steps.meta.outputs.build_id }}
+      release_id: ${{ steps.meta.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RUNTIME_SHA }}
+          path: runtime
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - name: Install
+        working-directory: runtime
+        run: npm ci
+      - name: Exact-main tests
+        working-directory: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RUNTIME_SHA"
+          remote_head="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test "$remote_head" = "$RUNTIME_SHA"
+          git diff --check
+          npm test
+          npm audit --omit=dev --audit-level=high
+      - name: Build exact main artifact
+        id: meta
+        working-directory: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build:linux
+          node - <<'NODE'
+          const fs=require('fs');
+          const m=JSON.parse(fs.readFileSync('dist/BUILD_MANIFEST.json','utf8'));
+          if(m.source_commit!==process.env.RUNTIME_SHA)throw new Error('source_mismatch:'+JSON.stringify(m));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'build_id='+m.build_id+'\nrelease_id='+m.release_id+'\n');
+          console.log(JSON.stringify(m,null,2));
+          NODE
+          npx wrangler deploy --config wrangler.jsonc --dry-run --minify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order076-main-dist-${{ github.run_id }}
+          path: runtime/dist
+          if-no-files-found: error
+          retention-days: 30
+
+  edge:
+    name: Edge exact-main matrix 10x
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RUNTIME_SHA }}
+          path: runtime
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/order076-terminal-evidence
+          path: audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - working-directory: runtime
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: order076-main-dist-${{ github.run_id }}
+          path: runtime/dist
+      - name: Edge 10x
+        env:
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
+          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
+          MODE: matrix
+          LOOP_COUNT: '10'
+          BROWSER_PATH: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\edge-main
+        run: node audit/order076/evidence/order076-terminal.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order076-main-edge-${{ github.run_id }}
+          path: edge-main
+          if-no-files-found: error
+          retention-days: 30
+
+  chrome:
+    name: Chrome exact-main matrix
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RUNTIME_SHA }}
+          path: runtime
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/order076-terminal-evidence
+          path: audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - working-directory: runtime
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: order076-main-dist-${{ github.run_id }}
+          path: runtime/dist
+      - name: Chrome matrix
+        env:
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
+          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
+          MODE: matrix
+          LOOP_COUNT: '1'
+          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\chrome-main
+        run: node audit/order076/evidence/order076-terminal.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order076-main-chrome-${{ github.run_id }}
+          path: chrome-main
+          if-no-files-found: error
+          retention-days: 30
+
+  specials:
+    name: Exact-main reduced motion WebGL and vector
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RUNTIME_SHA }}
+          path: runtime
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/order076-terminal-evidence
+          path: audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - working-directory: runtime
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: order076-main-dist-${{ github.run_id }}
+          path: runtime/dist
+      - name: Non-network specials
+        env:
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
+          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
+          MODE: specials
+          SKIP_REAL_VECTOR: '1'
+          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\special-main
+        run: node audit/order076/evidence/order076-terminal.mjs
+      - name: Hosted OpenFreeMap diagnostic
+        env:
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
+          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
+          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\vector-main
+        run: node audit/order076/evidence/order076-vector-diagnostic.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order076-main-special-${{ github.run_id }}
+          path: |
+            special-main
+            vector-main
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy exact main artifact
+    needs: [build, edge, chrome, specials]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_BUILD_ID: ${{ needs.build.outputs.build_id }}
+      EXPECTED_RELEASE_ID: ${{ needs.build.outputs.release_id }}
+    outputs:
+      build_id: ${{ needs.build.outputs.build_id }}
+      release_id: ${{ needs.build.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RUNTIME_SHA }}
+          path: runtime
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - working-directory: runtime
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: order076-main-dist-${{ github.run_id }}
+          path: runtime/dist
+      - name: Verify exact artifact
+        working-directory: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const m=JSON.parse(fs.readFileSync('dist/BUILD_MANIFEST.json','utf8'));
+          if(m.source_commit!==process.env.RUNTIME_SHA)throw new Error('source_mismatch');
+          if(m.build_id!==process.env.EXPECTED_BUILD_ID)throw new Error('build_mismatch');
+          if(m.release_id!==process.env.EXPECTED_RELEASE_ID)throw new Error('release_mismatch');
+          console.log(JSON.stringify(m,null,2));
+          NODE
+      - name: Deploy without rebuild
+        working-directory: runtime
+        run: npx wrangler deploy --config wrangler.jsonc --minify
+      - name: Reconcile production
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            curl -fsS "$WORKER_URL/api/health" > health.json || true
+            if node - <<'NODE'
+          const fs=require('fs');
+          let h;try{h=JSON.parse(fs.readFileSync('health.json','utf8'))}catch{process.exit(1)}
+          if(h.ok===true&&h.source_commit===process.env.RUNTIME_SHA&&h.build_hash===process.env.EXPECTED_BUILD_ID&&h.version===process.env.EXPECTED_RELEASE_ID)process.exit(0);
+          process.exit(1);
+          NODE
+            then cat health.json; exit 0; fi
+            sleep 5
+          done
+          cat health.json || true
+          exit 1
+
+  production_smoke:
+    name: Production exact-main browser smoke
+    needs: [build, deploy]
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RUNTIME_SHA }}
+          path: runtime
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/order076-terminal-evidence
+          path: audit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - working-directory: runtime
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: order076-main-dist-${{ github.run_id }}
+          path: runtime/dist
+      - name: Production smoke
+        env:
+          RUNTIME_DIR: ${{ github.workspace }}\runtime
+          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
+          MODE: prod
+          BASE_URL: ${{ env.WORKER_URL }}/
+          BROWSER_PATH: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+          EVIDENCE_DIR: ${{ github.workspace }}\production-main
+        run: node audit/order076/evidence/order076-terminal.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order076-main-production-${{ github.run_id }}
+          path: production-main
+          if-no-files-found: error
+          retention-days: 30
