@@ -16,7 +16,8 @@ PREMERGE_SEQUENCE=
 1 package verified candidate for OSS
 2 run canonical CI on exact packaging HEAD
 3 verify runtime tree did not change from b858568
-4 stop
+4 candidate CI PASS on 82bf193b60f9862dececcb698b09d9bfc1ba62b7 (run 36622052699)
+5 stop
 
 MERGE_SEQUENCE_AFTER_EXPLICIT_AUTHORIZATION=
 1 from candidate merge origin/main with --allow-unrelated-histories -s ours
