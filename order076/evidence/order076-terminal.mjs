@@ -77,7 +77,12 @@ async function fresh({viewport={width:390,height:844},fixture=true,vector='disab
   return{context,page,start};
 }
 async function selectFixture(page,id='fix-bus-01'){
-  await page.locator('[data-entity-id="'+id+'"]').first().click({timeout:10000});
+  await page.waitForSelector('[data-entity-id="'+id+'"]',{timeout:10000});
+  await page.evaluate(id=>{
+    const el=document.querySelector('[data-entity-id="'+CSS.escape(id)+'"]');
+    if(!el)throw new Error('fixture_marker_missing:'+id);
+    el.click();
+  },id);
   await page.waitForFunction(id=>window.__voyDebug?.store?.selected?.()?.id===id,id,{timeout:10000});
   await page.waitForSelector('#tracker-facts:not([hidden])',{timeout:10000});
 }
