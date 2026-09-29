@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RUNTIME_SHA: 3f6f1e7581b464701bb92ae583c7439f49e2e85c
+  RUNTIME_SHA: fa7fe143bf2cb5017af5d835cd9681918e26087d
   RUNTIME_BRANCH: main
   WORKER_URL: https://voy-app.simondalmasso44.workers.dev
 
