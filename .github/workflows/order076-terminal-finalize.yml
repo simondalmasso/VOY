@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_SHA: 3f6f1e7581b464701bb92ae583c7439f49e2e85c
-  EXPECTED_BUILD_ID: be57e6d76ef323ff87368c64
-  EXPECTED_RELEASE_ID: order057-3f6f1e7581b4-be57e6d7
+  RELEASE_SHA: fa7fe143bf2cb5017af5d835cd9681918e26087d
+  EXPECTED_BUILD_ID: a23663370eb24d18a322d7f9
+  EXPECTED_RELEASE_ID: order057-fa7fe143bf2c-a2366337
   WORKER_URL: https://voy-app.simondalmasso44.workers.dev
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_SHA }}
           fetch-depth: 0
-      - name: Verify canonical source and production identity
+      - name: Verify final canonical source and production identity
         shell: bash
         run: |
           set -euo pipefail
@@ -45,17 +45,19 @@ jobs:
           if(h.version!==process.env.EXPECTED_RELEASE_ID)throw new Error('release_mismatch:'+JSON.stringify(h));
           console.log(JSON.stringify(h,null,2));
           NODE
-      - name: Publish v0.1.0
+      - name: Recreate v0.1.0 on final main
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           if gh release view v0.1.0 >/dev/null 2>&1; then
-            echo "v0.1.0 already exists"; exit 1
+            gh release delete v0.1.0 --cleanup-tag --yes
+          else
+            git push origin :refs/tags/v0.1.0 >/dev/null 2>&1 || true
           fi
           gh release create v0.1.0             --target "$RELEASE_SHA"             --title "VOY v0.1.0"             --notes-file docs/release/RELEASE_v0.1.0.md
-      - name: Verify release and tag
+      - name: Verify final release tag and demo
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -74,15 +76,6 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');
           const h=JSON.parse(fs.readFileSync('health-after.json','utf8'));
-          if(h.source_commit!==process.env.RELEASE_SHA||h.build_hash!==process.env.EXPECTED_BUILD_ID)throw new Error('demo_release_mismatch:'+JSON.stringify(h));
+          if(h.source_commit!==process.env.RELEASE_SHA||h.build_hash!==process.env.EXPECTED_BUILD_ID||h.version!==process.env.EXPECTED_RELEASE_ID)throw new Error('demo_release_mismatch:'+JSON.stringify(h));
           console.log('DEMO_RELEASE_MATCH=PASS');
           NODE
-      - name: Update public repository metadata
-        id: metadata
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY"             -f description='Truth-first, map-first mobility surface for Argentina: public transit, routing, PWA and source-backed temporal truth.'             -f homepage='https://voy-app.simondalmasso44.workers.dev/'
-          gh api --method PUT "repos/$GITHUB_REPOSITORY/topics"             -H 'Accept: application/vnd.github+json'             -f 'names[]=urban-mobility'             -f 'names[]=public-transit'             -f 'names[]=argentina'             -f 'names[]=santa-fe'             -f 'names[]=transportation'             -f 'names[]=maplibre'             -f 'names[]=openstreetmap'             -f 'names[]=geospatial'             -f 'names[]=pwa'             -f 'names[]=svelte'             -f 'names[]=cloudflare-workers'             -f 'names[]=routing'             -f 'names[]=open-data'
