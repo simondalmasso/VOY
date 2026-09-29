@@ -1,0 +1,53 @@
+name: VOY canonical CI
+
+on:
+  push:
+    branches:
+      - main
+      - release/order076-oss-candidate
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voy-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Unit regression
+        run: npm test
+      - name: Build exact head
+        run: npm run build:linux
+      - name: Verify build identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs');
+          const m=JSON.parse(fs.readFileSync('dist/BUILD_MANIFEST.json','utf8'));
+          if(m.source_commit!==process.env.GITHUB_SHA)throw new Error('build_source_mismatch:'+JSON.stringify(m));
+          console.log('SOURCE_COMMIT='+m.source_commit);
+          console.log('BUILD_ID='+m.build_id);
+          console.log('RELEASE_ID='+m.release_id);
+          NODE
+      - name: Runtime dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Wrangler dry-run
+        run: npx wrangler deploy --config wrangler.jsonc --dry-run --minify
