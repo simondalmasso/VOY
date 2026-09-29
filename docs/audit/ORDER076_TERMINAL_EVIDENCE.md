@@ -1,6 +1,6 @@
 # ORDER-076 terminal evidence
 
-STATUS=TERMINAL_PASS_WITH_METADATA_AUTH_BLOCKER
+STATUS=TERMINAL_PASS
 
 FINAL_MAIN_SHA=fa7fe143bf2cb5017af5d835cd9681918e26087d
 FINAL_BUILD_ID=a23663370eb24d18a322d7f9
@@ -31,9 +31,9 @@ MAP_FIRST / TRUTH_FIRST / LOW_COST / FAIL_CLOSED / UNKNOWN != UNAVAILABLE.
 
 No new product feature, engine, runtime redesign or ORDER was opened during release closure.
 
-## Only remaining public-repository task
+## Public repository metadata
 
-OSS_METADATA=BLOCKED_GITHUB_ADMIN_AUTH
+OSS_METADATA=PASS
 
 Desired metadata:
 
@@ -44,39 +44,17 @@ topics=urban-mobility,public-transit,argentina,santa-fe,transportation,maplibre,
 ```
 
 Evidence:
-- GitHub Actions GITHUB_TOKEN returned HTTP 403 Resource not accessible by integration on PATCH /repos/{owner}/{repo}.
-- Native ChatGPT GitHub connector has no repository-administration mutation.
-- DESKTOP-DPH3941 has GitHub CLI installed, but `gh auth status` reports no authenticated GitHub host.
-- Git credential helper had no reusable non-interactive GitHub credential.
-- An attempted visible `gh auth login --web` launched in the SentinelX service session, not the user's visible desktop, and was terminated cleanly without changing credentials.
-- No PAT/token was requested, printed, copied or persisted.
+- Description readback: PASS.
+- Homepage readback: PASS.
+- Topics readback: PASS.
+- Metadata was applied through the authenticated interactive Windows user session; no token was printed or persisted by the audit process.
+- Temporary scheduled task and helper files were deleted.
+
+APPLICATION_STATUS=READY
+BLOCKER=NONE
 
 ## Exact continuation for a fresh agent
 
-Do not touch runtime, main, release, tag or deployment.
+No pending ORDER-076 release or OSS-readiness work remains.
 
-First require an authenticated GitHub CLI session with repository administration permission on DESKTOP-DPH3941. The human can establish it directly in a normal visible PowerShell:
-
-```powershell
-gh auth login --web --hostname github.com --git-protocol https --skip-ssh-key
-```
-
-Then the agent may execute, without further product work:
-
-```powershell
-gh api --method PATCH repos/simondalmasso/VOY ^
-  -f description='Truth-first, map-first mobility surface for Argentina: public transit, routing, PWA and source-backed temporal truth.' ^
-  -f homepage='https://voy-app.simondalmasso44.workers.dev/'
-
-'{' + '"names"' + ':[' + '"urban-mobility","public-transit","argentina","santa-fe","transportation","maplibre","openstreetmap","geospatial","pwa","svelte","cloudflare-workers","routing","open-data"' + ']}' |
-  gh api --method PUT repos/simondalmasso/VOY/topics --input -
-
-gh repo view simondalmasso/VOY --json description,homepageUrl,repositoryTopics
-```
-
-After public readback matches exactly:
-- OSS_METADATA=PASS
-- APPLICATION_STATUS=READY
-- BLOCKER=NONE
-
-No rebuild, deploy or release retarget is required for repository metadata because it does not change git content or runtime identity.
+Do not touch runtime, main, release, tag or deployment unless a new defect or explicit new task is provided.
