@@ -1,4 +1,4 @@
-name: ORDER-076 final exact-artifact release
+name: ORDER-076 publish v0.1.0
 
 on:
   push:
@@ -8,269 +8,81 @@ on:
       - .github/workflows/order076-terminal-finalize.yml
 
 permissions:
-  contents: read
-  actions: read
+  contents: write
 
 concurrency:
-  group: voy-order076-finalize
+  group: voy-order076-release-publish
   cancel-in-progress: false
 
 env:
-  RUNTIME_SHA: b858568848f6bf5abd6853ee13c77f2e65c63735
-  SOURCE_RUN_ID: '36567131839'
-  SOURCE_ARTIFACT: order076-dist-36567131839
+  RELEASE_SHA: 3f6f1e7581b464701bb92ae583c7439f49e2e85c
+  EXPECTED_BUILD_ID: be57e6d76ef323ff87368c64
+  EXPECTED_RELEASE_ID: order057-3f6f1e7581b4-be57e6d7
   WORKER_URL: https://voy-app.simondalmasso44.workers.dev
-  LOCAL_EVIDENCE_COMMIT: 89a0c96adf9adbd07fffabc29f55ee52bf5e1cd9
 
 jobs:
-  preflight:
-    name: Verify terminal evidence chain
+  publish:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: audit/order076-terminal-evidence
+          ref: ${{ env.RELEASE_SHA }}
           fetch-depth: 0
-      - name: Verify source-run build Chrome Edge
+      - name: Verify canonical source and production identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$RELEASE_SHA"
+          curl -fsS "$WORKER_URL/api/health" > health.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const h=JSON.parse(fs.readFileSync('health.json','utf8'));
+          if(h.ok!==true)throw new Error('health_not_ok');
+          if(h.source_commit!==process.env.RELEASE_SHA)throw new Error('source_mismatch:'+JSON.stringify(h));
+          if(h.build_hash!==process.env.EXPECTED_BUILD_ID)throw new Error('build_mismatch:'+JSON.stringify(h));
+          if(h.version!==process.env.EXPECTED_RELEASE_ID)throw new Error('release_mismatch:'+JSON.stringify(h));
+          console.log(JSON.stringify(h,null,2));
+          NODE
+      - name: Publish v0.1.0
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/$SOURCE_RUN_ID/jobs?per_page=100" > jobs.json
+          if gh release view v0.1.0 >/dev/null 2>&1; then
+            echo "v0.1.0 already exists"; exit 1
+          fi
+          gh release create v0.1.0             --target "$RELEASE_SHA"             --title "VOY v0.1.0"             --notes-file docs/release/RELEASE_v0.1.0.md
+      - name: Verify release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_sha="$(git ls-remote origin refs/tags/v0.1.0 | awk '{print $1}')"
+          test "$tag_sha" = "$RELEASE_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.1.0" > release.json
           node - <<'NODE'
           const fs=require('fs');
-          const x=JSON.parse(fs.readFileSync('jobs.json','utf8'));
-          for(const name of ['Build exact runtime once','Chrome terminal matrix','Edge terminal matrix 10x']){
-            const j=x.jobs.find(v=>v.name===name);
-            if(!j||j.status!=='completed'||j.conclusion!=='success')throw new Error('required_job_not_green:'+name);
-            console.log(name+'=PASS');
-          }
+          const r=JSON.parse(fs.readFileSync('release.json','utf8'));
+          if(r.tag_name!=='v0.1.0'||r.draft||r.prerelease)throw new Error('release_state_invalid:'+JSON.stringify(r));
+          console.log(JSON.stringify({tag:r.tag_name,draft:r.draft,prerelease:r.prerelease,published_at:r.published_at,html_url:r.html_url,target_commitish:r.target_commitish},null,2));
           NODE
-      - name: Verify durable local real-vector evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          git show "$LOCAL_EVIDENCE_COMMIT:docs/audit/ORDER076_TERMINAL_EVIDENCE.md" > local-evidence.md
-          grep -F "RUNTIME_SOURCE_SHA=$RUNTIME_SHA" local-evidence.md
-          grep -F "Real OpenFreeMap vector path: PASS" local-evidence.md
-          grep -F "Reduced motion: PASS" local-evidence.md
-          grep -F "WebGL2 unavailable -> truthful 2D fallback: PASS" local-evidence.md
-          grep -F "Live webglcontextlost -> truthful 2D fallback" local-evidence.md
-          grep -F "Focused TrackerView follow stability: 30/30 consecutive PASS" local-evidence.md
-
-  exact_specials:
-    name: Exact-artifact non-network special gates
-    needs: preflight
-    runs-on: windows-2025
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RUNTIME_SHA }}
-          path: runtime
-      - uses: actions/checkout@v4
-        with:
-          ref: audit/order076-terminal-evidence
-          path: audit
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: runtime/package-lock.json
-      - working-directory: runtime
-        run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.SOURCE_ARTIFACT }}
-          path: runtime/dist
-          run-id: ${{ env.SOURCE_RUN_ID }}
-          github-token: ${{ github.token }}
-      - name: Reduced motion WebGL2 context-loss
-        env:
-          RUNTIME_DIR: ${{ github.workspace }}\runtime
-          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
-          MODE: specials
-          SKIP_REAL_VECTOR: '1'
-          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
-          EVIDENCE_DIR: ${{ github.workspace }}\special-exact
-        run: node audit/order076/evidence/order076-terminal.mjs
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: order076-special-exact-${{ github.run_id }}
-          path: special-exact
-          if-no-files-found: error
-          retention-days: 30
-
-  vector_diagnostic:
-    name: Hosted OpenFreeMap diagnostic
-    needs: preflight
-    runs-on: windows-2025
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RUNTIME_SHA }}
-          path: runtime
-      - uses: actions/checkout@v4
-        with:
-          ref: audit/order076-terminal-evidence
-          path: audit
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: runtime/package-lock.json
-      - working-directory: runtime
-        run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.SOURCE_ARTIFACT }}
-          path: runtime/dist
-          run-id: ${{ env.SOURCE_RUN_ID }}
-          github-token: ${{ github.token }}
-      - name: Diagnose hosted vector path
-        env:
-          RUNTIME_DIR: ${{ github.workspace }}\runtime
-          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
-          BROWSER_PATH: C:\Program Files\Google\Chrome\Application\chrome.exe
-          EVIDENCE_DIR: ${{ github.workspace }}\vector-diagnostic
-        run: node audit/order076/evidence/order076-vector-diagnostic.mjs
-      - name: Display classification
-        shell: pwsh
-        run: Get-Content -Raw vector-diagnostic\order076-vector-diagnostic.json
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: order076-vector-diagnostic-${{ github.run_id }}
-          path: vector-diagnostic
-          if-no-files-found: error
-          retention-days: 30
-
-  deploy:
-    name: Deploy exact artifact
-    needs: [preflight, exact_specials, vector_diagnostic]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    outputs:
-      build_id: ${{ steps.meta.outputs.build_id }}
-      release_id: ${{ steps.meta.outputs.release_id }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RUNTIME_SHA }}
-          path: runtime
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: runtime/package-lock.json
-      - working-directory: runtime
-        run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.SOURCE_ARTIFACT }}
-          path: runtime/dist
-          run-id: ${{ env.SOURCE_RUN_ID }}
-          github-token: ${{ github.token }}
-      - name: Verify immutable artifact
-        id: meta
-        working-directory: runtime
-        shell: bash
-        run: |
-          set -euo pipefail
+          curl -fsS "$WORKER_URL/api/health" > health-after.json
           node - <<'NODE'
           const fs=require('fs');
-          const m=JSON.parse(fs.readFileSync('dist/BUILD_MANIFEST.json','utf8'));
-          if(m.source_commit!==process.env.RUNTIME_SHA)throw new Error('source_mismatch');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT,'build_id='+m.build_id+'\nrelease_id='+m.release_id+'\n');
-          console.log(JSON.stringify(m,null,2));
+          const h=JSON.parse(fs.readFileSync('health-after.json','utf8'));
+          if(h.source_commit!==process.env.RELEASE_SHA||h.build_hash!==process.env.EXPECTED_BUILD_ID)throw new Error('demo_release_mismatch:'+JSON.stringify(h));
+          console.log('DEMO_RELEASE_MATCH=PASS');
           NODE
-      - name: Record current production
-        shell: bash
-        run: curl -fsS "$WORKER_URL/api/health" | tee production-before.json
-      - name: Deploy without rebuild
-        working-directory: runtime
+      - name: Update public repository metadata
+        id: metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --config wrangler.jsonc --minify | tee ../deploy.log
-      - name: Reconcile exact production identity
-        env:
-          EXPECTED_BUILD_ID: ${{ steps.meta.outputs.build_id }}
-          EXPECTED_RELEASE_ID: ${{ steps.meta.outputs.release_id }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          ok=0
-          for i in $(seq 1 30); do
-            curl -fsS "$WORKER_URL/api/health" > production-health.json || true
-            if node - <<'NODE'
-          const fs=require('fs');
-          let h;try{h=JSON.parse(fs.readFileSync('production-health.json','utf8'))}catch{process.exit(1)}
-          if(h.ok===true&&h.source_commit===process.env.RUNTIME_SHA&&h.build_hash===process.env.EXPECTED_BUILD_ID&&h.version===process.env.EXPECTED_RELEASE_ID)process.exit(0);
-          process.exit(1);
-          NODE
-            then ok=1; break; fi
-            sleep 5
-          done
-          test "$ok" = 1
-          cat production-health.json
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: order076-final-deploy-${{ github.run_id }}
-          path: |
-            deploy.log
-            production-before.json
-            production-health.json
-          if-no-files-found: warn
-          retention-days: 30
-
-  production_smoke:
-    name: Production exact-head browser smoke
-    needs: deploy
-    runs-on: windows-2025
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RUNTIME_SHA }}
-          path: runtime
-      - uses: actions/checkout@v4
-        with:
-          ref: audit/order076-terminal-evidence
-          path: audit
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: runtime/package-lock.json
-      - working-directory: runtime
-        run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.SOURCE_ARTIFACT }}
-          path: runtime/dist
-          run-id: ${{ env.SOURCE_RUN_ID }}
-          github-token: ${{ github.token }}
-      - name: Production browser smoke
-        env:
-          RUNTIME_DIR: ${{ github.workspace }}\runtime
-          EXPECTED_SHA: ${{ env.RUNTIME_SHA }}
-          MODE: prod
-          BASE_URL: ${{ env.WORKER_URL }}/
-          BROWSER_PATH: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
-          EVIDENCE_DIR: ${{ github.workspace }}\production-final
-        run: node audit/order076/evidence/order076-terminal.mjs
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: order076-production-final-${{ github.run_id }}
-          path: production-final
-          if-no-files-found: error
-          retention-days: 30
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY"             -f description='Truth-first, map-first mobility surface for Argentina: public transit, routing, PWA and source-backed temporal truth.'             -f homepage='https://voy-app.simondalmasso44.workers.dev/'
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/topics"             -H 'Accept: application/vnd.github+json'             -f 'names[]=urban-mobility'             -f 'names[]=public-transit'             -f 'names[]=argentina'             -f 'names[]=santa-fe'             -f 'names[]=transportation'             -f 'names[]=maplibre'             -f 'names[]=openstreetmap'             -f 'names[]=geospatial'             -f 'names[]=pwa'             -f 'names[]=svelte'             -f 'names[]=cloudflare-workers'             -f 'names[]=routing'             -f 'names[]=open-data'
