@@ -2,7 +2,7 @@
 
 ## 2026-09-29 — PRE-MERGE OSS READINESS
 
-STATUS=READY_FOR_CANON_PROMOTION_PENDING_CI
+STATUS=PREMERGE_READY
 
 EVIDENCE=
 - Dossier reconciled with remote GitHub state.
@@ -17,7 +17,6 @@ EVIDENCE=
 - main remains old and intentionally untouched.
 
 MISSING=
-- Final candidate CI on packaging HEAD.
 - Explicit merge authorization.
 - Post-promotion exact-main build/deploy reconciliation.
 - Public v0.1.0 tag/release.
@@ -30,12 +29,15 @@ RISK=
 - Do not reopen product architecture for the application.
 
 NEXT=
-1. Require final candidate CI PASS.
-2. Stop at pre-merge checkpoint.
-3. After merge authorization, execute the history-preserving bridge.
-4. Rebuild/deploy exact main, tag/release v0.1.0, verify demo.
-5. Set APPLICATION_STATUS=READY only after identities reconcile.
+1. Stop at the pre-merge checkpoint.
+2. After explicit merge authorization, execute the history-preserving bridge.
+3. Rebuild/deploy exact main, tag/release v0.1.0, verify demo.
+4. Set APPLICATION_STATUS=READY only after identities reconcile.
 
 NO_RUNTIME_CHANGE=YES
 NO_MERGE=YES
 NO_DEPLOY_BY_OSS_PACKAGING=YES
+
+PREMERGE_CANDIDATE_HEAD_VERIFIED=82bf193b60f9862dececcb698b09d9bfc1ba62b7
+PREMERGE_CI_RUN=36622052699
+PREMERGE_CI=PASS
