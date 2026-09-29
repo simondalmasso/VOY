@@ -174,3 +174,42 @@ Zero-context agent:
 3. Require 10 consecutive PASS rows, each build=c150cf0f431b55fcbdbb8278 pass=13 fail=0.
 4. If it completes 10/10, proceed to evidence persistence + final dry-run/deploy reconciliation.
 5. If it fails, stop and classify before touching runtime.
+
+
+## CHECKPOINT — REMOTE-ONLY TERMINAL PATH
+
+CURRENT_RUNTIME_REMOTE=feat/order076-astra-truth-first@b858568848f6bf5abd6853ee13c77f2e65c63735
+GITLAB_MIRROR=PASS on b858568...
+DESKTOP_COMMANDER=QUOTA_EXHAUSTED
+NO_RESET=YES
+DEPLOYED=NO
+
+Persisted terminal evidence already available on audit/order076-terminal-evidence:
+- exact units/build source b858568...
+- Edge 13/13 PASS
+- Chrome 13/13 PASS
+- reduced-motion PASS
+- WebGL2 unavailable fallback PASS
+- live webglcontextlost fallback PASS
+- real OpenFreeMap vector smoke PASS
+- physical follow drag 30/30 PASS
+
+GitHub run 36391139662:
+- Linux unit/build/wrangler dry-run PASS.
+- browser jobs FAIL only because inherited ORDER-073 harness requires desktop map width ratio <=0.80.
+- ORDER-076 full-bleed MAP-FIRST correctly reports width_ratio=1.
+- Therefore old browser failure is OBSOLETE_HARNESS, not runtime failure.
+
+EXACT NEXT FOR A ZERO-CONTEXT AGENT:
+1. Do not reset or change b858568 runtime.
+2. Use audit/order076-terminal-evidence as the control branch.
+3. Add an ORDER-076-only terminal harness/workflow there.
+4. Workflow must checkout runtime SHA b858568 exactly.
+5. Build ONCE on Ubuntu and upload dist as artifact.
+6. Edge/Chrome must download and test that exact dist; no per-OS rebuild.
+7. Required terminal remaining gate: Edge stability 10 consecutive full ORDER-076 matrices.
+8. Keep real-vector as a separate live-provider smoke; stability must not depend on provider variability.
+9. After all gates pass, deploy the SAME downloaded dist using existing CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets.
+10. Post-deploy GET /api/health and require source_commit=b858568... and build_hash=artifact BUILD_ID.
+11. If post-deploy identity mismatch: fail and do not claim completion.
+12. Update this checkpoint and Issue #57 after production reconciliation.
