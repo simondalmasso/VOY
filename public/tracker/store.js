@@ -123,6 +123,13 @@ export function createTrackerStore({now=()=>Date.now(),presentTransportEntity=nu
 
     const classification=classifyObservation(observation,now(),{freshnessMs});
     if(observation.temporal_state==='realtime'&&classification.state==='realtime'){
+      // GPS observation point: show only the exact last reported coordinate.
+      // Never interpolate or snap it without independently verified geometry.
+      if(observation.observed_position_only===true)return{
+        render:true,animated:false,temporal_state:'realtime',visual_state:'realtime',
+        position:{lat:observation.lat,lon:observation.lon},source_observation:observation,
+        source_synthetic:synthetic,classification,reason:'observed_point_only'
+      };
       if(!entity.previous){
         return{render:false,animated:false,temporal_state:'realtime',visual_state:'realtime',reason:'previous_realtime_observation_missing',source_synthetic:synthetic,classification};
       }

@@ -47,6 +47,7 @@ export function normalizeObservation(raw) {
     if (times.length) observation.scheduled_times = times;
   }
   if (raw.synthetic_fixture === true) observation.synthetic_fixture = true;
+  if (raw.observed_position_only === true) observation.observed_position_only = true;
   return observation;
 }
 

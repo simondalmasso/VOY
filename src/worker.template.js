@@ -2042,9 +2042,81 @@ function health() {
   };
 }
 __name(health, "health");
+// P0 Santa Fe GPS: an opt-in, source-attested JSON vehicle adapter.
+// No undocumented APK backend is called or enabled by default.
+const SF_GPS_MAX_AGE_MS=20000;
+const SF_GPS_MAX_VEHICLES=16;
+const SF_GPS_CACHE_MS=5000;
+let sfGpsCache=null;
+function sfGpsSource(env={}){
+  if(env.VOY_SF_GPS_REUSE_APPROVED!=='YES')return null;
+  if(typeof env.VOY_SF_GPS_FEED_URL!=='string'||typeof env.VOY_SF_GPS_SOURCE_ID!=='string'||
+     typeof env.VOY_SF_GPS_APPROVED_HOST!=='string'||typeof env.VOY_SF_GPS_LICENSE_URL!=='string')return null;
+  try{
+    const url=new URL(env.VOY_SF_GPS_FEED_URL),license=new URL(env.VOY_SF_GPS_LICENSE_URL);
+    if(url.protocol!=='https:'||url.hostname!==env.VOY_SF_GPS_APPROVED_HOST||
+       !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)||url.username||url.password||
+       url.search||url.hash||license.protocol!=='https:'||license.username||license.password||
+       !/^sf_gps_[a-z0-9_]{2,48}$/.test(env.VOY_SF_GPS_SOURCE_ID))return null;
+    return {url:url.toString(),source_id:env.VOY_SF_GPS_SOURCE_ID,license:license.toString()};
+  }catch{return null}
+}
+function normalizeSfGpsVehicles(payload,sourceId,now=Date.now()){
+  if(!payload||!Array.isArray(payload.vehicles)||payload.vehicles.length>256)return null;
+  const seen=new Set(),observations=[];
+  for(const item of payload.vehicles){
+    if(!item||typeof item!=='object')continue;
+    const id=typeof item.id==='string'?item.id.trim():'';
+    if(!/^[A-Za-z0-9:_-]{1,64}$/.test(id)||seen.has(id))continue;
+    const lat=item.lat,lon=item.lon;
+    if(typeof lat!=='number'||typeof lon!=='number'||!Number.isFinite(lat)||!Number.isFinite(lon)||
+       lat < -31.95||lat > -31.3||lon < -61.08||lon > -60.3)continue;
+    if(typeof item.observed_at!=='string'||!/^\d{4}-\d\d-\d\dT/.test(item.observed_at))continue;
+    const t=Date.parse(item.observed_at),age=now-t;
+    if(!Number.isFinite(t)||age< -5000||age>SF_GPS_MAX_AGE_MS)continue;
+    seen.add(id);
+    const obs={id:sourceId+':'+id,source_id:sourceId,lat,lon,
+      temporal_state:'realtime',observed_at:new Date(t).toISOString(),observed_position_only:true};
+    for(const key of ['route_id','trip_id','line']){
+      if(typeof item[key]==='string'&&item[key].length<=64&&item[key].trim())
+        obs[key]=item[key].trim();
+    }
+    observations.push(obs);
+    if(observations.length>=SF_GPS_MAX_VEHICLES)break;
+  }
+  return observations;
+}
+async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now()){
+  const source=sfGpsSource(env);
+  if(!source)return {ok:true,status:'not_integrated',source_id:null,observations:[]};
+  const key=source.source_id+'|'+source.url;
+  if(sfGpsCache?.key===key&&now-sfGpsCache.at<SF_GPS_CACHE_MS)return sfGpsCache.value;
+  let value;
+  try{
+    const response=await fetchImpl(source.url,{headers:{accept:'application/json'},redirect:'error',
+      signal:AbortSignal.timeout(2500)});
+    const mime=response.headers.get('content-type')||'';
+    if(!response.ok||!/^application\/json(?:;|$)/i.test(mime))
+      throw new Error('invalid_source_response');
+    const content=await response.text();
+    if(content.length>160000)throw new Error('source_response_too_large');
+    const observations=normalizeSfGpsVehicles(JSON.parse(content),source.source_id,now);
+    if(!observations)throw new Error('invalid_source_schema');
+    value={ok:true,status:observations.length?'live':'no_current_positions',
+      source_id:source.source_id,observations};
+  }catch{
+    value={ok:true,status:'source_unavailable',source_id:source.source_id,observations:[]};
+  }
+  sfGpsCache={key,at:now,value};
+  return value;
+}
 async function apiResponse(request, env, deps) {
   const url = new URL(request.url);
   const fetchImpl = deps?.upstreamFetch ?? fetch;
+  if (url.pathname === "/api/transit/santa-fe/vehicles") {
+    if(request.method!=="GET")return methodNotAllowed(["GET"]);
+    return json(await readSantaFeGps(env,fetchImpl));
+  }
   if (url.pathname === "/api/health") {
     if (request.method !== "GET") return methodNotAllowed(["GET"]);
     return json(health());
@@ -2147,6 +2219,9 @@ var worker_default = { fetch: /* @__PURE__ */ __name((request, env) => defaultHa
 export {
   NominatimCoordinator,
   VoyError,
+  normalizeSfGpsVehicles,
+  readSantaFeGps,
+  sfGpsSource,
   classifySourceFreshness,
   createRequestHandler,
   worker_default as default,
