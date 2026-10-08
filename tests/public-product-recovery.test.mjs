@@ -47,7 +47,7 @@ test('public recovery: 3D can open from verified local topology context without 
   assert.match(app,/function hasLocal3DTopologyContext\(/);
   assert.match(app,/function has3DContext\(\)[\s\S]*hasLocal3DTopologyContext\(substrate\.getCenter\(\)\|\|DEFAULT_MAP_CENTER\)/);
   assert.doesNotMatch(app,/if\(!has3DContext\(\)\)\{activate2D\('Seleccioná un servicio o recorrido para abrir 3D\.'/);
-  assert.match(app,/3D urbano · Santa Fe/);
+  assert.match(app,/Mapa 3D · Santa Fe centro · recorridos publicados/);
 });
 
 test('public recovery: client sends visible map center as search viewport when origin is absent',async()=>{

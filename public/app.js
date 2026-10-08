@@ -150,7 +150,8 @@ function has3DContext(){
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
 function activate2D(message=''){
-  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
+  state.threeController?.dispose?.();state.threeController=null;
+  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
 }
 function loadVoy3DModule(){
   return state.threeImportAttempt===0
@@ -160,15 +161,16 @@ function loadVoy3DModule(){
 async function activate3D(){
   if(state.mapMode==='3d'&&state.threeController?.ok)return;
   if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
-  map3dStatus.textContent='Cargando topología 3D…';
+  map3dStatus.textContent='Abriendo mapa 3D de Santa Fe…';
   try{
     state.threeModulePromise??=loadVoy3DModule();
     const mod=await state.threeModulePromise;
     if(mod.BUILD_ID!==CLIENT_BUILD_ID)throw new Error('3d_build_identity_mismatch');
-    const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
+    map3dLayer.hidden=false;map3dLayer.style.opacity='0';
+    const controller=state.threeController?.ok?state.threeController:await mod.activateVoyUrbanMap3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('Mapa 3D no disponible; continuamos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
-    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dQuality.hidden=false;map3dStatus.textContent='3D urbano · Santa Fe Centro · edificios y calles OSM · alturas medidas/inferidas';sync3DTopology();
+    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dLayer.style.opacity='';map3dAttribution.hidden=false;map3dQuality.hidden=controller.renderer==='MAPLIBRE_URBAN_3D';map3dStatus.textContent='Mapa 3D · Santa Fe centro · recorridos publicados · sin vehículos en vivo';sync3DTopology();
   }catch(error){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
