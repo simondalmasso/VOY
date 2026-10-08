@@ -42,7 +42,7 @@ button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible{o
 .app-shell{position:relative;flex:1 1 auto;min-width:0;min-height:0;overflow:hidden}
 .map-shell.voy-map-stage{position:absolute;inset:0;width:100%;height:100%;margin:0;border-radius:0;overflow:hidden;background:var(--map);display:block}
 .map-tiles{position:absolute;inset:0;overflow:hidden;background:var(--map)}
-.map-tiles,#map-canvas canvas{filter:grayscale(.52) saturate(.62) contrast(1.06) brightness(.88)}
+.map-tile{filter:grayscale(.52) saturate(.62) contrast(1.06) brightness(.88)}
 .map-tiles.is-underlay{visibility:hidden}
 .map-tile{position:absolute;width:256px;height:256px;max-width:none;user-select:none;filter:saturate(.78) contrast(.98)}
 #map-canvas{position:absolute;inset:0;z-index:2}
@@ -292,7 +292,7 @@ html[data-theme="dark"]{
 .theme-button{border-radius:8px;border:1px solid var(--hud-line);background:rgba(0,0,0,.28);color:var(--hud-ink);backdrop-filter:blur(10px)}
 .theme-button:hover{background:var(--hud-ink);border-color:var(--hud-ink);color:#050806}
 .map-shell.voy-map-stage::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.22),transparent 18%,transparent 72%,rgba(0,0,0,.18));box-shadow:inset 0 0 72px rgba(0,0,0,.30),inset 0 0 260px rgba(0,0,0,.18)}
-.map-tiles,#map-canvas canvas{filter:grayscale(.72) saturate(.35) brightness(.66) contrast(1.13)}
+.map-tile{filter:grayscale(.72) saturate(.35) brightness(.66) contrast(1.13)}
 .map-hud{top:64px;left:14px;right:14px}
 .truth-pill{margin:0;display:inline-flex;align-items:center;gap:8px;max-width:min(70vw,390px);min-height:44px;padding:7px 11px;border-radius:8px;background:var(--hud-panel);border:1px solid var(--hud-line);backdrop-filter:blur(14px);box-shadow:0 14px 34px rgba(0,0,0,.34);font-size:12px;font-weight:650;line-height:1.2;color:var(--hud-ink)}
 .truth-meta{font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;font-size:9.5px;font-weight:520;letter-spacing:.07em;color:var(--hud-muted)}
@@ -350,5 +350,13 @@ dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:v
 }
 
 
+.bus-line-control{position:absolute;top:142px;left:18px;z-index:20;display:flex;flex-direction:column;gap:5px;width:min(260px,calc(100vw - 36px));padding:10px 12px;border:1px solid var(--hud-line);border-radius:9px;background:var(--hud-panel);color:var(--hud-ink);box-shadow:0 7px 18px rgba(0,0,0,.25)}
+.bus-line-control[hidden]{display:none}
+.bus-line-control label{font-size:12px;font-weight:700}
+.bus-line-control select{width:100%;min-height:38px;padding:7px 10px;border:1px solid var(--hud-line);border-radius:6px;background:#07100a;color:var(--hud-ink);font:inherit;cursor:pointer}
+.bus-line-control select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bus-line-control span{font:10px/1.4 var(--mono);color:var(--hud-muted)}
+@media(max-width:700px){.bus-line-control{top:146px;left:8px;width:min(230px,calc(100vw - 16px))}}
+
 /* Public product recovery: published Santa Fe bus network, static geometry only. */
-.transit-network-overlay{color:rgba(255,212,42,.58);pointer-events:none}
+.transit-network-overlay{color:rgba(255,212,42,.80);pointer-events:none}

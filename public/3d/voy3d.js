@@ -275,8 +275,10 @@ export async function activateVoyUrbanMap3D({
     });
     clearTimeout(timeout);
     if(!outcome.ok){cleanup();return fallbackTo2D(onFallback,outcome.reason)}
-    function update({routeGeometry:nextRoute=null,transportEntities=[]}={}){
+    let displayedNetwork=networkGeometries;
+    function update({routeGeometry:nextRoute=null,networkGeometries:nextNetwork=displayedNetwork,transportEntities=[]}={}){
       if(disposed)return;
+      if(nextNetwork!==displayedNetwork){map.getSource('voy-3d-bus-network')?.setData(networkData(nextNetwork));displayedNetwork=nextNetwork}
       map.getSource('voy-3d-selected-route')?.setData(routeData(nextRoute));
       map.getSource('voy-3d-transport')?.setData(transportData(transportEntities));
     }

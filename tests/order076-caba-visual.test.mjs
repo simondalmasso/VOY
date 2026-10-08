@@ -26,7 +26,10 @@ test('ORDER076 dark HUD is quiet, monochrome and time-aware',async()=>{
 
 test('ORDER076 map and panels adopt low-chrome night treatment without new assets',async()=>{
   const css=await read('public/styles.css');
-  assert.match(css,/\.map-tiles,#map-canvas canvas\{[^}]*grayscale\(/s);
+  // Keep the base-map imagery muted; never gray-filter the entire container
+  // because that also desaturates the semantically yellow bus-route overlay.
+  assert.match(css,/\.map-tile\{[^}]*grayscale\(/s);
+  assert.doesNotMatch(css,/\.map-tiles,#map-canvas canvas\{[^}]*grayscale\(/s);
   assert.match(css,/\.voy-sheet\{[^}]*background:var\(--hud-panel\)/s);
   assert.match(css,/\.truth-pill\{[^}]*background:var\(--hud-panel\)/s);
   assert.match(css,/\.map-mode-toggle\{[^}]*background:var\(--hud-panel\)/s);

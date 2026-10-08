@@ -4,6 +4,7 @@ import { createTrackerStore, TRAIL_MAX_OBSERVATIONS } from './tracker/store.js?v
 import { fixtureEnabled, createFixtureEngine, FIXTURE_LABEL, FIXTURE_SOURCE_ID, FIXTURE_TICK_PARAM, FIXTURE_DEFAULT_TICK_MS } from './tracker/fixtures.js?v=__BUILD_ID__';
 import { classifyObservation, ageLabel } from './tracker/observations.js?v=__BUILD_ID__';
 import { createMapSubstrate } from './map/substrate.js?v=__BUILD_ID__';
+import { listSantaFeLines, geometriesForSantaFeLine, labelSantaFeLine } from './transit/line-picker.js?v=__BUILD_ID__';
 
 const CLIENT_BUILD_ID='__BUILD_ID__';
 
@@ -31,7 +32,7 @@ const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
   originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
-  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],sheetPane:'collapsed',fixtureOn:false,gpsStatus:'not_integrated',gpsLastLiveAt:0
+  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],busNetworkSelectedGeometries:[],sheetPane:'collapsed',fixtureOn:false,gpsStatus:'not_integrated',gpsLastLiveAt:0
 };
 
 // ---------- DOM refs ----------
@@ -40,6 +41,7 @@ const originInput=$('#origin'),originEditor=$('#origin-editor'),originLabel=$('#
 const statusLine=$('#destination-status'),decision=$('#decision'),options=$('#options');
 const dialog=$('#handoff-dialog'),confirmHandoff=$('#confirm-handoff'),cancelHandoff=$('#cancel-handoff');
 const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapCanvas=$('#map-canvas'),map3dLayer=$('#map-3d-layer'),map3dStatus=$('#map-3d-status'),map3dAttribution=$('#map-3d-attribution'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution'),map3dQuality=$('#map-3d-quality');
+const busLineControl=$('#bus-line-control'),busLinePicker=$('#bus-line-picker'),busLineMeta=$('#bus-line-meta');
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary'),searchChip=$('#search-chip');
@@ -111,7 +113,7 @@ function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa 
 function clearMap(){renderInitialMap()}
 function currentBusNetworkGeometries(){
   const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;
-  return state.busNetworkGeometries.length&&trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)<=30000?state.busNetworkGeometries:[];
+  return state.busNetworkSelectedGeometries.length&&trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)<=30000?state.busNetworkSelectedGeometries:[];
 }
 async function loadSantaFeBusNetwork(){
   try{
@@ -119,9 +121,14 @@ async function loadSantaFeBusNetwork(){
     if(!response.ok)throw new Error('bus_network_unavailable');
     const payload=await response.json();
     if(payload?.kind!=='static_route_geometry'||!Array.isArray(payload.routes))throw new Error('bus_network_malformed');
-    const geometries=payload.routes.flatMap(route=>(Array.isArray(route?.segments)?route.segments:[])).filter(line=>Array.isArray(line)&&line.length>=2);
+    const geometries=geometriesForSantaFeLine(payload.routes);
     if(!geometries.length)throw new Error('bus_network_empty');
     state.busNetwork=payload;state.busNetworkGeometries=geometries;
+    state.busNetworkSelectedGeometries=geometries;
+    const lines=listSantaFeLines(payload.routes);
+    for(const line of lines){const option=document.createElement('option');option.value=line;option.textContent=labelSantaFeLine(line);busLinePicker.appendChild(option)}
+    busLineControl.hidden=false;
+    busLineMeta.textContent=lines.length+' líneas · recorridos publicados';
   }catch{state.busNetwork=null;state.busNetworkGeometries=[]}
   syncTrackerOverlays();
 }
@@ -145,7 +152,7 @@ function has3DContext(){
   return Boolean(currentSelectedRouteGeometry())||hasLocal3DTopologyContext(substrate.getCenter()||DEFAULT_MAP_CENTER);
 }
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
-function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
+function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transportEntities:current3DTransportEntities()})}
 function update3DGpsStatus(){
  const live=state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000;
  map3dStatus.textContent='Mapa 3D · Santa Fe centro · recorridos publicados · '+(live?'GPS reciente':'sin vehículos en vivo');
@@ -565,6 +572,11 @@ function renderRouteGeometry(geometry){
 }
 
 // ---------- boot: instant raster first paint, then vector upgrade ----------
+busLinePicker.addEventListener('change',()=>{
+  state.busNetworkSelectedGeometries=geometriesForSantaFeLine(state.busNetwork?.routes,busLinePicker.value);
+  busLineMeta.textContent=busLinePicker.value?labelSantaFeLine(busLinePicker.value)+' · trazado publicado, no GPS':listSantaFeLines(state.busNetwork?.routes).length+' líneas · recorridos publicados';
+  syncTrackerOverlays();sync3DTopology();
+});
 renderInitialMap();
 loadSantaFeBusNetwork();
 setSheetSummary();
