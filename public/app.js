@@ -31,7 +31,7 @@ const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
   originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
-  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],sheetPane:'collapsed',fixtureOn:false
+  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],sheetPane:'collapsed',fixtureOn:false,gpsStatus:'not_integrated',gpsLastLiveAt:0
 };
 
 // ---------- DOM refs ----------
@@ -128,11 +128,7 @@ async function loadSantaFeBusNetwork(){
 
 // ---------- 2D/3D mode (existing lazy Three architecture preserved) ----------
 function current3DTransportEntities(){
-  const selected=trackerStore.selected();
-  if(!selected)return[];
-  const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
-  if(!frame.render)return[];
-  return trackerStore.transportEntries().filter(entity=>entity.id===selected.id);
+  return trackerStore.transportEntries().filter(entity=>entity.next?.temporal_state==='realtime');
 }
 function currentSelectedRouteGeometry(){
   const trackerSelection=trackerStore.selected();
@@ -150,6 +146,10 @@ function has3DContext(){
 }
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
+function update3DGpsStatus(){
+ const live=state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000;
+ map3dStatus.textContent='Mapa 3D · Santa Fe centro · recorridos publicados · '+(live?'GPS reciente':'sin vehículos en vivo');
+}
 function activate2D(message=''){
   state.threeController?.dispose?.();state.threeController=null;
   state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
@@ -171,7 +171,7 @@ async function activate3D(){
     const controller=state.threeController?.ok?state.threeController:await mod.activateVoyUrbanMap3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('Mapa 3D no disponible; continuamos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
-    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dLayer.style.opacity='';map3dAttribution.hidden=false;map3dQuality.hidden=controller.renderer==='MAPLIBRE_URBAN_3D';map3dStatus.textContent='Mapa 3D · Santa Fe centro · recorridos publicados · sin vehículos en vivo';sync3DTopology();
+    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dLayer.style.opacity='';map3dAttribution.hidden=false;map3dQuality.hidden=controller.renderer==='MAPLIBRE_URBAN_3D';update3DGpsStatus();sync3DTopology();
   }catch(error){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
@@ -356,6 +356,10 @@ function setSheetSummary(){
   }
   if(state.fixtureOn){sheetSummary.textContent=`${FIXTURE_LABEL} · entidades sintéticas para evidencia de desarrollo`;return}
   if(state.substrateState==='vector_failed'){sheetSummary.textContent='Mapa vectorial no disponible; seguimos en mapa raster.';return}
+  if(state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000){sheetSummary.textContent='Colectivos GPS observados · fuente verificada';return}
+  if(state.gpsStatus==='source_unavailable'||state.gpsStatus==='no_current_positions'){
+    sheetSummary.textContent='GPS: sin posiciones recientes verificables.';return
+  }
   sheetSummary.textContent='GPS de VOY: todavía no integrado.';
 }
 trackerStore.onChange(()=>setSheetSummary());
@@ -564,6 +568,28 @@ function renderRouteGeometry(geometry){
 renderInitialMap();
 loadSantaFeBusNetwork();
 setSheetSummary();
+// Fail-closed native GPS polling; unconfigured deployments stop after the first response.
+let sfGpsPolling=false,sfGpsEnabled=true;
+async function pollSantaFeGps(){
+  if(!sfGpsEnabled||sfGpsPolling||state.fixtureOn||document.hidden)return;
+  const center=substrate.getCenter()||DEFAULT_MAP_CENTER;
+  if(trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)>30000)return;
+  sfGpsPolling=true;
+  try{
+    const response=await fetch('/api/transit/santa-fe/vehicles',{cache:'no-store',signal:AbortSignal.timeout(4500)});
+    if(!response.ok)throw new Error('gps_gateway_unavailable');
+    const payload=await response.json();
+    if(payload?.status==='not_integrated'){sfGpsEnabled=false;state.gpsStatus='not_integrated'}
+    else if(payload?.ok&&payload?.status==='live'&&Array.isArray(payload.observations)){
+      state.gpsStatus='live';state.gpsLastLiveAt=Date.now();
+      for(const obs of payload.observations)trackerStore.ingest(obs);
+    }else state.gpsStatus=payload?.status==='no_current_positions'?'no_current_positions':'source_unavailable';
+    syncTrackerOverlays();sync3DTopology();update3DGpsStatus();updateTruthPill();setSheetSummary();
+  }catch{state.gpsStatus='source_unavailable';setSheetSummary()}
+  finally{sfGpsPolling=false}
+}
+setTimeout(pollSantaFeGps,600);
+setInterval(pollSantaFeGps,15000);
 updateTruthPill();
 scheduleVectorUpgrade();
 window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});

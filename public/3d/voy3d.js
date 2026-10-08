@@ -158,7 +158,15 @@ export async function activateVoyUrbanMap3D({
       geometry:{type:'LineString',coordinates}}))});
   const transportData=entries=>({type:'FeatureCollection',features:
     (Array.isArray(entries)?entries:[]).slice(0,64).flatMap(entry=>{
-      const presented=presentTransportEntity(
+      const reported=entry.next;
+      const observedTime=Date.parse(reported?.observed_at||'');
+      const pointOnly=reported?.observed_position_only===true&&reported?.temporal_state==='realtime'&&
+        Number.isFinite(observedTime)&&Date.now()-observedTime>=-5000&&
+        Date.now()-observedTime<=REALTIME_FRESHNESS_MS&&
+        Number.isFinite(reported.lat)&&Number.isFinite(reported.lon);
+      const presented=pointOnly
+        ?{render:true,temporal_state:'realtime',position:{lat:reported.lat,lon:reported.lon}}
+        :presentTransportEntity(
         entry.previous,entry.next,Date.now(),
         {freshnessMs:REALTIME_FRESHNESS_MS,maxSpeedMps:REALTIME_MAX_SPEED_MPS,
          maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion,
