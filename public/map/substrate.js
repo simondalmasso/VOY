@@ -393,7 +393,7 @@ export function createMapSubstrate({
     const data={type:'FeatureCollection',features:lines.map((coordinates,index)=>({type:'Feature',properties:{index},geometry:{type:'LineString',coordinates}}))};
     if (!map.getSource('voy-bus-network-source')) {
       map.addSource('voy-bus-network-source',{type:'geojson',data});
-      map.addLayer({id:'voy-bus-network-layer',type:'line',source:'voy-bus-network-source',paint:{'line-color':'#ffd42a','line-width':1.6,'line-opacity':0.42}});
+      map.addLayer({id:'voy-bus-network-layer',type:'line',source:'voy-bus-network-source',paint:{'line-color':'#ffd42a','line-width':2.4,'line-opacity':0.72}});
     } else {
       map.getSource('voy-bus-network-source').setData(data);
     }
@@ -405,7 +405,7 @@ export function createMapSubstrate({
     networkRef=geometries;networkMode=nextMode;
     if (!inVector()) {
       if (networkLayer) { networkLayer.remove(); networkLayer=null; }
-      const svg=rasterMultiLine(geometries,'transit-network-overlay',2);
+      const svg=rasterMultiLine(geometries,'transit-network-overlay',3);
       if (svg) { networkLayer=svg; tilesEl.appendChild(svg); }
     } else {
       updateVectorNetwork(geometries);
