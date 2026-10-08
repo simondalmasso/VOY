@@ -27,9 +27,10 @@ Copy-Item node_modules\maplibre-gl\dist\maplibre-gl-shared.mjs dist\client\vendo
 Copy-Item node_modules\maplibre-gl\dist\maplibre-gl-worker.mjs dist\client\vendor\maplibre-gl-worker.mjs -Force
 Copy-Item node_modules\maplibre-gl\dist\maplibre-gl.css dist\client\vendor\maplibre-gl.css -Force
 Copy-Item node_modules\maplibre-gl\LICENSE.txt dist\client\vendor\MAPLIBRE-LICENSE.txt -Force
-New-Item -ItemType Directory -Force dist\client\tracker,dist\client\map | Out-Null
+New-Item -ItemType Directory -Force dist\client\tracker,dist\client\map,dist\client\transit | Out-Null
 Copy-Item public\tracker\* dist\client\tracker -Force
 Copy-Item public\map\* dist\client\map -Force
+Copy-Item public\transit\* dist\client\transit -Force
 $threeModulePath=Join-Path $root 'dist\client\vendor\three.module.js'
 $threeModule=[IO.File]::ReadAllText($threeModulePath,[Text.Encoding]::UTF8).Replace('./three.core.js',("./three.core.js?v="+$buildId))
 [IO.File]::WriteAllText($threeModulePath,$threeModule,(New-Object Text.UTF8Encoding($false)))
@@ -42,6 +43,7 @@ foreach($tf in $textClientFiles){$textClientPaths += Join-Path $root ('dist\clie
 Get-ChildItem (Join-Path $root 'dist\client\3d') -File -Recurse | Where-Object {$_.Extension -in '.js','.json'} | ForEach-Object {$textClientPaths += $_.FullName}
 Get-ChildItem (Join-Path $root 'dist\client\tracker') -File -Recurse | Where-Object {$_.Extension -in '.js','.json'} | ForEach-Object {$textClientPaths += $_.FullName}
 Get-ChildItem (Join-Path $root 'dist\client\map') -File -Recurse | Where-Object {$_.Extension -in '.js','.json'} | ForEach-Object {$textClientPaths += $_.FullName}
+Get-ChildItem (Join-Path $root 'dist\client\transit') -File -Recurse | Where-Object {$_.Extension -in '.js','.json'} | ForEach-Object {$textClientPaths += $_.FullName}
 foreach($tp in $textClientPaths){
   $txt=[IO.File]::ReadAllText($tp,[Text.Encoding]::UTF8).Replace('__BUILD_ID__',$buildId)
   [IO.File]::WriteAllText($tp,$txt,(New-Object Text.UTF8Encoding($false)))

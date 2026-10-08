@@ -326,9 +326,12 @@ __name(explicitCommaLocalityIntentBonus,"explicitCommaLocalityIntentBonus");
 function rankDestinationCandidates(candidates, context) {
   const explicit = context.explicit_geography, origin = context.origin;
   const originCoords = origin?.coordinates;
+  const viewportCoords = context.viewport?.center;
+  const contextCoords = originCoords ?? viewportCoords;
   return candidates.map((candidate, index) => {
     const locality = candidateLocality(candidate), province = candidateProvince(candidate), pid = candidateProvinceId(candidate);
     const distance = candidate.distance_meters ?? haversineMeters(originCoords, candidate.coordinates);
+    const contextDistance = distance ?? haversineMeters(contextCoords, candidate.coordinates);
     let score = 0;
     const entityQuery=stripExplicitCommaGeography(context.query,context.explicit_geography);
     score += tokenCoverage(entityQuery,candidate) * 6e3;
@@ -362,6 +365,8 @@ function rankDestinationCandidates(candidates, context) {
       if (origin.province_id && pid === origin.province_id) score += 3e3;
       else if (origin.province && foldText(province) === foldText(origin.province)) score += 3e3;
       if (distance !== null) score -= Math.min(5e3, distance / 100);
+    } else if (!explicit && viewportCoords && contextDistance !== null) {
+      score -= Math.min(5e3, contextDistance / 100);
     }
     score += Math.max(0, 800 - Number(candidate.provider_rank ?? index) * 80);
     if (candidate.confidence_class === "high") score += 500;
@@ -1218,7 +1223,9 @@ function destinationFocus(context){
     return coarseLocalityFocus(locality.province_id||explicit.province?.id,locality.name);
   }
   if(context.search_scope!=="local")return null;
-  return coarseLocalityFocus(context.origin?.province_id,context.origin?.locality);
+  const originFocus=coarseLocalityFocus(context.origin?.province_id,context.origin?.locality);
+  if(originFocus)return originFocus;
+  return validCoordinates(context.viewport?.center);
 }
 __name(destinationFocus,"destinationFocus");
 async function fetchPhotonSuggestions(context,fetchImpl=fetch,queryOverride=null){
@@ -1801,7 +1808,7 @@ function santaFeBusModeOption(destination, nowMs) {
     availability_state: "partial",
     price_state: fresh ? "known" : "unknown",
     eta_state: "not_integrated",
-    realtime_state: "unavailable",
+    realtime_state: "not_integrated",
     fare: {
       state: fresh ? "current" : "unverified",
       primary: fresh ? { label: "Tarifa plena", currency: "ARS", amount: SANTA_FE_BUS_FACTS.full_fare_ars } : null,

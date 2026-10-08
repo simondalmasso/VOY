@@ -30,7 +30,7 @@ dist = root/'dist'
 if dist.exists(): shutil.rmtree(dist)
 client = dist/'client'
 (client/'icons').mkdir(parents=True)
-(client/'3d').mkdir(); (client/'vendor').mkdir(); (client/'tracker').mkdir(); (client/'map').mkdir()
+(client/'3d').mkdir(); (client/'vendor').mkdir(); (client/'tracker').mkdir(); (client/'map').mkdir(); (client/'transit').mkdir()
 
 public_files = ['_headers','app.js','contracts.js','coverage.html','index.html','manifest.json','offline.html','privacy.html','runtime-config.js','sources.html','styles.css','sw.js','terms.html']
 for f in public_files: shutil.copy2(root/'public'/f, client/f)
@@ -42,6 +42,7 @@ for f in (root/'public/3d').rglob('*'):
         shutil.copy2(f, dest)
 for f in (root/'public/tracker').iterdir(): shutil.copy2(f, client/'tracker'/f.name)
 for f in (root/'public/map').iterdir(): shutil.copy2(f, client/'map'/f.name)
+for f in (root/'public/transit').iterdir(): shutil.copy2(f, client/'transit'/f.name)
 
 three = client/'vendor'
 shutil.copy2(root/'node_modules/three/build/three.module.js', three/'three.module.js')
@@ -61,7 +62,7 @@ mm = (three/'maplibre-gl.mjs').read_text(encoding='utf-8').replace('./maplibre-g
 (three/'maplibre-gl.mjs').write_text(mm, encoding='utf-8')
 
 text_paths = [client/f for f in ['index.html','styles.css','app.js','contracts.js','runtime-config.js','sw.js']]
-for d in ['3d','tracker','map']:
+for d in ['3d','tracker','map','transit']:
     for f in (client/d).rglob('*'):
         if f.is_file() and f.suffix in ('.js','.json'): text_paths.append(f)
 for p in text_paths:

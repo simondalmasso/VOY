@@ -12,6 +12,8 @@ const escapeHtml=(value='')=>{const div=document.createElement('div');div.textCo
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 
 const DEFAULT_MAP_CENTER={lat:-31.6333,lon:-60.7000};
+const THREE_TOPOLOGY_CENTER=Object.freeze({lat:-31.6555,lon:-60.7100});
+const THREE_TOPOLOGY_RADIUS_METERS=6000;
 const SUGGEST_DEBOUNCE_MS=400;
 const SUGGEST_CACHE_TTL_MS=45000;
 const SUGGEST_CACHE_MAX=20;
@@ -28,7 +30,7 @@ const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
   originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
-  substrateState:'raster',stationModels:[],sheetPane:'collapsed',fixtureOn:false
+  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],sheetPane:'collapsed',fixtureOn:false
 };
 
 // ---------- DOM refs ----------
@@ -52,7 +54,7 @@ const TRUTH_STATES={
   predicted:{icon:'◔',label:'Estimado'},
   scheduled:{icon:'◷',label:'Programado'},
   unknown:{icon:'○',label:'Estado desconocido'},
-  no_coverage:{icon:'◍',label:'Tiempo real no disponible en esta cobertura'}
+  no_coverage:{icon:'◍',label:'Estado en vivo no integrado'}
 };
 function truthStateLabel(key){return TRUTH_STATES[key]||TRUTH_STATES.no_coverage}
 function truthConclusion(cls,observation,{historical=false}={}){
@@ -91,7 +93,7 @@ const substrate=createMapSubstrate({
   onUserInteraction:()=>{trackerStore.userPanSuspend();updateFollowUI()},
   onViewportChange:()=>syncTrackerOverlays(),
   onSelectMarker:id=>selectTrackerEntity(id),
-  onVectorReady:()=>{state.substrateState='vector'},
+  onVectorReady:()=>{state.substrateState='vector';syncTrackerOverlays()},
   onSubstrateChange:null,
   onVectorFailed:reason=>{console.warn('[voy] vector substrate failed:',reason);state.substrateState='vector_failed';setSheetSummary()}
 });
@@ -106,6 +108,22 @@ function renderMap(coords,label='Mapa del destino',showPin=true){
 }
 function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe',false)}
 function clearMap(){renderInitialMap()}
+function currentBusNetworkGeometries(){
+  const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;
+  return state.busNetworkGeometries.length&&trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)<=30000?state.busNetworkGeometries:[];
+}
+async function loadSantaFeBusNetwork(){
+  try{
+    const response=await fetch('/transit/santa-fe-lines.json?v='+encodeURIComponent(CLIENT_BUILD_ID),{cache:'force-cache'});
+    if(!response.ok)throw new Error('bus_network_unavailable');
+    const payload=await response.json();
+    if(payload?.kind!=='static_route_geometry'||!Array.isArray(payload.routes))throw new Error('bus_network_malformed');
+    const geometries=payload.routes.flatMap(route=>(Array.isArray(route?.segments)?route.segments:[])).filter(line=>Array.isArray(line)&&line.length>=2);
+    if(!geometries.length)throw new Error('bus_network_empty');
+    state.busNetwork=payload;state.busNetworkGeometries=geometries;
+  }catch{state.busNetwork=null;state.busNetworkGeometries=[]}
+  syncTrackerOverlays();
+}
 
 // ---------- 2D/3D mode (existing lazy Three architecture preserved) ----------
 function current3DTransportEntities(){
@@ -120,13 +138,14 @@ function currentSelectedRouteGeometry(){
   if(trackerSelection?.entity?.observation?.verified_geometry)return {type:'LineString',coordinates:trackerSelection.entity.observation.verified_geometry};
   return state.mobilityComputation?.mode_options?.find(item=>item.mode===state.selectedRouteMode&&item.route_available)?.route?.geometry??null;
 }
+function hasLocal3DTopologyContext(coords){return Boolean(coords)&&trainRadarDistanceMeters(coords,THREE_TOPOLOGY_CENTER)<=THREE_TOPOLOGY_RADIUS_METERS}
 function has3DContext(){
   const selected=trackerStore.selected();
   if(selected){
     const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
     if(frame.render&&frame.position)return true;
   }
-  return Boolean(currentSelectedRouteGeometry());
+  return Boolean(currentSelectedRouteGeometry())||hasLocal3DTopologyContext(substrate.getCenter()||DEFAULT_MAP_CENTER);
 }
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),transportEntities:current3DTransportEntities()})}
@@ -140,7 +159,7 @@ function loadVoy3DModule(){
 }
 async function activate3D(){
   if(state.mapMode==='3d'&&state.threeController?.ok)return;
-  if(!has3DContext()){activate2D('Seleccioná un servicio o recorrido para abrir 3D.');return}
+  if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
   map3dStatus.textContent='Cargando topología 3D…';
   try{
     state.threeModulePromise??=loadVoy3DModule();
@@ -149,7 +168,7 @@ async function activate3D(){
     const controller=state.threeController?.ok?state.threeController:await mod.activateVoy3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
-    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dQuality.hidden=false;map3dStatus.textContent='3D contextual · selección actual · alturas genéricas/inferidas';sync3DTopology();
+    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dAttribution.hidden=false;map3dQuality.hidden=false;map3dStatus.textContent='3D urbano · Santa Fe Centro · edificios y calles OSM · alturas medidas/inferidas';sync3DTopology();
   }catch(error){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
@@ -208,7 +227,7 @@ function selectedRouteForMap(){
 function syncTrackerOverlays(){
   if(state.mapMode!=='2d')return;
   const {trail,scrubIndex}=selectedTrailDots();
-  substrate.sync({markers:trackerMarkerModels(),stations:state.stationModels,routeGeometry:selectedRouteForMap(),trail,scrubIndex});
+  substrate.sync({markers:trackerMarkerModels(),stations:state.stationModels,networkGeometries:currentBusNetworkGeometries(),routeGeometry:selectedRouteForMap(),trail,scrubIndex});
 }
 function trackerTick(){
   if(document.hidden)return;
@@ -357,8 +376,9 @@ const assistantToggle=$('#assistant-toggle'),assistantPanel=$('#assistant-panel'
 function setStatus(text='',kind='neutral'){statusLine.textContent=text;statusLine.dataset.state=kind;updateAssistant()}
 function approxDistance(meters){if(!Number.isFinite(meters))return '';return meters<1000?`${Math.max(50,Math.round(meters/50)*50)} m`:meters<10000?`${(meters/1000).toFixed(1).replace('.',',')} km`:`${Math.round(meters/1000)} km`}
 function fmtVerified(value){try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'medium'}).format(new Date(value))}catch{return ''}}
-function destinationContext(){if(!state.origin)return {search_scope:state.searchScope};return {search_scope:state.searchScope,origin:{locality:state.origin.locality?.name||'',province:state.origin.province?.name||'',province_id:state.origin.province?.id||'',coordinates:state.origin.coordinates||null}}}
-function suggestionCacheKey(query,scope){return `${String(scope||'local')}|${state.originRevision}|${String(query||'').trim().toLocaleLowerCase('es-AR')}`}
+function destinationViewport(){const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;return center?{center:{lat:Number(center.lat),lon:Number(center.lon)},span_km:25}:null}
+function destinationContext(){const viewport=destinationViewport();if(!state.origin)return {search_scope:state.searchScope,viewport};return {search_scope:state.searchScope,viewport,origin:{locality:state.origin.locality?.name||'',province:state.origin.province?.name||'',province_id:state.origin.province?.id||'',coordinates:state.origin.coordinates||null}}}
+function suggestionCacheKey(query,scope){const point=!state.origin&&scope==='local'?destinationViewport()?.center:null;const view=point?`${Number(point.lat).toFixed(3)},${Number(point.lon).toFixed(3)}`:'none';return `${String(scope||'local')}|${state.originRevision}|${view}|${String(query||'').trim().toLocaleLowerCase('es-AR')}`}
 function readSuggestionCache(key,now=Date.now()){const hit=suggestionCache.get(key);if(!hit)return null;if(now-hit.storedAt>SUGGEST_CACHE_TTL_MS){suggestionCache.delete(key);return null}suggestionCache.delete(key);suggestionCache.set(key,hit);return hit.payload}
 function writeSuggestionCache(key,payload,now=Date.now()){suggestionCache.delete(key);suggestionCache.set(key,{storedAt:now,payload});while(suggestionCache.size>SUGGEST_CACHE_MAX)suggestionCache.delete(suggestionCache.keys().next().value)}
 function invalidateSuggestionOriginContext(){state.originRevision+=1;suggestionCache.clear()}
@@ -498,7 +518,7 @@ function busModeCard(option){
   const frequent=fareCurrent&&option.fare?.frequent?`${option.fare.frequent.label}: ${formatArsExact(option.fare.frequent.amount)} · ${(option.fare.frequent.eligibility||[]).join(' · ')}`:'La tarifa vigente no está probada para esta sesión.';
   const source=fareCurrent?`Decreto 00048/2026 · fuente ${fmtVerified(option.fare.source?.source_date)}`:'Sin importe vigente mostrado';
   const actions=(option.actions||[]).filter(a=>a?.url).map(a=>`<button class="option-action option-action-secondary" data-handoff-url="${escapeHtml(a.url)}" data-handoff-label="${escapeHtml(a.label)}">${escapeHtml(a.label)}</button>`).join('');
-  return `<article class="option-row option-info mobility-bus" data-mode-card="bus" data-availability="${escapeHtml(option.availability_state||'partial')}"><div class="option-copy"><strong>Colectivo</strong><p>${escapeHtml(primary)}</p><div class="option-meta">${escapeHtml(frequent)}</div><div class="option-meta">${escapeHtml(source)} · Cuándo pasa: no integrado · Tiempo real no disponible en VOY</div></div><div class="mode-actions">${actions}</div></article>`;
+  return `<article class="option-row option-info mobility-bus" data-mode-card="bus" data-availability="${escapeHtml(option.availability_state||'partial')}"><div class="option-copy"><strong>Colectivo</strong><p>${escapeHtml(primary)}</p><div class="option-meta">${escapeHtml(frequent)}</div><div class="option-meta">Recorridos publicados: visibles en el mapa · Arribos en VOY: no integrados</div><div class="option-meta">${escapeHtml(source)} · Fuente de recorridos: Municipalidad de Santa Fe</div></div><div class="mode-actions">${actions}</div></article>`;
 }
 function renderOptions(){
   options.replaceChildren();const mobility=state.mobilityDecision;if(!mobility)return;
@@ -539,6 +559,7 @@ function renderRouteGeometry(geometry){
 
 // ---------- boot: instant raster first paint, then vector upgrade ----------
 renderInitialMap();
+loadSantaFeBusNetwork();
 setSheetSummary();
 updateTruthPill();
 scheduleVectorUpgrade();

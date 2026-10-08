@@ -52,7 +52,7 @@ test('ORDER069 Santa Fe bus is informational/partial with current official fare 
   assert.ok(bus.fare.frequent.eligibility.some(x=>/SUBE registrada/i.test(x)));
   assert.ok(bus.fare.frequent.eligibility.some(x=>/domicilio/i.test(x)));
   assert.equal(bus.eta_state,'not_integrated');
-  assert.equal(bus.realtime_state,'unavailable');
+  assert.equal(bus.realtime_state,'not_integrated');
   assert.equal('eta' in bus,false);
   assert.equal('live_position' in bus,false);
 });
@@ -88,8 +88,9 @@ test('ORDER069 frontend removes binary hide copy and renders four independent mo
   assert.doesNotMatch(app,/No mostramos Auto, Colectivo/);
   for(const literal of ["'A pie'","'Bici'","'Auto'","'Colectivo'"]) assert.ok(app.includes(literal));
   assert.match(app,/Precio no disponible/);
-  assert.match(app,/Cuándo pasa: no integrado/);
-  assert.match(app,/Tiempo real no disponible en VOY/);
+  assert.match(app,/Recorridos publicados: visibles en el mapa/);
+  assert.match(app,/Arribos en VOY: no integrados/);
+  assert.doesNotMatch(app,/Tiempo real no disponible en VOY/);
 });
 
 test('ORDER069 mobility normalizer accepts routed Auto with unknown price and partial bus',async()=>{

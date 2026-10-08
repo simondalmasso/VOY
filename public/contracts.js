@@ -64,7 +64,8 @@ export function normalizeDestinationSuggestion(candidate) {
   const provider=String(candidate.provider ?? '').trim();
   const lat=Number(candidate.coordinates?.lat), lon=Number(candidate.coordinates?.lon);
   if (!primary || !ref || !provider || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  const distance=Number(candidate.distance_meters);
+  const rawDistance=candidate.distance_meters;
+  const distance=rawDistance==null?null:Number(rawDistance);
   return {...candidate,display_primary:primary,display_secondary:secondary,candidate_ref:ref,provider,coordinates:{lat,lon},distance_meters:Number.isFinite(distance)?distance:null};
 }
 
