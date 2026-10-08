@@ -6,23 +6,23 @@
     {
       "id": "santa-fe-centro-0",
       "url": "./chunk-santa-fe-centro-0.json",
-      "sha256": "0c4a79f656fccd722de6cb20db504ebc09b2626b6d3caeccf2f78176788c75a2"
+      "sha256": "e34dd7c293deef8e6e9bc2281dd6dab3aa1987044588dc80ffcda13f45f8391a"
     }
   ],
   "geometry_source": {
     "authority": "OpenStreetMap contributors",
-    "source_url": "https://api.openstreetmap.org/api/0.6/map?bbox=-60.7115,-31.6565,-60.7085,-31.6545",
+    "source_url": "https://overpass-api.de/api/interpreter",
     "bbox": [
-      -60.7115,
-      -31.6565,
-      -60.7085,
-      -31.6545
+      -60.717,
+      -31.6615,
+      -60.703,
+      -31.6495
     ],
-    "snapshot_at": "2026-09-24T23:45:00Z",
-    "osm_base_timestamp": "2025-12-15T15:11:56Z",
+    "snapshot_at": "2026-10-08T05:47:00.403Z",
+    "osm_base_timestamp": "2026-08-22T08:04:42Z",
     "license": "ODbL-1.0",
     "attribution": "© OpenStreetMap contributors",
-    "raw_input_sha256": "a4a07ee50e139e3c603deb04950ac31f704a2993c6cda30cb4e36bda7489cf80",
+    "raw_input_sha256": "98b786bb41161205dd4304454f0fe8328166b2d7309d00dd6a56fa3006492a7b",
     "runtime_queries": false
   },
   "height_policy": {

@@ -43,7 +43,7 @@ test('ORDER075 temporal truth pill is visible, stateful and not color-only',asyn
   for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
     assert.ok(app.includes(`'${label}'`)||app.includes(`"${label}"`)||app.includes(label),'missing truth label: '+label);
   }
-  assert.ok(app.includes('Tiempo real no disponible'),'coverage-unavailable state must exist');
+  assert.ok(app.includes('Estado en vivo no integrado'),'non-integrated realtime state must remain explicit');
   assert.match(app,/truth-icon|truthPill.*dataset\.state|dataset\.state.*truth/i);
 });
 
@@ -167,7 +167,8 @@ test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
   assert.match(app,/function updateTrainStationMarkers/);
   assert.match(app,/state\.mapCenter=\{lat:Number\(coords\.lat\),lon:Number\(coords\.lon\)\}/);
   for(const literal of ["'A pie'","'Bici'","'Auto'","'Colectivo'"])assert.ok(app.includes(literal));
-  assert.ok(app.includes('Tiempo real no disponible en VOY'));
+  assert.ok(app.includes('Arribos en VOY: no integrados'));
+  assert.ok(app.includes('Recorridos publicados: visibles en el mapa'));
   assert.match(app,/renderInitialMap\(\)/);
   assert.match(app,/renderMap\(DEFAULT_MAP_CENTER/);
 });

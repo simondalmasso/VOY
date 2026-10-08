@@ -344,3 +344,6 @@ dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:v
   .assistant-panel{border-radius:8px!important}
 }
 
+
+/* Public product recovery: published Santa Fe bus network, static geometry only. */
+.transit-network-overlay{color:rgba(255,212,42,.58);pointer-events:none}

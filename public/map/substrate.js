@@ -47,6 +47,9 @@ export function createMapSubstrate({
   const stationMarkers = new Map(); // station name -> {element, mlMarker, lat, lon}
   const trailDots = new Map();    // index -> {element, mlMarker, lat, lon}
   let routeLayer = null;
+  let networkLayer = null;
+  let networkRef = null;
+  let networkMode = null;
   let trailLine = null;
   const emitUserInteraction = source => onUserInteraction(source);
   const inVector = () => substrate === 'vector' && Boolean(map);
@@ -84,6 +87,7 @@ export function createMapSubstrate({
     tilesEl.replaceChildren();
     trailLine = null;
     routeLayer = null;
+    networkLayer = null; networkRef = null; networkMode = null;
     const z = zoom, c = worldPixel(center.lon, center.lat, zoom);
     const cx = Math.floor(c.x / 256), cy = Math.floor(c.y / 256);
     const radius = Number(provider.tile_radius) || 1;
@@ -274,7 +278,7 @@ export function createMapSubstrate({
     }
   }
 
-  function sync({ markers: markerModels = [], stations = [], routeGeometry = null, trail = [], scrubIndex = -1 } = {}) {
+  function sync({ markers: markerModels = [], stations = [], networkGeometries = [], routeGeometry = null, trail = [], scrubIndex = -1 } = {}) {
     if (mode !== '2d') return;
     const seen = new Set();
     for (const model of markerModels) {
@@ -324,6 +328,7 @@ export function createMapSubstrate({
       }
     }
 
+    syncBusNetwork(networkGeometries);
     syncTrail(trail, scrubIndex);
     syncRoute(routeGeometry);
   }
@@ -358,6 +363,52 @@ export function createMapSubstrate({
       }
     } else {
       updateVectorLine('voy-trail-source', 'voy-trail-layer', trail.map(p => [p.lon, p.lat]), '#8fd3ff', 3, 0.55);
+    }
+  }
+
+  function rasterMultiLine(geometries, cssClass, strokeWidth=2) {
+    if (!center || !Array.isArray(geometries) || geometries.length === 0) return null;
+    const width = Math.max(1, tilesEl.clientWidth || 320), height = Math.max(1, tilesEl.clientHeight || 320);
+    const c = worldPixel(center.lon, center.lat, zoom);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add(cssClass, 'route-overlay');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    for (const coordinates of geometries) {
+      if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
+      const points = coordinates.map(pair => {
+        const p = worldPixel(pair[0], pair[1], zoom);
+        return `${(width / 2 + p.x - c.x).toFixed(1)},${(height / 2 + p.y - c.y).toFixed(1)}`;
+      }).join(' ');
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.setAttribute('points', points); line.setAttribute('fill', 'none'); line.setAttribute('stroke', 'currentColor');
+      line.setAttribute('stroke-width', String(strokeWidth)); line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(line);
+    }
+    return svg.childNodes.length ? svg : null;
+  }
+
+  function updateVectorNetwork(geometries) {
+    if (!inVector()) return;
+    const lines=(Array.isArray(geometries)?geometries:[]).filter(line=>Array.isArray(line)&&line.length>=2);
+    const data={type:'FeatureCollection',features:lines.map((coordinates,index)=>({type:'Feature',properties:{index},geometry:{type:'LineString',coordinates}}))};
+    if (!map.getSource('voy-bus-network-source')) {
+      map.addSource('voy-bus-network-source',{type:'geojson',data});
+      map.addLayer({id:'voy-bus-network-layer',type:'line',source:'voy-bus-network-source',paint:{'line-color':'#ffd42a','line-width':1.6,'line-opacity':0.42}});
+    } else {
+      map.getSource('voy-bus-network-source').setData(data);
+    }
+  }
+
+  function syncBusNetwork(geometries=[]) {
+    const nextMode=inVector()?'vector':'raster';
+    if (networkRef===geometries && networkMode===nextMode && (nextMode==='vector'?Boolean(map.getSource('voy-bus-network-source')):Boolean(networkLayer))) return;
+    networkRef=geometries;networkMode=nextMode;
+    if (!inVector()) {
+      if (networkLayer) { networkLayer.remove(); networkLayer=null; }
+      const svg=rasterMultiLine(geometries,'transit-network-overlay',2);
+      if (svg) { networkLayer=svg; tilesEl.appendChild(svg); }
+    } else {
+      updateVectorNetwork(geometries);
     }
   }
 
@@ -456,7 +507,7 @@ export function createMapSubstrate({
       try { map?.remove?.(); } catch {}
       map = null; MarkerClass = null;
       markers.clear(); stationMarkers.clear(); trailDots.clear();
-      routeLayer?.remove?.(); trailLine?.remove?.();
+      routeLayer?.remove?.(); networkLayer?.remove?.(); trailLine?.remove?.();
     }
   };
 }
