@@ -132,3 +132,151 @@ export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initi
     return{ok:true,renderer:'THREE_LAZY',three_version:THREE_VERSION,build_id:BUILD_ID,quality:qualityName,quality_profile:profile,movement_policy:{maxSpeedMps:REALTIME_MAX_SPEED_MPS,maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion:reducedMotion},draw_calls_design:{building_lod:1,roads:1,vehicle_instances:2},update,setRouteGeometry,setTransportEntities,setCenter(){controls.update()},dispose:cleanup};
   }catch(error){cleanup();return fallbackTo2D(onFallback,error?.message||'three_init_failed')}
 }
+
+
+// Public 3D recovery: keep a geographical basemap under the extrusions.
+// The legacy bare Three scene stays available for isolated renderer contracts,
+// but the public 3D action must use a map-projected urban view, not a blank grid.
+export async function activateVoyUrbanMap3D({
+  mount,onFallback=()=>{},routeGeometry:initialRoute=null,networkGeometries=[],
+  transport=[],quality='auto',reducedMotion=false
+}={}){
+  if(!mount)throw new Error('mount_required');
+  if(!canUseWebGL2())return fallbackTo2D(onFallback,'unsupported_webgl2');
+  let map=null,disposed=false,ready=false,timeout=null;
+  const safeLines=lines=>(Array.isArray(lines)?lines:[]).filter(line=>
+    Array.isArray(line)&&line.length>=2&&line.every(pair=>
+      Array.isArray(pair)&&pair.length===2&&pair.every(Number.isFinite)
+    )
+  );
+  const routeData=line=>({type:'FeatureCollection',features:
+    line?.type==='LineString'&&safeLines([line.coordinates]).length?
+      [{type:'Feature',properties:{kind:'selected'},geometry:line}]:[]});
+  const networkData=lines=>({type:'FeatureCollection',features:safeLines(lines)
+    .slice(0,600).map((coordinates,i)=>({type:'Feature',
+      properties:{index:i,temporal_state:'unknown'},
+      geometry:{type:'LineString',coordinates}}))});
+  const transportData=entries=>({type:'FeatureCollection',features:
+    (Array.isArray(entries)?entries:[]).slice(0,64).flatMap(entry=>{
+      const presented=presentTransportEntity(
+        entry.previous,entry.next,Date.now(),
+        {freshnessMs:REALTIME_FRESHNESS_MS,maxSpeedMps:REALTIME_MAX_SPEED_MPS,
+         maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion,
+         verifiedGeometry:entry.verifiedGeometry}
+      );
+      return presented.render&&['realtime','predicted'].includes(presented.temporal_state)
+       ?[{type:'Feature',properties:{temporal_state:presented.temporal_state},
+          geometry:{type:'Point',coordinates:[presented.position.lon,presented.position.lat]}}]
+       :[];
+    })});
+  function cleanup(){
+    if(disposed)return;
+    disposed=true;clearTimeout(timeout);
+    try{map?.remove()}catch{}
+    mount.replaceChildren();
+  }
+  try{
+    const manifest=await fetch(versionedUrl('/3d/topology/manifest.json'),{cache:'force-cache'})
+      .then(r=>{if(!r.ok)throw new Error('3d_topology_manifest_unavailable');return r.json()});
+    if(!Array.isArray(manifest.initial_chunks)||!manifest.initial_chunks.length||
+       manifest.initial_chunks.length>INITIAL_CHUNK_LIMIT)throw new Error('3d_topology_manifest_invalid');
+    const geometries=[];
+    for(const descriptor of manifest.initial_chunks){
+      if(typeof descriptor.url!=='string')throw new Error('3d_chunk_url_invalid');
+      const chunkUrl=new URL(descriptor.url,versionedUrl('/3d/topology/manifest.json'));
+      chunkUrl.searchParams.set('v',BUILD_ID);
+      const chunk=await fetch(chunkUrl,{cache:'force-cache'}).then(r=>{
+        if(!r.ok)throw new Error('3d_topology_chunk_unavailable');return r.json();
+      });
+      if(!Array.isArray(chunk.buildings)||!Number.isFinite(chunk.center?.lat)||
+         !Number.isFinite(chunk.center?.lon))throw new Error('3d_topology_chunk_invalid');
+      const center=chunk.center,cosLat=Math.cos(center.lat*Math.PI/180);
+      for(const building of chunk.buildings.slice(0,1800)){
+        const ring=building.footprint_m;
+        if(!Array.isArray(ring)||ring.length<4)continue;
+        const coordinates=ring.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite))
+          .map(([x,y])=>[center.lon+x/(111320*cosLat),center.lat+y/111320]);
+        if(coordinates.length<4)continue;
+        if(coordinates[0][0]!==coordinates.at(-1)[0]||coordinates[0][1]!==coordinates.at(-1)[1])
+          coordinates.push([...coordinates[0]]);
+        const height=Math.min(200,Math.max(3,Number(building.height_m)||9));
+        geometries.push({type:'Feature',id:building.id,
+          properties:{height,height_source:building.height_source||'inferred'},
+          geometry:{type:'Polygon',coordinates:[coordinates]}});
+      }
+    }
+    if(!geometries.length)throw new Error('3d_topology_no_buildings');
+    // MapLibre uses the established raster source in 3D so streets, names,
+    // the Santa Fe river and real-world orientation remain visible even when
+    // the optional OpenFreeMap vector style is unreachable.
+    if(!document.querySelector('link[data-voy-maplibre]')){
+      const link=document.createElement('link');link.rel='stylesheet';
+      link.href='/vendor/maplibre-gl.css?v=__BUILD_ID__';link.dataset.voyMaplibre='true';
+      document.head.appendChild(link);
+    }
+    const {Map:MapLibreMap}=await import('/vendor/maplibre-gl.mjs?v=__BUILD_ID__');
+    if(disposed)return {ok:false,reason:'disposed'};
+    const style={version:8,sources:{'voy-urban-raster':{
+      type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize:256,maxzoom:19,attribution:'© OpenStreetMap contributors'
+    }},layers:[{id:'voy-urban-basemap',type:'raster',source:'voy-urban-raster',
+      paint:{'raster-opacity':1}}]};
+    const center=manifest?.initial_chunks?.[0]?.center||
+      {lon:-60.7100,lat:-31.6555};
+    const cameraCenter=Number.isFinite(center.lon)&&Number.isFinite(center.lat)
+      ?[center.lon,center.lat]:[-60.7100,-31.6555];
+    map=new MapLibreMap({
+      container:mount,style,center:cameraCenter,zoom:15.3,pitch:57,bearing:-19,
+      maxPitch:70,minZoom:11,maxZoom:19,interactive:true,
+      attributionControl:{compact:true},preserveDrawingBuffer:false
+    });
+    const outcome=await new Promise(resolve=>{
+      timeout=setTimeout(()=>resolve({ok:false,reason:'urban_map_timeout'}),12000);
+      map.once('load',()=>{
+        try{
+          map.addSource('voy-3d-buildings',{type:'geojson',
+            data:{type:'FeatureCollection',features:geometries}});
+          map.addLayer({id:'voy-3d-buildings-extrusion',type:'fill-extrusion',
+            source:'voy-3d-buildings',minzoom:13,
+            paint:{
+              'fill-extrusion-color':['case',['==',['get','height_source'],'osm_tag_height'],'#e7ecdf','#bcc9cb'],
+              'fill-extrusion-height':['get','height'],
+              'fill-extrusion-base':0,
+              'fill-extrusion-opacity':0.86
+            }});
+          map.addSource('voy-3d-bus-network',{type:'geojson',data:networkData(networkGeometries)});
+          map.addLayer({id:'voy-3d-bus-network-lines',type:'line',source:'voy-3d-bus-network',
+            paint:{'line-color':'#fbd342','line-width':2.7,'line-opacity':0.83}});
+          map.addSource('voy-3d-selected-route',{type:'geojson',data:routeData(initialRoute)});
+          map.addLayer({id:'voy-3d-selected-route-line',type:'line',source:'voy-3d-selected-route',
+            paint:{'line-color':'#fae96b','line-width':5.5,'line-opacity':0.95}});
+          map.addSource('voy-3d-transport',{type:'geojson',data:transportData(transport)});
+          map.addLayer({id:'voy-3d-transport-markers',type:'circle',source:'voy-3d-transport',
+            paint:{
+              'circle-radius':7,'circle-stroke-width':2,'circle-stroke-color':'#0b1518',
+              'circle-color':['match',['get','temporal_state'],
+                'realtime','#36d7ff','predicted','#ffb54a','#aebdc2']
+            }});
+          mount.dataset.urban3d='ready';
+          mount.dataset.buildingCount=String(geometries.length);
+          mount.dataset.mapBased='true';
+          ready=true;resolve({ok:true});
+        }catch(e){resolve({ok:false,reason:'urban_3d_layers_failed'})}
+      });
+      map.once('error',e=>{if(!ready&&String(e.error?.message||'').includes('style'))resolve({ok:false,reason:'urban_map_style_error'})});
+    });
+    clearTimeout(timeout);
+    if(!outcome.ok){cleanup();return fallbackTo2D(onFallback,outcome.reason)}
+    function update({routeGeometry:nextRoute=null,transportEntities=[]}={}){
+      if(disposed)return;
+      map.getSource('voy-3d-selected-route')?.setData(routeData(nextRoute));
+      map.getSource('voy-3d-transport')?.setData(transportData(transportEntities));
+    }
+    return {ok:true,renderer:'MAPLIBRE_URBAN_3D',build_id:BUILD_ID,building_count:geometries.length,
+      geographical_basemap:true,route_layer:true,static_bus_network:true,
+      update,dispose:cleanup,setCenter(coords){
+        if(!coords||!Number.isFinite(coords.lon)||!Number.isFinite(coords.lat))return;
+        map.easeTo({center:[coords.lon,coords.lat],duration:reducedMotion?0:350});
+      }};
+  }catch(e){cleanup();return fallbackTo2D(onFallback,e?.message||'urban_3d_failed')}
+}

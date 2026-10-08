@@ -63,5 +63,5 @@ test('ORDER076 3D stays contextual, lazy and selected-only',async()=>{
   assert.ok(guard>=0,'3D activation must guard missing context');
   assert.ok(dynamicImport>guard,'3D context guard must run before lazy import');
   assert.match(app,/map3dQuality\.hidden=true/);
-  assert.match(app,/map3dQuality\.hidden=false/);
+  assert.match(app,/map3dQuality\.hidden=controller\.renderer==='MAPLIBRE_URBAN_3D'/,'do not show a quality selector that has no effect on the cartographic renderer');
 });

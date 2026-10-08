@@ -50,6 +50,8 @@ button:focus-visible,input:focus-visible,a:focus-visible,summary:focus-visible{o
 /* maplibre anchors markers itself: neutralize the raster centering margins */
 .tracker-marker.is-vector,.trail-dot.is-vector,.train-station-marker.is-vector{margin:0}
 .map-3d-layer{position:absolute;inset:0;z-index:10;background:#090c10;overflow:hidden}
+/* MapLibre adds .maplibregl-map; preserve the viewport geometry against its later stylesheet. */
+.map-shell .map-3d-layer.maplibregl-map{position:absolute;inset:0;width:100%;height:100%}
 .map-3d-layer canvas{display:block;width:100%;height:100%;touch-action:none}
 .selected-pin{position:absolute;left:50%;top:50%;width:22px;height:22px;border-radius:50% 50% 50% 0;background:#ff5b37;transform:translate(-50%,-100%) rotate(-45deg);box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:6}
 .selected-pin::after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:white;left:7px;top:7px}
