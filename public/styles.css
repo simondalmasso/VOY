@@ -109,8 +109,11 @@ html[data-theme="dark"] .truth-pill[data-state="realtime"] .truth-icon{color:#65
 .voy-sheet[data-pane="collapsed"] .sheet-expanded{display:none}
 .voy-sheet[data-pane="collapsed"] .sheet-collapsed{display:flex}
 .voy-sheet[data-pane="expanded"] .sheet-collapsed{display:none}
-.sheet-collapsed{flex:0 0 auto;flex-direction:column;gap:8px;padding:2px 16px 12px;min-width:0}
+.sheet-collapsed{flex:0 0 auto;flex-direction:column;gap:6px;padding:2px 16px 8px;min-width:0}
 .sheet-summary{margin:0;color:var(--muted);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.live-source-link{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--hud-line);border-radius:8px;background:rgba(224,236,222,.08);color:var(--hud-ink);font-size:12px;font-weight:750;text-decoration:none;text-align:center;padding:8px 10px}
+.live-source-link:hover,.live-source-link:focus-visible{border-color:var(--accent);outline-offset:2px}
+.live-source-note{display:block;color:var(--muted);font-size:11px;line-height:1.2}
 .sheet-expanded{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:2px 16px 18px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-height:0;min-width:0}
 
 .voy-chip{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid color-mix(in srgb,var(--line) 80%,transparent);background:var(--surface-2);color:var(--text);font-size:13px;font-weight:750;text-align:left;max-width:100%;overflow-wrap:anywhere}
