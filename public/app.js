@@ -12,6 +12,7 @@ const escapeHtml=(value='')=>{const div=document.createElement('div');div.textCo
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 
 const DEFAULT_MAP_CENTER={lat:-31.6333,lon:-60.7000};
+const EXTERNAL_BUS_LIVE_URL='https://cuandopasa.app/';
 const THREE_TOPOLOGY_CENTER=Object.freeze({lat:-31.6555,lon:-60.7100});
 const THREE_TOPOLOGY_RADIUS_METERS=6000;
 const SUGGEST_DEBOUNCE_MS=400;
@@ -355,7 +356,7 @@ function setSheetSummary(){
   }
   if(state.fixtureOn){sheetSummary.textContent=`${FIXTURE_LABEL} · entidades sintéticas para evidencia de desarrollo`;return}
   if(state.substrateState==='vector_failed'){sheetSummary.textContent='Mapa vectorial no disponible; seguimos en mapa raster.';return}
-  sheetSummary.textContent='Cobertura: sin fuente de tiempo real autorizada para Santa Fe.';
+  sheetSummary.textContent='GPS de VOY: todavía no integrado.';
 }
 trackerStore.onChange(()=>setSheetSummary());
 
@@ -520,7 +521,7 @@ function busModeCard(option){
   const frequent=fareCurrent&&option.fare?.frequent?`${option.fare.frequent.label}: ${formatArsExact(option.fare.frequent.amount)} · ${(option.fare.frequent.eligibility||[]).join(' · ')}`:'La tarifa vigente no está probada para esta sesión.';
   const source=fareCurrent?`Decreto 00048/2026 · fuente ${fmtVerified(option.fare.source?.source_date)}`:'Sin importe vigente mostrado';
   const actions=(option.actions||[]).filter(a=>a?.url).map(a=>`<button class="option-action option-action-secondary" data-handoff-url="${escapeHtml(a.url)}" data-handoff-label="${escapeHtml(a.label)}">${escapeHtml(a.label)}</button>`).join('');
-  return `<article class="option-row option-info mobility-bus" data-mode-card="bus" data-availability="${escapeHtml(option.availability_state||'partial')}"><div class="option-copy"><strong>Colectivo</strong><p>${escapeHtml(primary)}</p><div class="option-meta">${escapeHtml(frequent)}</div><div class="option-meta">Recorridos publicados: visibles en el mapa · Arribos en VOY: no integrados</div><div class="option-meta">${escapeHtml(source)} · Fuente de recorridos: Municipalidad de Santa Fe</div></div><div class="mode-actions">${actions}</div></article>`;
+  return `<article class="option-row option-info mobility-bus" data-mode-card="bus" data-availability="${escapeHtml(option.availability_state||'partial')}"><div class="option-copy"><strong>Colectivo</strong><p>${escapeHtml(primary)}</p><div class="option-meta">${escapeHtml(frequent)}</div><div class="option-meta">Recorridos publicados: visibles en el mapa · Arribos en VOY: no integrados</div><div class="option-meta">${escapeHtml(source)} · Fuente de recorridos: Municipalidad de Santa Fe</div></div><div class="mode-actions">${actions}<a class="option-action option-action-secondary" href="${EXTERNAL_BUS_LIVE_URL}" target="_blank" rel="noopener noreferrer">Consultar posiciones · Cuándo Pasa (externo)</a></div></article>`;
 }
 function renderOptions(){
   options.replaceChildren();const mobility=state.mobilityDecision;if(!mobility)return;
