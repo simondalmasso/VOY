@@ -129,7 +129,7 @@ html[data-theme="dark"] .truth-pill[data-state="realtime"] .truth-icon{color:#65
 .destination-control input:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 88%,white);outline-offset:4px;border-radius:8px}
 .destination-control input::placeholder{color:var(--muted);opacity:1}
 .search-progress{width:18px;height:18px;flex:0 0 auto;border:2px solid color-mix(in srgb,var(--muted) 40%,transparent);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
-.suggestions{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 8px);padding:8px;background:color-mix(in srgb,var(--surface) 96%,transparent);border:1px solid color-mix(in srgb,var(--line) 86%,transparent);border-radius:16px 16px 22px 14px;box-shadow:var(--shadow-float);backdrop-filter:blur(22px);max-height:min(320px,46svh);overflow:auto;animation:suggestionsIn 220ms var(--ease) both;transform-origin:top center}
+.suggestions{position:relative;z-index:2;left:auto;right:auto;top:auto;margin-top:8px;padding:8px;background:color-mix(in srgb,var(--surface) 96%,transparent);border:1px solid color-mix(in srgb,var(--line) 86%,transparent);border-radius:16px 16px 22px 14px;box-shadow:var(--shadow-float);backdrop-filter:blur(22px);max-height:min(248px,30svh);overflow:auto;animation:suggestionsIn 220ms var(--ease) both;transform-origin:top center}
 .suggestion{width:100%;min-height:54px;border:0;border-radius:12px;background:transparent;color:var(--text);padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;text-align:left;align-items:center;transition:background-color var(--motion-fast) ease,transform var(--motion-fast) var(--ease)}
 .suggestion:hover,.suggestion.active{background:var(--surface-2)}.suggestion:active{transform:scale(.992)}
 .suggestion strong{font-size:14px;line-height:1.25;font-weight:770;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.suggestion span{grid-column:1 / -1;color:var(--muted);font-size:12px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -274,25 +274,25 @@ dialog{width:min(92vw,460px);border:1px solid var(--line);border-radius:22px;pad
 html[data-theme="dark"]{
   color-scheme:dark;
   --bg:#000;--surface:#07100a;--surface-2:#0d1610;--text:#e0ecde;--muted:#8c9b8f;--line:#26352b;
-  --accent:#d8ff79;--accent-2:#d8b563;--accent-ink:#0a100b;--success:#9fffc3;--danger:#ff8e83;--map:#020403;
+  --accent:#ffd42a;--accent-2:#d8b563;--accent-ink:#151309;--success:#9fffc3;--danger:#ff8e83;--map:#020403;
   --hud-ink:#e0ecde;--hud-muted:#8c9b8f;--hud-panel:rgba(3,7,5,.82);--hud-line:rgba(224,236,222,.18);
   --shadow-soft:0 18px 44px rgba(0,0,0,.42);--shadow-float:0 28px 78px rgba(0,0,0,.62);
 }
 @media (prefers-color-scheme:dark){html[data-theme="system"]{
   color-scheme:dark;
   --bg:#000;--surface:#07100a;--surface-2:#0d1610;--text:#e0ecde;--muted:#8c9b8f;--line:#26352b;
-  --accent:#d8ff79;--accent-2:#d8b563;--accent-ink:#0a100b;--success:#9fffc3;--danger:#ff8e83;--map:#020403;
+  --accent:#ffd42a;--accent-2:#d8b563;--accent-ink:#151309;--success:#9fffc3;--danger:#ff8e83;--map:#020403;
   --hud-ink:#e0ecde;--hud-muted:#8c9b8f;--hud-panel:rgba(3,7,5,.82);--hud-line:rgba(224,236,222,.18);
 }}
 .app-shell{position:fixed;inset:0;min-width:0;min-height:0;overflow:hidden}
 .topbar.voy-topbar{position:fixed;inset:0 0 auto 0;height:56px;padding:0 14px;z-index:50;background:transparent;border:0;backdrop-filter:none;pointer-events:none}
 .topbar.voy-topbar .brand-lockup,.topbar.voy-topbar .theme-button{pointer-events:auto}
 .brand-lockup{color:var(--accent);filter:drop-shadow(0 2px 10px rgba(0,0,0,.72))}
-.brand-wordmark{color:var(--hud-ink)}
+.brand-wordmark{color:var(--accent)}
 .theme-button{border-radius:8px;border:1px solid var(--hud-line);background:rgba(0,0,0,.28);color:var(--hud-ink);backdrop-filter:blur(10px)}
 .theme-button:hover{background:var(--hud-ink);border-color:var(--hud-ink);color:#050806}
 .map-shell.voy-map-stage::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.22),transparent 18%,transparent 72%,rgba(0,0,0,.18));box-shadow:inset 0 0 72px rgba(0,0,0,.30),inset 0 0 260px rgba(0,0,0,.18)}
-.map-tile{filter:grayscale(.72) saturate(.35) brightness(.66) contrast(1.13)}
+.map-tile{filter:saturate(.72) brightness(.88) contrast(1.05)}
 .map-hud{top:64px;left:14px;right:14px}
 .truth-pill{margin:0;display:inline-flex;align-items:center;gap:8px;max-width:min(70vw,390px);min-height:44px;padding:7px 11px;border-radius:8px;background:var(--hud-panel);border:1px solid var(--hud-line);backdrop-filter:blur(14px);box-shadow:0 14px 34px rgba(0,0,0,.34);font-size:12px;font-weight:650;line-height:1.2;color:var(--hud-ink)}
 .truth-meta{font-family:ui-monospace,SFMono-Regular,"Cascadia Code","Roboto Mono",Consolas,monospace;font-size:9.5px;font-weight:520;letter-spacing:.07em;color:var(--hud-muted)}
@@ -360,3 +360,18 @@ dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:v
 
 /* Public product recovery: published Santa Fe bus network, static geometry only. */
 .transit-network-overlay{color:rgba(255,212,42,.80);pointer-events:none}
+/* Offline shell: cached stylesheet, no inline CSP exception and no implied live data. */
+
+body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;overflow-y:auto;padding:24px;background:#000;color:#e0ecde}
+
+.offline-card{width:min(100%,520px);padding:clamp(24px,5vw,42px);border:1px solid rgba(224,236,222,.22);border-radius:14px;background:#0d1510;box-shadow:0 24px 70px rgba(0,0,0,.4)}
+
+.offline-kicker{font:700 11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.12em;color:#ffd42a}
+
+.offline-card h1{margin:20px 0 14px;font-size:clamp(30px,7vw,42px);line-height:1.1}
+
+.offline-card p{max-width:52ch;line-height:1.55;color:#c0cec2}
+
+.offline-retry{display:inline-flex;align-items:center;justify-content:center;min-width:132px;min-height:44px;margin-top:16px;padding:10px 18px;border-radius:8px;background:#ffd42a;color:#151309;font-weight:750;text-decoration:none}
+
+.offline-retry:focus-visible{outline:3px solid #fff;outline-offset:3px}
