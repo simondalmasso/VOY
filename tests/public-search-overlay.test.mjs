@@ -23,3 +23,10 @@ test('VOY yellow stays branding and green stays realtime semantics', () => {
 test('raster fallback remains legible when vector tiles cannot render', () => {
   assert.match(css, /\.map-tile\{filter:saturate\(\.72\) brightness\(\.88\) contrast\(1\.05\)\}/);
 });
+const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+
+test('manual origin forwards explicit address locality instead of burying it in query text', () => {
+  assert.match(app, /function manualOriginRequestPayload\(query\)/);
+  assert.match(app, /parts\.length===2&&\/\\d\/\.test\(parts\[0\]\)\)return \{query:parts\[0\],locality:parts\[1\]\}/);
+  assert.match(app, /JSON\.stringify\(manualOriginRequestPayload\(query\)\)/);
+});
