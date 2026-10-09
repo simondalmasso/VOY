@@ -325,6 +325,9 @@ function explicitCommaLocalityIntentBonus(context,candidate){
 __name(explicitCommaLocalityIntentBonus,"explicitCommaLocalityIntentBonus");
 function rankDestinationCandidates(candidates, context) {
   const explicit = context.explicit_geography, origin = context.origin;
+  // A uniquely identified official locality outranks same-named nearby POIs.
+  // Only exact bare locality text qualifies; explicit "río", "plaza", etc. remains intact.
+  const uniqueOfficialLocality = !explicit && words(context.query).length===1 ? matchLocalityFragment(context.query,'',false) : null;
   const originCoords = origin?.coordinates;
   const viewportCoords = context.viewport?.center;
   const contextCoords = originCoords ?? viewportCoords;
@@ -347,6 +350,9 @@ function rankDestinationCandidates(candidates, context) {
     const exactIntentBonus=exactPrimaryIntentBonus(context,candidate);
     score += exactIntentBonus;
     if(candidateIsNamedSettlement(candidate) && foldText(candidate.display_primary)===foldText(entityQuery))score += 8000;
+    if(uniqueOfficialLocality && candidateIsNamedSettlement(candidate) &&
+       foldText(candidate.display_primary)===foldText(uniqueOfficialLocality.name) &&
+       pid===uniqueOfficialLocality.province_id)score += 16000;
     const primaryFold=foldText(candidate.display_primary);
     const entityFold=foldText(entityQuery);
     if((candidate.provider_types??[]).map(foldText).includes("administrative") && /^(?:partido|departamento|provincia|municipio|municipalidad)\b/.test(primaryFold) && !/\b(?:partido|departamento|provincia|municipio|municipalidad)\b/.test(entityFold))score -= 4000;
