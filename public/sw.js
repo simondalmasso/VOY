@@ -10,7 +10,13 @@ self.addEventListener('fetch',event=>{
   if(url.origin!==self.location.origin) return; // external map tiles are never service-worker cached
   if(url.pathname.startsWith('/api/')) { event.respondWith(fetch(req)); return; } // NETWORK_ONLY
   if(req.mode==='navigate') {
-    event.respondWith(fetch(req).catch(()=>caches.match('/offline.html')).then(res=>res||caches.match('/offline.html')));
+    event.respondWith(fetch(req)
+
+      .then(response => response.ok && (response.headers.get('content-type') || '').includes('text/html') ? response : caches.match('/offline.html'))
+
+      .catch(() => caches.match('/offline.html'))
+
+      .then(response => response || new Response('Sin conexión', {status:503,headers:{'content-type':'text/plain; charset=utf-8'}})));
     return;
   }
   event.respondWith(fetch(req).then(res=>{
