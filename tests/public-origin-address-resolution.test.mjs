@@ -213,3 +213,68 @@ test('unlocated exact street from another locality does not block the unique con
 test('malformed upstream address schema remains a 502-class error',async()=>{
   await assert.rejects(()=>resolveAddress({query:'San Martín 2954, Santa Fe'},async()=>jsonResp({direcciones:[{unexpected:true}]})),error=>error.code==='upstream_schema_invalid');
 });
+
+test('full GeoRef-style address label extracts locality before department and province',async()=>{
+  let seen;
+  const result=await resolveAddress({query:'Bv. Gálvez 1150, Santa Fe, La Capital, Santa Fe'},async url=>{
+    seen=new URL(String(url));
+    return jsonResp({direcciones:[address('15','BV GALVEZ 1150, Santa Fe, La Capital, Santa Fe',-31.63884,-60.68749)]});
+  });
+  assert.equal(seen.searchParams.get('direccion'),'Bv. Gálvez 1150');
+  assert.equal(seen.searchParams.get('localidad'),'Santa Fe');
+  assert.equal(seen.searchParams.get('provincia'),'Santa Fe');
+  assert.equal(result.result_class,'resolved');
+  assert.equal(result.candidates[0].locality.name,'Santa Fe');
+});
+
+test('country suffix and repeated locality-department suffix are parsed without changing the street number',async()=>{
+  let seen;
+  const result=await resolveAddress({query:'San Martín 2954, Rosario, Rosario, Santa Fe, Argentina'},async url=>{
+    seen=new URL(String(url));
+    return jsonResp({direcciones:[address('16','SAN MARTIN 2954, Rosario, Rosario, Santa Fe',-32.97193,-60.64306,'Rosario','Santa Fe','82','82084070')]});
+  });
+  assert.equal(seen.searchParams.get('direccion'),'San Martín 2954');
+  assert.equal(seen.searchParams.get('localidad'),'Rosario');
+  assert.equal(seen.searchParams.get('provincia'),'Santa Fe');
+  assert.equal(result.result_class,'resolved');
+  assert.equal(result.candidates[0].locality.name,'Rosario');
+});
+
+test('a single same-number substring candidate is not silently resolved as the requested street',async()=>{
+  const result=await resolveAddress({query:'San Martín 2954, Santa Fe'},async()=>{
+    return jsonResp({direcciones:[address('17','ZORRILLA DE SAN MARTIN 2954, Santa Fe, La Capital, Santa Fe',-31.63237,-60.70722)]});
+  });
+  assert.equal(result.result_class,'unverified');
+  assert.equal(result.error,'territory_unverified');
+  assert.deepEqual(result.candidates,[]);
+});
+
+test('explicit locality context rejects a conflicting comma suffix before querying GeoRef',async()=>{
+  let fetched=false,errorSeen=null;
+  try {
+    await resolveAddress({query:'San Martín 2954, Rosario',locality:'Santa Fe',province:'Santa Fe'},async()=>{
+      fetched=true;
+      return jsonResp({direcciones:[address('18','SAN MARTIN 2954, Santa Fe, La Capital, Santa Fe',-31.64166,-60.70510)]});
+    });
+  } catch(error) {
+    errorSeen=error;
+  }
+  assert.equal(errorSeen?.code,'invalid_query');
+  assert.equal(errorSeen?.detail,'address_context_conflict');
+  assert.equal(fetched,false);
+});
+
+test('explicit province context rejects a conflicting trailing province before querying GeoRef',async()=>{
+  let fetched=false,errorSeen=null;
+  try {
+    await resolveAddress({query:'San Martín 2954, Rosario, Entre Ríos',locality:'Rosario',province:'Santa Fe'},async()=>{
+      fetched=true;
+      return jsonResp({direcciones:[address('19','SAN MARTIN 2954, Rosario, Rosario, Santa Fe',-32.97193,-60.64306,'Rosario','Santa Fe','82','82084070')]});
+    });
+  } catch(error) {
+    errorSeen=error;
+  }
+  assert.equal(errorSeen?.code,'invalid_query');
+  assert.equal(errorSeen?.detail,'address_context_conflict');
+  assert.equal(fetched,false);
+});

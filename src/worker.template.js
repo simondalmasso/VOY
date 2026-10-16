@@ -937,16 +937,49 @@ function normalizeAddressResolveInput(payload) {
   let query = normalizeText(payload?.query);
   let province = normalizeText(payload?.province);
   let locality = normalizeText(payload?.locality);
-  // Parse the common human-entered address suffix before passing it to GeoRef.
-  if (!province && !locality && query.includes(",")) {
+  if (query.includes(",")) {
     const parts = query.split(",").map(normalizeText).filter(Boolean);
-    if (parts.length >= 3) {
-      province = parts.pop();
-      locality = parts.pop();
-      query = parts.join(", ");
-    } else if (parts.length === 2 && /\d/.test(parts[0])) {
-      locality = parts[1];
-      query = parts[0];
+    if (parts.length >= 2) {
+      const coreParts = parts.slice();
+      if (coreParts.length >= 3 && foldText(coreParts[coreParts.length - 1]) === "argentina") coreParts.pop();
+      const jurisdictionFor = value => [...JURISDICTION_BY_ID.values()].find(item => foldText(item.province_name) === foldText(value)) ?? null;
+      let provinceRow = province ? jurisdictionFor(province) : null;
+      const trailingProvince = coreParts.length >= 3 ? jurisdictionFor(coreParts[coreParts.length - 1]) : null;
+      if (trailingProvince) {
+        if (province && foldText(province) !== foldText(trailingProvince.province_name)) throw new VoyError("invalid_query", 400, "address_context_conflict");
+        if (!province) province = trailingProvince.province_name;
+        provinceRow = trailingProvince;
+        coreParts.pop();
+      }
+      if (!provinceRow && province) provinceRow = jurisdictionFor(province);
+      if (coreParts.length >= 2) {
+        const provinceId = provinceRow?.province_id ?? "";
+        const localityIndex = coreParts.findIndex((part, index) => index > 0 && Boolean(matchLocalityFragment(part, provinceId, false)));
+        if (locality) {
+          const explicitIndex = coreParts.findIndex((part, index) => index > 0 && foldText(part) === foldText(locality));
+          if (explicitIndex > 0) {
+            query = coreParts.slice(0, explicitIndex).join(", ");
+          } else if (localityIndex > 0) {
+            if (foldText(coreParts[localityIndex]) !== foldText(locality)) throw new VoyError("invalid_query", 400, "address_context_conflict");
+            query = coreParts.slice(0, localityIndex).join(", ");
+          } else {
+            throw new VoyError("invalid_query", 400, "address_context_conflict");
+          }
+        } else if (localityIndex > 0) {
+          locality = coreParts[localityIndex];
+          query = coreParts.slice(0, localityIndex).join(", ");
+        } else if (coreParts.length === 2) {
+          locality = coreParts[1];
+          query = coreParts[0];
+        } else if (coreParts.length >= 3) {
+          // Keep the conventional street, locality, department ordering when the
+          // locality is not in the bundled official locality index.
+          locality = coreParts[1];
+          query = coreParts[0];
+        }
+      } else if (coreParts.length === 1) {
+        query = coreParts[0];
+      }
     }
   }
   return { query, province, locality };
@@ -954,8 +987,9 @@ function normalizeAddressResolveInput(payload) {
 __name(normalizeAddressResolveInput, "normalizeAddressResolveInput");
 function normalizedAddressMatchKey(value) {
   return foldText(normalizeText(value).split(",")[0])
-    .replace(/\bavenida\b/g, " av ")
-    .replace(/\b(boulevard|bulevar)\b/g, " bv ")
+    .replace(/\bcalle\b/g, " ")
+    .replace(/\b(avda|avenida)\b/g, " av ")
+    .replace(/\b(boulevard|bulevar|blvd)\b/g, " bv ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -1006,8 +1040,13 @@ async function resolveAddress(payload, fetchImpl = fetch) {
         emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "coordinates_unavailable" });
         return { ok: false, result_class: "unverified", error: "territory_coordinates_unavailable", candidates: [], requires_context: !province && !locality };
       }
-    } else if (unique.length > 1 && exact.length === 1) {
-      unique.splice(0, unique.length, exact[0]);
+    } else if (exact.length > 0) {
+      // Keep only exact address+number matches; never let a longer street name
+      // resolve merely because GeoRef returned only one candidate.
+      unique.splice(0, unique.length, ...exact);
+    } else if (unique.length === 1) {
+      emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "not_found" });
+      return { ok: false, result_class: "unverified", error: "territory_unverified", candidates: [], requires_context: !province && !locality };
     }
   } else if (unlocated.length > 0) {
     emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "coordinates_unavailable" });
