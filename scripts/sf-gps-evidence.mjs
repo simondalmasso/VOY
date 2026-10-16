@@ -8,16 +8,17 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CLIENT = join(ROOT, 'dist/client');
 const ENV = {
   VOY_SF_GPS_REUSE_APPROVED: 'YES',
   VOY_SF_GPS_FEED_URL: 'https://api.cuandopasa.com.ar',
   VOY_SF_GPS_APPROVED_HOST: 'api.cuandopasa.com.ar',
   VOY_SF_GPS_SOURCE_ID: 'sf_gps_cuandopasa',
-  VOY_SF_GPS_LICENSE_URL: 'https://cuandopasa.app/'
+  VOY_SF_GPS_LICENSE_URL: 'https://github.com/simondalmasso/VOY/blob/main/docs/SANTA_FE_CUANDOPASA_SOURCE.md'
 };
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -26,7 +27,7 @@ const MIME = {
   '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon'
 };
 
-const worker = await import(join(ROOT, 'dist/worker.js'));
+const worker = await import(pathToFileURL(join(ROOT, 'dist/worker.js')).href);
 const handler = worker.default.fetch;
 
 const server = createServer(async (req, res) => {
@@ -80,6 +81,10 @@ async function runViewport(width, height, label) {
   // Wait for the static bus network to load and the first GPS poll to land.
   await page.waitForFunction(() => document.querySelectorAll('#bus-line-picker option').length > 5, { timeout: 20000 });
   await page.selectOption('#bus-line-picker', '9');
+  const savedLine = await page.evaluate(() => localStorage.getItem('voy.sf.line'));
+  if (savedLine !== '9') throw new Error('selected_line_not_persisted');
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('#bus-line-picker')?.value === '9', { timeout: 20000 });
   await page.waitForFunction(() => {
     const pill = document.querySelector('#truth-pill');
     return pill && pill.dataset.state && pill.dataset.state !== 'no_coverage';
@@ -95,6 +100,7 @@ async function runViewport(width, height, label) {
       truth_label: document.querySelector('#truth-label')?.textContent ?? null,
       truth_meta: document.querySelector('#truth-meta')?.textContent ?? null,
       marker_count: markers.length,
+      gps_bus_marker_count: document.querySelectorAll('.tracker-marker.is-gps-bus').length,
       pill_text: pillText,
       sheet_text: sheet ? sheet.textContent.replace(/\s+/g, ' ').trim() : null,
       bus_line_meta: document.querySelector('#bus-line-meta')?.textContent ?? null,
@@ -141,7 +147,7 @@ const desktop = await runViewport(1440, 900, 'desktop-1440x900-livegps');
 await browser.close();
 server.close();
 
-const verdict = (mobile.truth_state === 'realtime' || desktop.truth_state === 'realtime') ||
-  (mobile.marker_count > 0 || desktop.marker_count > 0);
+const verdict = (mobile.truth_state === 'realtime' || desktop.truth_state === 'realtime') &&
+  (mobile.gps_bus_marker_count > 0 || desktop.gps_bus_marker_count > 0);
 console.log(`\nE2E VERDICT: ${verdict ? 'LIVE GPS RENDERED IN BROWSER' : 'NOT RENDERED — check DOM evidence above'}`);
 process.exit(verdict ? 0 : 1);
