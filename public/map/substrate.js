@@ -373,16 +373,28 @@ export function createMapSubstrate({
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add(cssClass, 'route-overlay');
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const transitNetwork = cssClass === 'transit-network-overlay';
+    const strokes = transitNetwork
+      ? [{ color: '#10263f', width: Math.max(6, strokeWidth + 3), opacity: 0.98 },
+         { color: '#267dff', width: Math.max(3, strokeWidth), opacity: 1 }]
+      : [{ color: 'currentColor', width: strokeWidth, opacity: 1 }];
     for (const coordinates of geometries) {
       if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
       const points = coordinates.map(pair => {
         const p = worldPixel(pair[0], pair[1], zoom);
         return `${(width / 2 + p.x - c.x).toFixed(1)},${(height / 2 + p.y - c.y).toFixed(1)}`;
       }).join(' ');
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      line.setAttribute('points', points); line.setAttribute('fill', 'none'); line.setAttribute('stroke', 'currentColor');
-      line.setAttribute('stroke-width', String(strokeWidth)); line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(line);
+      for (const stroke of strokes) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        line.setAttribute('points', points);
+        line.setAttribute('fill', 'none');
+        line.setAttribute('stroke', stroke.color);
+        line.setAttribute('stroke-width', String(stroke.width));
+        line.setAttribute('stroke-opacity', String(stroke.opacity));
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(line);
+      }
     }
     return svg.childNodes.length ? svg : null;
   }
@@ -393,15 +405,21 @@ export function createMapSubstrate({
     const data={type:'FeatureCollection',features:lines.map((coordinates,index)=>({type:'Feature',properties:{index},geometry:{type:'LineString',coordinates}}))};
     if (!map.getSource('voy-bus-network-source')) {
       map.addSource('voy-bus-network-source',{type:'geojson',data});
-      map.addLayer({id:'voy-bus-network-layer',type:'line',source:'voy-bus-network-source',paint:{'line-color':'#ffd42a','line-width':2.4,'line-opacity':0.72}});
-    } else {
-      map.getSource('voy-bus-network-source').setData(data);
     }
+    if (!map.getLayer('voy-bus-network-casing-layer')) {
+      map.addLayer({id:'voy-bus-network-casing-layer',type:'line',source:'voy-bus-network-source',
+        paint:{'line-color':'#10263f','line-width':6,'line-opacity':0.98}});
+    }
+    if (!map.getLayer('voy-bus-network-layer')) {
+      map.addLayer({id:'voy-bus-network-layer',type:'line',source:'voy-bus-network-source',
+        paint:{'line-color':'#267dff','line-width':3.2,'line-opacity':1}});
+    }
+    map.getSource('voy-bus-network-source').setData(data);
   }
 
   function syncBusNetwork(geometries=[]) {
     const nextMode=inVector()?'vector':'raster';
-    if (networkRef===geometries && networkMode===nextMode && (nextMode==='vector'?Boolean(map.getSource('voy-bus-network-source')):Boolean(networkLayer))) return;
+    if (networkRef===geometries && networkMode===nextMode && (nextMode==='vector'?Boolean(map.getSource('voy-bus-network-source')&&map.getLayer('voy-bus-network-casing-layer')&&map.getLayer('voy-bus-network-layer')):Boolean(networkLayer))) return;
     networkRef=geometries;networkMode=nextMode;
     if (!inVector()) {
       if (networkLayer) { networkLayer.remove(); networkLayer=null; }
@@ -423,14 +441,21 @@ export function createMapSubstrate({
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add(cssClass, 'route-overlay');
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    line.setAttribute('points', points);
-    line.setAttribute('fill', 'none');
-    line.setAttribute('stroke', 'currentColor');
-    line.setAttribute('stroke-width', '6');
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(line);
+    const strokes = cssClass === 'route-overlay'
+      ? [{ color: '#10263f', width: 10, opacity: 0.98 },
+         { color: '#00d7ff', width: 5.5, opacity: 1 }]
+      : [{ color: 'currentColor', width: 6, opacity: 1 }];
+    for (const stroke of strokes) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.setAttribute('points', points);
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', stroke.color);
+      line.setAttribute('stroke-width', String(stroke.width));
+      line.setAttribute('stroke-opacity', String(stroke.opacity));
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(line);
+    }
     return svg;
   }
 
@@ -439,10 +464,11 @@ export function createMapSubstrate({
     const data = { type: 'Feature', geometry: coordinates.length >= 2 ? { type: 'LineString', coordinates } : null };
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, { type: 'geojson', data });
-      map.addLayer({ id: layerId, type: 'line', source: sourceId, paint: { 'line-color': color, 'line-width': width, 'line-opacity': opacity } });
-    } else {
-      (map.getSource(sourceId)).setData(data);
     }
+    if (!map.getLayer(layerId)) {
+      map.addLayer({ id: layerId, type: 'line', source: sourceId, paint: { 'line-color': color, 'line-width': width, 'line-opacity': opacity } });
+    }
+    map.getSource(sourceId).setData(data);
   }
 
   function syncRoute(geometry) {
@@ -453,7 +479,9 @@ export function createMapSubstrate({
         if (svg) { routeLayer = svg; tilesEl.appendChild(svg); }
       }
     } else {
-      updateVectorLine('voy-route-source', 'voy-route-layer', geometry || [], '#ffd42a', 5, 0.9);
+      const coordinates = geometry || [];
+      updateVectorLine('voy-route-source', 'voy-route-casing-layer', coordinates, '#10263f', 10, 0.98);
+      updateVectorLine('voy-route-source', 'voy-route-layer', coordinates, '#00d7ff', 5.5, 1);
     }
   }
 
