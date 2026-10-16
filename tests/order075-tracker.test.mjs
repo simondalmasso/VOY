@@ -32,6 +32,35 @@ test('ORDER075 movement invariant: scheduled => zero movement',()=>{
   }
 });
 
+test('ORDER075 measured GPS marker eases between plausible fixes without fabricating trail points',()=>{
+  let clock=FIXED_NOW;
+  const store=createTrackerStore({now:()=>clock});
+  const first=realtimeObservation({id:'sf-gps-1',source_id:'cuandopasa',line:'9',
+    observed_position_only:true,verified_geometry:undefined,
+    observed_at:new Date(clock-20000).toISOString(),lat:-31.6500,lon:-60.7100});
+  assert.equal(store.ingest(first).accepted,true);
+  clock+=15000;
+  const second={...first,observed_at:new Date(clock-5000).toISOString(),lat:-31.6499,lon:-60.7100};
+  assert.equal(store.ingest(second).accepted,true);
+  const start=store.displayFrame(first.id);
+  assert.equal(start.render,true);
+  assert.equal(start.animated,true);
+  assert.equal(start.display_interpolated,true);
+  assert.deepEqual(start.position,{lat:first.lat,lon:first.lon});
+  clock+=6000;
+  const middle=store.displayFrame(first.id);
+  assert.ok(middle.position.lat>first.lat&&middle.position.lat<second.lat);
+  assert.equal(middle.animated,true);
+  clock+=6000;
+  const end=store.displayFrame(first.id);
+  assert.deepEqual(end.position,{lat:second.lat,lon:second.lon});
+  assert.equal(end.animated,false);
+  assert.equal(store.trail(first.id).length,2,'only measured source fixes enter history');
+  const reduced=store.displayFrame(first.id,{reducedMotion:true});
+  assert.deepEqual(reduced.position,{lat:second.lat,lon:second.lon});
+  assert.equal(reduced.animated,false);
+});
+
 test('ORDER075 movement invariant: unknown => zero movement',()=>{
   const store=makeStore();
   store.ingest(realtimeObservation({id:'x-1',temporal_state:'unknown',observed_at:'2026-09-26T11:59:55.000Z'}));
@@ -295,7 +324,9 @@ test('ORDER075 fixture entity goes stale when its stream stops (truthful transit
   engine.step(2);
   const entities=store.entities();
   const target=entities.find(e=>e.observation.temporal_state==='realtime');
-  const laterStore=createTrackerStore({now:()=>Date.parse('2026-09-26T12:00:40.000Z'),presentTransportEntity});
+  // Clock jump beyond the evidence-based realtime window (90 s, see
+  // public/tracker/observations.js) must degrade the entity truthfully.
+  const laterStore=createTrackerStore({now:()=>Date.parse('2026-09-26T12:02:30.000Z'),presentTransportEntity});
   laterStore.ingest(target.previous);
   laterStore.ingest(target.observation);
   const frame=laterStore.displayFrame(target.id);

@@ -54,10 +54,14 @@ $authority=$authority.Replace('export const ','const ')
 $railCatalog=[IO.File]::ReadAllText((Join-Path $root 'src\rail-stations.generated.js'),[Text.Encoding]::UTF8)
 if($railCatalog -notmatch 'RAIL_STATION_CATALOG_META'){throw 'Pinned rail station catalog missing metadata'}
 $railCatalog=$railCatalog.Replace('export const ','const ')
+$sfStops=[IO.File]::ReadAllText((Join-Path $root 'src\sf-cuandopasa-stops.generated.js'),[Text.Encoding]::UTF8)
+if($sfStops -notmatch 'SF_CUANDOPASA_STOPS_META'){throw 'Pinned Cuándo Pasa stop catalog missing metadata'}
+$sfStops=$sfStops.Replace('export const ','const ')
 $worker=[IO.File]::ReadAllText((Join-Path $root 'src\worker.template.js'),[Text.Encoding]::UTF8)
 $worker=[regex]::Replace($worker,"^import \{OFFICIAL_GEOREF_RUNTIME_AUTHORITY_META,OFFICIAL_LOCALITY_CANON,OFFICIAL_PROVINCE_BOUNDARIES,OFFICIAL_LOCALITY_PARENT_BOUNDARIES\} from './georef-authority\.generated\.js';\r?\n",'',1)
 $worker=[regex]::Replace($worker,"^import \{RAIL_STATION_CATALOG_META,RAIL_STATIONS\} from './rail-stations\.generated\.js';\r?\n",'',1)
-$worker=$authority+"`r`n"+$railCatalog+"`r`n"+$worker
+$worker=[regex]::Replace($worker,"^import \{SF_CUANDOPASA_STOPS_META,SF_CUANDOPASA_ROUTES\} from './sf-cuandopasa-stops\.generated\.js';\r?\n",'',1)
+$worker=$authority+"`r`n"+$railCatalog+"`r`n"+$sfStops+"`r`n"+$worker
 $meta='var RELEASE_META = { "release_id": "'+$releaseId+'", "build_id": "'+$buildId+'", "source_commit": "'+$sha+'", "source_digest": "'+$sourceDigest+'", "config_digest": "'+$configDigest+'", "registry_digest": "'+$registryDigest+'" };'
 $worker=[regex]::Replace($worker,'var RELEASE_META = \{[^\r\n]+\};',$meta,1)
 [IO.File]::WriteAllText((Join-Path $root 'dist\worker.js'),$worker,(New-Object Text.UTF8Encoding($false)))

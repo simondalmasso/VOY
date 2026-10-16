@@ -1,5 +1,6 @@
 import {OFFICIAL_GEOREF_RUNTIME_AUTHORITY_META,OFFICIAL_LOCALITY_CANON,OFFICIAL_PROVINCE_BOUNDARIES,OFFICIAL_LOCALITY_PARENT_BOUNDARIES} from './georef-authority.generated.js';
 import {RAIL_STATION_CATALOG_META,RAIL_STATIONS} from './rail-stations.generated.js';
+import {SF_CUANDOPASA_STOPS_META,SF_CUANDOPASA_ROUTES} from './sf-cuandopasa-stops.generated.js';
 
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
@@ -2042,12 +2043,32 @@ function health() {
   };
 }
 __name(health, "health");
-// P0 Santa Fe GPS: an opt-in, source-attested JSON vehicle adapter.
-// No undocumented APK backend is called or enabled by default.
-const SF_GPS_MAX_AGE_MS=20000;
+// P0 Santa Fe GPS: an opt-in, source-attested Cuándo Pasa live-arrivals adapter.
+// No undocumented APK backend is enabled by default; activation is env-gated by
+// the maintainer exactly as documented in docs/SANTA_FE_NATIVE_GPS_ADAPTER.md.
+// Source evidence (2026-10-16, authorized inspection by the app owner Nico Cavallini):
+//   GET {FEED}/v0/stops/{x_stop_code}/arrivals?source=poll → Spanish EFISAT-style
+//   JSON with per-bus Latitud/Longitud/UltimaFechaHoraGPS (America/Argentina/Santa_Fe,
+//   UTC-3 fixed, no DST) and response headers x-cache-source/x-data-fetched-at.
+// Budgets are evidence-based, not speculative: measured GPS age at reception is
+// 40-80 s (upstream refresh ~30-60 s), so the age window is 90 s (the source's own
+// client tolerates 5 minutes; 20 s would discard every real observation).
+const SF_GPS_MAX_AGE_MS=90000;
+const SF_GPS_FUTURE_SKEW_MS=5000;
 const SF_GPS_MAX_VEHICLES=16;
 const SF_GPS_CACHE_MS=5000;
+const SF_GPS_UPSTREAM_TIMEOUT_MS=2500;
+const SF_GPS_MAX_STOP_POLLS=24;
+const SF_GPS_STOPS_PER_LINE=12;
+const SF_GPS_STOP_PAYLOAD_LIMIT=160000;
+const SF_GPS_LINE_FILTER_RE=/^[A-Za-z0-9Á-ÿ]{1,8}$/;
 let sfGpsCache=null;
+const SF_CUANDOPASA_LINE_CODE_TO_ROUTE=new Map(SF_CUANDOPASA_ROUTES.map(route=>[route.x_line_code,route]));
+const SF_CUANDOPASA_SHORT_NAME_ROUTES=new Map(
+  [...SF_CUANDOPASA_ROUTES.reduce((map,route)=>{
+    const list=map.get(route.short_name)||[];list.push(route);map.set(route.short_name,list);return map;
+  },new Map())]
+);
 function sfGpsSource(env={}){
   if(env.VOY_SF_GPS_REUSE_APPROVED!=='YES')return null;
   if(typeof env.VOY_SF_GPS_FEED_URL!=='string'||typeof env.VOY_SF_GPS_SOURCE_ID!=='string'||
@@ -2056,57 +2077,151 @@ function sfGpsSource(env={}){
     const url=new URL(env.VOY_SF_GPS_FEED_URL),license=new URL(env.VOY_SF_GPS_LICENSE_URL);
     if(url.protocol!=='https:'||url.hostname!==env.VOY_SF_GPS_APPROVED_HOST||
        !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)||url.username||url.password||
-       url.search||url.hash||license.protocol!=='https:'||license.username||license.password||
+       url.search||url.hash||(url.pathname&&url.pathname!=='/')||
+       license.protocol!=='https:'||license.username||license.password||
        !/^sf_gps_[a-z0-9_]{2,48}$/.test(env.VOY_SF_GPS_SOURCE_ID))return null;
     return {url:url.toString(),source_id:env.VOY_SF_GPS_SOURCE_ID,license:license.toString()};
   }catch{return null}
 }
-function normalizeSfGpsVehicles(payload,sourceId,now=Date.now()){
-  if(!payload||!Array.isArray(payload.vehicles)||payload.vehicles.length>256)return null;
-  const seen=new Set(),observations=[];
-  for(const item of payload.vehicles){
+// "16/10/2026 17:33:49" in America/Argentina/Santa_Fe (UTC-3 fixed since 2009,
+// no DST) → epoch ms. Verified by temporal coherence against live polls: ages
+// of 13-100 s only reconcile under the UTC-3 offset.
+function parseCuandopasaArtTimestamp(value){
+  const match=/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(value??'').trim());
+  if(!match)return null;
+  const [,dd,mm,yyyy,hh,mi,ss]=match.map(part=>Number(part));
+  const ms=Date.UTC(yyyy,mm-1,dd,hh+3,mi,ss);
+  return Number.isFinite(ms)?ms:null;
+}
+// "+00:05" / "-02:21" → signed seconds (DesvioHorario).
+function parseCuandopasaDesvio(value){
+  const match=/^([+-])(\d{2}):(\d{2})$/.exec(String(value??'').trim());
+  if(!match)return null;
+  const seconds=(Number(match[2])*60+Number(match[3]))*(match[1]==='-'?-1:1);
+  return Number.isFinite(seconds)?seconds:null;
+}
+function parseCuandopasaFloat(value){
+  const raw=String(value??'').trim();
+  if(!raw)return null;
+  const num=Number(raw);
+  return Number.isFinite(num)?num:null;
+}
+// One upstream arrivals payload → raw observations (pre-dedupe). Pseudonymous
+// ids: line code + coche. Driver identity (IdentificadorChofer) is deliberately
+// NOT carried into VOY: the worker must not expose personal data.
+function normalizeSfGpsVehicles(payload,sourceId,now=Date.now(),lineCodes=null){
+  if(!payload||typeof payload!=='object'||!Array.isArray(payload.arribos))return null;
+  if(payload.arribos.length>256)return null;
+  if(payload.CodigoEstado!==0||String(payload.MensajeEstado??'').trim()!=='ok')return [];
+  const observations=[];
+  for(const item of payload.arribos){
     if(!item||typeof item!=='object')continue;
-    const id=typeof item.id==='string'?item.id.trim():'';
-    if(!/^[A-Za-z0-9:_-]{1,64}$/.test(id)||seen.has(id))continue;
-    const lat=item.lat,lon=item.lon;
-    if(typeof lat!=='number'||typeof lon!=='number'||!Number.isFinite(lat)||!Number.isFinite(lon)||
-       lat < -31.95||lat > -31.3||lon < -61.08||lon > -60.3)continue;
-    if(typeof item.observed_at!=='string'||!/^\d{4}-\d\d-\d\dT/.test(item.observed_at))continue;
-    const t=Date.parse(item.observed_at),age=now-t;
-    if(!Number.isFinite(t)||age< -5000||age>SF_GPS_MAX_AGE_MS)continue;
-    seen.add(id);
-    const obs={id:sourceId+':'+id,source_id:sourceId,lat,lon,
-      temporal_state:'realtime',observed_at:new Date(t).toISOString(),observed_position_only:true};
-    for(const key of ['route_id','trip_id','line']){
-      if(typeof item[key]==='string'&&item[key].length<=64&&item[key].trim())
-        obs[key]=item[key].trim();
-    }
-    observations.push(obs);
-    if(observations.length>=SF_GPS_MAX_VEHICLES)break;
+    const lineCode=String(item.CodigoLineaParada??'').trim();
+    if(lineCodes&&!lineCodes.has(lineCode))continue;
+    const coche=String(item.IdentificadorCoche??'').trim();
+    if(!/^[A-Za-z0-9_-]{1,16}$/.test(coche))continue;
+    const lat=parseCuandopasaFloat(item.Latitud),lon=parseCuandopasaFloat(item.Longitud);
+    if(lat===null||lon===null||lat< -31.95||lat> -31.3||lon< -61.08||lon> -60.3)continue;
+    const observedMs=parseCuandopasaArtTimestamp(item.UltimaFechaHoraGPS);
+    if(observedMs===null)continue;
+    const age=now-observedMs;
+    if(age< -SF_GPS_FUTURE_SKEW_MS||age>SF_GPS_MAX_AGE_MS)continue;
+    const route=SF_CUANDOPASA_LINE_CODE_TO_ROUTE.get(lineCode)||null;
+    const observation={
+      id:sourceId+':'+(lineCode||'x')+'-'+coche,
+      source_id:sourceId,lat,lon,
+      temporal_state:'realtime',observed_at:new Date(observedMs).toISOString(),
+      observed_position_only:true,
+      route_id:route?route.id:undefined,
+      line:route?route.short_name:undefined,
+      trip_id:String(item.DescripcionBandera??'').trim().slice(0,64)||undefined
+    };
+    const desvio=parseCuandopasaDesvio(item.DesvioHorario);
+    if(desvio!==null)observation.delay_seconds=desvio;
+    observations.push(observation);
   }
   return observations;
 }
-async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now()){
+// Dedupe across stops by vehicle id, keeping the newest GPS fix per vehicle.
+function dedupeNewestSfGpsObservations(rawObservations){
+  const byId=new Map();
+  for(const obs of rawObservations){
+    const existing=byId.get(obs.id);
+    if(!existing||Date.parse(obs.observed_at)>Date.parse(existing.observed_at))byId.set(obs.id,obs);
+  }
+  return [...byId.values()].sort((a,b)=>Date.parse(b.observed_at)-Date.parse(a.observed_at));
+}
+// Deterministic stride sample: first occurrence order preserved, bounded count.
+function strideSample(codes,maxCount){
+  if(codes.length<=maxCount)return [...codes];
+  const step=codes.length/maxCount;
+  const sampled=[];
+  for(let i=0;i<maxCount;i+=1)sampled.push(codes[Math.floor(i*step)]);
+  return sampled;
+}
+// Line filter (picker short_name, e.g. "9" or "C") → stop codes + accepted line codes.
+function sfGpsLineScope(lineFilter){
+  if(!SF_GPS_LINE_FILTER_RE.test(lineFilter))return null;
+  const routes=SF_CUANDOPASA_SHORT_NAME_ROUTES.get(lineFilter);
+  if(!routes||!routes.length)return null;
+  const lineCodes=new Set(routes.map(route=>route.x_line_code));
+  const codes=[...new Set(routes.flatMap(route=>route.x_stop_codes))];
+  return {routes,lineCodes,codes:strideSample(codes,SF_GPS_STOPS_PER_LINE)};
+}
+// Citywide scope: one rotating stop per route (deterministic per minute), so a
+// 15 s poll cycle observes a bounded, honest sample of the network.
+function sfGpsCitywideScope(now){
+  const minute=Math.floor(now/60000);
+  const codes=[];
+  SF_CUANDOPASA_ROUTES.forEach((route,routeIndex)=>{
+    if(!route.x_stop_codes.length)return;
+    codes.push(route.x_stop_codes[(minute+routeIndex)%route.x_stop_codes.length]);
+  });
+  return {codes:codes.slice(0,SF_GPS_MAX_STOP_POLLS),lineCodes:null};
+}
+async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now(),lineFilter=''){
   const source=sfGpsSource(env);
   if(!source)return {ok:true,status:'not_integrated',source_id:null,observations:[]};
-  const key=source.source_id+'|'+source.url;
+  const scope=lineFilter?sfGpsLineScope(lineFilter):null;
+  if(lineFilter&&!scope)return {ok:true,status:'source_unavailable',source_id:source.source_id,observations:[],reason:'unknown_line'};
+  const stopCodes=scope?scope.codes:sfGpsCitywideScope(now).codes;
+  const key=source.source_id+'|'+source.url+'|line:'+(scope?scope.routes.map(r=>r.id).join(','):'all');
   if(sfGpsCache?.key===key&&now-sfGpsCache.at<SF_GPS_CACHE_MS)return sfGpsCache.value;
-  let value;
-  try{
-    const response=await fetchImpl(source.url,{headers:{accept:'application/json'},redirect:'error',
-      signal:AbortSignal.timeout(2500)});
+  const baseUrl=source.url.endsWith('/')?source.url:source.url+'/';
+  const deadline=AbortSignal.timeout(SF_GPS_UPSTREAM_TIMEOUT_MS);
+  const settled=await Promise.allSettled(stopCodes.map(async code=>{
+    const response=await fetchImpl(baseUrl+'v0/stops/'+encodeURIComponent(code)+'/arrivals?source=poll',
+      {headers:{accept:'application/json'},redirect:'error',signal:deadline});
+    if(!response.ok)return {code,ok:false,status:response.status};
     const mime=response.headers.get('content-type')||'';
-    if(!response.ok||!/^application\/json(?:;|$)/i.test(mime))
-      throw new Error('invalid_source_response');
-    const content=await response.text();
-    if(content.length>160000)throw new Error('source_response_too_large');
-    const observations=normalizeSfGpsVehicles(JSON.parse(content),source.source_id,now);
-    if(!observations)throw new Error('invalid_source_schema');
-    value={ok:true,status:observations.length?'live':'no_current_positions',
-      source_id:source.source_id,observations};
-  }catch{
-    value={ok:true,status:'source_unavailable',source_id:source.source_id,observations:[]};
+    if(!/^application\/json(?:;|$)/i.test(mime))return {code,ok:false,status:0};
+    const text=await response.text();
+    if(text.length>SF_GPS_STOP_PAYLOAD_LIMIT)return {code,ok:false,status:0};
+    return {code,ok:true,payload:JSON.parse(text),
+      cacheSource:response.headers.get('x-cache-source'),
+      dataFetchedAt:response.headers.get('x-data-fetched-at')};
+  }));
+  let answeredStops=0,raw=[];
+  for(const result of settled){
+    if(result.status!=='fulfilled'||!result.value?.ok)continue;
+    answeredStops+=1;
+    const parsed=normalizeSfGpsVehicles(result.value.payload,source.source_id,now,scope?scope.lineCodes:null);
+    if(Array.isArray(parsed))raw.push(...parsed);
   }
+  const observations=dedupeNewestSfGpsObservations(raw).slice(0,SF_GPS_MAX_VEHICLES)
+    .map(obs=>({id:obs.id,source_id:obs.source_id,lat:obs.lat,lon:obs.lon,
+      temporal_state:obs.temporal_state,observed_at:obs.observed_at,
+      observed_position_only:true,route_id:obs.route_id,line:obs.line,
+      trip_id:obs.trip_id,delay_seconds:obs.delay_seconds}));
+  let status;
+  if(answeredStops===0)status='source_unavailable';
+  else if(observations.length)status='live';
+  else status='no_current_positions';
+  const freshest=settled.filter(result=>result.status==='fulfilled'&&result.value?.ok)
+    .map(result=>result.value.dataFetchedAt).filter(Boolean).sort().at(-1)||null;
+  const value={ok:true,status,source_id:source.source_id,observations,
+    stops_queried:stopCodes.length,stops_answered:answeredStops,
+    retrieved_at:freshest?new Date(freshest).toISOString():new Date(now).toISOString()};
   sfGpsCache={key,at:now,value};
   return value;
 }
@@ -2115,7 +2230,9 @@ async function apiResponse(request, env, deps) {
   const fetchImpl = deps?.upstreamFetch ?? fetch;
   if (url.pathname === "/api/transit/santa-fe/vehicles") {
     if(request.method!=="GET")return methodNotAllowed(["GET"]);
-    return json(await readSantaFeGps(env,fetchImpl));
+    const rawLine=(url.searchParams.get('line')||'').trim();
+    const lineFilter=SF_GPS_LINE_FILTER_RE.test(rawLine)?rawLine:'';
+    return json(await readSantaFeGps(env,fetchImpl,Date.now(),lineFilter));
   }
   if (url.pathname === "/api/health") {
     if (request.method !== "GET") return methodNotAllowed(["GET"]);
@@ -2222,6 +2339,11 @@ export {
   normalizeSfGpsVehicles,
   readSantaFeGps,
   sfGpsSource,
+  parseCuandopasaArtTimestamp,
+  parseCuandopasaDesvio,
+  dedupeNewestSfGpsObservations,
+  sfGpsLineScope,
+  strideSample,
   classifySourceFreshness,
   createRequestHandler,
   worker_default as default,

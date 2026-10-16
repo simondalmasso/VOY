@@ -2,7 +2,12 @@
 // Pure module: no DOM, no network, no persistence. Truth contract lives here.
 
 export const TEMPORAL_STATES = Object.freeze(['realtime', 'predicted', 'scheduled', 'unknown']);
-export const REALTIME_FRESHNESS_MS = 20000;
+// Evidence-based (2026-10-16): the only production realtime source (Cuándo Pasa
+// Santa Fe arrivals) delivers GPS fixes whose age at reception measures 40-80 s
+// (upstream refresh ~30-60 s). The previous 20 s budget would classify every
+// real observation as stale; 90 s keeps truth (no timestamp rewriting) while
+// accepting the source's real cadence. See docs/SANTA_FE_NATIVE_GPS_ADAPTER.md.
+export const REALTIME_FRESHNESS_MS = 90000;
 export const REALTIME_MAX_SPEED_MPS = 45;
 export const ROUTE_SNAP_MAX_METERS = 35;
 

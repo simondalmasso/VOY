@@ -57,7 +57,7 @@ test('ORDER075 scrub/follow/truth-pill perform zero Worker calls by wiring',asyn
 test('ORDER075 no tracker persistence, telemetry or new storage',async()=>{
   const sources=await Promise.all(['public/tracker/store.js','public/tracker/fixtures.js','public/map/substrate.js','public/app.js'].map(read));
   for(const src of sources){
-    assert.doesNotMatch(src,/localStorage(?!.*voy-theme)/,'tracker must not persist (theme pref is the only legacy exception)');
+    assert.doesNotMatch(src,/localStorage(?!.*(?:voy-theme|voy\.sf\.line))/,'only theme and explicit preferred bus line may persist');
     assert.doesNotMatch(src,/indexedDB|caches\.open|navigator\.storage/);
     assert.doesNotMatch(src,/\/api\/telemetry/);
     assert.doesNotMatch(src,/submitTelemetry\(/);
