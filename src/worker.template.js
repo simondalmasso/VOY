@@ -2190,20 +2190,36 @@ async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now(),lineFilter='
   const baseUrl=source.url.endsWith('/')?source.url:source.url+'/';
   const deadline=AbortSignal.timeout(SF_GPS_UPSTREAM_TIMEOUT_MS);
   const settled=await Promise.allSettled(stopCodes.map(async code=>{
-    const response=await fetchImpl(baseUrl+'v0/stops/'+encodeURIComponent(code)+'/arrivals?source=poll',
-      {headers:{accept:'application/json'},redirect:'error',signal:deadline});
-    if(!response.ok)return {code,ok:false,status:response.status};
-    const mime=response.headers.get('content-type')||'';
-    if(!/^application\/json(?:;|$)/i.test(mime))return {code,ok:false,status:0};
-    const text=await response.text();
-    if(text.length>SF_GPS_STOP_PAYLOAD_LIMIT)return {code,ok:false,status:0};
-    return {code,ok:true,payload:JSON.parse(text),
-      cacheSource:response.headers.get('x-cache-source'),
-      dataFetchedAt:response.headers.get('x-data-fetched-at')};
+    try {
+      const response=await fetchImpl(baseUrl+'v0/stops/'+encodeURIComponent(code)+'/arrivals?source=poll',
+        {headers:{accept:'application/json'},redirect:'error',signal:deadline});
+      if(!response.ok)return {code,ok:false,status:response.status,failure:'http_'+response.status};
+      const mime=response.headers.get('content-type')||'';
+      if(!/^application\/json(?:;|$)/i.test(mime))return {code,ok:false,status:0,failure:'content_type'};
+      const text=await response.text();
+      if(text.length>SF_GPS_STOP_PAYLOAD_LIMIT)return {code,ok:false,status:0,failure:'payload_limit'};
+      let payload;
+      try { payload=JSON.parse(text); } catch { return {code,ok:false,status:0,failure:'invalid_json'}; }
+      return {code,ok:true,payload,
+        cacheSource:response.headers.get('x-cache-source'),
+        dataFetchedAt:response.headers.get('x-data-fetched-at')};
+    } catch(error) {
+      const name=error&&typeof error.name==='string'?error.name:'unknown';
+      return {code,ok:false,status:0,failure:name==='TimeoutError'?'timeout':name==='AbortError'?'aborted':name==='TypeError'?'network_error':'fetch_error'};
+    }
   }));
   let answeredStops=0,raw=[];
+  const upstreamFailures={};
   for(const result of settled){
-    if(result.status!=='fulfilled'||!result.value?.ok)continue;
+    if(result.status!=='fulfilled'){
+      upstreamFailures.rejected=(upstreamFailures.rejected||0)+1;
+      continue;
+    }
+    if(!result.value?.ok){
+      const reason=result.value?.failure||'upstream_error';
+      upstreamFailures[reason]=(upstreamFailures[reason]||0)+1;
+      continue;
+    }
     answeredStops+=1;
     const parsed=normalizeSfGpsVehicles(result.value.payload,source.source_id,now,scope?scope.lineCodes:null);
     if(Array.isArray(parsed))raw.push(...parsed);
@@ -2221,6 +2237,7 @@ async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now(),lineFilter='
     .map(result=>result.value.dataFetchedAt).filter(Boolean).sort().at(-1)||null;
   const value={ok:true,status,source_id:source.source_id,observations,
     stops_queried:stopCodes.length,stops_answered:answeredStops,
+    upstream_failures:upstreamFailures,
     retrieved_at:freshest?new Date(freshest).toISOString():new Date(now).toISOString()};
   sfGpsCache={key,at:now,value};
   return value;
