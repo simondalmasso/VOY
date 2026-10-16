@@ -113,7 +113,7 @@ test('upstream cache metadata is surfaced as retrieved_at, not used to rewrite G
  const obs=answer.observations[0];
  assert.equal(Date.parse(obs.observed_at),Math.floor((now-30000)/1000)*1000);
 });
-test('worker never sends credentials or cookies upstream and builds only the documented path',async()=>{
+test('worker never sends credentials or cookies upstream, refuses redirects, and builds only the documented path',async()=>{
  const now=Date.now();
  const seen=[];
  await readSantaFeGps(env('urlshape'),async(url,init)=>{
@@ -123,7 +123,7 @@ test('worker never sends credentials or cookies upstream and builds only the doc
  assert.ok(seen.length>=1);
  for(const {url,init} of seen){
   assert.match(url,/^https:\/\/licensed\.example\.org\/v0\/stops\/\d+\/arrivals\?source=poll$/);
-  assert.equal(init.redirect,'error');
+  assert.equal(init.redirect,'manual');
   assert.ok(init.signal);
   assert.equal(init.headers.accept,'application/json');
   assert.equal(Object.keys(init.headers).length,1);

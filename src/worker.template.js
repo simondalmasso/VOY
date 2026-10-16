@@ -2192,7 +2192,7 @@ async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now(),lineFilter='
   const settled=await Promise.allSettled(stopCodes.map(async code=>{
     try {
       const response=await fetchImpl(baseUrl+'v0/stops/'+encodeURIComponent(code)+'/arrivals?source=poll',
-        {headers:{accept:'application/json'},redirect:'error',signal:deadline});
+        {headers:{accept:'application/json'},redirect:'manual',signal:deadline});
       if(!response.ok)return {code,ok:false,status:response.status,failure:'http_'+response.status};
       const mime=response.headers.get('content-type')||'';
       if(!/^application\/json(?:;|$)/i.test(mime))return {code,ok:false,status:0,failure:'content_type'};
