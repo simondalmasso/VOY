@@ -103,7 +103,7 @@ export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initi
     const predictedVehicles=new THREE.InstancedMesh(vehicleGeometry,predictedMaterial,64);
     realtimeVehicles.count=0;predictedVehicles.count=0;realtimeVehicles.frustumCulled=true;predictedVehicles.frustumCulled=true;
     scene.add(realtimeVehicles,predictedVehicles);
-    const routeMaterial=new THREE.LineBasicMaterial({color:0xffd23f});
+    const routeMaterial=new THREE.LineBasicMaterial({color:0x00d7ff});
     function setRouteGeometry(geometry){
       if(routeLine){scene.remove(routeLine);routeLine.geometry.dispose();routeLine=null}
       const g=routeGeometry(geometry,center);
@@ -253,11 +253,15 @@ export async function activateVoyUrbanMap3D({
               'fill-extrusion-opacity':0.86
             }});
           map.addSource('voy-3d-bus-network',{type:'geojson',data:networkData(networkGeometries)});
+          map.addLayer({id:'voy-3d-bus-network-casing',type:'line',source:'voy-3d-bus-network',
+            paint:{'line-color':'#10263f','line-width':6,'line-opacity':0.98}});
           map.addLayer({id:'voy-3d-bus-network-lines',type:'line',source:'voy-3d-bus-network',
-            paint:{'line-color':'#fbd342','line-width':2.7,'line-opacity':0.83}});
+            paint:{'line-color':'#267dff','line-width':3.2,'line-opacity':1}});
           map.addSource('voy-3d-selected-route',{type:'geojson',data:routeData(initialRoute)});
+          map.addLayer({id:'voy-3d-selected-route-casing',type:'line',source:'voy-3d-selected-route',
+            paint:{'line-color':'#10263f','line-width':10,'line-opacity':0.98}});
           map.addLayer({id:'voy-3d-selected-route-line',type:'line',source:'voy-3d-selected-route',
-            paint:{'line-color':'#fae96b','line-width':5.5,'line-opacity':0.95}});
+            paint:{'line-color':'#00d7ff','line-width':5.5,'line-opacity':1}});
           map.addSource('voy-3d-transport',{type:'geojson',data:transportData(transport)});
           map.addLayer({id:'voy-3d-transport-markers',type:'circle',source:'voy-3d-transport',
             paint:{
