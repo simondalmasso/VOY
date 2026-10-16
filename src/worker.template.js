@@ -296,1956 +296,414 @@ function tokenOrderScore(query,candidate){
 }
 __name(tokenOrderScore,"tokenOrderScore");
 function primaryEntityCoverage(query,candidate){
-  const categoryWords=new Set(["cancha","estadio","club","terminal","hospital","sanatorio","aeropuerto","airport","estacion","station","puente","bridge","universidad","facultad","shopping","mall","plaza","parque"]);
-  const all=words(query);const entity=all.filter(token=>!categoryWords.has(token)&&!ROAD_QUERY_WORDS.has(token)&&!["de","del","la","las","el","los","y","en","a","al"].includes(token));const q=entity.length?entity:all;
-  const primary=words(candidate.display_primary);
-  if(!q.length||!primary.length)return 0;
-  let hits=0;for(const token of q)if(primary.some(p=>fuzzyTokenMatch(token,p)))hits++;
-  return hits/q.length;
-}
-__name(primaryEntityCoverage,"primaryEntityCoverage");
-function roadIntentBonus(context,candidate){
-  const q=words(correctCommonQueryTypos(stripExplicitCommaGeography(context.query,context.explicit_geography)));
-  if(!q.length||!ROAD_QUERY_WORDS.has(q[0]))return 0;
-  const types=(candidate.provider_types??[]).map(foldText);
-  return types.some(type=>ROAD_PROVIDER_TYPES.has(type))?6500:-1500;
-}
-__name(roadIntentBonus,"roadIntentBonus");
-function exactPrimaryIntentBonus(context,candidate){
-  let q=correctCommonQueryTypos(stripExplicitCommaGeography(context.query,context.explicit_geography));
-  q=normalizeRoadVocabulary(q).replace(/\b\d{3,6}\b/g,"").replace(/\s+/g," ").trim();
-  const p=normalizeRoadVocabulary(candidate.display_primary);
-  return foldText(q)&&foldText(q)===foldText(p)?1800:0;
-}
-__name(exactPrimaryIntentBonus,"exactPrimaryIntentBonus");
-function explicitCommaLocalityIntentBonus(context,candidate){
-  if(!candidateLooksLikeSettlement(candidate))return 0;
-  return explicitHeadMatchesCandidateLocality(context.query,candidate,context)?12000:0;
-}
-__name(explicitCommaLocalityIntentBonus,"explicitCommaLocalityIntentBonus");
-function rankDestinationCandidates(candidates, context) {
-  const explicit = context.explicit_geography, origin = context.origin;
-  const originCoords = origin?.coordinates;
-  const viewportCoords = context.viewport?.center;
-  const contextCoords = originCoords ?? viewportCoords;
-  return candidates.map((candidate, index) => {
-    const locality = candidateLocality(candidate), province = candidateProvince(candidate), pid = candidateProvinceId(candidate);
-    const distance = candidate.distance_meters ?? haversineMeters(originCoords, candidate.coordinates);
-    const contextDistance = distance ?? haversineMeters(contextCoords, candidate.coordinates);
-    let score = 0;
-    const entityQuery=stripExplicitCommaGeography(context.query,context.explicit_geography);
-    score += tokenCoverage(entityQuery,candidate) * 6e3;
-    score += tokenOrderScore(entityQuery,candidate) * 1e3;
-    score += primaryEntityCoverage(entityQuery,candidate) * 3e3;
-    score += roadIntentBonus(context,candidate);
-    const categoryHints=QueryNormalizer(context.query).category_hints;
-    if(categoryHints.length){
-      const types=(candidate.provider_types??[]).map(foldText), nameHints=QueryNormalizer(candidate.display_primary).category_hints;
-      const categoryMatch=categoryHints.some(h=>nameHints.includes(h)||types.some(t=>t===foldText(h)||(h==="stadium"&&["sports_centre","pitch"].includes(t))||(h==="station"&&["bus_station","bus_stop","train_station"].includes(t))||(h==="aerodrome"&&t==="airport")));
-      score += categoryMatch?2200:-1200;
-    }
-    const exactIntentBonus=exactPrimaryIntentBonus(context,candidate);
-    score += exactIntentBonus;
-    if(candidateIsNamedSettlement(candidate) && foldText(candidate.display_primary)===foldText(entityQuery))score += 8000;
-    const primaryFold=foldText(candidate.display_primary);
-    const entityFold=foldText(entityQuery);
-    if((candidate.provider_types??[]).map(foldText).includes("administrative") && /^(?:partido|departamento|provincia|municipio|municipalidad)\b/.test(primaryFold) && !/\b(?:partido|departamento|provincia|municipio|municipalidad)\b/.test(entityFold))score -= 4000;
-    score += explicitCommaLocalityIntentBonus(context,candidate);
-    if (explicit?.province) {
-      const match = pid === explicit.province.id || foldText(province) === foldText(explicit.province.name);
-      score += match ? 2e4 : -2e4;
-    }
-    if (explicit?.locality) {
-      const localityMatch = foldText(locality) === foldText(explicit.locality.name);
-      const provinceMatch = explicit?.province && (pid === explicit.province.id || foldText(province) === foldText(explicit.province.name));
-      score += localityMatch ? 3e4 : provinceMatch ? -2e3 : -3e4;
-    }
-    if (!explicit && origin) {
-      if (origin.locality && foldText(locality) === foldText(origin.locality)) score += 7e3;
-      if (origin.province_id && pid === origin.province_id) score += 3e3;
-      else if (origin.province && foldText(province) === foldText(origin.province)) score += 3e3;
-      if (distance !== null) score -= Math.min(5e3, distance / 100);
-    } else if (!explicit && viewportCoords && contextDistance !== null) {
-      score -= Math.min(5e3, contextDistance / 100);
-    }
-    score += Math.max(0, 800 - Number(candidate.provider_rank ?? index) * 80);
-    if (candidate.confidence_class === "high") score += 500;
-    else if (candidate.confidence_class === "low") score -= 500;
-    return { ...candidate, distance_meters: distance, rank_score: Math.round(score * 100) / 100, _stable: index };
-  }).sort((a, b) => b.rank_score - a.rank_score || Number(a.provider_rank ?? a._stable) - Number(b.provider_rank ?? b._stable) || String(a.candidate_id).localeCompare(String(b.candidate_id))).map(({ _stable, ...c }) => c);
-}
-__name(rankDestinationCandidates, "rankDestinationCandidates");
-function cleanDisplay(primary, secondary) {
-  return { display_primary: text(primary).slice(0, 160), display_secondary: text(secondary).slice(0, 180) };
-}
-__name(cleanDisplay, "cleanDisplay");
-function normalizeGeoRefCandidates(candidates = []) {
-  return candidates.map((c, i) => {
-    const d = cleanDisplay(c.label, `${c.locality?.name ?? ""}${c.province?.name ? ` \xB7 ${c.province.name}` : ""}`);
-    return {
-      candidate_id: `georef:${text(c.source_entity_id) || i + 1}`,
-      candidate_ref: `georef:${text(c.source_entity_id) || i + 1}`,
-      provider: "georef_baseline",
-      provider_place_id_or_ref: text(c.source_entity_id) || null,
-      ...d,
-      coordinates: validCoordinates(c.coordinates),
-      locality: c.locality,
-      province: c.province,
-      provider_rank: i,
-      provider_types: ["address"],
-      confidence_class: "territorial",
-      attribution_requirement: null,
-      coverage: c.coverage,
-      integration_slug: c.integration_slug
-    };
-  }).filter((c) => c.display_primary && c.coordinates);
-}
-__name(normalizeGeoRefCandidates, "normalizeGeoRefCandidates");
-function publicCandidate(candidate) {
-  return {
-    candidate_id: candidate.candidate_id,
-    candidate_ref: candidate.candidate_ref,
-    provider: candidate.provider,
-    display_primary: candidate.display_primary,
-    display_secondary: candidate.display_secondary,
-    coordinates: candidate.coordinates,
-    distance_meters: candidate.distance_meters ?? null,
-    provider_rank: candidate.provider_rank,
-    provider_types: candidate.provider_types,
-    confidence_class: candidate.confidence_class,
-    attribution_requirement: candidate.attribution_requirement,
-    locality: candidate.locality ?? null,
-    province: candidate.province ?? null,
-    territory_verified: candidate.territory_verified ?? false,
-    territory_verification: candidate.territory_verification ?? "unverified",
-    territory_authority: candidate.territory_authority ?? null,
-    coverage: candidate.coverage ?? null,
-    integration_slug: candidate.integration_slug ?? null
-  };
-}
-__name(publicCandidate, "publicCandidate");
-
-// dist/worker/worker.js
-var PROVENANCE = "CLEAN_ROOM_REPLACEMENT_DUE_TO_PROVEN_SOURCE_LOSS";
-var JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
-var RETRYABLE_STATUS = /* @__PURE__ */ new Set([429, 502, 503, 504]);
-var SOURCE_BY_ID = new Map(MOBILITY_SOURCES.sources.map((source) => [source.id, source]));
-var RAIL_HANDOFF_URL = "https://www.argentina.gob.ar/transporte/trenes-argentinos/horarios-tarifas-y-recorridos";
-var RAIL_STATIC_SOURCE = {
-  id: "src_rail_station_catalog_2022",
-  authority: "Datos Argentina / ADIFSE-SOFSE",
-  jurisdiction: "AR",
-  canonical_url: RAIL_STATION_CATALOG_META.canonical_dataset_url,
-  data_class: "OFFICIAL_STATIC_RAIL_CATALOG",
-  auth_requirement: "NONE",
-  freshness_threshold_seconds: 31536000,
-  last_successful_verification: "2023-03-27T14:15:12Z",
-  runtime_claims_allowed: true,
-  trust_state: "TRUSTED_FOR_IDENTITY_GEOMETRY_ONLY"
-};
-var RAIL_HANDOFF_SOURCE = {
-  id: "src_trenes_argentinos_handoff",
-  authority: "Trenes Argentinos Operaciones / Argentina.gob.ar",
-  jurisdiction: "AR",
-  canonical_url: RAIL_HANDOFF_URL,
-  data_class: "OFFICIAL_WEB_PAGE",
-  auth_requirement: "NONE",
-  freshness_threshold_seconds: 7776000,
-  last_successful_verification: "2026-09-05T14:00:00Z",
-  runtime_claims_allowed: true,
-  trust_state: "TRUSTED_FOR_DECLARED_SCOPE"
-};
-SOURCE_BY_ID.set(RAIL_STATIC_SOURCE.id, RAIL_STATIC_SOURCE);
-SOURCE_BY_ID.set(RAIL_HANDOFF_SOURCE.id, RAIL_HANDOFF_SOURCE);
-
-var TRAIN_RADAR_SOURCE = Object.freeze({
-  id: "src_trenes_argentinos_sarmiento_diferencial",
-  authority: "Trenes Argentinos Operaciones / SOFSE",
-  url: "https://www.argentina.gob.ar/noticias/el-servicio-diferencial-entre-once-haedo-moreno-de-la-linea-sarmiento-suma-servicios-los",
-  published_at: "2026-08-21",
-  access_method: "public_html",
-  license: "CC BY 4.0 unless otherwise declared by Argentina.gob.ar"
-});
-var TRAIN_RADAR_CACHE_TTL_MS = 300000;
-var TRAIN_RADAR_RADIUS_METERS = 8000;
-var TRAIN_RADAR_STATION_NAMES = new Set(["once", "haedo", "moreno"]);
-var TRAIN_RADAR_COVERAGE_POINTS = Object.freeze([
-  Object.freeze({ name: "Once", lat: -34.60827979749716, lon: -58.4075158087721 }),
-  Object.freeze({ name: "Haedo", lat: -34.644477144900506, lon: -58.59194588896136 }),
-  Object.freeze({ name: "Moreno", lat: -34.65055409620922, lon: -58.7896992362823 })
-]);
-function trainRadarCoverageSupported(coordinates) {
-  const center = validCoordinates(coordinates);
-  if (!center) return false;
-  return TRAIN_RADAR_COVERAGE_POINTS.some((station) => (haversineMeters(center, station) ?? Infinity) <= TRAIN_RADAR_RADIUS_METERS);
-}
-__name(trainRadarCoverageSupported, "trainRadarCoverageSupported");
-function unsupportedTrainRadarSnapshot(coordinates) {
-  const center = validCoordinates(coordinates);
-  if (!center) throw new VoyError("invalid_coordinates", 400);
-  return { source_status: "unsupported", radius_meters: TRAIN_RADAR_RADIUS_METERS, source: null, stations: [] };
-}
-__name(unsupportedTrainRadarSnapshot, "unsupportedTrainRadarSnapshot");
-
-function decodeTrainSourceHtml(value) {
-  return String(value ?? "")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&aacute;/gi, "Ã¡").replace(/&eacute;/gi, "Ã©").replace(/&iacute;/gi, "Ã­")
-    .replace(/&oacute;/gi, "Ã³").replace(/&uacute;/gi, "Ãº").replace(/&ntilde;/gi, "Ã±")
-    .replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
-}
-function normalizeTrainTime(value) {
-  const [h, m] = String(value).split(":");
-  return `${String(Number(h)).padStart(2, "0")}:${m}`;
-}
-function parseSarmientoScheduledService(html, observedAt = new Date().toISOString()) {
-  const plain = foldText(decodeTrainSourceHtml(html));
-  if (!plain.includes("once-haedo-moreno") || !plain.includes("linea sarmiento") || !plain.includes("dias habiles")) throw new Error("rail_source_contract_invalid");
-  const outbound = plain.match(/sale a las (\d{1,2}:\d{2}).{0,160}?haedo a las (\d{1,2}:\d{2}).{0,160}?moreno a las (\d{1,2}:\d{2})/);
-  const inbound = plain.match(/de moreno parte a las (\d{1,2}:\d{2}).{0,160}?haedo a las (\d{1,2}:\d{2}).{0,160}?once a las (\d{1,2}:\d{2})/);
-  if (!outbound || !inbound) throw new Error("rail_source_contract_invalid");
-  return {
-    source: TRAIN_RADAR_SOURCE,
-    observed_at: observedAt,
-    temporal_state: "scheduled",
-    line: "Sarmiento",
-    branch: "Once-Haedo-Moreno diferencial",
-    service: {
-      days: "weekdays",
-      stations: {
-        Once: [normalizeTrainTime(outbound[1]), normalizeTrainTime(inbound[3])],
-        Haedo: [normalizeTrainTime(outbound[2]), normalizeTrainTime(inbound[2])],
-        Moreno: [normalizeTrainTime(outbound[3]), normalizeTrainTime(inbound[1])]
-      }
-    }
-  };
-}
-function createSarmientoScheduledAdapter({ fetchImpl = fetch, now = Date.now, ttlMs = TRAIN_RADAR_CACHE_TTL_MS, timeoutMs = 3500 } = {}) {
-  let cached = null;
-  return {
-    async read() {
-      const current = Number(now());
-      if (cached && current - cached.fetched_at_ms <= ttlMs) return { available: true, reason: null, observation: cached.observation, cache_hit: true };
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await fetchImpl(TRAIN_RADAR_SOURCE.url, { headers: { accept: "text/html,application/xhtml+xml" }, signal: controller.signal });
-        if (!response?.ok) throw new Error("rail_source_unavailable");
-        const observation = parseSarmientoScheduledService(await response.text(), new Date(current).toISOString());
-        cached = { fetched_at_ms: current, observation };
-        return { available: true, reason: null, observation, cache_hit: false };
-      } catch (error) {
-        cached = null;
-        return { available: false, reason: error?.message === "rail_source_contract_invalid" ? "source_contract_invalid" : "source_unavailable", observation: null, cache_hit: false };
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-  };
-}
-function buildTrainRadarSnapshot({ coordinates, providerResult, nowMs = Date.now(), freshnessMs = TRAIN_RADAR_CACHE_TTL_MS } = {}) {
-  const center = validCoordinates(coordinates);
-  if (!center) throw new VoyError("invalid_coordinates", 400);
-  const observation = providerResult?.available ? providerResult.observation : null;
-  const observedMs = Date.parse(observation?.observed_at ?? "");
-  const fresh = observation && Number.isFinite(observedMs) && nowMs - observedMs <= freshnessMs && nowMs >= observedMs;
-  const sourceStatus = !providerResult?.available ? "unavailable" : fresh ? "available" : "stale";
-  const nearby = nearestRailStations(center, 10, TRAIN_RADAR_RADIUS_METERS, "SOFSE")
-    .filter((station) => TRAIN_RADAR_STATION_NAMES.has(foldText(station.name)) && railLineIdentity(station.line) === "sarmiento")
-    .slice(0, 3);
-  return {
-    source_status: sourceStatus,
-    radius_meters: TRAIN_RADAR_RADIUS_METERS,
-    source: TRAIN_RADAR_SOURCE,
-    stations: nearby.map((station) => {
-      const times = fresh ? observation.service.stations[station.name] ?? null : null;
-      return {
-        source: TRAIN_RADAR_SOURCE,
-        observed_at: fresh ? observation.observed_at : null,
-        temporal_state: times ? "scheduled" : "unknown",
-        station: {
-          id: `rail:${station.catalog_id}`,
-          name: station.name,
-          coordinates: { lat: station.lat, lon: station.lon },
-          distance_meters: station.distance_meters,
-          catalog_source: station.source_id
-        },
-        line: "Sarmiento",
-        branch: times ? observation.branch : null,
-        service: times ? { days: observation.service.days, scheduled_times: [...times] } : null
-      };
-    })
-  };
-}
-var JURISDICTION_BY_ID = new Map(JURISDICTIONS.jurisdictions.map((item) => [item.province_id, item]));
-var cityKey = /* @__PURE__ */ __name((provinceId, localitySlug) => `${String(provinceId ?? "")}:${String(localitySlug ?? "")}`, "cityKey");
-var CITY_BY_KEY = new Map(CITY_INTEGRATIONS.cities.map((item) => [cityKey(item.province_id, item.slug), item]));
-var HANDOFF_ALLOWLIST = new Set(APP_CONFIG.OFFICIAL_HANDOFF_ALLOWLIST);
-var telemetryWindow = { startedAt: 0, count: 0 };
-var destinationWindow = { startedAt: 0, count: 0 };
-var DESTINATION_PROVIDER = DESTINATION_PROVIDERS.production_provider;
-const ROUTER_QUEUE_MAX=32;
-const ROUTE_CACHE_MAX=96;
-var SECURITY_HEADERS = {
-  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self' https://tiles.openfreemap.org; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Permissions-Policy": "geolocation=(self), microphone=(), camera=()",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-origin"
-};
-var NominatimCoordinator = class {
-  static { __name(this, "NominatimCoordinator"); }
-  constructor(state, env) {
-    this.state = state;
-    this.env = env;
-    this.tail = Promise.resolve();
-    this.pendingAdmissions = 0;
-    this.routeCache = new Map();
-    this.lastFetchAt = 0;
-    this.circuitUntil = 0;
-  }
-  validateBatch(payload) {
-    const modes = Array.isArray(payload?.modes) ? payload.modes.map((mode) => String(mode)) : [];
-    const origin = routeCoordinate(payload?.origin), destination = routeCoordinate(payload?.destination);
-    if (!origin || !destination || modes.length < 1 || modes.length > 3) return null;
-    if (new Set(modes).size !== modes.length) return null;
-    if (modes.some((mode) => !ROUTING_PROFILES[mode])) return null;
-    return { modes, origin, destination };
-  }
-  async fetch(request) {
-    if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "method_not_allowed" }), { status: 405, headers: JSON_HEADERS });
-    const payload = await request.json().catch(() => null);
-    const batch = this.validateBatch(payload);
-    if (!batch) return new Response(JSON.stringify({ ok: false, error: "invalid_route_batch" }), { status: 400, headers: JSON_HEADERS });
-    if (this.pendingAdmissions >= ROUTER_QUEUE_MAX) return new Response(JSON.stringify({ ok: false, error: "router_queue_full" }), { status: 503, headers: JSON_HEADERS });
-    this.pendingAdmissions += 1;
-    const job = this.tail.then(() => this.routeBatch(batch));
-    this.tail = job.catch(() => null);
-    try {
-      const value = await job.catch(() => null);
-      return new Response(JSON.stringify(value ?? { ok: false, error: "route_unavailable" }), { status: value?.ok ? 200 : 503, headers: JSON_HEADERS });
-    } finally { this.pendingAdmissions = Math.max(0, this.pendingAdmissions - 1); }
-  }
-  readMemoryCache(key, now) {
-    const cached = this.routeCache.get(key);
-    if (!cached) return null;
-    if (now - Number(cached.stored_at) >= ROUTING_PROVIDER.cache_ttl_ms) { this.routeCache.delete(key); return null; }
-    this.routeCache.delete(key);
-    this.routeCache.set(key, cached);
-    return { ...cached.value, cache_hit: true };
-  }
-  writeMemoryCache(key, value, now) {
-    this.routeCache.delete(key);
-    this.routeCache.set(key, { stored_at: now, value });
-    while (this.routeCache.size > ROUTE_CACHE_MAX) this.routeCache.delete(this.routeCache.keys().next().value);
-  }
-  async routeBatch({ modes, origin, destination }) {
-    const routes = {}, errors = {};
-    for (const mode of modes) {
-      const result = await this.routeOne(mode, origin, destination);
-      if (result?.ok && result.route) routes[mode] = result.route;
-      else errors[mode] = result?.error ?? "route_unavailable";
-    }
-    return { ok: true, routes, errors };
-  }
-  async route(payload) {
-    const mode = String(payload?.mode ?? "");
-    const origin = routeCoordinate(payload?.origin), destination = routeCoordinate(payload?.destination);
-    if (!ROUTING_PROFILES[mode] || !origin || !destination) return { ok: false, error: "invalid_route_request" };
-    return this.routeOne(mode, origin, destination);
-  }
-  async routeOne(mode, origin, destination) {
-    const profile = ROUTING_PROFILES[mode];
-    if (!profile) return { ok: false, error: "invalid_route_request" };
-    const key = routeCacheKey(mode, origin, destination);
-    const now = Date.now();
-    const cached = this.readMemoryCache(key, now);
-    if (cached) return { ok: true, route: cached };
-    if (now < this.circuitUntil) return { ok: false, error: "circuit_open" };
-    const wait = Math.max(0, 1000 - (Date.now() - this.lastFetchAt));
-    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-    this.lastFetchAt = Date.now();
-    const coords = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
-    const url = `${ROUTING_PROVIDER.base_url}/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ROUTING_PROVIDER.timeout_ms);
-    try {
-      const response = await fetch(url, { method: "GET", headers: { "User-Agent": "VOY-Mobility/1.0 (+https://voy-app.simondalmasso44.workers.dev/)", "Accept": "application/json" }, signal: controller.signal });
-      if (!response.ok) {
-        if (response.status >= 500 || response.status === 429) this.circuitUntil = Date.now() + ROUTING_PROVIDER.circuit_open_ms;
-        return { ok: false, error: `upstream_${response.status}` };
-      }
-      const body = await response.json();
-      const candidate = Array.isArray(body?.routes) ? body.routes[0] : null;
-      const geometry = validateRouteGeometry(candidate?.geometry);
-      const distance = Number(candidate?.distance);
-      if (!geometry || !Number.isFinite(distance) || distance <= 0) return { ok: false, error: "invalid_upstream_route" };
-      const value = { geometry, distance_m: Math.round(distance), source: ROUTING_PROVIDER.id, source_class: "network_route", observed_at: new Date().toISOString(), attribution: ROUTING_PROVIDER.attribution, cache_hit: false };
-      this.writeMemoryCache(key, value, Date.now());
-      return { ok: true, route: value };
-    } catch {
-      this.circuitUntil = Date.now() + ROUTING_PROVIDER.circuit_open_ms;
-      return { ok: false, error: "upstream_unavailable" };
-    } finally { clearTimeout(timer); }
-  }
-};
-var VoyError = class extends Error {
-  static {
-    __name(this, "VoyError");
-  }
-  constructor(code, status = 500, detail = null) {
-    super(code);
-    this.name = "VoyError";
-    this.code = code;
-    this.status = status;
-    this.detail = detail;
-  }
-};
-function withSecurity(response) {
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-}
-__name(withSecurity, "withSecurity");
-function json(body, status = 200, extraHeaders = {}) {
-  return withSecurity(new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...extraHeaders } }));
-}
-__name(json, "json");
-function methodNotAllowed(allowed) {
-  return json({ ok: false, error: "method_not_allowed" }, 405, { allow: allowed.join(", ") });
-}
-__name(methodNotAllowed, "methodNotAllowed");
-function nowIso() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-__name(nowIso, "nowIso");
-function byteLength(value) {
-  return new TextEncoder().encode(value).byteLength;
-}
-__name(byteLength, "byteLength");
-function normalizeText(value) {
-  return String(value ?? "").trim().replace(/\s+/g, " ");
-}
-__name(normalizeText, "normalizeText");
-function slugify(value) {
-  return normalizeText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-__name(slugify, "slugify");
-function numeric(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-__name(numeric, "numeric");
-function validLatLon(lat, lon) {
-  return lat !== null && lon !== null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
-}
-__name(validLatLon, "validLatLon");
-function entityName(entity) {
-  return normalizeText(entity?.nombre ?? entity?.name ?? entity?.nomenclatura ?? "");
-}
-__name(entityName, "entityName");
-function entityId(entity) {
-  const value = entity?.id ?? entity?.codigo ?? entity?.code;
-  return value === void 0 || value === null ? null : String(value);
-}
-__name(entityId, "entityId");
-function extractProvince(item) {
-  return item?.provincia ?? item?.ubicacion?.provincia ?? item?.localidad?.provincia ?? item?.municipio?.provincia ?? null;
-}
-__name(extractProvince, "extractProvince");
-function extractLocality(item) {
-  const candidates = [
-    item?.localidad,
-    item?.ubicacion?.localidad,
-    item?.localidad_censal,
-    item?.gobierno_local,
-    item?.municipio,
-    item?.departamento
-  ];
-  return candidates.find((entity) => entityName(entity)) ?? candidates.find((entity) => entityId(entity)) ?? null;
-}
-__name(extractLocality, "extractLocality");
-function extractCoordinates(item) {
-  const location = item?.ubicacion ?? item?.centroide ?? item?.geometria?.centroide ?? item?.localidad?.centroide ?? null;
-  const lat = numeric(location?.lat ?? location?.latitude ?? item?.lat ?? item?.latitude);
-  const lon = numeric(location?.lon ?? location?.lng ?? location?.longitude ?? item?.lon ?? item?.lng ?? item?.longitude);
-  return validLatLon(lat, lon) ? { lat, lon } : null;
-}
-__name(extractCoordinates, "extractCoordinates");
-function findCityIntegration(localitySlug, provinceId, localityName = "") {
-  const normalizedProvinceId = String(provinceId ?? "");
-  const normalizedSlug = slugify(localitySlug);
-  if (normalizedProvinceId === "02") return CITY_BY_KEY.get(cityKey("02", "caba")) ?? null;
-  const direct = CITY_BY_KEY.get(cityKey(normalizedProvinceId, normalizedSlug));
-  if (direct) return direct;
-  return null;
-}
-__name(findCityIntegration, "findCityIntegration");
-function extractLabel(item) {
-  const direct = normalizeText(item?.nomenclatura ?? item?.direccion ?? item?.nombre ?? item?.label);
-  if (direct) return direct;
-  const street = entityName(item?.calle);
-  const height = normalizeText(item?.altura?.valor ?? item?.altura);
-  if (street) return [street, height].filter(Boolean).join(" ");
-  return "";
-}
-__name(extractLabel, "extractLabel");
-function normalizeGeoRefPlace(item) {
-  if (!item || typeof item !== "object") return null;
-  const province = extractProvince(item);
-  const locality = extractLocality(item);
-  const provinceName = entityName(province);
-  const provinceId = entityId(province);
-  const localityName = entityName(locality);
-  const localityId = entityId(locality);
-  const coordinates = extractCoordinates(item);
-  const label = extractLabel(item) || localityName;
-  if (!provinceName || !provinceId || !localityName || !label || !coordinates) return null;
-  const localitySlug = slugify(localityName);
-  const integration = findCityIntegration(localitySlug, provinceId, localityName);
-  const jurisdiction = JURISDICTION_BY_ID.get(provinceId) ?? null;
-  return {
-    source_id: "src_georef",
-    source_entity_id: entityId(item),
-    label,
-    province: { id: provinceId, name: provinceName },
-    locality: { id: localityId, name: localityName, slug: localitySlug },
-    coordinates,
-    territory_verified: true,
-    territory_verification: "full",
-    territory_authority: "live_georef",
-    coverage: integration ? effectiveTierForIntegration(integration).tier : "T0_TERRITORY_ONLY",
-    integration_slug: integration?.slug ?? null
-  };
-}
-__name(normalizeGeoRefPlace, "normalizeGeoRefPlace");
-function normalizeDirectionCollection(payload) {
-  if (!payload || typeof payload !== "object") throw new VoyError("upstream_schema_invalid", 502);
-  const collections = [payload.direcciones, payload.resultados, payload.results, payload.data];
-  const found = collections.find(Array.isArray);
-  if (!found) throw new VoyError("upstream_schema_invalid", 502);
-  const normalized = found.map(normalizeGeoRefPlace).filter(Boolean);
-  if (found.length > 0 && normalized.length === 0) throw new VoyError("upstream_schema_invalid", 502);
-  return normalized;
-}
-__name(normalizeDirectionCollection, "normalizeDirectionCollection");
-function normalizeReversePayload(payload) {
-  if (!payload || typeof payload !== "object") throw new VoyError("upstream_schema_invalid", 502);
-  const candidates = [payload.ubicacion, ...Array.isArray(payload.ubicaciones) ? payload.ubicaciones : [], ...Array.isArray(payload.resultados) ? payload.resultados : []].filter(Boolean);
-  const normalized = candidates.map(normalizeGeoRefPlace).filter(Boolean);
-  if (!normalized.length) throw new VoyError("upstream_schema_invalid", 502);
-  return normalized[0];
-}
-__name(normalizeReversePayload, "normalizeReversePayload");
-function emitEvent(event, dimensions = {}) {
-  if (!TELEMETRY_CONTRACT.events.includes(event)) return;
-  const safe = { event, release_id: RELEASE_META.release_id, timestamp: nowIso() };
-  for (const [key, value] of Object.entries(dimensions)) {
-    if (TELEMETRY_CONTRACT.dimensions.includes(key) && ["string", "number", "boolean"].includes(typeof value)) safe[key] = value;
-  }
-  console.log(JSON.stringify(safe));
-}
-__name(emitEvent, "emitEvent");
-function statusClass(status) {
-  return status >= 500 ? "5xx" : status >= 400 ? "4xx" : status >= 300 ? "3xx" : status >= 200 ? "2xx" : "other";
-}
-__name(statusClass, "statusClass");
-function latencyBucket(ms) {
-  return ms < 100 ? "lt100ms" : ms < 300 ? "100_299ms" : ms < 1e3 ? "300_999ms" : ms < 3e3 ? "1_3s" : "gt3s";
-}
-__name(latencyBucket, "latencyBucket");
-async function parseSmallJsonBody(request, maxBytes = 4096) {
-  const declared = Number(request.headers.get("content-length") || 0);
-  if (declared > maxBytes) throw new VoyError("request_too_large", 413);
-  const raw = await request.text();
-  if (byteLength(raw) > maxBytes) throw new VoyError("request_too_large", 413);
-  try {
-    return JSON.parse(raw || "{}");
-  } catch {
-    throw new VoyError("invalid_json", 400);
-  }
-}
-__name(parseSmallJsonBody, "parseSmallJsonBody");
-async function fetchGeoRef(pathname, searchParams, fetchImpl = fetch, timeoutMs = APP_CONFIG.UPSTREAM_TIMEOUTS.georef_ms) {
-  if (!pathname.startsWith("/")) throw new VoyError("internal_upstream_path_invalid", 500);
-  const url = new URL(`${APP_CONFIG.TERRITORY_SOURCE.base_url}${pathname}`);
-  if (url.hostname !== APP_CONFIG.TERRITORY_SOURCE.allowed_host) throw new VoyError("internal_upstream_host_invalid", 500);
-  for (const [key, value] of Object.entries(searchParams ?? {})) {
-    if (value !== void 0 && value !== null && value !== "") url.searchParams.set(key, String(value));
-  }
-  let lastClass = null;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response;
-    try {
-      response = await fetchImpl(url.toString(), { method: "GET", headers: { accept: "application/json" }, signal: controller.signal });
-    } catch (error) {
-      clearTimeout(timer);
-      if (error?.name === "AbortError") {
-        emitEvent("upstream_timeout", { endpoint_class: "georef", result_class: "timeout" });
-        throw new VoyError("external_dependency_unavailable", 503, "timeout");
-      }
-      throw new VoyError("external_dependency_unavailable", 503, "network_error");
-    }
-    clearTimeout(timer);
-    if (RETRYABLE_STATUS.has(response.status)) {
-      lastClass = response.status === 429 ? "rate_limited" : "upstream_5xx";
-      if (response.status >= 500) emitEvent("upstream_5xx", { endpoint_class: "georef", status_code_class: "5xx" });
-      if (attempt < 2) continue;
-      throw new VoyError("external_dependency_unavailable", 503, lastClass);
-    }
-    if (!response.ok) throw new VoyError("upstream_rejected", 502, statusClass(response.status));
-    const text2 = await response.text();
-    if (byteLength(text2) > 262144) throw new VoyError("upstream_response_too_large", 502);
-    let payload;
-    try {
-      payload = JSON.parse(text2);
-    } catch {
-      throw new VoyError("upstream_schema_invalid", 502);
-    }
-    return payload;
-  }
-  throw new VoyError("external_dependency_unavailable", 503, lastClass ?? "unknown");
-}
-__name(fetchGeoRef, "fetchGeoRef");
-function buildResolveParams(query, province, locality) {
-  const params = { direccion: query, max: 5 };
-  if (province) params.provincia = province;
-  if (locality) params.localidad = locality;
-  return params;
-}
-__name(buildResolveParams, "buildResolveParams");
-async function resolveAddress(payload, fetchImpl = fetch) {
-  const query = normalizeText(payload?.query);
-  const province = normalizeText(payload?.province);
-  const locality = normalizeText(payload?.locality);
-  if (query.length < 3 || query.length > 160 || province.length > 80 || locality.length > 100) throw new VoyError("invalid_query", 400);
-  const upstream = await fetchGeoRef("/direcciones", buildResolveParams(query, province, locality), fetchImpl);
-  const candidates = normalizeDirectionCollection(upstream);
-  if (!candidates.length) {
-    emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "not_found" });
-    return { ok: false, result_class: "unverified", error: "territory_unverified", candidates: [], requires_context: !province && !locality };
-  }
-  const unique = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const candidate of candidates) {
-    const key = `${candidate.label}|${candidate.province.id}|${candidate.locality.id}|${candidate.coordinates.lat}|${candidate.coordinates.lon}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(candidate);
-    }
-  }
-  const resultClass = unique.length === 1 ? "resolved" : "ambiguous";
-  emitEvent(resultClass === "resolved" ? "territory_resolve_ok" : "territory_resolve_ambiguous", { endpoint_class: "territory", province_id: unique[0].province.id, result_class: resultClass });
-  return { ok: true, result_class: resultClass, candidates: unique, source: { id: "src_georef", retrieved_at: nowIso() } };
-}
-__name(resolveAddress, "resolveAddress");
-function destinationRateAllowed() {
-  const now = Date.now();
-  if (!destinationWindow.startedAt || now - destinationWindow.startedAt >= 6e4) {
-    destinationWindow.startedAt = now;
-    destinationWindow.count = 0;
-  }
-  destinationWindow.count += 1;
-  return destinationWindow.count <= DESTINATION_PROVIDERS.suggest_rate_limit_per_isolate_minute;
-}
-__name(destinationRateAllowed, "destinationRateAllowed");
-function validateSessionToken(value) {
-  const token = normalizeText(value);
-  if (!token) return "";
-  if (token.length < DESTINATION_PROVIDERS.session_token_min_chars || token.length > DESTINATION_PROVIDERS.session_token_max_chars || !/^[A-Za-z0-9_-]+$/.test(token)) throw new VoyError("invalid_session_token", 400);
-  return token;
-}
-__name(validateSessionToken, "validateSessionToken");
-function resultCountBucket(n) {
-  return n === 0 ? "0" : n === 1 ? "1" : n <= 3 ? "2_3" : "4_5";
-}
-__name(resultCountBucket, "resultCountBucket");
-function destinationContextFilters(context) {
-  const explicit = context.explicit_geography;
-  if (explicit?.locality || explicit?.province) return { province: explicit?.province?.name ?? "", locality: explicit?.locality?.name ?? "" };
-  if (context.search_scope === "national") return { province: "", locality: "" };
-  if (context.origin) return { province: context.origin.province ?? "", locality: context.search_scope === "province" ? "" : context.origin.locality ?? "" };
-  return { province: "", locality: "" };
-}
-__name(destinationContextFilters, "destinationContextFilters");
-function meaningfulDestinationTokens(query, context) {
-  const stop = new Set(["de","del","la","las","el","los","y","en","a","al","av","avda","avenida","calle","ruta","autopista","bv","blvd","boulevard","bulevar","cancha","estadio","club","historico","historica","regional"]);
-  const geo = new Set();
-  for (const x of [context?.explicit_geography?.locality?.name, context?.explicit_geography?.province?.name]) {
-    for (const w of words(x || "")) geo.add(w);
-  }
-  return words(query).filter((w) => !stop.has(w) && !geo.has(w) && /[a-z]/.test(w));
-}
-__name(meaningfulDestinationTokens, "meaningfulDestinationTokens");
-function editDistance(a,b,maxDistance=Infinity){
-  const x=String(a??""),y=String(b??"");
-  if(x===y)return 0;
-  if(Math.abs(x.length-y.length)>maxDistance)return maxDistance+1;
-  let prev=Array.from({length:y.length+1},(_,i)=>i);
-  for(let i=1;i<=x.length;i++){
-    const cur=[i];let rowMin=i;
-    for(let j=1;j<=y.length;j++){
-      const v=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(x[i-1]===y[j-1]?0:1));
-      cur[j]=v;rowMin=Math.min(rowMin,v);
-    }
-    if(rowMin>maxDistance)return maxDistance+1;
-    prev=cur;
-  }
-  return prev[y.length];
-}
-__name(editDistance,"editDistance");
-function editDistanceAtMostOne(a,b){return editDistance(a,b,1)<=1;}
-__name(editDistanceAtMostOne,"editDistanceAtMostOne");
-function fuzzyTokenMatch(a,b){
-  if(a===b)return true;
-  if(Math.min(a.length,b.length)>=4&&(a.startsWith(b)||b.startsWith(a)))return true;
-  const allowance=Math.max(a.length,b.length)>=7&&Math.min(a.length,b.length)>=5?2:Math.min(a.length,b.length)>=4?1:0;
-  return allowance>0&&editDistance(a,b,allowance)<=allowance;
-}
-__name(fuzzyTokenMatch,"fuzzyTokenMatch");
-const DESTINATION_QUERY_LEXICON=["san","martin","sarmiento","rivadavia","velez","sarsfield","corrientes","belgrano","urquiza"];
-const DESTINATION_QUERY_ABBREVIATIONS=Object.freeze({sna:"san",pal:"palacio",gral:"general"});
-function correctCommonQueryTypos(value){return text(value).split(/\s+/).map(raw=>{const f=foldText(raw).replace(/[^a-z0-9]/g,"");const abbreviation=DESTINATION_QUERY_ABBREVIATIONS[f];if(abbreviation)return abbreviation;if(f.length<5)return raw;const m=DESTINATION_QUERY_LEXICON.find(x=>editDistanceAtMostOne(f,x));return m||raw;}).join(" ");}
-__name(correctCommonQueryTypos,"correctCommonQueryTypos");
-function explicitCommaDestinationHead(query,context){
-  if(!context?.explicit_geography || !text(query).includes(","))return "";
-  return text(query).split(",")[0].trim();
-}
-__name(explicitCommaDestinationHead,"explicitCommaDestinationHead");
-function explicitHeadMatchesCandidateLocality(query,candidate,context){
-  const rawHead=explicitCommaDestinationHead(query,context),locality=foldText(candidateLocality(candidate));
-  const explicitLocality=context?.explicit_geography?.locality?.name;if(!rawHead||!locality||!explicitLocality)return false;
-  const row=matchLocalityFragment(rawHead,context?.explicit_geography?.province?.id||'',false);
-  return Boolean(row&&foldText(row.name)===foldText(explicitLocality)&&locality===foldText(explicitLocality));
-}
-__name(explicitHeadMatchesCandidateLocality,"explicitHeadMatchesCandidateLocality");
-function candidateLooksLikeSettlement(candidate){
-  const types=(candidate?.provider_types??[]).map(foldText);
-  return types.some(type=>["city","town","village","hamlet","locality","municipality","administrative"].includes(type));
-}
-__name(candidateLooksLikeSettlement,"candidateLooksLikeSettlement");
-function candidateIsNamedSettlement(candidate){
-  const types=(candidate?.provider_types??[]).map(foldText);
-  return types.some(type=>["city","town","village","hamlet","locality","municipality"].includes(type));
-}
-__name(candidateIsNamedSettlement,"candidateIsNamedSettlement");
-function candidateTextPlausible(query,candidate,context){
-  const explicitLocality=context?.explicit_geography?.locality?.name;
-  if(explicitLocality && candidateLooksLikeSettlement(candidate) && foldText(candidateLocality(candidate))===foldText(explicitLocality))return true;
-  const semanticQuery=correctCommonQueryTypos(stripExplicitCommaGeography(query,context?.explicit_geography));
-  const commaExplicit=Boolean(context?.explicit_geography && text(query).includes(","));
-  let tokenContext=commaExplicit?{...context,explicit_geography:null}:context;
-  if(!context?.explicit_geography && candidateLooksLikeSettlement(candidate)){
-    const trailingProvince=matchTrailingProvince(semanticQuery,{allowAmbiguousBuenosAires:true})||matchTrailingProvince(semanticQuery,{allowAmbiguousBuenosAires:true,allowTypo:true});
-    if(trailingProvince&&candidateProvinceId(candidate)===trailingProvince.id)tokenContext={...context,explicit_geography:{province:{id:trailingProvince.id,name:trailingProvince.name}}};
-  }
-  const q=meaningfulDestinationTokens(semanticQuery,tokenContext);
-  if(!q.length)return false;
-  const primary=words([candidate.display_primary,candidate.search_text].filter(Boolean).join(" ")).map((w)=>w==="boulevard"?"bulevar":w);
-  if(!primary.length)return false;
-  let hits=0;
-  for(const token of q){
-    if(primary.some((h)=>fuzzyTokenMatch(token,h))) hits++;
-  }
-  const primaryMatch=q.length===1?hits===1:q.length===2?hits===2:hits>=2&&hits/q.length>=0.6;
-  if(primaryMatch)return true;
-  return commaExplicit && candidateLooksLikeSettlement(candidate) && explicitHeadMatchesCandidateLocality(query,candidate,context);
-}
-__name(candidateTextPlausible,"candidateTextPlausible");
-function normalizeRoadVocabulary(value){
-  return text(value).replace(/\bboulevard\b/gi,"Bulevar").replace(/\bbv\.?\b/gi,"Bulevar");
-}
-__name(normalizeRoadVocabulary,"normalizeRoadVocabulary");
-function commaSuffixMatchesProvince(context){
-  const explicit=context?.explicit_geography;
-  if(!explicit?.province || !text(context?.query).includes(","))return false;
-  const suffix=foldText(text(context.query).split(",").slice(1).join(",").trim());
-  const row=PROVINCES.find(([id])=>id===explicit.province.id);
-  return Boolean(row && (suffix===foldText(row[1]) || (row[2]??[]).some(alias=>suffix===foldText(alias))));
-}
-__name(commaSuffixMatchesProvince,"commaSuffixMatchesProvince");
-function photonQuerySuffix(context){
-  const explicit=context.explicit_geography;
-  if(explicit && commaSuffixMatchesProvince(context))return explicit.province.name;
-  return explicit?.locality?.name || explicit?.province?.name || (!explicit && context.search_scope==='local' ? context.origin?.locality : !explicit && context.search_scope==='province' ? context.origin?.province : '');
-}
-__name(photonQuerySuffix,"photonQuerySuffix");
-function withPhotonSuffix(value,context){
-  let q=text(value);const suffix=photonQuerySuffix(context);
-  if(suffix && !foldText(q).includes(foldText(suffix)))q=`${q} ${suffix}`;
-  return text(q);
-}
-__name(withPhotonSuffix,"withPhotonSuffix");
-function photonProviderQuery(context){
-  const explicit=context.explicit_geography;
-  let head=stripExplicitCommaGeography(context.query,explicit);
-  if(explicit?.locality && !text(context.query).includes(",")){
-    const rawParts=stripTerminalCountryQualifier(context.query).split(/\s+/).filter(Boolean);
-    const matched=Math.max(0,Number(explicit.matched_suffix_tokens||0));
-    if(matched>0&&rawParts.length>matched){
-      const entityHead=rawParts.slice(0,-matched).join(' ');
-      head=`${entityHead} ${explicit.locality.name}`.trim();
-    }
-  }
-  if(explicit?.locality && text(context.query).includes(",")){
-    const foldedHead=foldText(head);
-    const row=LOCALITIES.find(([name])=>foldText(name)===foldText(explicit.locality.name));
-    if(row && (foldText(row[0])===foldedHead || (row[2]??[]).some(alias=>foldText(alias)===foldedHead))) head=explicit.locality.name;
-  }
-  const q=normalizeRoadVocabulary(correctCommonQueryTypos(head));
-  const outbound=withPhotonSuffix(q,context);
-  return explicit?outbound.normalize("NFD").replace(/[\u0300-\u036f]/g,""):outbound;
-}
-__name(photonProviderQuery,"photonProviderQuery");
-function explicitHeadKnownLocality(context){
-  const explicit=context?.explicit_geography;
-  if(!explicit?.locality || !text(context?.query).includes(','))return false;
-  const head=text(context.query).split(',')[0].trim();
-  const row=matchLocalityFragment(head,explicit.province?.id||explicit.locality.province_id||'',false);
-  return Boolean(row&&foldText(row.name)===foldText(explicit.locality.name));
-}
-__name(explicitHeadKnownLocality,"explicitHeadKnownLocality");
-function photonRetryQuery(context){
-  if(context.explicit_geography){
-    const head=stripExplicitCommaGeography(context.query,context.explicit_geography);
-    if(/\b\d{1,6}\b/.test(head)){
-      const q=normalizeRoadVocabulary(correctCommonQueryTypos(head.replace(/\b\d{1,6}\b/g,'').replace(/\s+/g,' ').trim()));
-      const retry=withPhotonSuffix(q,context).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-      if(foldText(retry)!==foldText(photonProviderQuery(context)))return retry;
-    }
-    const nonCommaExactSettlement=Boolean(!text(context.query).includes(',') && context.explicit_geography.locality && Number(context.explicit_geography.matched_suffix_tokens||0)>=words(stripTerminalCountryQualifier(context.query)).length);
-    if(!explicitHeadKnownLocality(context) && !nonCommaExactSettlement)return null;
-    const retry=normalizeRoadVocabulary(correctCommonQueryTypos(context.explicit_geography.locality.name)).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    return foldText(retry)===foldText(photonProviderQuery(context))?null:retry;
-  }
-  if(context.search_scope!=="local" || !context.origin?.locality)return null;
-  let q=correctCommonQueryTypos(stripExplicitCommaGeography(context.query,context.explicit_geography));
-  if(/\b(?:historico|historica)\b/i.test(foldText(q)))q=q.replace(/\b(?:hist[oÃ³]rico|hist[oÃ³]rica)\b/gi,"").replace(/\s+/g," ").trim();
-  else if(/^\s*(?:boulevard|bulevar|bv\.?)\s+/i.test(q))q=q.replace(/^\s*(?:boulevard|bulevar|bv\.?)\s+/i,"");
-  else if(/\b\d{1,6}\b/.test(q))q=q.replace(/\b\d{1,6}\b/g,"").replace(/\s+/g," ").trim();
-  else return null;
-  q=normalizeRoadVocabulary(q);
-  const retry=withPhotonSuffix(q,context);
-  return foldText(retry)===foldText(photonProviderQuery(context))?null:retry;
-}
-__name(photonRetryQuery,"photonRetryQuery");
-const SEARCH_CATEGORY_ALIASES=Object.freeze({cancha:["estadio","club"],estadio:["cancha","club"],terminal:["terminal de omnibus","estacion"],hospital:["sanatorio"],sanatorio:["hospital"],aeropuerto:["airport"],estacion:["station"],puente:["bridge"],universidad:["facultad"],facultad:["universidad"],shopping:["mall"]});
-const SEARCH_CATEGORY_TYPES=Object.freeze({cancha:"stadium",estadio:"stadium",club:"stadium",terminal:"station",hospital:"hospital",sanatorio:"hospital",aeropuerto:"aerodrome",airport:"aerodrome",estacion:"station",station:"station",puente:"bridge",bridge:"bridge",universidad:"university",facultad:"university",shopping:"mall",mall:"mall"});
-const SEARCH_CATEGORY_CANONICAL=Object.freeze(["cancha","estadio","terminal","hospital","sanatorio","aeropuerto","estacion","puente","universidad","facultad","shopping"]);
-const SEARCH_CATEGORY_ABBREVIATIONS=Object.freeze({term:"terminal",univ:"universidad",uni:"universidad",hosp:"hospital",aero:"aeropuerto",estac:"estacion"});
-function canonicalSearchCategoryToken(raw){
-  const f=foldText(raw).replace(/[^a-z]/g,'');if(!f)return null;
-  if(SEARCH_CATEGORY_TYPES[f])return f;if(SEARCH_CATEGORY_ABBREVIATIONS[f])return SEARCH_CATEGORY_ABBREVIATIONS[f];if(f.length<5)return null;
-  const ranked=SEARCH_CATEGORY_CANONICAL.map(term=>({term,d:editDistance(f,term,2)})).filter(x=>x.d<=2).sort((a,b)=>a.d-b.d||a.term.localeCompare(b.term));
-  return ranked.length&&(!ranked[1]||ranked[0].d<ranked[1].d)?ranked[0].term:null;
-}
-__name(canonicalSearchCategoryToken,"canonicalSearchCategoryToken");
-function normalizeSearchCategoryTokens(value){return text(value).split(/\s+/).map(raw=>{const c=canonicalSearchCategoryToken(raw);return c&&c!==foldText(raw).replace(/[^a-z]/g,'')?c:raw;}).join(' ');}
-__name(normalizeSearchCategoryTokens,"normalizeSearchCategoryTokens");
-function QueryNormalizer(value){
-  const original=text(value).replace(/\s+/g," ").trim(),semanticBase=normalizeSearchCategoryTokens(original),folded=foldText(original).replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
-  const semanticFolded=foldText(semanticBase),category_hints=[...new Set(words(semanticFolded).map(w=>SEARCH_CATEGORY_TYPES[w]).filter(Boolean))],rewrite_variants=[];
-  if(foldText(semanticBase)!==foldText(original))rewrite_variants.push(semanticBase);
-  for(const token of words(semanticFolded)){for(const alias of SEARCH_CATEGORY_ALIASES[token]??[])rewrite_variants.push(semanticBase.replace(new RegExp(`\\b${token}\\b`,'i'),alias));}
-  return {original,folded,category_hints,rewrite_variants:[...new Set(rewrite_variants)].slice(0,3)};
-}
-__name(QueryNormalizer,"QueryNormalizer");
-function ContextPlanner(context){
-  const normalized=QueryNormalizer(context?.query);const rows=[{kind:"original",query:normalized.original}];
-  if(!context?.explicit_geography&&context?.origin?.locality)rows.push({kind:"local_context",query:`${normalized.original} ${context.origin.locality}${context.origin.province?` ${context.origin.province}`:""}`});
-  for(const q of normalized.rewrite_variants)rows.push({kind:"semantic",query:q});
-  return rows.filter((row,i,a)=>row.query&&a.findIndex(x=>foldText(x.query)===foldText(row.query))===i).slice(0,3);
-}
-__name(ContextPlanner,"ContextPlanner");
-function destinationQueryVariants(context){
-  const original=stripTerminalCountryQualifier(context.query), primary=photonProviderQuery(context), variants=[primary];
-  const retry=photonRetryQuery(context);if(retry)variants.push(retry);
-  const explicitLocality=context?.explicit_geography?.locality?.name||'';
-  const entityText=stripExplicitCommaGeography(context.query,context.explicit_geography);
-  const compactCategory=words(normalizeSearchCategoryTokens(correctCommonQueryTypos(entityText))).map(canonicalSearchCategoryToken).find(Boolean);
-  const sameNameCapital=compactCategory&&!explicitLocality&&context?.explicit_geography?.province?matchLocalityFragment(context.explicit_geography.province.name,context.explicit_geography.province.id,false):null;
-  const compactLocality=explicitLocality||sameNameCapital?.name||'';
-  if(compactCategory&&compactLocality)variants.push(`${compactCategory} ${compactLocality}`);
-  const plan=ContextPlanner(context), semantic=plan.filter(row=>row.kind==="semantic"), localPlan=plan.find(row=>row.kind==="local_context");
-  for(const row of semantic){
-    if(!context.explicit_geography && context.origin?.locality)variants.push(`${row.query} ${context.origin.locality}${context.origin.province?` ${context.origin.province}`:""}`);
-    else variants.push(row.query);
-  }
-  if(localPlan)variants.push(localPlan.query);
-  if(!semantic.length && foldText(original)!==foldText(primary))variants.push(original);
-  const seen=new Set();return variants.map(text).filter(q=>q.length>=3).filter(q=>{const k=foldText(q);if(seen.has(k))return false;seen.add(k);return true}).slice(0,3);
-}
-__name(destinationQueryVariants,"destinationQueryVariants");
-function dedupeDestinationCandidates(candidates){const map=new Map();for(const c of candidates){const key=c.candidate_ref||`${Number(c.coordinates?.lat).toFixed(5)},${Number(c.coordinates?.lon).toFixed(5)}:${foldText(c.display_primary)}`;const prev=map.get(key);if(!prev||Number(c.rank_score??-Infinity)>Number(prev.rank_score??-Infinity))map.set(key,c);}return [...map.values()];}
-__name(dedupeDestinationCandidates,"dedupeDestinationCandidates");
-function candidateMatchesExplicitGeography(candidate,context){
-  const explicit=context?.explicit_geography;if(!explicit)return true;
-  if(explicit.province){const pid=candidateProvinceId(candidate),province=candidateProvince(candidate);if(pid!==explicit.province.id&&foldText(province)!==foldText(explicit.province.name))return false;}
-  const comma=Boolean(text(context?.query).includes(','));
-  if(explicit.locality&&!comma&&foldText(candidateLocality(candidate))!==foldText(explicit.locality.name)){
-    const localityPhrase=foldText(explicit.locality.name),primary=foldText(candidate.display_primary);
-    const strongNamedEntity=QueryNormalizer(context.query).category_hints.length>0 && localityPhrase && (` ${primary} `).includes(` ${localityPhrase} `);
-    if(!strongNamedEntity)return false;
-  }
-  return true;
-}
-__name(candidateMatchesExplicitGeography,"candidateMatchesExplicitGeography");
-function candidateMatchesLocalContext(candidate,context){
-  if(context.explicit_geography || context.search_scope!=="local" || !context.origin?.locality)return true;
-  const localityMatch=foldText(candidate.locality?.name)===foldText(context.origin.locality);
-  const provinceMatch=!context.origin.province_id || candidate.province?.id===context.origin.province_id || foldText(candidate.province?.name)===foldText(context.origin.province);
-  return localityMatch&&provinceMatch;
-}
-__name(candidateMatchesLocalContext,"candidateMatchesLocalContext");
-const LOCALITY_COARSE_FOCUS=Object.freeze({
-  "82|santa fe":{lat:-31.6333,lon:-60.7},"82|rosario":{lat:-32.9468,lon:-60.6393},"14|cordoba":{lat:-31.4167,lon:-64.1833},
-  "50|mendoza":{lat:-32.8895,lon:-68.8458},"66|salta":{lat:-24.7821,lon:-65.4232},"30|parana":{lat:-31.7413,lon:-60.5115},
-  "82|rafaela":{lat:-31.2503,lon:-61.4867},"82|reconquista":{lat:-29.1443,lon:-59.6436},"06|san nicolas de los arroyos":{lat:-33.3358,lon:-60.2252},
-  "02|ciudad autonoma de buenos aires":{lat:-34.6037,lon:-58.3816},"94|ushuaia":{lat:-54.8019,lon:-68.303},"22|resistencia":{lat:-27.4514,lon:-58.9867},
-  "34|formosa":{lat:-26.1775,lon:-58.1781},"46|la rioja":{lat:-29.4131,lon:-66.8558}
-});
-function coarseLocalityFocus(provinceId,localityName){
-  const key=`${text(provinceId)}|${foldText(localityName)}`;
-  return LOCALITY_COARSE_FOCUS[key]??null;
-}
-__name(coarseLocalityFocus,"coarseLocalityFocus");
-function destinationFocus(context){
-  const explicit=context.explicit_geography;
-  if(explicit){
-    const locality=explicit.locality;if(!locality)return null;
-    return coarseLocalityFocus(locality.province_id||explicit.province?.id,locality.name);
-  }
-  if(context.search_scope!=="local")return null;
-  const originFocus=coarseLocalityFocus(context.origin?.province_id,context.origin?.locality);
-  if(originFocus)return originFocus;
-  return validCoordinates(context.viewport?.center);
-}
-__name(destinationFocus,"destinationFocus");
-async function fetchPhotonSuggestions(context,fetchImpl=fetch,queryOverride=null){
-  const source=APP_CONFIG.DESTINATION_SOURCE;
-  const url=new URL(`${source.base_url}/api`);
-  if(url.hostname!==source.allowed_host)throw new VoyError("internal_upstream_host_invalid",500);
-  url.searchParams.set("q",queryOverride||photonProviderQuery(context));
-  url.searchParams.set("limit","12");
-  url.searchParams.set("countrycode",source.countrycode);
-  const focus=destinationFocus(context);
-  if(focus){
-    url.searchParams.set("lat",String(focus.lat));url.searchParams.set("lon",String(focus.lon));url.searchParams.set("zoom","13");url.searchParams.set("location_bias_scale","0.02");
-    // Soft location bias only: never hard-bound ambiguous destination retrieval to the origin.
-  }
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),APP_CONFIG.UPSTREAM_TIMEOUTS.destination_ms);
-  let response;
-  try{response=await fetchImpl(url.toString(),{method:"GET",headers:{accept:"application/json","user-agent":"VOY/ORDER056 bounded destination discovery"},signal:controller.signal});}
-  catch(error){clearTimeout(timer);throw new VoyError("external_dependency_unavailable",503,error?.name==="AbortError"?"destination_timeout":"destination_network_error");}
-  clearTimeout(timer);
-  if(!response.ok)throw new VoyError("external_dependency_unavailable",503,`destination_${statusClass(response.status)}`);
-  const raw=await response.text();
-  if(byteLength(raw)>524288)throw new VoyError("upstream_response_too_large",502);
-  let payload;try{payload=JSON.parse(raw)}catch{throw new VoyError("upstream_schema_invalid",502)}
-  if(!Array.isArray(payload?.features))throw new VoyError("upstream_schema_invalid",502);
-  return payload.features;
-}
-__name(fetchPhotonSuggestions,"fetchPhotonSuggestions");
-function normalizePhotonFeature(feature,index){
-  const p=feature?.properties??{}, co=feature?.geometry?.coordinates;
-  const coordinates=validCoordinates({lat:co?.[1],lon:co?.[0]});
-  const primary=text(p.name||p.street||p.city||p.locality);
-  if(!coordinates||!primary)return null;
-  const locality=text(p.city||p.town||p.village||p.locality||'');
-  const province=text(p.state||'');
-  const ref=`photon:${text(p.osm_type||'x')}:${text(p.osm_id||index+1)}`;
-  const searchText=[p.name,p.alt_name,p.official_name,p.short_name,p.operator,p.brand,p.street,p.city,p.town,p.village,p.locality].map(text).filter(Boolean).join(" ");
-  return {candidate_id:ref,candidate_ref:ref,provider:"photon_georef_contextual",provider_place_id_or_ref:ref,display_primary:primary,display_secondary:[locality,province].filter(Boolean).join(" Â· "),search_text:searchText,coordinates,locality:{id:"",name:locality,slug:slugify(locality)},province:{id:"",name:province},provider_rank:index,provider_types:[text(p.osm_value||p.type||p.osm_key||"unknown")],confidence_class:"provider",attribution_requirement:"OpenStreetMap contributors",coverage:null,integration_slug:null};
-}
-__name(normalizePhotonFeature,"normalizePhotonFeature");
-function canonicalDestinationLocality(territory){
-  const pid=territory?.province?.id;
-  const name=territory?.locality?.name||"";
-  if(pid==="02")return {id:territory.locality?.id??"",name:"Ciudad AutÃ³noma de Buenos Aires",slug:"caba"};
-  if(pid==="06" && foldText(name)==="san nicolas")return {id:territory.locality?.id??"",name:"San NicolÃ¡s de los Arroyos",slug:"san-nicolas-de-los-arroyos"};
-  return territory.locality;
-}
-__name(canonicalDestinationLocality,"canonicalDestinationLocality");
-function pointInOfficialRing(lon,lat,ring){
-
-  let inside=false;
-
-  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
-
-    const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
-
-    if(((yi>lat)!==(yj>lat)) && lon<((xj-xi)*(lat-yi)/(yj-yi)+xi))inside=!inside;
-
-  }
-
-  return inside;
-
-}
-
-__name(pointInOfficialRing,"pointInOfficialRing");
-
-function officialProvinceAtCoordinates(coords){
-
-  const c=validCoordinates(coords);if(!c)return null;
-
-  const matches=[];
-
-  for(const [id,name,bbox,rings] of OFFICIAL_PROVINCE_BOUNDARIES){
-
-    if(c.lon<bbox[0]||c.lat<bbox[1]||c.lon>bbox[2]||c.lat>bbox[3])continue;
-
-    let inside=false;
-
-    for(const ring of rings)if(pointInOfficialRing(c.lon,c.lat,ring))inside=!inside;
-
-    if(inside)matches.push({id,name});
-
-  }
-
-  return matches.length===1?matches[0]:null;
-
-}
-
-__name(officialProvinceAtCoordinates,"officialProvinceAtCoordinates");
-
-function localityInitialEquivalent(left,right){
-  const a=words(left),b=words(right);
-  if(!a.length||a.length!==b.length)return false;
-  let expanded=0;
-  for(let i=0;i<a.length;i++){
-    if(a[i]===b[i])continue;
-    if(a[i].length===1&&b[i].startsWith(a[i])){expanded++;continue;}
-    if(b[i].length===1&&a[i].startsWith(b[i])){expanded++;continue;}
-    return false;
-  }
-  return expanded>0;
-}
-__name(localityInitialEquivalent,"localityInitialEquivalent");
-
-function officialLocalityCanonical(rawLocality,provinceId){
-
-  if(!provinceId)return null;
-
-  let locality=text(rawLocality).split(";")[0].trim();
-
-  if(provinceId==="02")return OFFICIAL_LOCALITY_CANON["02|ciudad autonoma de buenos aires"]||"Ciudad AutÃ³noma de Buenos Aires";
-
-  if(foldText(locality)==="santa fe capital")locality="Santa Fe";
-
-  if(foldText(locality)==="san nicolas")locality="San NicolÃ¡s de los Arroyos";
-
-  const known=LOCALITIES.find(x=>foldText(x[0])===foldText(locality)||x[2]?.some(alias=>foldText(alias)===foldText(locality)));
-
-  if(known && known[1]===provinceId)locality=known[0];
-
-  let canonical=OFFICIAL_LOCALITY_CANON[`${provinceId}|${foldText(locality)}`]||null;
-  if(!canonical){
-    const initialMatches=officialLocalitySearchRows().filter(row=>row.province_id===provinceId&&localityInitialEquivalent(locality,row.name));
-    const uniqueInitial=new Map();for(const row of initialMatches)uniqueInitial.set(foldText(row.name),row.name);
-    if(uniqueInitial.size===1)canonical=[...uniqueInitial.values()][0];
-  }
-  if(!canonical && foldText(locality).length>=5){
-    const fuzzy=officialLocalitySearchRows().filter(row=>row.province_id===provinceId && editDistance(foldText(locality),row.alias,1)<=1);
-    const unique=new Map();for(const row of fuzzy)unique.set(foldText(row.name),row.name);
-    if(unique.size===1)canonical=[...unique.values()][0];
-  }
-  return canonical;
-
-}
-
-__name(officialLocalityCanonical,"officialLocalityCanonical");
-
-function officialLocalityParentContains(localityName,provinceId,coords){
-
-  const key=`${provinceId}|${foldText(localityName)}`;
-
-  if(provinceId==="02"&&key==="02|ciudad autonoma de buenos aires")return true;
-
-  const shapes=OFFICIAL_LOCALITY_PARENT_BOUNDARIES[key];
-
-  if(!shapes)return null;
-
-  const c=validCoordinates(coords);if(!c)return false;
-
-  return shapes.some(([_kind,_id,_name,bbox,rings])=>{
-
-    if(c.lon<bbox[0]||c.lat<bbox[1]||c.lon>bbox[2]||c.lat>bbox[3])return false;
-
-    let inside=false;
-
-    for(const ring of rings)if(pointInOfficialRing(c.lon,c.lat,ring))inside=!inside;
-
-    return inside;
-
-  });
-
-}
-
-__name(officialLocalityParentContains,"officialLocalityParentContains");
-
-function canonicalizePhotonTerritory(candidate,context=null){
-
-  const providerLocality=text(candidate.locality?.name).split(";")[0].trim();
-
-  const providerProvince=text(candidate.province?.name);
-
-  const spatialProvince=officialProvinceAtCoordinates(candidate.coordinates);
-
-  const province=spatialProvince?{id:spatialProvince.id,name:spatialProvince.name}:null;
-
-  let localityInput=providerLocality;
-
-  if(candidateLooksLikeSettlement(candidate)){
-    const namedSettlement=spatialProvince?officialLocalityCanonical(candidate.display_primary,spatialProvince.id):null;
-    if(namedSettlement)localityInput=namedSettlement;
-    else if(!localityInput)localityInput=candidate.display_primary;
-  }
-
-  let canonicalLocality=spatialProvince?officialLocalityCanonical(localityInput,spatialProvince.id):null;
-
-  if(!canonicalLocality&&spatialProvince&&context?.explicit_geography?.locality&&candidateLooksLikeSettlement(candidate)){
-    const expectedProvinceId=context.explicit_geography.province?.id||context.explicit_geography.locality.province_id||'';
-    const requested=officialLocalityCanonical(context.explicit_geography.locality.name,spatialProvince.id)||text(context.explicit_geography.locality.name);
-    const primary=foldText(candidate.display_primary),target=foldText(requested);
-    const namedMatch=target&&(` ${primary} `).includes(` ${target} `);
-    if((!expectedProvinceId||expectedProvinceId===spatialProvince.id)&&namedMatch){
-      const requestedParent=officialLocalityParentContains(requested,spatialProvince.id,candidate.coordinates);
-      if(requestedParent!==false)canonicalLocality=requested;
-    }
-  }
-
-  const parentCheck=canonicalLocality&&spatialProvince?officialLocalityParentContains(canonicalLocality,spatialProvince.id,candidate.coordinates):null;
-
-  const locality=canonicalLocality&&parentCheck!==false?{id:"",name:canonicalLocality,slug:slugify(canonicalLocality)}:null;
-
-  const fullyVerified=Boolean(province&&locality);
-
-  const partiallyVerified=Boolean(province&&!locality);
-
-  const integration=fullyVerified?findCityIntegration(locality.slug,province.id,locality.name):null;
-
-  return {
-
-    ...candidate,
-
-    locality,
-
-    province,
-
-    display_secondary:[providerLocality,province?.name||providerProvince].filter(Boolean).join(" Â· "),
-
-    confidence_class:fullyVerified?"official_offline_territory":partiallyVerified?"official_offline_province":"provider_unverified",
-
-    territory_verified:fullyVerified,
-
-    territory_verification:fullyVerified?"full":partiallyVerified?"partial":"unverified",
-
-    territory_authority:province?"pinned_official_georef_snapshot":null,
-
-    coverage:integration?effectiveTierForIntegration(integration).tier:"T0_TERRITORY_ONLY",
-
-    integration_slug:integration?.slug??null
-
-  };
-
-}
-
-__name(canonicalizePhotonTerritory,"canonicalizePhotonTerritory");
-async function georefFallbackSuggestions(context,fetchImpl){
-  const filters=destinationContextFilters(context);
-  const providerQuery=stripExplicitCommaGeography(context.query,context.explicit_geography);
-  const baseline=await resolveAddress({query:providerQuery,province:filters.province,locality:filters.locality},fetchImpl);
-  return rankDestinationCandidates(normalizeGeoRefCandidates(baseline.candidates??[]).filter(c=>candidateTextPlausible(context.query,c,context)),context).slice(0,DESTINATION_PROVIDERS.max_initial_suggestions);
-}
-__name(georefFallbackSuggestions,"georefFallbackSuggestions");
-async function suggestDestinations(payload, fetchImpl = fetch) {
-  const context=buildDestinationContext(payload), query=context.query;
-  if(query.length<DESTINATION_PROVIDERS.query_min_chars||query.length>DESTINATION_PROVIDERS.query_max_chars)throw new VoyError("invalid_query",400);
-  validateSessionToken(context.session_token);
-  if(!destinationRateAllowed())throw new VoyError("rate_limited",429);
-  let ranked=[],fallbackStage=context.search_scope==='national'?'national':context.search_scope==='province'?'province':'local';
-  try{
-    const normalizeBatch=(features)=>features.map(normalizePhotonFeature).filter(Boolean).map(c=>canonicalizePhotonTerritory(c,context)).filter(c=>candidateTextPlausible(query,c,context)).filter(c=>candidateMatchesExplicitGeography(c,context));
-    const variants=destinationQueryVariants(context);
-    let verified=[];
-    for(const variant of variants){
-      try{verified.push(...normalizeBatch(await fetchPhotonSuggestions(context,fetchImpl,variant)))}catch(error){if(!verified.length)throw error;}
-    }
-    verified=dedupeDestinationCandidates(verified);
-    ranked=rankDestinationCandidates(verified,context).slice(0,DESTINATION_PROVIDERS.max_initial_suggestions);
-  }catch(error){emitEvent("destination_suggest_error",{endpoint_class:"destination",provider_id:DESTINATION_PROVIDER,error_class:error?.code??"upstream",outcome_class:"fallback"});}
-  if(!ranked.length){
-    try{ranked=await georefFallbackSuggestions(context,fetchImpl)}catch{}
-  }
-  emitEvent(ranked.length?"destination_suggest_ok":"destination_suggest_empty",{endpoint_class:"destination",provider_id:DESTINATION_PROVIDER,result_count_bucket:resultCountBucket(ranked.length),fallback_stage:fallbackStage,outcome_class:ranked.length?"results":"empty"});
-  return {ok:true,provider:DESTINATION_PROVIDER,result_class:ranked.length?"suggestions":"unverified",suggestions:ranked.map(publicCandidate),requires_national_expansion:!ranked.length&&context.search_scope!=="national",fallback_stage:fallbackStage};
-}
-__name(suggestDestinations, "suggestDestinations");
-async function resolveDestinationSelection(payload, fetchImpl = fetch) {
-  validateSessionToken(payload?.session_token);
-  const ref = normalizeText(payload?.candidate_ref);
-  if (!/^(?:georef|photon):[A-Za-z0-9._:-]{1,120}$/.test(ref)) throw new VoyError("invalid_candidate_ref", 400);
-  const coords = payload?.coordinates;
-  const lat = numeric(coords?.lat), lon = numeric(coords?.lon);
-  if (!validLatLon(lat, lon)) throw new VoyError("invalid_coordinates", 400);
-  try {
-    const final = await reverseLocation({ lat, lon }, fetchImpl);
-    emitEvent("destination_resolve_ok", { endpoint_class: "destination", provider_id: DESTINATION_PROVIDER, province_id: final.candidate.province.id, outcome_class: "resolved" });
-    return { ok: true, result_class: "resolved", provider: DESTINATION_PROVIDER, destination: final.candidate, mobility_decision: buildMobilityDecision(final.candidate) };
-  } catch (error) {
-    emitEvent("destination_resolve_error", { endpoint_class: "destination", provider_id: DESTINATION_PROVIDER, error_class: error?.code ?? "upstream", outcome_class: "map_resolvable_territory_unverified" });
-    if (ref.startsWith("photon:") && ["external_dependency_unavailable","upstream_rejected","upstream_schema_invalid"].includes(error?.code)) {
-      const destination={source_id:"photon_discovery",source_entity_id:ref,label:"Destino seleccionado",province:null,locality:null,coordinates:{lat,lon},coverage:"T0_TERRITORY_ONLY",integration_slug:null,territory_verified:false};
-      return {ok:true,result_class:"map_resolvable_territory_unverified",provider:DESTINATION_PROVIDER,territory_verified:false,destination,mobility_decision:buildMobilityDecision(destination)};
-    }
-    throw error;
-  }
-}
-__name(resolveDestinationSelection, "resolveDestinationSelection");
-async function reverseLocation(payload, fetchImpl = fetch) {
-  const lat = numeric(payload?.lat);
-  const lon = numeric(payload?.lon);
-  if (!validLatLon(lat, lon)) throw new VoyError("invalid_coordinates", 400);
-  const upstream = await fetchGeoRef("/ubicacion", { lat, lon }, fetchImpl);
-  const candidate = normalizeReversePayload(upstream);
-  emitEvent("territory_resolve_ok", { endpoint_class: "reverse", province_id: candidate.province.id, result_class: "resolved" });
-  return { ok: true, result_class: "resolved", candidate, source: { id: "src_georef", retrieved_at: nowIso() } };
-}
-__name(reverseLocation, "reverseLocation");
-function classifySourceFreshness(source, nowMs = Date.now()) {
-  const verifiedMs = Date.parse(source?.last_successful_verification ?? "");
-  const ttlSeconds = Number(source?.freshness_threshold_seconds);
-  const runtimeClaimsAllowed = source?.runtime_claims_allowed !== false;
-  if (!runtimeClaimsAllowed) return source?.trust_state === "QUARANTINED" ? "QUARANTINED" : "UNTRUSTED";
-  if (!Number.isFinite(verifiedMs) || !Number.isFinite(ttlSeconds) || ttlSeconds <= 0) return "UNKNOWN";
-  if (nowMs < verifiedMs) return "UNKNOWN";
-  return nowMs - verifiedMs <= ttlSeconds * 1e3 ? "FRESH" : "STALE";
-}
-__name(classifySourceFreshness, "classifySourceFreshness");
-function sourceEvidence(sourceId, nowMs = Date.now()) {
-  const source = SOURCE_BY_ID.get(sourceId);
-  if (!source) return null;
-  const ttlSeconds = Number(source.freshness_threshold_seconds);
-  const runtimeClaimsAllowed = source.runtime_claims_allowed !== false;
-  const freshness_state = classifySourceFreshness(source, nowMs);
-  return {
-    id: source.id,
-    authority: source.authority,
-    data_class: source.data_class,
-    verified_at: source.last_successful_verification ?? null,
-    freshness_threshold_seconds: Number.isFinite(ttlSeconds) ? ttlSeconds : null,
-    freshness_state,
-    runtime_claims_allowed: runtimeClaimsAllowed,
-    trust_state: source.trust_state ?? (runtimeClaimsAllowed ? "TRUSTED_FOR_DECLARED_SCOPE" : "UNTRUSTED"),
-    canonical_url: source.canonical_url
-  };
-}
-__name(sourceEvidence, "sourceEvidence");
-function evidenceUsable(evidence) {
-  return Boolean(evidence && evidence.runtime_claims_allowed && evidence.freshness_state === "FRESH");
-}
-__name(evidenceUsable, "evidenceUsable");
-function effectiveTierForIntegration(integration, nowMs = Date.now()) {
-  const sources = integration.source_ids.map((id) => sourceEvidence(id, nowMs)).filter(Boolean);
-  const primarySource = sources.find(evidenceUsable) ?? null;
-  const safeHandoffs = integration.handoffs.map((item) => {
-    const source = sourceEvidence(item.source_id ?? integration.source_ids[0], nowMs);
-    const safe = HANDOFF_ALLOWLIST.has(item.url) && evidenceUsable(source);
-    return { ...item, safe, source };
-  }).filter((item) => item.safe);
-  const fareSource = integration.fare ? sourceEvidence(integration.fare.source_id, nowMs) : null;
-  const fareUsable = Boolean(integration.fare && evidenceUsable(fareSource));
-  let tier = "T0_TERRITORY_ONLY";
-  if (safeHandoffs.length) tier = "T1_OFFICIAL_HANDOFF";
-  if (safeHandoffs.length && fareUsable && integration.tier === "T4_FARE_VERIFIED") tier = "T4_FARE_VERIFIED";
-  return { tier, sources, primarySource, safeHandoffs, fareSource, fareUsable };
-}
-__name(effectiveTierForIntegration, "effectiveTierForIntegration");
-function getCoverage(provinceId, localitySlug, nowMs = Date.now()) {
-  const normalizedProvinceId = String(provinceId ?? "");
-  const normalizedLocalitySlug = slugify(localitySlug);
-  const province = JURISDICTION_BY_ID.get(normalizedProvinceId);
-  if (!province) return null;
-  const integration = findCityIntegration(normalizedLocalitySlug, normalizedProvinceId, localitySlug);
-  if (!integration) {
-    return {
-      province_id: normalizedProvinceId,
-      province_name: province.province_name,
-      locality_slug: normalizedLocalitySlug,
-      territory_status: province.territory_status,
-      configured_local_mobility_tier: province.local_mobility_tier,
-      local_mobility_tier: "T0_TERRITORY_ONLY",
-      source_ids: ["src_georef"],
-      official_handoff_urls: [],
-      unavailable_or_unknown: true,
-      verified_at: province.last_verified_at
-    };
-  }
-  const effective = effectiveTierForIntegration(integration, nowMs);
-  return {
-    province_id: normalizedProvinceId,
-    province_name: province.province_name,
-    locality_slug: normalizedLocalitySlug,
-    territory_status: province.territory_status,
-    configured_local_mobility_tier: integration.tier,
-    local_mobility_tier: effective.tier,
-    source_ids: effective.sources.filter(evidenceUsable).map((source) => source.id),
-    official_handoff_urls: effective.safeHandoffs.map((item) => item.url),
-    unavailable_or_unknown: effective.tier === "T0_TERRITORY_ONLY",
-    verified_at: CITY_INTEGRATIONS.verified_at
-  };
-}
-__name(getCoverage, "getCoverage");
-function getMobility(slug, nowMs = Date.now(), provinceId = null) {
-  const normalizedSlug = slugify(slug);
-  const candidates = CITY_INTEGRATIONS.cities.filter((city) => city.slug === normalizedSlug);
-  const integration = provinceId ? findCityIntegration(normalizedSlug, String(provinceId), slug) : candidates.length === 1 ? candidates[0] : null;
-  if (!integration) return null;
-  const effective = effectiveTierForIntegration(integration, nowMs);
-  const fare = effective.fareUsable ? { ...integration.fare, source: effective.fareSource } : null;
-  if (integration.tier !== effective.tier) emitEvent("mobility_source_stale", { endpoint_class: "mobility", province_id: integration.province_id, locality_coverage_tier: effective.tier, source_id: integration.source_ids[0], result_class: "degraded" });
-  return {
-    city: integration.city,
-    province: integration.province,
-    province_id: integration.province_id,
-    configured_tier: integration.tier,
-    tier: effective.tier,
-    structured_status: effective.tier === "T0_TERRITORY_ONLY" ? "UNAVAILABLE_IN_VOY" : integration.structured_status,
-    source_ids: effective.sources.filter(evidenceUsable).map((source) => source.id),
-    sources: effective.sources,
-    fare,
-    fare_status: integration.fare ? fare ? "CURRENT_VERIFIED" : "STALE_UNAVAILABLE" : "UNAVAILABLE",
-    handoffs: effective.safeHandoffs,
-    route: null,
-    eta: null,
-    provider_presence: []
-  };
-}
-__name(getMobility, "getMobility");
-function mobilityDecisionFreshness(sources) {
-  const list = Array.isArray(sources) ? sources : [];
-  const states = list.map((source) => source?.freshness_state).filter(Boolean);
-  const verified = list.map((source) => Date.parse(source?.verified_at ?? "")).filter(Number.isFinite);
-  let state = "unknown";
-  if (states.length && states.every((value) => value === "FRESH")) state = "fresh";
-  else if (states.includes("FRESH")) state = "mixed";
-  else if (states.includes("STALE")) state = "stale";
-  return { state, verified_at: verified.length ? new Date(Math.max(...verified)).toISOString() : null };
-}
-__name(mobilityDecisionFreshness, "mobilityDecisionFreshness");
-function mobilityDecisionProvenance(sources) {
-  return (Array.isArray(sources) ? sources : []).map((source) => ({
-    id: source.id,
-    authority: source.authority,
-    data_class: source.data_class,
-    canonical_url: source.canonical_url,
-    verified_at: source.verified_at,
-    freshness_state: source.freshness_state,
-    runtime_claims_allowed: source.runtime_claims_allowed,
-    trust_state: source.trust_state
-  }));
-}
-__name(mobilityDecisionProvenance, "mobilityDecisionProvenance");
-function buildRailStaticContext(destination, nowMs = Date.now()) {
-  if (destination?.territory_verified !== true) return null;
-  const nearby = nearestRailStations(destination?.coordinates, 3, 5000, "SOFSE");
-  if (!nearby.length) return null;
-  const catalogSource = sourceEvidence(RAIL_STATIC_SOURCE.id, nowMs);
-  const handoffSource = sourceEvidence(RAIL_HANDOFF_SOURCE.id, nowMs);
-  const handoffSafe = HANDOFF_ALLOWLIST.has(RAIL_HANDOFF_URL) && evidenceUsable(handoffSource);
-  if (!handoffSafe) return null;
-  const facts = nearby.map((station) => ({
-    kind: "rail_station_reference",
-    mode: "rail",
-    label: "EstaciÃ³n ferroviaria cercana Â· catÃ¡logo oficial 2022",
-    value: station.name,
-    line: station.line,
-    branch: null,
-    operator: station.operator,
-    distance_meters: station.distance_meters,
-    catalog_id: station.catalog_id,
-    data_as_of: RAIL_STATION_CATALOG_META.data_as_of,
-    source: catalogSource
-  }));
-  const handoffs = [{
-    id: "trenes_argentinos_horarios_oficial",
-    mode: "rail",
-    label: "Consultar horarios, tarifas y recorridos oficiales",
-    url: RAIL_HANDOFF_URL,
-    requires_confirmation: true,
-    single_use: true,
-    sends_coords: false,
-    sends_query: false,
-    source: handoffSource
-  }];
-  return {
-    coverage: "R1_OFFICIAL_STATIC_HANDOFF",
-    available_modes: [],
-    facts,
-    handoffs,
-    sources: [catalogSource, handoffSource].filter(Boolean)
-  };
-}
-__name(buildRailStaticContext, "buildRailStaticContext");
-function buildMobilityDecision(destination, nowMs = Date.now()) {
-  const territoryVerified = destination?.territory_verified === true;
-  const provinceId = territoryVerified ? String(destination?.province?.id ?? "") : "";
-  const localityName = territoryVerified ? text(destination?.locality?.name) : "";
-  const localitySlug = territoryVerified ? slugify(destination?.locality?.slug || localityName) : "";
-  const integration = territoryVerified && provinceId && localityName ? findCityIntegration(localitySlug, provinceId, localityName) : null;
-  const integrationSlug = integration?.slug ?? null;
-  const mobility = integrationSlug ? getMobility(integrationSlug, nowMs, provinceId) : null;
-  const rail = buildRailStaticContext(destination, nowMs);
-  const facts = [];
-  if (mobility?.fare?.value != null) facts.push({
-    kind: "fare",
-    mode: "bus",
-    label: mobility.fare.scope,
-    value: mobility.fare.value,
-    currency: mobility.fare.currency ?? "ARS",
-    effective_from: mobility.fare.effective_from ?? null,
-    verified_at: mobility.fare.verified_at ?? mobility.fare.source?.verified_at ?? null,
-    source: mobility.fare.source ?? null
-  });
-  facts.push(...(rail?.facts ?? []));
-  const busHandoffs = (Array.isArray(mobility?.handoffs) ? mobility.handoffs : []).map((handoff) => ({ ...handoff, mode: "bus" }));
-  const handoffs = [...busHandoffs, ...(rail?.handoffs ?? [])];
-  const busCoverage = mobility?.tier ?? "T0_TERRITORY_ONLY";
-  const coverage = busCoverage !== "T0_TERRITORY_ONLY" ? busCoverage : rail?.coverage ?? busCoverage;
-  const officialActions = handoffs.map((handoff) => ({
-    type: "open_official_handoff",
-    mode: handoff.mode ?? null,
-    label: handoff.label,
-    url: handoff.url,
-    source: handoff.source ?? null
-  }));
-  const usefulBaselineActions = territoryVerified ? [
-    { type: "consult_navigation", travel_mode: "transit", label: "Consultar transporte pÃºblico" },
-    { type: "consult_navigation", travel_mode: "walking", label: "Consultar a pie" },
-    { type: "consult_navigation", travel_mode: "bicycling", label: "Consultar en bici" },
-    { type: "consult_navigation", travel_mode: "driving", label: "Consultar en auto" }
-  ] : [];
-  let state = "unknown";
-  if (handoffs.length || usefulBaselineActions.length) state = "handoff";
-  else if (facts.length) state = "available";
-  else if (territoryVerified && !integration) state = "unavailable";
-  const availableModes = [];
-  if (mobility && busCoverage !== "T0_TERRITORY_ONLY" && (busHandoffs.length || facts.some((fact) => fact.mode === "bus"))) availableModes.push("bus");
-  for (const mode of rail?.available_modes ?? []) if (!availableModes.includes(mode)) availableModes.push(mode);
-  const sourceClass = handoffs.length || usefulBaselineActions.length ? "handoff" : "unknown";
-  const sources = [...(mobility?.sources ?? []), ...(rail?.sources ?? [])].filter(Boolean);
-  const uniqueSources = [...new Map(sources.map((source) => [source.id, source])).values()];
-  const provenance = mobilityDecisionProvenance(uniqueSources);
-  const freshness = mobilityDecisionFreshness(uniqueSources);
-  const nextActions = [...officialActions, ...usefulBaselineActions];
-  if (!nextActions.length) nextActions.push(
-    { type: "view_map", label: "Ver ubicaciÃ³n en el mapa" },
-    { type: "refine_destination", label: territoryVerified ? "Probar otro destino" : "Precisar o volver a intentar el destino" }
-  );
-  return {
-    state,
-    destination,
-    integration_slug: integrationSlug,
-    coverage,
-    mode_coverage: { bus: integration ? busCoverage : null, rail: rail?.coverage ?? null },
-    available_modes: availableModes,
-    source_class: sourceClass,
-    freshness,
-    provenance,
-    facts,
-    handoffs,
-    next_actions: nextActions
-  };
-}
-__name(buildMobilityDecision, "buildMobilityDecision");
-const SANTA_FE_BUS_FACTS = Object.freeze({
-  fare_source: Object.freeze({
-    id: "src_santa_fe_fare_20260515",
-    authority: "Municipalidad de Santa Fe",
-    canonical_url: "https://transparencia.santafeciudad.gov.ar/normativa/decreto-00048-2026/",
-    source_date: "2026-05-15",
-    verified_at: "2026-09-22T18:20:00Z",
-    freshness_threshold_seconds: 2592000
-  }),
-  deviations_source: Object.freeze({
-    id: "src_santa_fe_deviations",
-    authority: "Municipalidad de Santa Fe",
-    canonical_url: "https://santafeciudad.gov.ar/desvios/",
-    source_date: "2026-09-21",
-    verified_at: "2026-09-22T18:20:00Z"
-  }),
-  transit_url: "https://santafeciudad.gov.ar/secretaria-de-gobierno-control-movilidad-seguridadciudadana/colectivos/",
-  full_fare_ars: 2111.11,
-  frequent_fare_ars: 1900
-});
-function isVerifiedSantaFeCity(destination) {
-  if (destination?.territory_verified !== true || String(destination?.province?.id ?? "") !== "82") return false;
-  const slug = String(destination?.locality?.slug ?? destination?.integration_slug ?? "").toLowerCase();
-  const locality = foldText(destination?.locality?.name ?? "");
-  return slug === "santa-fe" || locality === "santa fe";
-}
-function sourceFreshAt(source, nowMs) {
-  const verified = Date.parse(source?.verified_at ?? "");
-  const ttl = Number(source?.freshness_threshold_seconds);
-  return Number.isFinite(verified) && Number.isFinite(ttl) && ttl > 0 && nowMs >= verified && nowMs - verified <= ttl * 1000;
-}
-function santaFeBusModeOption(destination, nowMs) {
-  if (!isVerifiedSantaFeCity(destination)) return null;
-  const fresh = sourceFreshAt(SANTA_FE_BUS_FACTS.fare_source, nowMs);
-  const fareSource = { ...SANTA_FE_BUS_FACTS.fare_source };
-  return {
-    mode: "bus",
-    selectable: false,
-    route_available: false,
-    availability_state: "partial",
-    price_state: fresh ? "known" : "unknown",
-    eta_state: "not_integrated",
-    realtime_state: "not_integrated",
-    fare: {
-      state: fresh ? "current" : "unverified",
-      primary: fresh ? { label: "Tarifa plena", currency: "ARS", amount: SANTA_FE_BUS_FACTS.full_fare_ars } : null,
-      frequent: fresh ? {
-        label: "Boleto frecuente Santa Fe",
-        currency: "ARS",
-        amount: SANTA_FE_BUS_FACTS.frequent_fare_ars,
-        eligibility: [
-          "SUBE registrada a nombre de la persona usuaria",
-          "domicilio declarado en la ciudad de Santa Fe",
-          "pago prepago con SUBE fÃ­sica o SUBE Digital",
-          "no aplica a pagos con tarjeta de dÃ©bito, crÃ©dito, billetera virtual ni QR"
-        ]
-      } : null,
-      source: fareSource
-    },
-    disclosures: [
-      "CuÃ¡ndo pasa: no integrado",
-      "Tiempo real no disponible en VOY",
-      "La tarifa frecuente depende de elegibilidad; no es el precio exacto de cada viaje."
-    ],
-    actions: [
-      { id: "santa_fe_when_arrives", label: "Consultar cuÃ¡ndo pasa", url: SANTA_FE_BUS_FACTS.transit_url, source: { id: "src_santa_fe_bus", authority: "Municipalidad de Santa Fe", verified_at: SANTA_FE_BUS_FACTS.fare_source.verified_at } },
-      { id: "santa_fe_deviations", label: "Ver desvÃ­os oficiales", url: SANTA_FE_BUS_FACTS.deviations_source.canonical_url, source: { ...SANTA_FE_BUS_FACTS.deviations_source } }
-    ],
-    provenance: [fareSource, { ...SANTA_FE_BUS_FACTS.deviations_source }]
-  };
-}
-__name(isVerifiedSantaFeCity, "isVerifiedSantaFeCity");
-__name(sourceFreshAt, "sourceFreshAt");
-__name(santaFeBusModeOption, "santaFeBusModeOption");
-const ROUTING_PROFILES = Object.freeze({
-  walking: "routed-foot",
-  bicycle: "routed-bike",
-  auto: "routed-car"
-});
-const ROUTING_PROVIDER = Object.freeze({
-  id: "routing_openstreetmap_de",
-  authority: "FOSSGIS / OpenStreetMap routing service",
-  base_url: "https://routing.openstreetmap.de",
-  attribution: "Â© OpenStreetMap contributors",
-  max_rps: 1,
-  timeout_ms: 6000,
-  cache_ttl_ms: 120000,
-  circuit_open_ms: 30000
-});
-function validRoutePoint(pair) {
-  return Array.isArray(pair) && pair.length >= 2 && Number.isFinite(Number(pair[0])) && Number.isFinite(Number(pair[1])) && Number(pair[0]) >= -180 && Number(pair[0]) <= 180 && Number(pair[1]) >= -90 && Number(pair[1]) <= 90;
-}
-function validateRouteGeometry(geometry) {
-  if (!geometry || geometry.type !== "LineString" || !Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2 || geometry.coordinates.length > 20000) return null;
-  if (!geometry.coordinates.every(validRoutePoint)) return null;
-  return { type: "LineString", coordinates: geometry.coordinates.map((pair) => [Number(pair[0]), Number(pair[1])]) };
-}
-function routeCoordinate(value) {
-  const lat = Number(value?.lat), lon = Number(value?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-  return { lat, lon };
-}
-function routeCacheKey(mode, origin, destination) {
-  const round = (n) => Number(n).toFixed(5);
-  return `${mode}:${round(origin.lat)},${round(origin.lon)}:${round(destination.lat)},${round(destination.lon)}`;
-}
-async function acquireNetworkRoute(mode, originInput, destinationInput, fetchImpl = fetch, nowMs = Date.now()) {
-  const profile = ROUTING_PROFILES[mode];
-  const origin = routeCoordinate(originInput), destination = routeCoordinate(destinationInput);
-  if (!profile || !origin || !destination) return null;
-  const coords = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
-  const url = `${ROUTING_PROVIDER.base_url}/${profile}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ROUTING_PROVIDER.timeout_ms);
-  try {
-    const response = await fetchImpl(url, { method: "GET", headers: { "User-Agent": "VOY-Mobility/1.0 (+https://voy-app.simondalmasso44.workers.dev/)", "Accept": "application/json" }, signal: controller.signal });
-    if (!response?.ok) return null;
-    const payload = await response.json();
-    const route = Array.isArray(payload?.routes) ? payload.routes[0] : null;
-    const geometry = validateRouteGeometry(route?.geometry);
-    const distance = Number(route?.distance);
-    if (!geometry || !Number.isFinite(distance) || distance <= 0) return null;
-    return { geometry, distance_m: Math.round(distance), source: ROUTING_PROVIDER.id, source_class: "network_route", observed_at: new Date(nowMs).toISOString(), attribution: ROUTING_PROVIDER.attribution, cache_hit: false };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-__name(acquireNetworkRoute, "acquireNetworkRoute");
-async function acquireNetworkRoutes(modes, originInput, destinationInput, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
-  const origin = routeCoordinate(originInput), destination = routeCoordinate(destinationInput);
-  const empty = () => Object.fromEntries(modes.map((mode) => [mode, null]));
-  if (!origin || !destination) return empty();
-  if (fetchImpl === fetch) {
-    const coordinator = env?.ROUTING_COORDINATOR;
-    if (!coordinator?.idFromName || !coordinator?.get) return empty();
-    try {
-      const stub = coordinator.get(coordinator.idFromName("global"));
-      const response = await stub.fetch("https://routing-coordinator.internal/routes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ modes, origin, destination }) });
-      if (!response.ok) return empty();
-      const body = await response.json();
-      return Object.fromEntries(modes.map((mode) => [mode, body?.routes?.[mode] ?? null]));
-    } catch {
-      return empty();
-    }
-  }
-  const routes = {};
-  for (const mode of modes) routes[mode] = await acquireNetworkRoute(mode, origin, destination, fetchImpl, nowMs);
-  return routes;
-}
-__name(acquireNetworkRoutes, "acquireNetworkRoutes");
-function routeDistanceDisplay(distanceM) {
-  const n = Number(distanceM);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n < 1000 ? `${Math.round(n)} m` : `${(n / 1000).toFixed(n < 10000 ? 1 : 0)} km`;
-}
-function routedModeOption(mode, route, price) {
-  if (!route) return null;
-  const priceState = price ? "known" : "unknown";
-  return {
-    mode,
-    selectable: true,
-    route_available: true,
-    availability_state: "available",
-    price_state: priceState,
-    route: { geometry: route.geometry, source: route.source, observed_at: route.observed_at, attribution: route.attribution },
-    distance_m: route.distance_m,
-    distance_display: routeDistanceDisplay(route.distance_m),
-    price: price ?? null,
-    disclosures: [
-      "Recorrido calculado sobre red OpenStreetMap; no implica estado del trÃ¡nsito ni tiempo estimado.",
-      ...(priceState === "unknown" ? ["Precio no disponible"] : [])
-    ],
-    provenance: [{ id: ROUTING_PROVIDER.id, authority: ROUTING_PROVIDER.authority, attribution: ROUTING_PROVIDER.attribution }],
-    next_actions: []
-  };
-}
-function freeModeOption(mode, route) {
-  return routedModeOption(mode, route, route ? { currency: "ARS", amount: 0, kind: "free", source: "intrinsic_zero_marginal_fare" } : null);
-}
-function nonSelectableMode(mode, reason, extra = {}) {
-  return { mode, selectable: false, route_available: false, availability_state: "unavailable", price_state: "unknown", reason, ...extra };
-}
-function autoModeOption(route) {
-  if (!route) return nonSelectableMode("auto", "route_unavailable", { price: null, disclosures: ["Precio no disponible"] });
-  return routedModeOption("auto", route, null);
-}
-async function computeMobilityComputation(payload, fetchImpl = fetch, nowMs = Date.now(), env = {}) {
-  if (!payload || typeof payload !== "object") throw new VoyError("mobility_computation_invalid", 400);
-  const origin = payload.origin, destination = payload.destination;
-  if (!routeCoordinate(origin?.coordinates) || !routeCoordinate(destination?.coordinates)) throw new VoyError("mobility_computation_coordinates_required", 400);
-  if (destination?.territory_verified !== true) throw new VoyError("mobility_computation_destination_unverified", 409);
-  const baseDecision = buildMobilityDecision(destination, nowMs);
-  const routes = await acquireNetworkRoutes(["walking", "bicycle", "auto"], origin.coordinates, destination.coordinates, fetchImpl, nowMs, env);
-  const walkingRoute = routes.walking, bicycleRoute = routes.bicycle, autoRoute = routes.auto;
-  const modeOptions = [];
-  const walking = freeModeOption("walking", walkingRoute);
-  const bicycle = freeModeOption("bicycle", bicycleRoute);
-  if (walking) modeOptions.push(walking); else modeOptions.push(nonSelectableMode("walking", "route_unavailable"));
-  if (bicycle) modeOptions.push(bicycle); else modeOptions.push(nonSelectableMode("bicycle", "route_unavailable"));
-  modeOptions.push(autoModeOption(autoRoute));
-  const santaFeBus = santaFeBusModeOption(destination, nowMs);
-  if (santaFeBus) modeOptions.push(santaFeBus);
-  else if (baseDecision.integration_slug || baseDecision.handoffs.some((h) => h.mode === "bus")) modeOptions.push(nonSelectableMode("bus", "route_and_fare_unavailable", { price: null }));
-  if ((baseDecision.facts ?? []).some((f) => f.mode === "rail") || (baseDecision.handoffs ?? []).some((h) => h.mode === "rail")) modeOptions.push(nonSelectableMode("rail", "truthful_route_and_applicable_fare_not_jointly_available", { price: null }));
-  return {
-    server_authoritative: true,
-    destination,
-    origin: { ...origin, label: text(origin?.label) || "Origen" },
-    mode_options: modeOptions,
-    selectable_modes: modeOptions.filter((option) => option.selectable).map((option) => option.mode),
-    info_actions: baseDecision.handoffs,
-    provenance: baseDecision.provenance,
-    computed_at: new Date(nowMs).toISOString(),
-    fabricated_claims: 0
-  };
-}
-__name(computeMobilityComputation, "computeMobilityComputation");
-function telemetryRateAllowed() {
-  const now = Date.now();
-  if (!telemetryWindow.startedAt || now - telemetryWindow.startedAt >= TELEMETRY_CONTRACT.window_ms) {
-    telemetryWindow.startedAt = now;
-    telemetryWindow.count = 0;
-  }
-  telemetryWindow.count += 1;
-  return telemetryWindow.count <= TELEMETRY_CONTRACT.max_events_per_isolate_window;
-}
-__name(telemetryRateAllowed, "telemetryRateAllowed");
-function validateTelemetryDimension(key, value) {
-  if (typeof value === "boolean") {
-    if (key !== "cache_hit_boolean") throw new VoyError("telemetry_value_invalid", 400);
-    return;
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new VoyError("telemetry_value_invalid", 400);
-    return;
-  }
-  if (typeof value !== "string" || value.length < 1 || value.length > 80) throw new VoyError("telemetry_value_invalid", 400);
-  if (!/^[A-Za-z0-9_.:-]+$/.test(value)) throw new VoyError("telemetry_value_invalid", 400);
-  if (key === "province_id" && !/^\d{2}$/.test(value)) throw new VoyError("telemetry_value_invalid", 400);
-  if (key === "locality_coverage_tier" && !/^T[0-9]_[A-Z0-9_]+$/.test(value)) throw new VoyError("telemetry_value_invalid", 400);
-  if (key === "source_id" && !/^src_[a-z0-9_]+$/.test(value)) throw new VoyError("telemetry_value_invalid", 400);
-  if (key === "status_code_class" && !/^[2345]xx$/.test(value)) throw new VoyError("telemetry_value_invalid", 400);
-  if (key === "latency_bucket" && !["lt100ms", "100_299ms", "300_999ms", "1_3s", "gt3s"].includes(value)) throw new VoyError("telemetry_value_invalid", 400);
-}
-__name(validateTelemetryDimension, "validateTelemetryDimension");
-function validateTelemetryPayload(payload) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new VoyError("telemetry_invalid", 400);
-  if (!TELEMETRY_CONTRACT.events.includes(payload.event)) throw new VoyError("telemetry_event_not_allowed", 400);
-  for (const forbidden of TELEMETRY_CONTRACT.forbidden_fields) {
-    if (Object.prototype.hasOwnProperty.call(payload, forbidden)) throw new VoyError("telemetry_field_not_allowed", 400);
-  }
-  const dimensions = payload.dimensions ?? {};
-  if (typeof dimensions !== "object" || Array.isArray(dimensions)) throw new VoyError("telemetry_invalid", 400);
-  for (const [key, value] of Object.entries(dimensions)) {
-    if (!TELEMETRY_CONTRACT.dimensions.includes(key)) throw new VoyError("telemetry_dimension_not_allowed", 400);
-    validateTelemetryDimension(key, value);
-  }
-  return { event: payload.event, dimensions };
-}
-__name(validateTelemetryPayload, "validateTelemetryPayload");
-function health() {
-  return {
-    ok: true,
-    service: "voy-app",
-    version: RELEASE_META.release_id,
-    build_hash: RELEASE_META.build_id,
-    source_commit: RELEASE_META.source_commit,
-    config_digest: RELEASE_META.config_digest,
-    registry_digest: RELEASE_META.registry_digest,
-    provenance: PROVENANCE,
-    features: { auth: false, voice: false, ai_required: false, pwa: true, national_territory: true, routing: true, mobility_computation: true, map_provider: APP_CONFIG.MAP_PROVIDER.id }
-  };
-}
-__name(health, "health");
-// P0 Santa Fe GPS: an opt-in, source-attested JSON vehicle adapter.
-// No undocumented APK backend is called or enabled by default.
-const SF_GPS_MAX_AGE_MS=20000;
-const SF_GPS_MAX_VEHICLES=16;
-const SF_GPS_CACHE_MS=5000;
-let sfGpsCache=null;
-function sfGpsSource(env={}){
-  if(env.VOY_SF_GPS_REUSE_APPROVED!=='YES')return null;
-  if(typeof env.VOY_SF_GPS_FEED_URL!=='string'||typeof env.VOY_SF_GPS_SOURCE_ID!=='string'||
-     typeof env.VOY_SF_GPS_APPROVED_HOST!=='string'||typeof env.VOY_SF_GPS_LICENSE_URL!=='string')return null;
-  try{
-    const url=new URL(env.VOY_SF_GPS_FEED_URL),license=new URL(env.VOY_SF_GPS_LICENSE_URL);
-    if(url.protocol!=='https:'||url.hostname!==env.VOY_SF_GPS_APPROVED_HOST||
-       !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)||url.username||url.password||
-       url.search||url.hash||license.protocol!=='https:'||license.username||license.password||
-       !/^sf_gps_[a-z0-9_]{2,48}$/.test(env.VOY_SF_GPS_SOURCE_ID))return null;
-    return {url:url.toString(),source_id:env.VOY_SF_GPS_SOURCE_ID,license:license.toString()};
-  }catch{return null}
-}
-function normalizeSfGpsVehicles(payload,sourceId,now=Date.now()){
-  if(!payload||!Array.isArray(payload.vehicles)||payload.vehicles.length>256)return null;
-  const seen=new Set(),observations=[];
-  for(const item of payload.vehicles){
-    if(!item||typeof item!=='object')continue;
-    const id=typeof item.id==='string'?item.id.trim():'';
-    if(!/^[A-Za-z0-9:_-]{1,64}$/.test(id)||seen.has(id))continue;
-    const lat=item.lat,lon=item.lon;
-    if(typeof lat!=='number'||typeof lon!=='number'||!Number.isFinite(lat)||!Number.isFinite(lon)||
-       lat < -31.95||lat > -31.3||lon < -61.08||lon > -60.3)continue;
-    if(typeof item.observed_at!=='string'||!/^\d{4}-\d\d-\d\dT/.test(item.observed_at))continue;
-    const t=Date.parse(item.observed_at),age=now-t;
-    if(!Number.isFinite(t)||age< -5000||age>SF_GPS_MAX_AGE_MS)continue;
-    seen.add(id);
-    const obs={id:sourceId+':'+id,source_id:sourceId,lat,lon,
-      temporal_state:'realtime',observed_at:new Date(t).toISOString(),observed_position_only:true};
-    for(const key of ['route_id','trip_id','line']){
-      if(typeof item[key]==='string'&&item[key].length<=64&&item[key].trim())
-        obs[key]=item[key].trim();
-    }
-    observations.push(obs);
-    if(observations.length>=SF_GPS_MAX_VEHICLES)break;
-  }
-  return observations;
-}
-async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now()){
-  const source=sfGpsSource(env);
-  if(!source)return {ok:true,status:'not_integrated',source_id:null,observations:[]};
-  const key=source.source_id+'|'+source.url;
-  if(sfGpsCache?.key===key&&now-sfGpsCache.at<SF_GPS_CACHE_MS)return sfGpsCache.value;
-  let value;
-  try{
-    const response=await fetchImpl(source.url,{headers:{accept:'application/json'},redirect:'error',
-      signal:AbortSignal.timeout(2500)});
-    const mime=response.headers.get('content-type')||'';
-    if(!response.ok||!/^application\/json(?:;|$)/i.test(mime))
-      throw new Error('invalid_source_response');
-    const content=await response.text();
-    if(content.length>160000)throw new Error('source_response_too_large');
-    const observations=normalizeSfGpsVehicles(JSON.parse(content),source.source_id,now);
-    if(!observations)throw new Error('invalid_source_schema');
-    value={ok:true,status:observations.length?'live':'no_current_positions',
-      source_id:source.source_id,observations};
-  }catch{
-    value={ok:true,status:'source_unavailable',source_id:source.source_id,observations:[]};
-  }
-  sfGpsCache={key,at:now,value};
-  return value;
-}
-async function apiResponse(request, env, deps) {
-  const url = new URL(request.url);
-  const fetchImpl = deps?.upstreamFetch ?? fetch;
-  if (url.pathname === "/api/transit/santa-fe/vehicles") {
-    if(request.method!=="GET")return methodNotAllowed(["GET"]);
-    return json(await readSantaFeGps(env,fetchImpl));
-  }
-  if (url.pathname === "/api/health") {
-    if (request.method !== "GET") return methodNotAllowed(["GET"]);
-    return json(health());
-  }
-  if (url.pathname === "/api/destinations/suggest") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    return json(await suggestDestinations(payload, fetchImpl));
-  }
-  if (url.pathname === "/api/destinations/resolve") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    return json(await resolveDestinationSelection(payload, fetchImpl));
-  }
-  if (url.pathname === "/api/destination/resolve" || url.pathname === "/api/origin/resolve") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    return json(await resolveAddress(payload, fetchImpl));
-  }
-  if (url.pathname === "/api/location/reverse") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    return json(await reverseLocation(payload, fetchImpl));
-  }
-  if (url.pathname === "/api/radar/trains/nearby") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    if (!validCoordinates(payload.coordinates)) throw new VoyError("invalid_coordinates", 400);
-    if (!trainRadarCoverageSupported(payload.coordinates)) return json({ ok: true, radar: unsupportedTrainRadarSnapshot(payload.coordinates) });
-    const providerResult = await deps.trainServiceAdapter.read();
-    return json({ ok: true, radar: buildTrainRadarSnapshot({ coordinates: payload.coordinates, providerResult, nowMs: Date.now() }) });
-  }
-  if (url.pathname.startsWith("/api/coverage/")) {
-    if (request.method !== "GET") return methodNotAllowed(["GET"]);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 4) return json({ ok: false, error: "not_found" }, 404);
-    const coverage = getCoverage(parts[2], decodeURIComponent(parts[3]));
-    return coverage ? json({ ok: true, coverage }) : json({ ok: false, error: "coverage_not_found" }, 404);
-  }
-  if (url.pathname === "/api/mobility/compute") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    return json({ ok: true, computation: await computeMobilityComputation(payload, fetchImpl, Date.now(), env) });
-  }
-  if (url.pathname.startsWith("/api/mobility/")) {
-    if (request.method !== "GET") return methodNotAllowed(["GET"]);
-    const slug = decodeURIComponent(url.pathname.slice("/api/mobility/".length));
-    const mobility = getMobility(slug);
-    if (!mobility) return json({ ok: false, error: "mobility_not_integrated", tier: "T0_TERRITORY_ONLY" }, 404);
-    emitEvent("mobility_source_ok", { endpoint_class: "mobility", province_id: mobility.province_id, locality_coverage_tier: mobility.tier, source_id: mobility.source_ids[0], result_class: "available_metadata" });
-    return json({ ok: true, mobility });
-  }
-  if (url.pathname === "/api/mobility/compute") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const payload = await parseSmallJsonBody(request);
-    return json({ ok: true, computation: await computeMobilityComputation(payload, fetchImpl, Date.now(), env) });
-  }
-  if (url.pathname === "/api/telemetry") {
-    if (request.method !== "POST") return methodNotAllowed(["POST"]);
-    const contentType = request.headers.get("content-type") ?? "";
-    if (!/^application\/json(?:\s*;|$)/i.test(contentType)) return json({ ok: false, error: "unsupported_media_type" }, 415);
-    const origin = request.headers.get("origin");
-    if (origin && origin !== url.origin) return json({ ok: false, error: "cross_origin_forbidden" }, 403);
-    const fetchSite = request.headers.get("sec-fetch-site");
-    if (fetchSite && !["same-origin", "none"].includes(fetchSite)) return json({ ok: false, error: "cross_origin_forbidden" }, 403);
-    if (!telemetryRateAllowed()) return json({ ok: false, error: "rate_limited" }, 429);
-    const payload = await parseSmallJsonBody(request, TELEMETRY_CONTRACT.max_body_bytes);
-    const validated = validateTelemetryPayload(payload);
-    emitEvent(validated.event, validated.dimensions);
-    return json({ ok: true });
-  }
-  return json({ ok: false, error: "not_found" }, 404);
-}
-__name(apiResponse, "apiResponse");
-function createRequestHandler(deps = {}) {
-  const trainServiceAdapter = deps.trainServiceAdapter ?? createSarmientoScheduledAdapter({ fetchImpl: deps.upstreamFetch ?? fetch });
-  const requestDeps = { ...deps, trainServiceAdapter };
-  return /* @__PURE__ */ __name(async function handle(request, env = {}) {
-    const started = Date.now();
-    const url = new URL(request.url);
-    let response;
-    try {
-      if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, requestDeps);
-      else if (!env.ASSETS) response = json({ ok: false, error: "assets_binding_unavailable" }, 503);
-      else response = withSecurity(await env.ASSETS.fetch(request));
-    } catch (error) {
-      if (error instanceof VoyError) response = json({ ok: false, error: error.code, detail: error.detail ?? void 0 }, error.status);
-      else {
-        console.error(JSON.stringify({ event: "internal_error", release_id: RELEASE_META.release_id, error_class: "unhandled" }));
-        response = json({ ok: false, error: "internal_error" }, 500);
-      }
-    }
-    emitEvent("request_completed", { endpoint_class: url.pathname.startsWith("/api/") ? url.pathname.split("/").slice(1, 3).join("_") : "asset", status_code_class: statusClass(response.status), latency_bucket: latencyBucket(Date.now() - started) });
-    return response;
-  }, "handle");
-}
-__name(createRequestHandler, "createRequestHandler");
-var defaultHandler = createRequestHandler();
-var worker_default = { fetch: /* @__PURE__ */ __name((request, env) => defaultHandler(request, env), "fetch") };
-export {
-  NominatimCoordinator,
-  VoyError,
-  normalizeSfGpsVehicles,
-  readSantaFeGps,
-  sfGpsSource,
-  classifySourceFreshness,
-  createRequestHandler,
-  worker_default as default,
-  fetchGeoRef,
-  getCoverage,
-  getMobility,
-  buildMobilityDecision,
-  computeMobilityComputation,
-  QueryNormalizer,
-  ContextPlanner,
-  dedupeDestinationCandidates,
-  rankDestinationCandidates,
-  nearestRailStations,
-  trainRadarCoverageSupported,
-  buildTrainRadarSnapshot,
-  createSarmientoScheduledAdapter,
-  parseSarmientoScheduledService,
-  normalizeGeoRefPlace,
-  resolveAddress,
-  resolveDestinationSelection,
-  reverseLocation,
-  sourceEvidence,
-  suggestDestinations,
-  validateTelemetryPayload
-};
-//# sourceMappingURL=worker.js.map
-
+  const categoryWords=new Set(["cancha","estadio","club","terminal","hospital","sanatorio","Ç§¶)Ş—kºwµç}÷m9o+^±ÈH[X™\ŠÛİ\˜ÙK™œ™\Ú™\Ü×İ™\ÚÛÜÙXÛÛ™ÊNÂˆÛÛœİ[[YPÛZ[\Ğ[İÙYHÛİ\˜ÙKœ[[YWØÛZ[\×Ø[İÙYOOH˜[ÙNÂˆÛÛœİœ™\Ú™\Ü×Üİ]HHÛ\ÜÚYTÛİ\˜ÙQœ™\Ú™\ÜÊÛİ\˜ÙK›İÓ\ÊNÂˆ™]\›ˆÂˆYˆÛİ\˜ÙKšYˆ]]Üš]NˆÛİ\˜ÙK˜]]Üš]Kˆ]WØÛ\ÜÎˆÛİ\˜ÙK™]WØÛ\ÜËˆ™\šYšYYØ]ˆÛİ\˜ÙK›\İÜİXØÙ\ÜÙ[İ™\šYšXØ][ÛˆÏÈ[ˆœ™\Ú™\Ü×İ™\ÚÛÜÙXÛÛ™Îˆ[X™\‹š\Ñš[š]JÙXÛÛ™ÊHÈÙXÛÛ™Èˆ[ˆœ™\Ú™\Ü×Üİ]Kˆ[[YWØÛZ[\×Ø[İÙYˆ[[YPÛZ[\Ğ[İÙYˆ\İÜİ]NˆÛİ\˜ÙK\İÜİ]HÏÈ
+[[YPÛZ[\Ğ[İÙYÈ••TÕQÑ“Ô—ÑPÓT‘QÔĞÓÔHˆˆ•S••TÕQŠKˆØ[›ÛšXØ[İ\›ˆÛİ\˜ÙK˜Ø[›ÛšXØ[İ\›ˆNÂŸB—×Û˜[YJÛİ\˜ÙQ]šY[˜ÙKœÛİ\˜ÙQ]šY[˜ÙHŠNÂ™[˜İ[Ûˆ]šY[˜ÙU\ØX›J]šY[˜ÙJHÂˆ™]\›ˆ›ÛÛX[Š]šY[˜ÙH	‰ˆ]šY[˜ÙKœ[[YWØÛZ[\×Ø[İÙY	‰ˆ]šY[˜ÙK™œ™\Ú™\Ü×Üİ]HOOH‘”‘TÒŠNÂŸB—×Û˜[YJ]šY[˜ÙU\ØX›K™]šY[˜ÙU\ØX›HŠNÂ™[˜İ[ÛˆY™™Xİ]™UY\‘›Ü’[YÜ˜][ÛŠ[YÜ˜][Û‹›İÓ\ÈH]K››İÊ
+JHÂˆÛÛœİÛİ\˜Ù\ÈH[YÜ˜][Û‹œÛİ\˜ÙWÚYË›X\
+
+Y
+HOˆÛİ\˜ÙQ]šY[˜ÙJY›İÓ\ÊJK™š[\Š›ÛÛX[ŠNÂˆÛÛœİš[X\TÛİ\˜ÙHHÛİ\˜Ù\Ë™š[™
+]šY[˜ÙU\ØX›JHÏÈ[ÂˆÛÛœİØY™R[™Ù™œÈH[YÜ˜][Û‹š[™Ù™œË›X\
+
+][JHOˆÂˆÛÛœİÛİ\˜ÙHHÛİ\˜ÙQ]šY[˜ÙJ][KœÛİ\˜ÙWÚYÏÈ[YÜ˜][Û‹œÛİ\˜ÙWÚYÖÌK›İÓ\ÊNÂˆÛÛœİØY™HHS‘Ñ‘—ĞSÕÓTÕš\Ê][K\›
+H	‰ˆ]šY[˜ÙU\ØX›JÛİ\˜ÙJNÂˆ™]\›ˆÈ‹‹š][KØY™KÛİ\˜ÙHNÂˆJK™š[\Š
+][JHOˆ][KœØY™JNÂˆÛÛœİ˜\™TÛİ\˜ÙHH[YÜ˜][Û‹™˜\™HÈÛİ\˜ÙQ]šY[˜ÙJ[YÜ˜][Û‹™˜\™KœÛİ\˜ÙWÚY›İÓ\ÊHˆ[ÂˆÛÛœİ˜\™U\ØX›HH›ÛÛX[Š[YÜ˜][Û‹™˜\™H	‰ˆ]šY[˜ÙU\ØX›J˜\™TÛİ\˜ÙJJNÂˆ]Y\ˆH•ÕT”’UÔ–WÓÓ“HÂˆYˆ
+ØY™R[™Ù™œË›[™İ
+HY\ˆH•WÓÑ‘’PÒPSÒS‘Ñ‘ˆÂˆYˆ
+ØY™R[™Ù™œË›[™İ	‰ˆ˜\™U\ØX›H	‰ˆ[YÜ˜][Û‹Y\ˆOOH•ÑT‘WÕ‘T’Q’QQŠHY\ˆH•ÑT‘WÕ‘T’Q’QQÂˆ™]\›ˆÈY\‹Ûİ\˜Ù\Ëš[X\TÛİ\˜ÙKØY™R[™Ù™œË˜\™TÛİ\˜ÙK˜\™U\ØX›HNÂŸB—×Û˜[YJY™™Xİ]™UY\‘›Ü’[YÜ˜][Û‹™Y™™Xİ]™UY\‘›Ü’[YÜ˜][ÛˆŠNÂ™[˜İ[ÛˆÙ]Ûİ™\˜YÙJ›İš[˜ÙRYØØ[]TÛYË›İÓ\ÈH]K››İÊ
+JHÂˆÛÛœİ›Ü›X[^™Y›İš[˜ÙRYHİš[™Ê›İš[˜ÙRYÏÈˆŠNÂˆÛÛœİ›Ü›X[^™YØØ[]TÛYÈHÛYÚYJØØ[]TÛYÊNÂˆÛÛœİ›İš[˜ÙHH•T’TÑPÕSÓ—Ğ–WÒQ™Ù]
+›Ü›X[^™Y›İš[˜ÙRY
+NÂˆYˆ
+\›İš[˜ÙJH™]\›ˆ[ÂˆÛÛœİ[YÜ˜][ÛˆHš[™Ú]R[YÜ˜][ÛŠ›Ü›X[^™YØØ[]TÛYË›Ü›X[^™Y›İš[˜ÙRYØØ[]TÛYÊNÂˆYˆ
+Z[YÜ˜][ÛŠHÂˆ™]\›ˆÂˆ›İš[˜ÙWÚYˆ›Ü›X[^™Y›İš[˜ÙRYˆ›İš[˜ÙWÛ˜[YNˆ›İš[˜ÙKœ›İš[˜ÙWÛ˜[YKˆØØ[]WÜÛYÎˆ›Ü›X[^™YØØ[]TÛYËˆ\œš]ÜWÜİ]\Îˆ›İš[˜ÙK\œš]ÜWÜİ]\ËˆÛÛ™šYİ\™YÛØØ[Û[Øš[]WİY\ˆ›İš[˜ÙK›ØØ[Û[Øš[]WİY\‹ˆØØ[Û[Øš[]WİY\ˆ•ÕT”’UÔ–WÓÓ“H‹ˆÛİ\˜ÙWÚYÎˆÈœÜ˜×ÙÙ[Ü™Yˆ—KˆÙ™šXÚX[Ú[™Ù™—İ\›Îˆ×Kˆ[˜]˜Z[X›WÛÜ—İ[šÛ›İÛˆYKˆ™\šYšYYØ]ˆ›İš[˜ÙK›\İİ™\šYšYYØ]ˆNÂˆBˆÛÛœİY™™Xİ]™HHY™™Xİ]™UY\‘›Ü’[YÜ˜][ÛŠ[YÜ˜][Û‹›İÓ\ÊNÂˆ™]\›ˆÂˆ›İš[˜ÙWÚYˆ›Ü›X[^™Y›İš[˜ÙRYˆ›İš[˜ÙWÛ˜[YNˆ›İš[˜ÙKœ›İš[˜ÙWÛ˜[YKˆØØ[]WÜÛYÎˆ›Ü›X[^™YØØ[]TÛYËˆ\œš]ÜWÜİ]\Îˆ›İš[˜ÙK\œš]ÜWÜİ]\ËˆÛÛ™šYİ\™YÛØØ[Û[Øš[]WİY\ˆ[YÜ˜][Û‹Y\‹ˆØØ[Û[Øš[]WİY\ˆY™™Xİ]™KY\‹ˆÛİ\˜ÙWÚYÎˆY™™Xİ]™KœÛİ\˜Ù\Ë™š[\Š]šY[˜ÙU\ØX›JK›X\
+
+Ûİ\˜ÙJHOˆÛİ\˜ÙKšY
+KˆÙ™šXÚX[Ú[™Ù™—İ\›ÎˆY™™Xİ]™KœØY™R[™Ù™œË›X\
+
+][JHOˆ][K\›
+Kˆ[˜]˜Z[X›WÛÜ—İ[šÛ›İÛˆY™™Xİ]™KY\ˆOOH•ÕT”’UÔ–WÓÓ“H‹ˆ™\šYšYYØ]ˆÒUWÒS•QÔUSÓ”Ë™\šYšYYØ]ˆNÂŸB—×Û˜[YJÙ]Ûİ™\˜YÙK™Ù]Ûİ™\˜YÙHŠNÂ™[˜İ[ÛˆÙ][Øš[]JÛYË›İÓ\ÈH]K››İÊ
+K›İš[˜ÙRYH[
+HÂˆÛÛœİ›Ü›X[^™YÛYÈHÛYÚYJÛYÊNÂˆÛÛœİØ[™Y]\ÈHÒUWÒS•QÔUSÓ”Ë˜Ú]Y\Ë™š[\Š
+Ú]JHOˆÚ]KœÛYÈOOH›Ü›X[^™YÛYÊNÂˆÛÛœİ[YÜ˜][ÛˆH›İš[˜ÙRYÈš[™Ú]R[YÜ˜][ÛŠ›Ü›X[^™YÛYËİš[™Ê›İš[˜ÙRY
+KÛYÊHˆØ[™Y]\Ë›[™İOOHHÈØ[™Y]\ÖÌHˆ[ÂˆYˆ
+Z[YÜ˜][ÛŠH™]\›ˆ[ÂˆÛÛœİY™™Xİ]™HHY™™Xİ]™UY\‘›Ü’[YÜ˜][ÛŠ[YÜ˜][Û‹›İÓ\ÊNÂˆÛÛœİ˜\™HHY™™Xİ]™K™˜\™U\ØX›HÈÈ‹‹š[YÜ˜][Û‹™˜\™KÛİ\˜ÙNˆY™™Xİ]™K™˜\™TÛİ\˜ÙHHˆ[ÂˆYˆ
+[YÜ˜][Û‹Y\ˆOOHY™™Xİ]™KY\ŠH[Z]]™[
+›[Øš[]WÜÛİ\˜ÙWÜİ[H‹È[™Ú[ØÛ\ÜÎˆ›[Øš[]H‹›İš[˜ÙWÚYˆ[YÜ˜][Û‹œ›İš[˜ÙWÚYØØ[]WØÛİ™\˜YÙWİY\ˆY™™Xİ]™KY\‹Ûİ\˜ÙWÚYˆ[YÜ˜][Û‹œÛİ\˜ÙWÚYÖÌK™\İ[ØÛ\ÜÎˆ™YÜ˜YYˆJNÂˆ™]\›ˆÂˆÚ]Nˆ[YÜ˜][Û‹˜Ú]Kˆ›İš[˜ÙNˆ[YÜ˜][Û‹œ›İš[˜ÙKˆ›İš[˜ÙWÚYˆ[YÜ˜][Û‹œ›İš[˜ÙWÚYˆÛÛ™šYİ\™YİY\ˆ[YÜ˜][Û‹Y\‹ˆY\ˆY™™Xİ]™KY\‹ˆİXİ\™YÜİ]\ÎˆY™™Xİ]™KY\ˆOOH•ÕT”’UÔ–WÓÓ“HˆÈ•SURSP“WÒS—Õ“ÖHˆˆ[YÜ˜][Û‹œİXİ\™YÜİ]\ËˆÛİ\˜ÙWÚYÎˆY™™Xİ]™KœÛİ\˜Ù\Ë™š[\Š]šY[˜ÙU\ØX›JK›X\
+
+Ûİ\˜ÙJHOˆÛİ\˜ÙKšY
+KˆÛİ\˜Ù\ÎˆY™™Xİ]™KœÛİ\˜Ù\Ëˆ˜\™Kˆ˜\™WÜİ]\Îˆ[YÜ˜][Û‹™˜\™HÈ˜\™HÈÕT”‘S•Õ‘T’Q’QQˆˆ”ÕSWÕSURSP“Hˆˆ•SURSP“H‹ˆ[™Ù™œÎˆY™™Xİ]™KœØY™R[™Ù™œËˆ›İ]Nˆ[ˆ]Nˆ[ˆ›İšY\—Ü™\Ù[˜ÙNˆ×BˆNÂŸB—×Û˜[YJÙ][Øš[]K™Ù][Øš[]HŠNÂ™[˜İ[Ûˆ[Øš[]QXÚ\Ú[Û‘œ™\Ú™\ÜÊÛİ\˜Ù\ÊHÂˆÛÛœİ\İH\œ˜^Kš\Ğ\œ˜^JÛİ\˜Ù\ÊHÈÛİ\˜Ù\Èˆ×NÂˆÛÛœİİ]\ÈH\İ›X\
+
+Ûİ\˜ÙJHOˆÛİ\˜ÙOË™œ™\Ú™\Ü×Üİ]JK™š[\Š›ÛÛX[ŠNÂˆÛÛœİ™\šYšYYH\İ›X\
+
+Ûİ\˜ÙJHOˆ]Kœ\œÙJÛİ\˜ÙOË™\šYšYYØ]ÏÈˆŠJK™š[\Š[X™\‹š\Ñš[š]JNÂˆ]İ]HH[šÛ›İÛˆÂˆYˆ
+İ]\Ë›[™İ	‰ˆİ]\Ë™]™\J
+˜[YJHOˆ˜[YHOOH‘”‘TÒŠJHİ]HH™œ™\ÚÂˆ[ÙHYˆ
+İ]\Ëš[˜ÛY\Ê‘”‘TÒŠJHİ]HH›Z^YÂˆ[ÙHYˆ
+İ]\Ëš[˜ÛY\Ê”ÕSHŠJHİ]HHœİ[HÂˆ™]\›ˆÈİ]K™\šYšYYØ]ˆ™\šYšYY›[™İÈ™]È]JX]›X^
+‹‹™\šYšYY
+JKÒTÓÔİš[™Ê
+Hˆ[NÂŸB—×Û˜[YJ[Øš[]QXÚ\Ú[Û‘œ™\Ú™\ÜË›[Øš[]QXÚ\Ú[Û‘œ™\Ú™\ÜÈŠNÂ™[˜İ[Ûˆ[Øš[]QXÚ\Ú[Û”›İ™[˜[˜ÙJÛİ\˜Ù\ÊHÂˆ™]\›ˆ
+\œ˜^Kš\Ğ\œ˜^JÛİ\˜Ù\ÊHÈÛİ\˜Ù\Èˆ×JK›X\
+
+Ûİ\˜ÙJHOˆ
+ÂˆYˆÛİ\˜ÙKšYˆ]]Üš]NˆÛİ\˜ÙK˜]]Üš]Kˆ]WØÛ\ÜÎˆÛİ\˜ÙK™]WØÛ\ÜËˆØ[›ÛšXØ[İ\›ˆÛİ\˜ÙK˜Ø[›ÛšXØ[İ\›ˆ™\šYšYYØ]ˆÛİ\˜ÙK™\šYšYYØ]ˆœ™\Ú™\Ü×Üİ]NˆÛİ\˜ÙK™œ™\Ú™\Ü×Üİ]Kˆ[[YWØÛZ[\×Ø[İÙYˆÛİ\˜ÙKœ[[YWØÛZ[\×Ø[İÙYˆ\İÜİ]NˆÛİ\˜ÙK\İÜİ]BˆJJNÂŸB—×Û˜[YJ[Øš[]QXÚ\Ú[Û”›İ™[˜[˜ÙK›[Øš[]QXÚ\Ú[Û”›İ™[˜[˜ÙHŠNÂ™[˜İ[ÛˆZ[˜Z[İ]XĞÛÛ^
+\İ[˜][Û‹›İÓ\ÈH]K››İÊ
+JHÂˆYˆ
+\İ[˜][ÛË\œš]ÜWİ™\šYšYYOOHYJH™]\›ˆ[ÂˆÛÛœİ™X\˜HH™X\™\İ˜Z[İ][ÛœÊ\İ[˜][ÛË˜ÛÛÜ™[˜]\ËËL”ÓÑ”ÑHŠNÂˆYˆ
+[™X\˜K›[™İ
+H™]\›ˆ[ÂˆÛÛœİØ][ÙÔÛİ\˜ÙHHÛİ\˜ÙQ]šY[˜ÙJRSÔÕUP×ÔÓÕTÑKšY›İÓ\ÊNÂˆÛÛœİ[™Ù™”Ûİ\˜ÙHHÛİ\˜ÙQ]šY[˜ÙJRSÒS‘Ñ‘—ÔÓÕTÑKšY›İÓ\ÊNÂˆÛÛœİ[™Ù™”ØY™HHS‘Ñ‘—ĞSÕÓTÕš\ÊRSÒS‘Ñ‘—ÕT“
+H	‰ˆ]šY[˜ÙU\ØX›J[™Ù™”Ûİ\˜ÙJNÂˆYˆ
+Z[™Ù™”ØY™JH™]\›ˆ[ÂˆÛÛœİ˜XİÈH™X\˜K›X\
+
+İ][ÛŠHOˆ
+ÂˆÚ[™ˆœ˜Z[Üİ][Û—Ü™Y™\™[˜ÙH‹ˆ[ÙNˆœ˜Z[‹ˆX™[ˆ‘\İXÚpìÛˆ™\œ›İšX\šXHÙ\˜Ø[˜H0­ÈØ]0è[ÙÛÈÙšXÚX[ŒŒˆ‹ˆ˜[YNˆİ][Û‹›˜[YKˆ[™Nˆİ][Û‹›[™Kˆœ˜[˜Úˆ[ˆÜ\˜]Üˆİ][Û‹›Ü\˜]Ü‹ˆ\İ[˜ÙWÛY]\œÎˆİ][Û‹™\İ[˜ÙWÛY]\œËˆØ][Ù×ÚYˆİ][Û‹˜Ø][Ù×ÚYˆ]WØ\×ÛÙˆRSÔÕUSÓ—ĞĞUSÑ×ÓQUK™]WØ\×ÛÙ‹ˆÛİ\˜ÙNˆØ][ÙÔÛİ\˜ÙBˆJJNÂˆÛÛœİ[™Ù™œÈHŞÂˆYˆ™[™\×Ø\™Ù[[›Ü×ÚÜ˜\š[Ü×ÛÙšXÚX[‹ˆ[ÙNˆœ˜Z[‹ˆX™[ˆÛÛœİ[\ˆÜ˜\š[ÜË\šY˜\ÈH™XÛÜœšYÜÈÙšXÚX[\È‹ˆ\›ˆRSÒS‘Ñ‘—ÕT“ˆ™\]Z\™\×ØÛÛ™š\›X][ÛˆYKˆÚ[™ÛWİ\ÙNˆYKˆÙ[™×ØÛÛÜ™Îˆ˜[ÙKˆÙ[™×Ü]Y\Nˆ˜[ÙKˆÛİ\˜ÙNˆ[™Ù™”Ûİ\˜ÙBˆWNÂˆ™]\›ˆÂˆÛİ™\˜YÙNˆ”ŒWÓÑ‘’PÒPSÔÕUP×ÒS‘Ñ‘ˆ‹ˆ]˜Z[X›WÛ[Ù\Îˆ×Kˆ˜XİËˆ[™Ù™œËˆÛİ\˜Ù\ÎˆØØ][ÙÔÛİ\˜ÙK[™Ù™”Ûİ\˜ÙWK™š[\Š›ÛÛX[ŠBˆNÂŸB—×Û˜[YJZ[˜Z[İ]XĞÛÛ^˜Z[˜Z[İ]XĞÛÛ^ŠNÂ™[˜İ[ÛˆZ[[Øš[]QXÚ\Ú[ÛŠ\İ[˜][Û‹›İÓ\ÈH]K››İÊ
+JHÂˆÛÛœİ\œš]ÜU™\šYšYYH\İ[˜][ÛË\œš]ÜWİ™\šYšYYOOHYNÂˆÛÛœİ›İš[˜ÙRYH\œš]ÜU™\šYšYYÈİš[™Ê\İ[˜][ÛËœ›İš[˜ÙOËšYÏÈˆŠHˆˆÂˆÛÛœİØØ[]S˜[YHH\œš]ÜU™\šYšYYÈ^
+\İ[˜][ÛË›ØØ[]OË›˜[YJHˆˆÂˆÛÛœİØØ[]TÛYÈH\œš]ÜU™\šYšYYÈÛYÚYJ\İ[˜][ÛË›ØØ[]OËœÛYÈØØ[]S˜[YJHˆˆÂˆÛÛœİ[YÜ˜][ÛˆH\œš]ÜU™\šYšYY	‰ˆ›İš[˜ÙRY	‰ˆØØ[]S˜[YHÈš[™Ú]R[YÜ˜][ÛŠØØ[]TÛYË›İš[˜ÙRYØØ[]S˜[YJHˆ[ÂˆÛÛœİ[YÜ˜][Û”ÛYÈH[YÜ˜][ÛËœÛYÈÏÈ[ÂˆÛÛœİ[Øš[]HH[YÜ˜][Û”ÛYÈÈÙ][Øš[]J[YÜ˜][Û”ÛYË›İÓ\Ë›İš[˜ÙRY
+Hˆ[ÂˆÛÛœİ˜Z[HZ[˜Z[İ]XĞÛÛ^
+\İ[˜][Û‹›İÓ\ÊNÂˆÛÛœİ˜XİÈH×NÂˆYˆ
+[Øš[]OË™˜\™OË˜[YHOH[
+H˜XİËœ\Ú
+ÂˆÚ[™ˆ™˜\™H‹ˆ[ÙNˆ˜\È‹ˆX™[ˆ[Øš[]K™˜\™KœØÛÜKˆ˜[YNˆ[Øš[]K™˜\™K˜[YKˆİ\œ™[˜ŞNˆ[Øš[]K™˜\™K˜İ\œ™[˜ŞHÏÈT”È‹ˆY™™Xİ]™WÙœ›ÛNˆ[Øš[]K™˜\™K™Y™™Xİ]™WÙœ›ÛHÏÈ[ˆ™\šYšYYØ]ˆ[Øš[]K™˜\™K™\šYšYYØ]ÏÈ[Øš[]K™˜\™KœÛİ\˜ÙOË™\šYšYYØ]ÏÈ[ˆÛİ\˜ÙNˆ[Øš[]K™˜\™KœÛİ\˜ÙHÏÈ[ˆJNÂˆ˜XİËœ\Ú
+‹‹Š˜Z[Ë™˜XİÈÏÈ×JJNÂˆÛÛœİ\Ò[™Ù™œÈH
+\œ˜^Kš\Ğ\œ˜^J[Øš[]OËš[™Ù™œÊHÈ[Øš[]Kš[™Ù™œÈˆ×JK›X\
+
+[™Ù™ŠHOˆ
+È‹‹š[™Ù™‹[ÙNˆ˜\ÈˆJJNÂˆÛÛœİ[™Ù™œÈHË‹‹˜\Ò[™Ù™œË‹‹Š˜Z[Ëš[™Ù™œÈÏÈ×JWNÂˆÛÛœİ\ĞÛİ™\˜YÙHH[Øš[]OËY\ˆÏÈ•ÕT”’UÔ–WÓÓ“HÂˆÛÛœİÛİ™\˜YÙHH\ĞÛİ™\˜YÙHOOH•ÕT”’UÔ–WÓÓ“HˆÈ\ĞÛİ™\˜YÙHˆ˜Z[Ë˜Ûİ™\˜YÙHÏÈ\ĞÛİ™\˜YÙNÂˆÛÛœİÙ™šXÚX[Xİ[ÛœÈH[™Ù™œË›X\
+
+[™Ù™ŠHOˆ
+Âˆ\Nˆ›Ü[—ÛÙ™šXÚX[Ú[™Ù™ˆ‹ˆ[ÙNˆ[™Ù™‹›[ÙHÏÈ[ˆX™[ˆ[™Ù™‹›X™[ˆ\›ˆ[™Ù™‹\›ˆÛİ\˜ÙNˆ[™Ù™‹œÛİ\˜ÙHÏÈ[ˆJJNÂˆÛÛœİ\ÙY[˜\Ù[[™PXİ[ÛœÈH\œš]ÜU™\šYšYYÈÂˆÈ\Nˆ˜ÛÛœİ[Û˜]šYØ][Ûˆ‹˜]™[Û[ÙNˆ˜[œÚ]‹X™[ˆÛÛœİ[\ˆ˜[œÜÜH0î˜›XÛÈˆKˆÈ\Nˆ˜ÛÛœİ[Û˜]šYØ][Ûˆ‹˜]™[Û[ÙNˆØ[Ú[™È‹X™[ˆÛÛœİ[\ˆHYHˆKˆÈ\Nˆ˜ÛÛœİ[Û˜]šYØ][Ûˆ‹˜]™[Û[ÙNˆ˜šXŞXÛ[™È‹X™[ˆÛÛœİ[\ˆ[ˆšXÚHˆKˆÈ\Nˆ˜ÛÛœİ[Û˜]šYØ][Ûˆ‹˜]™[Û[ÙNˆ™š]š[™È‹X™[ˆÛÛœİ[\ˆ[ˆ]]ÈˆBˆHˆ×NÂˆ]İ]HH[šÛ›İÛˆÂˆYˆ
+[™Ù™œË›[™İ\ÙY[˜\Ù[[™PXİ[ÛœË›[™İ
+Hİ]HHš[™Ù™ˆÂˆ[ÙHYˆ
+˜XİË›[™İ
+Hİ]HH˜]˜Z[X›HÂˆ[ÙHYˆ
+\œš]ÜU™\šYšYY	‰ˆZ[YÜ˜][ÛŠHİ]HH[˜]˜Z[X›HÂˆÛÛœİ]˜Z[X›S[Ù\ÈH×NÂˆYˆ
+[Øš[]H	‰ˆ\ĞÛİ™\˜YÙHOOH•ÕT”’UÔ–WÓÓ“Hˆ	‰ˆ
+\Ò[™Ù™œË›[™İ˜XİËœÛÛYJ
+˜Xİ
+HOˆ˜Xİ›[ÙHOOH˜\ÈŠJJH]˜Z[X›S[Ù\Ëœ\Ú
+˜\ÈŠNÂˆ›Üˆ
+ÛÛœİ[ÙHÙˆ˜Z[Ë˜]˜Z[X›WÛ[Ù\ÈÏÈ×JHYˆ
+X]˜Z[X›S[Ù\Ëš[˜ÛY\Ê[ÙJJH]˜Z[X›S[Ù\Ëœ\Ú
+[ÙJNÂˆÛÛœİÛİ\˜ÙPÛ\ÜÈH[™Ù™œË›[™İ\ÙY[˜\Ù[[™PXİ[ÛœË›[™İÈš[™Ù™ˆˆˆ[šÛ›İÛˆÂˆÛÛœİÛİ\˜Ù\ÈHË‹‹Š[Øš[]OËœÛİ\˜Ù\ÈÏÈ×JK‹‹Š˜Z[ËœÛİ\˜Ù\ÈÏÈ×JWK™š[\Š›ÛÛX[ŠNÂˆÛÛœİ[š\]YTÛİ\˜Ù\ÈHË‹‹›™]ÈX\
+Ûİ\˜Ù\Ë›X\
+
+Ûİ\˜ÙJHOˆÜÛİ\˜ÙKšYÛİ\˜ÙWJJK˜[Y\Ê
+WNÂˆÛÛœİ›İ™[˜[˜ÙHH[Øš[]QXÚ\Ú[Û”›İ™[˜[˜ÙJ[š\]YTÛİ\˜Ù\ÊNÂˆÛÛœİœ™\Ú™\ÜÈH[Øš[]QXÚ\Ú[Û‘œ™\Ú™\ÜÊ[š\]YTÛİ\˜Ù\ÊNÂˆÛÛœİ™^Xİ[ÛœÈHË‹‹›Ù™šXÚX[Xİ[ÛœË‹‹\ÙY[˜\Ù[[™PXİ[Ûœ×NÂˆYˆ
+[™^Xİ[ÛœË›[™İ
+H™^Xİ[ÛœËœ\Ú
+ˆÈ\NˆšY]×ÛX\‹X™[ˆ•™\ˆXšXØXÚpìÛˆ[ˆ[X\HˆKˆÈ\Nˆœ™Yš[™WÙ\İ[˜][Ûˆ‹X™[ˆ\œš]ÜU™\šYšYYÈ”›Ø˜\ˆİ›È\İ[›Èˆˆ”™XÚ\Ø\ˆÈ›Û™\ˆH[[\ˆ[\İ[›ÈˆBˆ
+NÂˆ™]\›ˆÂˆİ]Kˆ\İ[˜][Û‹ˆ[YÜ˜][Û—ÜÛYÎˆ[YÜ˜][Û”ÛYËˆÛİ™\˜YÙKˆ[ÙWØÛİ™\˜YÙNˆÈ\Îˆ[YÜ˜][ÛˆÈ\ĞÛİ™\˜YÙHˆ[˜Z[ˆ˜Z[Ë˜Ûİ™\˜YÙHÏÈ[Kˆ]˜Z[X›WÛ[Ù\Îˆ]˜Z[X›S[Ù\ËˆÛİ\˜ÙWØÛ\ÜÎˆÛİ\˜ÙPÛ\ÜËˆœ™\Ú™\ÜËˆ›İ™[˜[˜ÙKˆ˜XİËˆ[™Ù™œËˆ™^ØXİ[ÛœÎˆ™^Xİ[ÛœÂˆNÂŸB—×Û˜[YJZ[[Øš[]QXÚ\Ú[Û‹˜Z[[Øš[]QXÚ\Ú[ÛˆŠNÂ˜ÛÛœİĞS•WÑ‘WĞ•T×ÑPÕÈHØš™Xİ™œ™Y^™JÂˆ˜\™WÜÛİ\˜ÙNˆØš™Xİ™œ™Y^™JÂˆYˆœÜ˜×ÜØ[WÙ™WÙ˜\™WÌŒŒLMH‹ˆ]]Üš]Nˆ“][šXÚ\[YYHØ[H™H‹ˆØ[›ÛšXØ[İ\›ˆšÎ‹Ëİ˜[œÜ\™[˜ÚXKœØ[Y™XÚ]YY™Ûİ‹˜\‹Û›Ü›X]]˜KÙXÜ™]ËLLŒ‹È‹ˆÛİ\˜ÙWÙ]NˆŒŒ‹LKLMH‹ˆ™\šYšYYØ]ˆŒŒ‹LKLŒ•NŒŒŒˆ‹ˆœ™\Ú™\Ü×İ™\ÚÛÜÙXÛÛ™ÎˆNLŒˆJKˆ]šX][Ûœ×ÜÛİ\˜ÙNˆØš™Xİ™œ™Y^™JÂˆYˆœÜ˜×ÜØ[WÙ™WÙ]šX][ÛœÈ‹ˆ]]Üš]Nˆ“][šXÚ\[YYHØ[H™H‹ˆØ[›ÛšXØ[İ\›ˆšÎ‹ËÜØ[Y™XÚ]YY™Ûİ‹˜\‹Ù\İš[ÜËÈ‹ˆÛİ\˜ÙWÙ]NˆŒŒ‹LKLŒH‹ˆ™\šYšYYØ]ˆŒŒ‹LKLŒ•NŒŒŒˆ‚ˆJKˆ˜[œÚ]İ\›ˆšÎ‹ËÜØ[Y™XÚ]YY™Ûİ‹˜\‹ÜÙXÜ™]\šXKYKYÛØšY\››ËXÛÛ›Û[[İš[YY\ÙYİ\šYYÚ]YY[˜KØÛÛXİ]›ÜËÈ‹ˆ[Ù˜\™WØ\œÎˆŒLLKŒLKˆœ™\]Y[Ù˜\™WØ\œÎˆNLŸJNÂ™[˜İ[Ûˆ\Õ™\šYšYYØ[Q™PÚ]J\İ[˜][ÛŠHÂˆYˆ
+\İ[˜][ÛË\œš]ÜWİ™\šYšYYOOHYHİš[™Ê\İ[˜][ÛËœ›İš[˜ÙOËšYÏÈˆŠHOOHˆŠH™]\›ˆ˜[ÙNÂˆÛÛœİÛYÈHİš[™Ê\İ[˜][ÛË›ØØ[]OËœÛYÈÏÈ\İ[˜][ÛËš[YÜ˜][Û—ÜÛYÈÏÈˆŠKÓİÙ\Ø\ÙJ
+NÂˆÛÛœİØØ[]HH›Û^
+\İ[˜][ÛË›ØØ[]OË›˜[YHÏÈˆŠNÂˆ™]\›ˆÛYÈOOHœØ[KY™HˆØØ[]HOOHœØ[H™HÂŸB™[˜İ[ÛˆÛİ\˜ÙQœ™\Ú]
+Ûİ\˜ÙK›İÓ\ÊHÂˆÛÛœİ™\šYšYYH]Kœ\œÙJÛİ\˜ÙOË™\šYšYYØ]ÏÈˆŠNÂˆÛÛœİH[X™\ŠÛİ\˜ÙOË™œ™\Ú™\Ü×İ™\ÚÛÜÙXÛÛ™ÊNÂˆ™]\›ˆ[X™\‹š\Ñš[š]J™\šYšYY
+H	‰ˆ[X™\‹š\Ñš[š]J
+H	‰ˆˆ	‰ˆ›İÓ\ÈH™\šYšYY	‰ˆ›İÓ\ÈH™\šYšYYH
+ˆLÂŸB™[˜İ[ÛˆØ[Q™P\Ó[ÙSÜ[ÛŠ\İ[˜][Û‹›İÓ\ÊHÂˆYˆ
+Z\Õ™\šYšYYØ[Q™PÚ]J\İ[˜][ÛŠJH™]\›ˆ[ÂˆÛÛœİœ™\ÚHÛİ\˜ÙQœ™\Ú]
+ĞS•WÑ‘WĞ•T×ÑPÕË™˜\™WÜÛİ\˜ÙK›İÓ\ÊNÂˆÛÛœİ˜\™TÛİ\˜ÙHHÈ‹‹”ĞS•WÑ‘WĞ•T×ÑPÕË™˜\™WÜÛİ\˜ÙHNÂˆ™]\›ˆÂˆ[ÙNˆ˜\È‹ˆÙ[XİX›Nˆ˜[ÙKˆ›İ]WØ]˜Z[X›Nˆ˜[ÙKˆ]˜Z[Xš[]WÜİ]Nˆœ\X[‹ˆšXÙWÜİ]Nˆœ™\ÚÈšÛ›İÛˆˆˆ[šÛ›İÛˆ‹ˆ]WÜİ]Nˆ››İÚ[YÜ˜]Y‹ˆ™X[[YWÜİ]Nˆ››İÚ[YÜ˜]Y‹ˆ˜\™NˆÂˆİ]Nˆœ™\ÚÈ˜İ\œ™[ˆˆ[™\šYšYY‹ˆš[X\Nˆœ™\ÚÈÈX™[ˆ•\šY˜H[˜H‹İ\œ™[˜ŞNˆT”È‹[[İ[ˆĞS•WÑ‘WĞ•T×ÑPÕË™[Ù˜\™WØ\œÈHˆ[ˆœ™\]Y[ˆœ™\ÚÈÂˆX™[ˆ›Û]Èœ™XİY[HØ[H™H‹ˆİ\œ™[˜ŞNˆT”È‹ˆ[[İ[ˆĞS•WÑ‘WĞ•T×ÑPÕË™œ™\]Y[Ù˜\™WØ\œËˆ[YÚXš[]NˆÂˆ”ÕP‘H™YÚ\İ˜YHH›ÛXœ™HHH\œÛÛ˜H\İX\šXH‹ˆ™ÛZXÚ[[ÈXÛ\˜YÈ[ˆHÚ]YYHØ[H™H‹ˆœYÛÈ™\YÛÈÛÛˆÕP‘H°ë\ÚXØHÈÕP‘HYÚ][‹ˆ››È\XØHHYÛÜÈÛÛˆ\š™]HH0êXš]ËÜ°êY]Ëš[]\˜Hš\X[šHTˆ‚ˆBˆHˆ[ˆÛİ\˜ÙNˆ˜\™TÛİ\˜ÙBˆKˆ\ØÛÜİ\™\ÎˆÂˆİpè[™È\ØNˆ›È[YÜ˜YÈ‹ˆ•Y[\È™X[›È\ÜÛšX›H[ˆ“ÖH‹ˆ“H\šY˜Hœ™XİY[H\[™HH[YÚXš[YYÈ›È\È[™XÚ[È^XİÈHØYHšXZ™Kˆ‚ˆKˆXİ[ÛœÎˆÂˆÈYˆœØ[WÙ™WİÚ[—Ø\œš]™\È‹X™[ˆÛÛœİ[\ˆİpè[™È\ØH‹\›ˆĞS•WÑ‘WĞ•T×ÑPÕË˜[œÚ]İ\›Ûİ\˜ÙNˆÈYˆœÜ˜×ÜØ[WÙ™WØ\È‹]]Üš]Nˆ“][šXÚ\[YYHØ[H™H‹™\šYšYYØ]ˆĞS•WÑ‘WĞ•T×ÑPÕË™˜\™WÜÛİ\˜ÙK™\šYšYYØ]HKˆÈYˆœØ[WÙ™WÙ]šX][ÛœÈ‹X™[ˆ•™\ˆ\İ°ë[ÜÈÙšXÚX[\È‹\›ˆĞS•WÑ‘WĞ•T×ÑPÕË™]šX][Ûœ×ÜÛİ\˜ÙK˜Ø[›ÛšXØ[İ\›Ûİ\˜ÙNˆÈ‹‹”ĞS•WÑ‘WĞ•T×ÑPÕË™]šX][Ûœ×ÜÛİ\˜ÙHHBˆKˆ›İ™[˜[˜ÙNˆÙ˜\™TÛİ\˜ÙKÈ‹‹”ĞS•WÑ‘WĞ•T×ÑPÕË™]šX][Ûœ×ÜÛİ\˜ÙHWBˆNÂŸB—×Û˜[YJ\Õ™\šYšYYØ[Q™PÚ]Kš\Õ™\šYšYYØ[Q™PÚ]HŠNÂ—×Û˜[YJÛİ\˜ÙQœ™\Ú]œÛİ\˜ÙQœ™\Ú]ŠNÂ—×Û˜[YJØ[Q™P\Ó[ÙSÜ[Û‹œØ[Q™P\Ó[ÙSÜ[ÛˆŠNÂ˜ÛÛœİ“ÕUS‘×Ô“Ñ’STÈHØš™Xİ™œ™Y^™JÂˆØ[Ú[™Îˆœ›İ]YY›Ûİ‹ˆšXŞXÛNˆœ›İ]YXšZÙH‹ˆ]]Îˆœ›İ]YXØ\ˆ‚ŸJNÂ˜ÛÛœİ“ÕUS‘×Ô“Õ’QTˆHØš™Xİ™œ™Y^™JÂˆYˆœ›İ][™×ÛÜ[œİ™Y]X\ÙH‹ˆ]]Üš]Nˆ‘“ÔÔÑÒTÈÈÜ[”İ™Y]X\›İ][™ÈÙ\šXÙH‹ˆ˜\ÙWİ\›ˆšÎ‹ËÜ›İ][™Ë›Ü[œİ™Y]X\™H‹ˆ]šX][Ûˆ°ªHÜ[”İ™Y]X\ÛÛšX]ÜœÈ‹ˆX^ÜœÎˆKˆ[Y[İ]Û\ÎˆŒˆØXÚWİÛ\ÎˆLŒˆÚ\˜İZ]ÛÜ[—Û\ÎˆÌŸJNÂ™[˜İ[Ûˆ˜[Y›İ]TÚ[
+Z\ŠHÂˆ™]\›ˆ\œ˜^Kš\Ğ\œ˜^JZ\ŠH	‰ˆZ\‹›[™İHˆ	‰ˆ[X™\‹š\Ñš[š]J[X™\ŠZ\–ÌJJH	‰ˆ[X™\‹š\Ñš[š]J[X™\ŠZ\–ÌWJJH	‰ˆ[X™\ŠZ\–ÌJHHLN	‰ˆ[X™\ŠZ\–ÌJHHN	‰ˆ[X™\ŠZ\–ÌWJHHNL	‰ˆ[X™\ŠZ\–ÌWJHHLÂŸB™[˜İ[Ûˆ˜[Y]T›İ]QÙ[ÛY]JÙ[ÛY]JHÂˆYˆ
+YÙ[ÛY]HÙ[ÛY]K\HOOH“[™Tİš[™ÈˆP\œ˜^Kš\Ğ\œ˜^JÙ[ÛY]K˜ÛÛÜ™[˜]\ÊHÙ[ÛY]K˜ÛÛÜ™[˜]\Ë›[™İˆÙ[ÛY]K˜ÛÛÜ™[˜]\Ë›[™İˆŒ
+H™]\›ˆ[ÂˆYˆ
+YÙ[ÛY]K˜ÛÛÜ™[˜]\Ë™]™\J˜[Y›İ]TÚ[
+JH™]\›ˆ[Âˆ™]\›ˆÈ\Nˆ“[™Tİš[™È‹ÛÛÜ™[˜]\ÎˆÙ[ÛY]K˜ÛÛÜ™[˜]\Ë›X\
+
+Z\ŠHOˆÓ[X™\ŠZ\–ÌJK[X™\ŠZ\–ÌWJWJHNÂŸB™[˜İ[Ûˆ›İ]PÛÛÜ™[˜]J˜[YJHÂˆÛÛœİ]H[X™\Š˜[YOË›]
+KÛˆH[X™\Š˜[YOË›ÛŠNÂˆYˆ
+S[X™\‹š\Ñš[š]J]
+HS[X™\‹š\Ñš[š]JÛŠH]NL]ˆLÛˆLNÛˆˆN
+H™]\›ˆ[Âˆ™]\›ˆÈ]ÛˆNÂŸB™[˜İ[Ûˆ›İ]PØXÚRÙ^J[ÙKÜšYÚ[‹\İ[˜][ÛŠHÂˆÛÛœİ›İ[™H
+ŠHOˆ[X™\ŠŠKÑš^Y
+JNÂˆ™]\›ˆ	Û[Ù_N‰Ü›İ[™
+ÜšYÚ[‹›]
+_K	Ü›İ[™
+ÜšYÚ[‹›ÛŠ_N‰Ü›İ[™
+\İ[˜][Û‹›]
+_K	Ü›İ[™
+\İ[˜][Û‹›ÛŠ_XÂŸB˜\Ş[˜È[˜İ[ÛˆXÜ]Z\™S™]ÛÜšÔ›İ]J[ÙKÜšYÚ[’[œ]\İ[˜][Û’[œ]™]Ú[\H™]Ú›İÓ\ÈH]K››İÊ
+JHÂˆÛÛœİ›Ùš[HH“ÕUS‘×Ô“Ñ’STÖÛ[ÙWNÂˆÛÛœİÜšYÚ[ˆH›İ]PÛÛÜ™[˜]JÜšYÚ[’[œ]
+K\İ[˜][ÛˆH›İ]PÛÛÜ™[˜]J\İ[˜][Û’[œ]
+NÂˆYˆ
+\›Ùš[H[ÜšYÚ[ˆY\İ[˜][ÛŠH™]\›ˆ[ÂˆÛÛœİÛÛÜ™ÈH	ÛÜšYÚ[‹›ÛŸK	ÛÜšYÚ[‹›]NÉÙ\İ[˜][Û‹›ÛŸK	Ù\İ[˜][Û‹›]XÂˆÛÛœİ\›H	Ô“ÕUS‘×Ô“Õ’QT‹˜˜\ÙWİ\›KÉÜ›Ùš[_KÜ›İ]KİŒKÙš]š[™ËÉØÛÛÜ™ßOÛİ™\šY]ÏY[	™Ù[ÛY]šY\ÏYÙ[ÚœÛÛ‰œİ\ÏY˜[ÙXÂˆÛÛœİÛÛ›Û\ˆH™]ÈX›ÜÛÛ›Û\Š
+NÂˆÛÛœİ[Y\ˆHÙ][Y[İ]
+
+
+HOˆÛÛ›Û\‹˜X›Ü
+
+K“ÕUS‘×Ô“Õ’QT‹[Y[İ]Û\ÊNÂˆHÂˆÛÛœİ™\ÜÛœÙHH]ØZ]™]Ú[\
+\›ÈY]Ùˆ‘ÑU‹XY\œÎˆÈ•\Ù\‹PYÙ[ˆ•“ÖKS[Øš[]KÌKŒ
+
+ÚÎ‹Ëİ›ŞKX\œÚ[[Û™[X\ÜÛÍÛÜšÙ\œË™]‹ÊH‹XØÙ\ˆ˜\XØ][Û‹ÚœÛÛˆˆKÚYÛ˜[ˆÛÛ›Û\‹œÚYÛ˜[JNÂˆYˆ
+\™\ÜÛœÙOË›ÚÊH™]\›ˆ[ÂˆÛÛœİ^[ØYH]ØZ]™\ÜÛœÙKšœÛÛŠ
+NÂˆÛÛœİ›İ]HH\œ˜^Kš\Ğ\œ˜^J^[ØYËœ›İ]\ÊHÈ^[ØYœ›İ]\ÖÌHˆ[ÂˆÛÛœİÙ[ÛY]HH˜[Y]T›İ]QÙ[ÛY]J›İ]OË™Ù[ÛY]JNÂˆÛÛœİ\İ[˜ÙHH[X™\Š›İ]OË™\İ[˜ÙJNÂˆYˆ
+YÙ[ÛY]HS[X™\‹š\Ñš[š]J\İ[˜ÙJH\İ[˜ÙHH
+H™]\›ˆ[Âˆ™]\›ˆÈÙ[ÛY]K\İ[˜ÙWÛNˆX]œ›İ[™
+\İ[˜ÙJKÛİ\˜ÙNˆ“ÕUS‘×Ô“Õ’QT‹šYÛİ\˜ÙWØÛ\ÜÎˆ›™]ÛÜš×Ü›İ]H‹ØœÙ\™YØ]ˆ™]È]J›İÓ\ÊKÒTÓÔİš[™Ê
+K]šX][Ûˆ“ÕUS‘×Ô“Õ’QT‹˜]šX][Û‹ØXÚWÚ]ˆ˜[ÙHNÂˆHØ]ÚÂˆ™]\›ˆ[ÂˆHš[˜[HÂˆÛX\•[Y[İ]
+[Y\ŠNÂˆBŸB—×Û˜[YJXÜ]Z\™S™]ÛÜšÔ›İ]K˜XÜ]Z\™S™]ÛÜšÔ›İ]HŠNÂ˜\Ş[˜È[˜İ[ÛˆXÜ]Z\™S™]ÛÜšÔ›İ]\Ê[Ù\ËÜšYÚ[’[œ]\İ[˜][Û’[œ]™]Ú[\H™]Ú›İÓ\ÈH]K››İÊ
+K[ˆHßJHÂˆÛÛœİÜšYÚ[ˆH›İ]PÛÛÜ™[˜]JÜšYÚ[’[œ]
+K\İ[˜][ÛˆH›İ]PÛÛÜ™[˜]J\İ[˜][Û’[œ]
+NÂˆÛÛœİ[\HH
+
+HOˆØš™Xİ™œ›ÛQ[šY\Ê[Ù\Ë›X\
+
+[ÙJHOˆÛ[ÙK[JJNÂˆYˆ
+[ÜšYÚ[ˆY\İ[˜][ÛŠH™]\›ˆ[\J
+NÂˆYˆ
+™]Ú[\OOH™]Ú
+HÂˆÛÛœİÛÛÜ™[˜]ÜˆH[Ë”“ÕUS‘×ĞÓÓÔ‘SUÔÂˆYˆ
+XÛÛÜ™[˜]ÜËšYœ›ÛS˜[YHXÛÛÜ™[˜]ÜË™Ù]
+H™]\›ˆ[\J
+NÂˆHÂˆÛÛœİİXˆHÛÛÜ™[˜]Ü‹™Ù]
+ÛÛÜ™[˜]Ü‹šYœ›ÛS˜[YJ™ÛØ˜[ŠJNÂˆÛÛœİ™\ÜÛœÙHH]ØZ]İX‹™™]Ú
+šÎ‹ËÜ›İ][™ËXÛÛÜ™[˜]Ü‹š[\›˜[Ü›İ]\È‹ÈY]Ùˆ”ÔÕ‹XY\œÎˆÈ˜ÛÛ[]\Hˆ˜\XØ][Û‹ÚœÛÛˆˆK›ÙNˆ”ÓÓ‹œİš[™ÚYJÈ[Ù\ËÜšYÚ[‹\İ[˜][ÛˆJHJNÂˆYˆ
+\™\ÜÛœÙK›ÚÊH™]\›ˆ[\J
+NÂˆÛÛœİ›ÙHH]ØZ]™\ÜÛœÙKšœÛÛŠ
+NÂˆ™]\›ˆØš™Xİ™œ›ÛQ[šY\Ê[Ù\Ë›X\
+
+[ÙJHOˆÛ[ÙK›ÙOËœ›İ]\ÏË–Û[ÙWHÏÈ[JJNÂˆHØ]ÚÂˆ™]\›ˆ[\J
+NÂˆBˆBˆÛÛœİ›İ]\ÈHßNÂˆ›Üˆ
+ÛÛœİ[ÙHÙˆ[Ù\ÊH›İ]\ÖÛ[ÙWHH]ØZ]XÜ]Z\™S™]ÛÜšÔ›İ]J[ÙKÜšYÚ[‹\İ[˜][Û‹™]Ú[\›İÓ\ÊNÂˆ™]\›ˆ›İ]\ÎÂŸB—×Û˜[YJXÜ]Z\™S™]ÛÜšÔ›İ]\Ë˜XÜ]Z\™S™]ÛÜšÔ›İ]\ÈŠNÂ™[˜İ[Ûˆ›İ]Q\İ[˜ÙQ\Ü^J\İ[˜ÙSJHÂˆÛÛœİˆH[X™\Š\İ[˜ÙSJNÂˆYˆ
+S[X™\‹š\Ñš[š]JŠHˆH
+H™]\›ˆ[Âˆ™]\›ˆˆLÈ	ÓX]œ›İ[™
+Š_HXˆ	ÊˆÈL
+KÑš^Y
+ˆLÈHˆ
+_HÛXÂŸB™[˜İ[Ûˆ›İ]Y[ÙSÜ[ÛŠ[ÙK›İ]KšXÙJHÂˆYˆ
+\›İ]JH™]\›ˆ[ÂˆÛÛœİšXÙTİ]HHšXÙHÈšÛ›İÛˆˆˆ[šÛ›İÛˆÂˆ™]\›ˆÂˆ[ÙKˆÙ[XİX›NˆYKˆ›İ]WØ]˜Z[X›NˆYKˆ]˜Z[Xš[]WÜİ]Nˆ˜]˜Z[X›H‹ˆšXÙWÜİ]NˆšXÙTİ]Kˆ›İ]NˆÈÙ[ÛY]Nˆ›İ]K™Ù[ÛY]KÛİ\˜ÙNˆ›İ]KœÛİ\˜ÙKØœÙ\™YØ]ˆ›İ]K›ØœÙ\™YØ]]šX][Ûˆ›İ]K˜]šX][ÛˆKˆ\İ[˜ÙWÛNˆ›İ]K™\İ[˜ÙWÛKˆ\İ[˜ÙWÙ\Ü^Nˆ›İ]Q\İ[˜ÙQ\Ü^J›İ]K™\İ[˜ÙWÛJKˆšXÙNˆšXÙHÏÈ[ˆ\ØÛÜİ\™\ÎˆÂˆ”™XÛÜœšYÈØ[İ[YÈÛØœ™H™YÜ[”İ™Y]X\È›È[\XØH\İYÈ[°è[œÚ]ÈšHY[\È\İ[XYËˆ‹ˆ‹‹ŠšXÙTİ]HOOH[šÛ›İÛˆˆÈÈ”™XÚ[È›È\ÜÛšX›H—Hˆ×JBˆKˆ›İ™[˜[˜ÙNˆŞÈYˆ“ÕUS‘×Ô“Õ’QT‹šY]]Üš]Nˆ“ÕUS‘×Ô“Õ’QT‹˜]]Üš]K]šX][Ûˆ“ÕUS‘×Ô“Õ’QT‹˜]šX][ÛˆWKˆ™^ØXİ[ÛœÎˆ×BˆNÂŸB™[˜İ[Ûˆœ™YS[ÙSÜ[ÛŠ[ÙK›İ]JHÂˆ™]\›ˆ›İ]Y[ÙSÜ[ÛŠ[ÙK›İ]K›İ]HÈÈİ\œ™[˜ŞNˆT”È‹[[İ[ˆÚ[™ˆ™œ™YH‹Ûİ\˜ÙNˆš[š[œÚX×Ş™\›×ÛX\™Ú[˜[Ù˜\™HˆHˆ[
+NÂŸB™[˜İ[Ûˆ›Û”Ù[XİX›S[ÙJ[ÙK™X\ÛÛ‹^˜HHßJHÂˆ™]\›ˆÈ[ÙKÙ[XİX›Nˆ˜[ÙK›İ]WØ]˜Z[X›Nˆ˜[ÙK]˜Z[Xš[]WÜİ]Nˆ[˜]˜Z[X›H‹šXÙWÜİ]Nˆ[šÛ›İÛˆ‹™X\ÛÛ‹‹‹™^˜HNÂŸB™[˜İ[Ûˆ]]Ó[ÙSÜ[ÛŠ›İ]JHÂˆYˆ
+\›İ]JH™]\›ˆ›Û”Ù[XİX›S[ÙJ˜]]È‹œ›İ]Wİ[˜]˜Z[X›H‹ÈšXÙNˆ[\ØÛÜİ\™\ÎˆÈ”™XÚ[È›È\ÜÛšX›H—HJNÂˆ™]\›ˆ›İ]Y[ÙSÜ[ÛŠ˜]]È‹›İ]K[
+NÂŸB˜\Ş[˜È[˜İ[ÛˆÛÛ\]S[Øš[]PÛÛ\]][ÛŠ^[ØY™]Ú[\H™]Ú›İÓ\ÈH]K››İÊ
+K[ˆHßJHÂˆYˆ
+\^[ØY\[Ùˆ^[ØYOOH›Øš™XİŠH›İÈ™]È›ŞQ\œ›ÜŠ›[Øš[]WØÛÛ\]][Û—Ú[˜[Y‹
+NÂˆÛÛœİÜšYÚ[ˆH^[ØY›ÜšYÚ[‹\İ[˜][ÛˆH^[ØY™\İ[˜][ÛÂˆYˆ
+\›İ]PÛÛÜ™[˜]JÜšYÚ[Ë˜ÛÛÜ™[˜]\ÊH\›İ]PÛÛÜ™[˜]J\İ[˜][ÛË˜ÛÛÜ™[˜]\ÊJH›İÈ™]È›ŞQ\œ›ÜŠ›[Øš[]WØÛÛ\]][Û—ØÛÛÜ™[˜]\×Ü™\]Z\™Y‹
+NÂˆYˆ
+\İ[˜][ÛË\œš]ÜWİ™\šYšYYOOHYJH›İÈ™]È›ŞQ\œ›ÜŠ›[Øš[]WØÛÛ\]][Û—Ù\İ[˜][Û—İ[™\šYšYY‹JNÂˆÛÛœİ˜\ÙQXÚ\Ú[ÛˆHZ[[Øš[]QXÚ\Ú[ÛŠ\İ[˜][Û‹›İÓ\ÊNÂˆÛÛœİ›İ]\ÈH]ØZ]XÜ]Z\™S™]ÛÜšÔ›İ]\ÊÈØ[Ú[™È‹˜šXŞXÛH‹˜]]È—KÜšYÚ[‹˜ÛÛÜ™[˜]\Ë\İ[˜][Û‹˜ÛÛÜ™[˜]\Ë™]Ú[\›İÓ\Ë[ŠNÂˆÛÛœİØ[Ú[™Ô›İ]HH›İ]\ËØ[Ú[™ËšXŞXÛT›İ]HH›İ]\Ë˜šXŞXÛK]]Ô›İ]HH›İ]\Ë˜]]ÎÂˆÛÛœİ[ÙSÜ[ÛœÈH×NÂˆÛÛœİØ[Ú[™ÈHœ™YS[ÙSÜ[ÛŠØ[Ú[™È‹Ø[Ú[™Ô›İ]JNÂˆÛÛœİšXŞXÛHHœ™YS[ÙSÜ[ÛŠ˜šXŞXÛH‹šXŞXÛT›İ]JNÂˆYˆ
+Ø[Ú[™ÊH[ÙSÜ[ÛœËœ\Ú
+Ø[Ú[™ÊNÈ[ÙH[ÙSÜ[ÛœËœ\Ú
+›Û”Ù[XİX›S[ÙJØ[Ú[™È‹œ›İ]Wİ[˜]˜Z[X›HŠJNÂˆYˆ
+šXŞXÛJH[ÙSÜ[ÛœËœ\Ú
+šXŞXÛJNÈ[ÙH[ÙSÜ[ÛœËœ\Ú
+›Û”Ù[XİX›S[ÙJ˜šXŞXÛH‹œ›İ]Wİ[˜]˜Z[X›HŠJNÂˆ[ÙSÜ[ÛœËœ\Ú
+]]Ó[ÙSÜ[ÛŠ]]Ô›İ]JJNÂˆÛÛœİØ[Q™P\ÈHØ[Q™P\Ó[ÙSÜ[ÛŠ\İ[˜][Û‹›İÓ\ÊNÂˆYˆ
+Ø[Q™P\ÊH[ÙSÜ[ÛœËœ\Ú
+Ø[Q™P\ÊNÂˆ[ÙHYˆ
+˜\ÙQXÚ\Ú[Û‹š[YÜ˜][Û—ÜÛYÈ˜\ÙQXÚ\Ú[Û‹š[™Ù™œËœÛÛYJ
+
+HOˆ›[ÙHOOH˜\ÈŠJH[ÙSÜ[ÛœËœ\Ú
+›Û”Ù[XİX›S[ÙJ˜\È‹œ›İ]WØ[™Ù˜\™Wİ[˜]˜Z[X›H‹ÈšXÙNˆ[JJNÂˆYˆ
+
+˜\ÙQXÚ\Ú[Û‹™˜XİÈÏÈ×JKœÛÛYJ
+ŠHOˆ‹›[ÙHOOHœ˜Z[ŠH
+˜\ÙQXÚ\Ú[Û‹š[™Ù™œÈÏÈ×JKœÛÛYJ
+
+HOˆ›[ÙHOOHœ˜Z[ŠJH[ÙSÜ[ÛœËœ\Ú
+›Û”Ù[XİX›S[ÙJœ˜Z[‹][Ü›İ]WØ[™Ø\XØX›WÙ˜\™WÛ›İÚ›Ú[WØ]˜Z[X›H‹ÈšXÙNˆ[JJNÂˆ™]\›ˆÂˆÙ\™\—Ø]]Üš]]]™NˆYKˆ\İ[˜][Û‹ˆÜšYÚ[ˆÈ‹‹›ÜšYÚ[‹X™[ˆ^
+ÜšYÚ[Ë›X™[
+H“ÜšYÙ[ˆˆKˆ[ÙWÛÜ[ÛœÎˆ[ÙSÜ[ÛœËˆÙ[XİX›WÛ[Ù\Îˆ[ÙSÜ[ÛœË™š[\Š
+Ü[ÛŠHOˆÜ[Û‹œÙ[XİX›JK›X\
+
+Ü[ÛŠHOˆÜ[Û‹›[ÙJKˆ[™›×ØXİ[ÛœÎˆ˜\ÙQXÚ\Ú[Û‹š[™Ù™œËˆ›İ™[˜[˜ÙNˆ˜\ÙQXÚ\Ú[Û‹œ›İ™[˜[˜ÙKˆÛÛ\]YØ]ˆ™]È]J›İÓ\ÊKÒTÓÔİš[™Ê
+Kˆ˜XœšXØ]YØÛZ[\ÎˆˆNÂŸB—×Û˜[YJÛÛ\]S[Øš[]PÛÛ\]][Û‹˜ÛÛ\]S[Øš[]PÛÛ\]][ÛˆŠNÂ™[˜İ[Ûˆ[[Y]T˜]P[İÙY
+
+HÂˆÛÛœİ›İÈH]K››İÊ
+NÂˆYˆ
+][[Y]UÚ[™İËœİ\Y]›İÈH[[Y]UÚ[™İËœİ\Y]HSSQU–WĞÓÓ•PÕÚ[™İ×Û\ÊHÂˆ[[Y]UÚ[™İËœİ\Y]H›İÎÂˆ[[Y]UÚ[™İË˜Ûİ[HÂˆBˆ[[Y]UÚ[™İË˜Ûİ[
+ÏHNÂˆ™]\›ˆ[[Y]UÚ[™İË˜Ûİ[HSSQU–WĞÓÓ•PÕ›X^Ù]™[×Ü\—Ú\ÛÛ]WİÚ[™İÎÂŸB—×Û˜[YJ[[Y]T˜]P[İÙY[[Y]T˜]P[İÙYŠNÂ™[˜İ[Ûˆ˜[Y]U[[Y]Q[Y[œÚ[ÛŠÙ^K˜[YJHÂˆYˆ
+\[Ùˆ˜[YHOOH˜›ÛÛX[ˆŠHÂˆYˆ
+Ù^HOOH˜ØXÚWÚ]Ø›ÛÛX[ˆŠH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆ™]\›ÂˆBˆYˆ
+\[Ùˆ˜[YHOOH›[X™\ˆŠHÂˆYˆ
+S[X™\‹š\Ñš[š]J˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆ™]\›ÂˆBˆYˆ
+\[Ùˆ˜[YHOOHœİš[™Èˆ˜[YK›[™İH˜[YK›[™İˆ
+H›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆYˆ
+K×–ĞKV˜K^ŒNWË‹WJÉË\İ
+˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆYˆ
+Ù^HOOHœ›İš[˜ÙWÚYˆ	‰ˆK×—ÌŸIË\İ
+˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆYˆ
+Ù^HOOH›ØØ[]WØÛİ™\˜YÙWİY\ˆˆ	‰ˆK×•ÌNWWÖĞKVŒNW×JÉË\İ
+˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆYˆ
+Ù^HOOHœÛİ\˜ÙWÚYˆ	‰ˆK×œÜ˜×ÖØK^ŒNW×JÉË\İ
+˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆYˆ
+Ù^HOOHœİ]\×ØÛÙWØÛ\ÜÈˆ	‰ˆK×–ÌŒÍW^	Ë\İ
+˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂˆYˆ
+Ù^HOOH›][˜ŞWØXÚÙ]ˆ	‰ˆVÈ›L\È‹ŒLÌN[\È‹ŒÌÎNN[\È‹ŒWÌÜÈ‹™İÜÈ—Kš[˜ÛY\Ê˜[YJJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]Wİ˜[YWÚ[˜[Y‹
+NÂŸB—×Û˜[YJ˜[Y]U[[Y]Q[Y[œÚ[Û‹˜[Y]U[[Y]Q[Y[œÚ[ÛˆŠNÂ™[˜İ[Ûˆ˜[Y]U[[Y]T^[ØY
+^[ØY
+HÂˆYˆ
+\^[ØY\[Ùˆ^[ØYOOH›Øš™Xİˆ\œ˜^Kš\Ğ\œ˜^J^[ØY
+JH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]WÚ[˜[Y‹
+NÂˆYˆ
+USSQU–WĞÓÓ•PÕ™]™[Ëš[˜ÛY\Ê^[ØY™]™[
+JH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]WÙ]™[Û›İØ[İÙY‹
+NÂˆ›Üˆ
+ÛÛœİ›Ü˜šY[ˆÙˆSSQU–WĞÓÓ•PÕ™›Ü˜šY[—ÙšY[ÊHÂˆYˆ
+Øš™Xİœ›İİ\Kš\ÓİÛ”›Ü\K˜Ø[
+^[ØY›Ü˜šY[ŠJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]WÙšY[Û›İØ[İÙY‹
+NÂˆBˆÛÛœİ[Y[œÚ[ÛœÈH^[ØY™[Y[œÚ[ÛœÈÏÈßNÂˆYˆ
+\[Ùˆ[Y[œÚ[ÛœÈOOH›Øš™Xİˆ\œ˜^Kš\Ğ\œ˜^J[Y[œÚ[ÛœÊJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]WÚ[˜[Y‹
+NÂˆ›Üˆ
+ÛÛœİÚÙ^K˜[YWHÙˆØš™Xİ™[šY\Ê[Y[œÚ[ÛœÊJHÂˆYˆ
+USSQU–WĞÓÓ•PÕ™[Y[œÚ[ÛœËš[˜ÛY\ÊÙ^JJH›İÈ™]È›ŞQ\œ›ÜŠ[[Y]WÙ[Y[œÚ[Û—Û›İØ[İÙY‹
+NÂˆ˜[Y]U[[Y]Q[Y[œÚ[ÛŠÙ^K˜[YJNÂˆBˆ™]\›ˆÈ]™[ˆ^[ØY™]™[[Y[œÚ[ÛœÈNÂŸB—×Û˜[YJ˜[Y]U[[Y]T^[ØY˜[Y]U[[Y]T^[ØYŠNÂ™[˜İ[ÛˆX[
+
+HÂˆ™]\›ˆÂˆÚÎˆYKˆÙ\šXÙNˆ›ŞKX\‹ˆ™\œÚ[Ûˆ‘SPTÑWÓQUKœ™[X\ÙWÚYˆZ[Ú\Úˆ‘SPTÑWÓQUK˜Z[ÚYˆÛİ\˜ÙWØÛÛ[Z]ˆ‘SPTÑWÓQUKœÛİ\˜ÙWØÛÛ[Z]ˆÛÛ™šY×ÙYÙ\İˆ‘SPTÑWÓQUK˜ÛÛ™šY×ÙYÙ\İˆ™YÚ\İWÙYÙ\İˆ‘SPTÑWÓQUKœ™YÚ\İWÙYÙ\İˆ›İ™[˜[˜ÙNˆ“Õ‘SSÑKˆ™X]\™\ÎˆÈ]]ˆ˜[ÙK›ÚXÙNˆ˜[ÙKZWÜ™\]Z\™Yˆ˜[ÙKØNˆYK˜][Û˜[İ\œš]ÜNˆYK›İ][™ÎˆYK[Øš[]WØÛÛ\]][ÛˆYKX\Ü›İšY\ˆTĞÓÓ‘’QË“PTÔ“Õ’QT‹šYBˆNÂŸB—×Û˜[YJX[šX[ŠNÂ‹ËÈØ[H™HÔÎˆ[ˆÜZ[‹Ûİ\˜ÙKX]\İY”ÓÓˆ™ZXÛHY\\‹‚‹ËÈ›È[™Øİ[Y[YTÈ˜XÚÙ[™\ÈØ[YÜˆ[˜X›YHY˜][‚˜ÛÛœİÑ—ÑÔ×ÓPVĞQÑWÓTÏLŒÂ˜ÛÛœİÑ—ÑÔ×ÓPVÕ‘RPÓTÏLMÂ˜ÛÛœİÑ—ÑÔ×ĞĞPÒWÓTÏMLÂ›]Ù‘ÜĞØXÚO[[Â™[˜İ[ÛˆÙ‘ÜÔÛİ\˜ÙJ[^ßJ^ÂˆYŠ[‹•“ÖWÔÑ—ÑÔ×Ô‘UTÑWĞT“Õ‘QOOIÖQTÉÊ\™]\›ˆ[ÂˆYŠ\[Ùˆ[‹•“ÖWÔÑ—ÑÔ×Ñ‘QQÕT“OOIÜİš[™Éß\[Ùˆ[‹•“ÖWÔÑ—ÑÔ×ÔÓÕTÑWÒQOOIÜİš[™Éßˆ\[Ùˆ[‹•“ÖWÔÑ—ÑÔ×ĞT“Õ‘QÒÔÕOOIÜİš[™Éß\[Ùˆ[‹•“ÖWÔÑ—ÑÔ×ÓPÑS”ÑWÕT“OOIÜİš[™ÉÊ\™]\›ˆ[Âˆ^ÂˆÛÛœİ\›[™]ÈT“
+[‹•“ÖWÔÑ—ÑÔ×Ñ‘QQÕT“
+KXÙ[œÙO[™]ÈT“
+[‹•“ÖWÔÑ—ÑÔ×ÓPÑS”ÑWÕT“
+NÂˆYŠ\›œ›İØÛÛOOIÚÎ‰ß\›šÜİ˜[YHOOY[‹•“ÖWÔÑ—ÑÔ×ĞT“Õ‘QÒÔÕˆK×–ØK^ŒNK‹WJ×–ØK^—^Ì‹IÚK\İ
+\›šÜİ˜[YJ_\›\Ù\›˜[Y_\›œ\ÜİÛÜ™ˆ\›œÙX\˜Ú\›š\ÚXÙ[œÙKœ›İØÛÛOOIÚÎ‰ßXÙ[œÙK\Ù\›˜[Y_XÙ[œÙKœ\ÜİÛÜ™ˆK×œÙ—ÙÜ×ÖØK^ŒNW×^Ì‹IË\İ
+[‹•“ÖWÔÑ—ÑÔ×ÔÓÕTÑWÒQ
+J\™]\›ˆ[Âˆ™]\›ˆİ\›\›Ôİš[™Ê
+KÛİ\˜ÙWÚY™[‹•“ÖWÔÑ—ÑÔ×ÔÓÕTÑWÒQXÙ[œÙN›XÙ[œÙKÔİš[™Ê
+_NÂˆXØ]ÚÜ™]\›ˆ[BŸB™[˜İ[Ûˆ›Ü›X[^™TÙ‘ÜÕ™ZXÛ\Ê^[ØYÛİ\˜ÙRY›İÏQ]K››İÊ
+J^ÂˆYŠ\^[ØYP\œ˜^Kš\Ğ\œ˜^J^[ØY™ZXÛ\Ê_^[ØY™ZXÛ\Ë›[™İŒMŠ\™]\›ˆ[ÂˆÛÛœİÙY[[™]ÈÙ]
+
+KØœÙ\˜][ÛœÏV×NÂˆ›ÜŠÛÛœİ][HÙˆ^[ØY™ZXÛ\Ê^ÂˆYŠZ][_\[Ùˆ][HOOIÛØš™Xİ	ÊXÛÛ[YNÂˆÛÛœİY]\[Ùˆ][KšYOOIÜİš[™ÉÏÚ][KšYš[J
+N‰ÉÎÂˆYŠK×–ĞKV˜K^ŒNN—ËW^ÌKIË\İ
+Y
+_ÙY[‹š\ÊY
+JXÛÛ[YNÂˆÛÛœİ]Z][K›]ÛZ][K›ÛÂˆYŠ\[Ùˆ]OOIÛ[X™\‰ß\[ÙˆÛˆOOIÛ[X™\‰ßS[X™\‹š\Ñš[š]J]
+_S[X™\‹š\Ñš[š]JÛŠ_ˆ]LÌKM_]ˆLÌKŒßÛˆMŒKŒÛˆˆMŒŒÊXÛÛ[YNÂˆYŠ\[Ùˆ][K›ØœÙ\™YØ]OOIÜİš[™ÉßK×—ÍKWWË\İ
+][K›ØœÙ\™YØ]
+JXÛÛ[YNÂˆÛÛœİQ]Kœ\œÙJ][K›ØœÙ\™YØ]
+KYÙO[›İË]ÂˆYŠS[X™\‹š\Ñš[š]J
+_YÙOMLYÙO”Ñ—ÑÔ×ÓPVĞQÑWÓTÊXÛÛ[YNÂˆÙY[‹˜Y
+Y
+NÂˆÛÛœİØœÏ^ÚYœÛİ\˜ÙRY
+ÉÎ‰ÊÚYÛİ\˜ÙWÚYœÛİ\˜ÙRY]Û‹ˆ[\Ü˜[Üİ]N‰Ü™X[[YIËØœÙ\™YØ]›™]È]J
+KÒTÓÔİš[™Ê
+KØœÙ\™YÜÜÚ][Û—ÛÛ›NY_NÂˆ›ÜŠÛÛœİÙ^HÙˆÉÜ›İ]WÚY	Ë	İš\ÚY	Ë	Û[™I×J^ÂˆYŠ\[Ùˆ][VÚÙ^WOOOIÜİš[™ÉÉ‰š][VÚÙ^WK›[™İM	‰š][VÚÙ^WKš[J
+JBˆØœÖÚÙ^WOZ][VÚÙ^WKš[J
+NÂˆBˆØœÙ\˜][ÛœËœ\Ú
+ØœÊNÂˆYŠØœÙ\˜][ÛœË›[™İTÑ—ÑÔ×ÓPVÕ‘RPÓTÊXœ™XZÎÂˆBˆ™]\›ˆØœÙ\˜][ÛœÎÂŸB˜\Ş[˜È[˜İ[Ûˆ™XYØ[Q™QÜÊ[^ßK™]Ú[\Y™]Ú›İÏQ]K››İÊ
+J^ÂˆÛÛœİÛİ\˜ÙO\Ù‘ÜÔÛİ\˜ÙJ[ŠNÂˆYŠ\Ûİ\˜ÙJ\™]\›ˆÛÚÎYKİ]\Î‰Û›İÚ[YÜ˜]Y	ËÛİ\˜ÙWÚY›[ØœÙ\˜][ÛœÎ–×_NÂˆÛÛœİÙ^O\Ûİ\˜ÙKœÛİ\˜ÙWÚY
+Éß	ÊÜÛİ\˜ÙK\›ÂˆYŠÙ‘ÜĞØXÚOËšÙ^OOOZÙ^I‰››İË\Ù‘ÜĞØXÚK˜]Ñ—ÑÔ×ĞĞPÒWÓTÊ\™]\›ˆÙ‘ÜĞØXÚK˜[YNÂˆ]˜[YNÂˆ^ÂˆÛÛœİ™\ÜÛœÙOX]ØZ]™]Ú[\
+Ûİ\˜ÙK\›ÚXY\œÎØXØÙ\‰Ø\XØ][Û‹ÚœÛÛ‰ßK™Y\™Xİ‰Ù\œ›Ü‰ËˆÚYÛ˜[X›ÜÚYÛ˜[[Y[İ]
+L
+_JNÂˆÛÛœİZ[YO\™\ÜÛœÙKšXY\œË™Ù]
+	ØÛÛ[]\IÊ_	ÉÎÂˆYŠ\™\ÜÛœÙK›ÚßK×˜\XØ][Û—ÚœÛÛŠÎß	
+KÚK\İ
+Z[YJJBˆ›İÈ™]È\œ›ÜŠ	Ú[˜[YÜÛİ\˜ÙWÜ™\ÜÛœÙIÊNÂˆÛÛœİÛÛ[X]ØZ]™\ÜÛœÙK^
+
+NÂˆYŠÛÛ[›[™İŒMŒ
+]›İÈ™]È\œ›ÜŠ	ÜÛİ\˜ÙWÜ™\ÜÛœÙWİÛ×Û\™ÙIÊNÂˆÛÛœİØœÙ\˜][ÛœÏ[›Ü›X[^™TÙ‘ÜÕ™ZXÛ\Ê”ÓÓ‹œ\œÙJÛÛ[
+KÛİ\˜ÙKœÛİ\˜ÙWÚY›İÊNÂˆYŠ[ØœÙ\˜][ÛœÊ]›İÈ™]È\œ›ÜŠ	Ú[˜[YÜÛİ\˜ÙWÜØÚ[XIÊNÂˆ˜[YO^ÛÚÎYKİ]\Î›ØœÙ\˜][ÛœË›[™İÉÛ]™IÎ‰Û›×Øİ\œ™[ÜÜÚ][ÛœÉËˆÛİ\˜ÙWÚYœÛİ\˜ÙKœÛİ\˜ÙWÚYØœÙ\˜][ÛœßNÂˆXØ]ÚÂˆ˜[YO^ÛÚÎYKİ]\Î‰ÜÛİ\˜ÙWİ[˜]˜Z[X›IËÛİ\˜ÙWÚYœÛİ\˜ÙKœÛİ\˜ÙWÚYØœÙ\˜][ÛœÎ–×_NÂˆBˆÙ‘ÜĞØXÚO^ÚÙ^K]››İË˜[Y_NÂˆ™]\›ˆ˜[YNÂŸB˜\Ş[˜È[˜İ[Ûˆ\T™\ÜÛœÙJ™\]Y\İ[‹\ÊHÂˆÛÛœİ\›H™]ÈT“
+™\]Y\İ\›
+NÂˆÛÛœİ™]Ú[\H\ÏË\İ™X[Q™]ÚÏÈ™]ÚÂˆYˆ
+\›œ]˜[YHOOH‹Ø\Kİ˜[œÚ]ÜØ[KY™Kİ™ZXÛ\ÈŠHÂˆYŠ™\]Y\İ›Y]ÙOOH‘ÑUŠ\™]\›ˆY]Ù›İ[İÙY
+È‘ÑU—JNÂˆ™]\›ˆœÛÛŠ]ØZ]™XYØ[Q™QÜÊ[‹™]Ú[\
+JNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÚX[ŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH‘ÑUŠH™]\›ˆY]Ù›İ[İÙY
+È‘ÑU—JNÂˆ™]\›ˆœÛÛŠX[
+
+JNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÙ\İ[˜][ÛœËÜİYÙÙ\İŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆ™]\›ˆœÛÛŠ]ØZ]İYÙÙ\İ\İ[˜][ÛœÊ^[ØY™]Ú[\
+JNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÙ\İ[˜][ÛœËÜ™\ÛÛ™HŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆ™]\›ˆœÛÛŠ]ØZ]™\ÛÛ™Q\İ[˜][Û”Ù[Xİ[ÛŠ^[ØY™]Ú[\
+JNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÙ\İ[˜][Û‹Ü™\ÛÛ™Hˆ\›œ]˜[YHOOH‹Ø\KÛÜšYÚ[‹Ü™\ÛÛ™HŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆ™]\›ˆœÛÛŠ]ØZ]™\ÛÛ™PY™\ÜÊ^[ØY™]Ú[\
+JNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÛØØ][Û‹Ü™]™\œÙHŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆ™]\›ˆœÛÛŠ]ØZ]™]™\œÙSØØ][ÛŠ^[ØY™]Ú[\
+JNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÜ˜Y\‹İ˜Z[œËÛ™X\˜HŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆYˆ
+]˜[YÛÛÜ™[˜]\Ê^[ØY˜ÛÛÜ™[˜]\ÊJH›İÈ™]È›ŞQ\œ›ÜŠš[˜[YØÛÛÜ™[˜]\È‹
+NÂˆYˆ
+]˜Z[”˜Y\Ûİ™\˜YÙTİ\ÜY
+^[ØY˜ÛÛÜ™[˜]\ÊJH™]\›ˆœÛÛŠÈÚÎˆYK˜Y\ˆ[œİ\ÜY˜Z[”˜Y\”Û˜\Úİ
+^[ØY˜ÛÛÜ™[˜]\ÊHJNÂˆÛÛœİ›İšY\”™\İ[H]ØZ]\Ë˜Z[”Ù\šXÙPY\\‹œ™XY
+
+NÂˆ™]\›ˆœÛÛŠÈÚÎˆYK˜Y\ˆZ[˜Z[”˜Y\”Û˜\Úİ
+ÈÛÛÜ™[˜]\Îˆ^[ØY˜ÛÛÜ™[˜]\Ë›İšY\”™\İ[›İÓ\Îˆ]K››İÊ
+HJHJNÂˆBˆYˆ
+\›œ]˜[YKœİ\ÕÚ]
+‹Ø\KØÛİ™\˜YÙKÈŠJHÂˆYˆ
+™\]Y\İ›Y]ÙOOH‘ÑUŠH™]\›ˆY]Ù›İ[İÙY
+È‘ÑU—JNÂˆÛÛœİ\ÈH\›œ]˜[YKœÜ]
+‹ÈŠK™š[\Š›ÛÛX[ŠNÂˆYˆ
+\Ë›[™İOOH
+H™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ››İÙ›İ[™ˆK
+NÂˆÛÛœİÛİ™\˜YÙHHÙ]Ûİ™\˜YÙJ\ÖÌ—KXÛÙUT’PÛÛ\Û™[
+\ÖÌ×JJNÂˆ™]\›ˆÛİ™\˜YÙHÈœÛÛŠÈÚÎˆYKÛİ™\˜YÙHJHˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ˜Ûİ™\˜YÙWÛ›İÙ›İ[™ˆK
+NÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÛ[Øš[]KØÛÛ\]HŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆ™]\›ˆœÛÛŠÈÚÎˆYKÛÛ\]][Ûˆ]ØZ]ÛÛ\]S[Øš[]PÛÛ\]][ÛŠ^[ØY™]Ú[\]K››İÊ
+K[ŠHJNÂˆBˆYˆ
+\›œ]˜[YKœİ\ÕÚ]
+‹Ø\KÛ[Øš[]KÈŠJHÂˆYˆ
+™\]Y\İ›Y]ÙOOH‘ÑUŠH™]\›ˆY]Ù›İ[İÙY
+È‘ÑU—JNÂˆÛÛœİÛYÈHXÛÙUT’PÛÛ\Û™[
+\›œ]˜[YKœÛXÙJ‹Ø\KÛ[Øš[]KÈ‹›[™İ
+JNÂˆÛÛœİ[Øš[]HHÙ][Øš[]JÛYÊNÂˆYˆ
+[[Øš[]JH™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ›[Øš[]WÛ›İÚ[YÜ˜]Y‹Y\ˆ•ÕT”’UÔ–WÓÓ“HˆK
+NÂˆ[Z]]™[
+›[Øš[]WÜÛİ\˜ÙWÛÚÈ‹È[™Ú[ØÛ\ÜÎˆ›[Øš[]H‹›İš[˜ÙWÚYˆ[Øš[]Kœ›İš[˜ÙWÚYØØ[]WØÛİ™\˜YÙWİY\ˆ[Øš[]KY\‹Ûİ\˜ÙWÚYˆ[Øš[]KœÛİ\˜ÙWÚYÖÌK™\İ[ØÛ\ÜÎˆ˜]˜Z[X›WÛY]Y]HˆJNÂˆ™]\›ˆœÛÛŠÈÚÎˆYK[Øš[]HJNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\KÛ[Øš[]KØÛÛ\]HŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İ
+NÂˆ™]\›ˆœÛÛŠÈÚÎˆYKÛÛ\]][Ûˆ]ØZ]ÛÛ\]S[Øš[]PÛÛ\]][ÛŠ^[ØY™]Ú[\]K››İÊ
+K[ŠHJNÂˆBˆYˆ
+\›œ]˜[YHOOH‹Ø\Kİ[[Y]HŠHÂˆYˆ
+™\]Y\İ›Y]ÙOOH”ÔÕŠH™]\›ˆY]Ù›İ[İÙY
+È”ÔÕ—JNÂˆÛÛœİÛÛ[\HH™\]Y\İšXY\œË™Ù]
+˜ÛÛ[]\HŠHÏÈˆÂˆYˆ
+K×˜\XØ][Û—ÚœÛÛŠÎ—Êß	
+KÚK\İ
+ÛÛ[\JJH™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ[œİ\ÜYÛYYXWİ\HˆKMJNÂˆÛÛœİÜšYÚ[ˆH™\]Y\İšXY\œË™Ù]
+›ÜšYÚ[ˆŠNÂˆYˆ
+ÜšYÚ[ˆ	‰ˆÜšYÚ[ˆOOH\››ÜšYÚ[ŠH™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ˜Ü›ÜÜ×ÛÜšYÚ[—Ù›Ü˜šY[ˆˆKÊNÂˆÛÛœİ™]ÚÚ]HH™\]Y\İšXY\œË™Ù]
+œÙXËY™]Ú\Ú]HŠNÂˆYˆ
+™]ÚÚ]H	‰ˆVÈœØ[YK[ÜšYÚ[ˆ‹››Û™H—Kš[˜ÛY\Ê™]ÚÚ]JJH™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ˜Ü›ÜÜ×ÛÜšYÚ[—Ù›Ü˜šY[ˆˆKÊNÂˆYˆ
+][[Y]T˜]P[İÙY
+
+JH™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆœ˜]WÛ[Z]YˆKJNÂˆÛÛœİ^[ØYH]ØZ]\œÙTÛX[œÛÛ›ÙJ™\]Y\İSSQU–WĞÓÓ•PÕ›X^Ø›ÙWØ]\ÊNÂˆÛÛœİ˜[Y]YH˜[Y]U[[Y]T^[ØY
+^[ØY
+NÂˆ[Z]]™[
+˜[Y]Y™]™[˜[Y]Y™[Y[œÚ[ÛœÊNÂˆ™]\›ˆœÛÛŠÈÚÎˆYHJNÂˆBˆ™]\›ˆœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ››İÙ›İ[™ˆK
+NÂŸB—×Û˜[YJ\T™\ÜÛœÙK˜\T™\ÜÛœÙHŠNÂ™[˜İ[ÛˆÜ™X]T™\]Y\İ[™\Š\ÈHßJHÂˆÛÛœİ˜Z[”Ù\šXÙPY\\ˆH\Ë˜Z[”Ù\šXÙPY\\ˆÏÈÜ™X]TØ\›ZY[ÔØÚY[YY\\ŠÈ™]Ú[\ˆ\Ë\İ™X[Q™]ÚÏÈ™]ÚJNÂˆÛÛœİ™\]Y\İ\ÈHÈ‹‹™\Ë˜Z[”Ù\šXÙPY\\ˆNÂˆ™]\›ˆÊˆ×ÔT‘W×È
+‹È×Û˜[YJ\Ş[˜È[˜İ[Ûˆ[™J™\]Y\İ[ˆHßJHÂˆÛÛœİİ\YH]K››İÊ
+NÂˆÛÛœİ\›H™]ÈT“
+™\]Y\İ\›
+NÂˆ]™\ÜÛœÙNÂˆHÂˆYˆ
+\›œ]˜[YKœİ\ÕÚ]
+‹Ø\KÈŠJH™\ÜÛœÙHH]ØZ]\T™\ÜÛœÙJ™\]Y\İ[‹™\]Y\İ\ÊNÂˆ[ÙHYˆ
+Y[‹TÔÑUÊH™\ÜÛœÙHHœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ˜\ÜÙ]×Øš[™[™×İ[˜]˜Z[X›HˆKLÊNÂˆ[ÙH™\ÜÛœÙHHÚ]ÙXİ\š]J]ØZ][‹TÔÑUË™™]Ú
+™\]Y\İ
+JNÂˆHØ]Ú
+\œ›ÜŠHÂˆYˆ
+\œ›Üˆ[œİ[˜Ù[Ùˆ›ŞQ\œ›ÜŠH™\ÜÛœÙHHœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆ\œ›Ü‹˜ÛÙK]Z[ˆ\œ›Ü‹™]Z[ÏÈ›ÚYK\œ›Ü‹œİ]\ÊNÂˆ[ÙHÂˆÛÛœÛÛK™\œ›ÜŠ”ÓÓ‹œİš[™ÚYJÈ]™[ˆš[\›˜[Ù\œ›Üˆ‹™[X\ÙWÚYˆ‘SPTÑWÓQUKœ™[X\ÙWÚY\œ›Ü—ØÛ\ÜÎˆ[š[™YˆJJNÂˆ™\ÜÛœÙHHœÛÛŠÈÚÎˆ˜[ÙK\œ›Üˆš[\›˜[Ù\œ›ÜˆˆKL
+NÂˆBˆBˆ[Z]]™[
+œ™\]Y\İØÛÛ\]Y‹È[™Ú[ØÛ\ÜÎˆ\›œ]˜[YKœİ\ÕÚ]
+‹Ø\KÈŠHÈ\›œ]˜[YKœÜ]
+‹ÈŠKœÛXÙJKÊKš›Ú[Š—ÈŠHˆ˜\ÜÙ]‹İ]\×ØÛÙWØÛ\ÜÎˆİ]\ĞÛ\ÜÊ™\ÜÛœÙKœİ]\ÊK][˜ŞWØXÚÙ]ˆ][˜ŞPXÚÙ]
+]K››İÊ
+HHİ\Y
+HJNÂˆ™]\›ˆ™\ÜÛœÙNÂˆKš[™HŠNÂŸB—×Û˜[YJÜ™X]T™\]Y\İ[™\‹˜Ü™X]T™\]Y\İ[™\ˆŠNÂ˜\ˆY˜][[™\ˆHÜ™X]T™\]Y\İ[™\Š
+NÂ˜\ˆÛÜšÙ\—ÙY˜][HÈ™]ÚˆÊˆ×ÔT‘W×È
+‹È×Û˜[YJ
+™\]Y\İ[ŠHOˆY˜][[™\Š™\]Y\İ[ŠK™™]ÚŠHNÂ™^ÜÂˆ›ÛZ[˜][PÛÛÜ™[˜]Ü‹ˆ›ŞQ\œ›Ü‹ˆ›Ü›X[^™TÙ‘ÜÕ™ZXÛ\Ëˆ™XYØ[Q™QÜËˆÙ‘ÜÔÛİ\˜ÙKˆÛ\ÜÚYTÛİ\˜ÙQœ™\Ú™\ÜËˆÜ™X]T™\]Y\İ[™\‹ˆÛÜšÙ\—ÙY˜][\ÈY˜][ˆ™]ÚÙ[Ô™Y‹ˆÙ]Ûİ™\˜YÙKˆÙ][Øš[]KˆZ[[Øš[]QXÚ\Ú[Û‹ˆÛÛ\]S[Øš[]PÛÛ\]][Û‹ˆ]Y\S›Ü›X[^™\‹ˆÛÛ^[›™\‹ˆY\Q\İ[˜][ÛØ[™Y]\Ëˆ˜[šÑ\İ[˜][ÛØ[™Y]\Ëˆ™X\™\İ˜Z[İ][ÛœËˆ˜Z[”˜Y\Ûİ™\˜YÙTİ\ÜYˆZ[˜Z[”˜Y\”Û˜\ÚİˆÜ™X]TØ\›ZY[ÔØÚY[YY\\‹ˆ\œÙTØ\›ZY[ÔØÚY[YÙ\šXÙKˆ›Ü›X[^™QÙ[Ô™Y”XÙKˆ™\ÛÛ™PY™\ÜËˆ™\ÛÛ™Q\İ[˜][Û”Ù[Xİ[Û‹ˆ™]™\œÙSØØ][Û‹ˆÛİ\˜ÙQ]šY[˜ÙKˆİYÙÙ\İ\İ[˜][ÛœËˆ˜[Y]U[[Y]T^[ØYŸNÂ‹ËÈÈÛİ\˜ÙSX\[™ÕT“]ÛÜšÙ\‹šœË›X\‚
