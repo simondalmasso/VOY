@@ -74,11 +74,15 @@ authority = authority.replace('export const ','const ')
 rail = (root/'src/rail-stations.generated.js').read_text(encoding='utf-8')
 if 'RAIL_STATION_CATALOG_META' not in rail: raise SystemExit('Pinned rail station catalog missing metadata')
 rail = rail.replace('export const ','const ')
+sfStops = (root/'src/sf-cuandopasa-stops.generated.js').read_text(encoding='utf-8')
+if 'SF_CUANDOPASA_STOPS_META' not in sfStops: raise SystemExit('Pinned Cuándo Pasa stop catalog missing metadata')
+sfStops = sfStops.replace('export const ','const ')
 import re
 worker = (root/'src/worker.template.js').read_text(encoding='utf-8')
 worker = re.sub(r"^import \{OFFICIAL_GEOREF_RUNTIME_AUTHORITY_META,OFFICIAL_LOCALITY_CANON,OFFICIAL_PROVINCE_BOUNDARIES,OFFICIAL_LOCALITY_PARENT_BOUNDARIES\} from './georef-authority\.generated\.js';\r?\n",'',worker,count=1,flags=re.M)
 worker = re.sub(r"^import \{RAIL_STATION_CATALOG_META,RAIL_STATIONS\} from './rail-stations\.generated\.js';\r?\n",'',worker,count=1,flags=re.M)
-worker = authority+'\r\n'+rail+'\r\n'+worker
+worker = re.sub(r"^import \{SF_CUANDOPASA_STOPS_META,SF_CUANDOPASA_ROUTES\} from './sf-cuandopasa-stops\.generated\.js';\r?\n",'',worker,count=1,flags=re.M)
+worker = authority+'\r\n'+rail+'\r\n'+sfStops+'\r\n'+worker
 meta = f'var RELEASE_META = {{ "release_id": "{release_id}", "build_id": "{build_id}", "source_commit": "{sha}", "source_digest": "{source_digest}", "config_digest": "{config_digest}", "registry_digest": "{registry_digest}" }};'
 worker = re.sub(r'var RELEASE_META = \{[^\r\n]+\};', meta, worker, count=1)
 (dist/'worker.js').write_text(worker, encoding='utf-8')

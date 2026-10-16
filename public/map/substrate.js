@@ -287,6 +287,9 @@ export function createMapSubstrate({
       seen.add(model.id);
       const entry = ensureMarker(model.id, model.kind, model.label);
       entry.element.classList.toggle('is-selected', model.selected === true);
+      entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true);
+      if (Number.isFinite(Number(model.bearing))) entry.element.style.setProperty('--gps-bearing', `${Number(model.bearing)}deg`);
+      else entry.element.style.removeProperty('--gps-bearing');
       place(entry, Number(model.lat), Number(model.lon));
     }
     for (const [id, entry] of markers) {

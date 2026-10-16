@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "voy-app",
   "main": "dist/worker.js",
@@ -6,15 +6,32 @@
   "workers_dev": true,
   "durable_objects": {
     "bindings": [
-      { "name": "ROUTING_COORDINATOR", "class_name": "NominatimCoordinator" }
+      {
+        "name": "ROUTING_COORDINATOR",
+        "class_name": "NominatimCoordinator"
+      }
     ]
   },
   "migrations": [
-    { "tag": "v1_nominatim_coordinator", "new_sqlite_classes": ["NominatimCoordinator"] }
+    {
+      "tag": "v1_nominatim_coordinator",
+      "new_sqlite_classes": [
+        "NominatimCoordinator"
+      ]
+    }
   ],
   "assets": {
     "directory": "dist/client",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "vars": {
+    "VOY_SF_GPS_REUSE_APPROVED": "YES",
+    "VOY_SF_GPS_FEED_URL": "https://api.cuandopasa.com.ar/",
+    "VOY_SF_GPS_APPROVED_HOST": "api.cuandopasa.com.ar",
+    "VOY_SF_GPS_SOURCE_ID": "sf_gps_cuandopasa",
+    "VOY_SF_GPS_LICENSE_URL": "https://github.com/simondalmasso/VOY/blob/main/docs/SANTA_FE_CUANDOPASA_SOURCE.md"
   }
 }

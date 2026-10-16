@@ -125,11 +125,36 @@ export function createTrackerStore({now=()=>Date.now(),presentTransportEntity=nu
     if(observation.temporal_state==='realtime'&&classification.state==='realtime'){
       // GPS observation point: show only the exact last reported coordinate.
       // Never interpolate or snap it without independently verified geometry.
-      if(observation.observed_position_only===true)return{
-        render:true,animated:false,temporal_state:'realtime',visual_state:'realtime',
-        position:{lat:observation.lat,lon:observation.lon},source_observation:observation,
-        source_synthetic:synthetic,classification,reason:'observed_point_only'
-      };
+      if(observation.observed_position_only===true){
+        const exactPosition={lat:observation.lat,lon:observation.lon};
+        const previous=entity.previous;
+        const staticFrame=(reason='observed_point_only')=>({
+          render:true,animated:false,temporal_state:'realtime',visual_state:'realtime',
+          position:exactPosition,source_observation:observation,source_synthetic:synthetic,
+          classification,reason
+        });
+        // Ease only between two fresh, measured GPS fixes for the same vehicle.
+        // Display-only interpolation is capped at 12 s; trail/history retain raw fixes.
+        if(reducedMotion||!previous||previous.observed_position_only!==true||
+           previous.source_id!==observation.source_id)return staticFrame();
+        const previousAt=Date.parse(previous.observed_at),currentAt=Date.parse(observation.observed_at);
+        const sourceSpanMs=currentAt-previousAt;
+        if(!Number.isFinite(sourceSpanMs)||sourceSpanMs<=0||sourceSpanMs>freshnessMs)return staticFrame();
+        const distance=distanceMeters(previous,observation);
+        const plausibleDistance=sourceSpanMs/1000*maxSpeedMps+20;
+        if(!Number.isFinite(distance)||distance>plausibleDistance)return staticFrame('impossible_gps_jump');
+        const progress=Math.max(0,Math.min(1,(now()-entity.lastUpdate)/12000));
+        const eased=progress*progress*(3-2*progress);
+        const dLat=observation.lat-previous.lat,dLon=observation.lon-previous.lon;
+        const bearing=(Math.atan2(dLon*Math.cos(observation.lat*Math.PI/180),dLat)*180/Math.PI+360)%360;
+        return{
+          render:true,animated:progress<1,temporal_state:'realtime',visual_state:'realtime',
+          position:{lat:previous.lat+dLat*eased,lon:previous.lon+dLon*eased},bearing,
+          display_interpolated:progress<1,animation_progress:progress,
+          source_observation:observation,source_synthetic:synthetic,classification,
+          reason:progress<1?'observed_gps_easing':'observed_point_only'
+        };
+      }
       if(!entity.previous){
         return{render:false,animated:false,temporal_state:'realtime',visual_state:'realtime',reason:'previous_realtime_observation_missing',source_synthetic:synthetic,classification};
       }
