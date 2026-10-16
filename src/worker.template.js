@@ -830,13 +830,26 @@ function normalizeGeoRefPlace(item) {
   };
 }
 __name(normalizeGeoRefPlace, "normalizeGeoRefPlace");
+function hasUnlocatedAddressCandidate(item) {
+  if (!item || typeof item !== "object" || !extractLabel(item)) return false;
+  const province = extractProvince(item), locality = extractLocality(item);
+  return Boolean(entityId(province) && entityName(province) && entityId(locality) && entityName(locality) && !extractCoordinates(item));
+}
+__name(hasUnlocatedAddressCandidate, "hasUnlocatedAddressCandidate");
+function unlocatedAddressCandidates(payload) {
+  const found = [payload?.direcciones, payload?.resultados, payload?.results, payload?.data].find(Array.isArray);
+  return found?.filter(hasUnlocatedAddressCandidate) ?? [];
+}
+__name(unlocatedAddressCandidates, "unlocatedAddressCandidates");
 function normalizeDirectionCollection(payload) {
   if (!payload || typeof payload !== "object") throw new VoyError("upstream_schema_invalid", 502);
   const collections = [payload.direcciones, payload.resultados, payload.results, payload.data];
   const found = collections.find(Array.isArray);
   if (!found) throw new VoyError("upstream_schema_invalid", 502);
   const normalized = found.map(normalizeGeoRefPlace).filter(Boolean);
-  if (found.length > 0 && normalized.length === 0) throw new VoyError("upstream_schema_invalid", 502);
+  // GeoRef can return valid address records with null coordinates: these are
+  // unusable for routing, but do not by themselves imply a malformed schema.
+  if (found.length > 0 && normalized.length === 0 && !found.some(hasUnlocatedAddressCandidate)) throw new VoyError("upstream_schema_invalid", 502);
   return normalized;
 }
 __name(normalizeDirectionCollection, "normalizeDirectionCollection");
@@ -920,6 +933,34 @@ async function fetchGeoRef(pathname, searchParams, fetchImpl = fetch, timeoutMs 
   throw new VoyError("external_dependency_unavailable", 503, lastClass ?? "unknown");
 }
 __name(fetchGeoRef, "fetchGeoRef");
+function normalizeAddressResolveInput(payload) {
+  let query = normalizeText(payload?.query);
+  let province = normalizeText(payload?.province);
+  let locality = normalizeText(payload?.locality);
+  // Parse the common human-entered address suffix before passing it to GeoRef.
+  if (!province && !locality && query.includes(",")) {
+    const parts = query.split(",").map(normalizeText).filter(Boolean);
+    if (parts.length >= 3) {
+      province = parts.pop();
+      locality = parts.pop();
+      query = parts.join(", ");
+    } else if (parts.length === 2 && /\d/.test(parts[0])) {
+      locality = parts[1];
+      query = parts[0];
+    }
+  }
+  return { query, province, locality };
+}
+__name(normalizeAddressResolveInput, "normalizeAddressResolveInput");
+function normalizedAddressMatchKey(value) {
+  return foldText(normalizeText(value).split(",")[0])
+    .replace(/\bavenida\b/g, " av ")
+    .replace(/\b(boulevard|bulevar)\b/g, " bv ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+__name(normalizedAddressMatchKey, "normalizedAddressMatchKey");
 function buildResolveParams(query, province, locality) {
   const params = { direccion: query, max: 5 };
   if (province) params.provincia = province;
@@ -928,15 +969,14 @@ function buildResolveParams(query, province, locality) {
 }
 __name(buildResolveParams, "buildResolveParams");
 async function resolveAddress(payload, fetchImpl = fetch) {
-  const query = normalizeText(payload?.query);
-  const province = normalizeText(payload?.province);
-  const locality = normalizeText(payload?.locality);
+  const { query, province, locality } = normalizeAddressResolveInput(payload);
   if (query.length < 3 || query.length > 160 || province.length > 80 || locality.length > 100) throw new VoyError("invalid_query", 400);
   const upstream = await fetchGeoRef("/direcciones", buildResolveParams(query, province, locality), fetchImpl);
+  const unlocated = unlocatedAddressCandidates(upstream);
   const candidates = normalizeDirectionCollection(upstream);
   if (!candidates.length) {
-    emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "not_found" });
-    return { ok: false, result_class: "unverified", error: "territory_unverified", candidates: [], requires_context: !province && !locality };
+    emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: unlocated.length ? "coordinates_unavailable" : "not_found" });
+    return { ok: false, result_class: "unverified", error: unlocated.length ? "territory_coordinates_unavailable" : "territory_unverified", candidates: [], requires_context: !province && !locality };
   }
   const unique = [];
   const seen = /* @__PURE__ */ new Set();
@@ -946,6 +986,32 @@ async function resolveAddress(payload, fetchImpl = fetch) {
       seen.add(key);
       unique.push(candidate);
     }
+  }
+  const queryKey = normalizedAddressMatchKey(query);
+  const matchesContext = candidate => {
+    const candidateProvince = candidate.province?.name ?? entityName(extractProvince(candidate));
+    const candidateLocality = candidate.locality?.name ?? entityName(extractLocality(candidate));
+    return (!locality || foldText(candidateLocality) === foldText(locality)) &&
+      (!province || foldText(candidateProvince) === foldText(province));
+  };
+  // Only one exact street+number match in the requested territory can resolve.
+  // Substring matches such as ZORRILLA DE SAN MARTIN are never treated as SAN MARTIN.
+  if (locality && /\d/.test(query)) {
+    const exact = unique.filter(candidate => normalizedAddressMatchKey(candidate.label) === queryKey && matchesContext(candidate));
+    const exactUnlocated = unlocated.filter(candidate => normalizedAddressMatchKey(extractLabel(candidate)) === queryKey && matchesContext(candidate));
+    if (unlocated.length > 0) {
+      if (exact.length === 1 && exactUnlocated.length === 0) {
+        unique.splice(0, unique.length, exact[0]);
+      } else {
+        emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "coordinates_unavailable" });
+        return { ok: false, result_class: "unverified", error: "territory_coordinates_unavailable", candidates: [], requires_context: !province && !locality };
+      }
+    } else if (unique.length > 1 && exact.length === 1) {
+      unique.splice(0, unique.length, exact[0]);
+    }
+  } else if (unlocated.length > 0) {
+    emitEvent("territory_resolve_unverified", { endpoint_class: "territory", result_class: "coordinates_unavailable" });
+    return { ok: false, result_class: "unverified", error: "territory_coordinates_unavailable", candidates: [], requires_context: !province && !locality };
   }
   const resultClass = unique.length === 1 ? "resolved" : "ambiguous";
   emitEvent(resultClass === "resolved" ? "territory_resolve_ok" : "territory_resolve_ambiguous", { endpoint_class: "territory", province_id: unique[0].province.id, result_class: resultClass });
