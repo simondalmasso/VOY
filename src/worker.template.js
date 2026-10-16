@@ -2205,6 +2205,8 @@ async function readSantaFeGps(env={},fetchImpl=fetch,now=Date.now(),lineFilter='
         dataFetchedAt:response.headers.get('x-data-fetched-at')};
     } catch(error) {
       const name=error&&typeof error.name==='string'?error.name:'unknown';
+      const message=error&&typeof error.message==='string'?error.message.slice(0,160):'';
+      console.error('sf-gps upstream fetch failure',{failure:name==='TimeoutError'?'timeout':name==='AbortError'?'aborted':name==='TypeError'?'network_error':'fetch_error',name,message});
       return {code,ok:false,status:0,failure:name==='TimeoutError'?'timeout':name==='AbortError'?'aborted':name==='TypeError'?'network_error':'fetch_error'};
     }
   }));
