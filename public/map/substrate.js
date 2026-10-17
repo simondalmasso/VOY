@@ -243,11 +243,18 @@ export function createMapSubstrate({
       element.type = 'button';
       element.dataset.entityId = id;
       element.addEventListener('click', () => onSelectMarker(id));
-      entry = { element, mlMarker: null, lat: null, lon: null };
+      const busIcon = document.createElement('span');
+      busIcon.className = 'tracker-bus-icon';
+      busIcon.setAttribute('aria-hidden', 'true');
+      element.appendChild(busIcon);
+      entry = { element, mlMarker: null, lat: null, lon: null, animationFrame: 0 };
       markers.set(id, entry);
     }
     entry.element.className = `tracker-marker tracker-marker-${kind || 'unknown'}`;
-    if (label) entry.element.setAttribute('aria-label', label);
+    if (label) {
+      entry.element.setAttribute('aria-label', label);
+      entry.element.title = label;
+    }
     return entry;
   }
 
@@ -265,9 +272,8 @@ export function createMapSubstrate({
     }
   }
 
-  function place(entry, lat, lon) {
+  function setRenderedPosition(entry, lat, lon) {
     entry.lat = lat; entry.lon = lon;
-    mountElement(entry);
     if (entry.mlMarker) {
       entry.mlMarker.setLngLat([lon, lat]);
     } else if (center) {
@@ -276,6 +282,36 @@ export function createMapSubstrate({
       entry.element.style.left = `calc(50% + ${p.x - c.x}px)`;
       entry.element.style.top = `calc(50% + ${p.y - c.y}px)`;
     }
+  }
+
+  function place(entry, lat, lon, { animate = false } = {}) {
+    const targetLat = Number(lat), targetLon = Number(lon);
+    if (entry.animationFrame) {
+      cancelAnimationFrame(entry.animationFrame);
+      entry.animationFrame = 0;
+    }
+    const canAnimate = animate && entry.lat != null && entry.lon != null &&
+      (Math.abs(targetLat - entry.lat) > 1e-9 || Math.abs(targetLon - entry.lon) > 1e-9);
+    if (!canAnimate) {
+      entry.lat = targetLat; entry.lon = targetLon;
+      mountElement(entry);
+      setRenderedPosition(entry, targetLat, targetLon);
+      return;
+    }
+    mountElement(entry);
+
+    // Smooth the 250 ms map refresh in both raster and MapLibre substrates.
+    const startLat = entry.lat, startLon = entry.lon;
+    const startAt = performance.now(), durationMs = 240;
+    const step = timestamp => {
+      const progress = Math.max(0, Math.min(1, (timestamp - startAt) / durationMs));
+      setRenderedPosition(entry,
+        startLat + (targetLat - startLat) * progress,
+        startLon + (targetLon - startLon) * progress);
+      if (progress < 1) entry.animationFrame = requestAnimationFrame(step);
+      else entry.animationFrame = 0;
+    };
+    entry.animationFrame = requestAnimationFrame(step);
   }
 
   function sync({ markers: markerModels = [], stations = [], networkGeometries = [], routeGeometry = null, trail = [], scrubIndex = -1 } = {}) {
@@ -288,12 +324,16 @@ export function createMapSubstrate({
       const entry = ensureMarker(model.id, model.kind, model.label);
       entry.element.classList.toggle('is-selected', model.selected === true);
       entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true);
+      entry.element.classList.toggle('is-interpolating', model.displayInterpolated === true);
       if (Number.isFinite(Number(model.bearing))) entry.element.style.setProperty('--gps-bearing', `${Number(model.bearing)}deg`);
       else entry.element.style.removeProperty('--gps-bearing');
-      place(entry, Number(model.lat), Number(model.lon));
+      place(entry, Number(model.lat), Number(model.lon), {
+        animate: model.gpsVehicle === true && model.displayInterpolated === true
+      });
     }
     for (const [id, entry] of markers) {
       if (!seen.has(id)) {
+        if (entry.animationFrame) cancelAnimationFrame(entry.animationFrame);
         if (entry.mlMarker) { try { entry.mlMarker.remove(); } catch {} }
         entry.element.remove();
         markers.delete(id);

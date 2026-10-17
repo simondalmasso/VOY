@@ -314,19 +314,13 @@ html[data-theme="dark"]{
 .tracker-marker.is-selected::after{content:"";position:absolute;width:31px;height:31px;border-radius:50%;border:1px solid var(--hud-ink);animation:none;box-shadow:0 0 0 1px rgba(0,0,0,.64)}
 .tracker-marker.is-selected::before{background:var(--success)}
 /* Native GPS gets a bus glyph oriented by the last two measured fixes. */
-.tracker-marker.is-gps-bus::before{
-  width:18px;height:27px;box-sizing:border-box;border:2px solid #f4fff9;border-radius:5px;
-  transform:rotate(var(--gps-bearing,0deg));
-  background:
-    linear-gradient(#dceeff,#dceeff) 3px 3px/10px 6px no-repeat,
-    linear-gradient(#dceeff,#dceeff) 3px 12px/10px 5px no-repeat,
-    linear-gradient(#052b20,#052b20) 3px 20px/3px 2px no-repeat,
-    linear-gradient(#052b20,#052b20) 10px 20px/3px 2px no-repeat,
-    #13a66a;
-  box-shadow:0 0 0 1px rgba(3,20,14,.65),0 4px 12px rgba(0,0,0,.5);
-}
+.tracker-bus-icon{display:none;width:25px;height:25px;background:#fff;-webkit-mask-image:url('/icons/bus-transport-icons8.svg');mask-image:url('/icons/bus-transport-icons8.svg');-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;transform:rotate(var(--gps-bearing,0deg));transform-origin:center}
+.tracker-marker.is-gps-bus{border:2px solid #f4fff9;border-radius:50%;background:#0b8f60;box-shadow:0 0 0 1px rgba(3,20,14,.65),0 4px 12px rgba(0,0,0,.5)}
+.tracker-marker.is-gps-bus::before{content:none}
+.tracker-marker.is-gps-bus .tracker-bus-icon{display:block}
+.tracker-marker.is-gps-bus.is-interpolating{transition:box-shadow 180ms linear}
 @media (prefers-reduced-motion:reduce){
-  .tracker-marker.is-gps-bus::before{transition:none}
+  .tracker-marker.is-gps-bus,.tracker-bus-icon{transition:none}
 }
 .trail-connector{color:var(--hud-ink);opacity:.34}
 .trail-dot{background:var(--hud-ink);border-color:#061009}
