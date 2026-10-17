@@ -593,7 +593,10 @@ busLinePicker.addEventListener('change',()=>{
   state.busNetworkSelectedGeometries=geometriesForSantaFeLine(state.busNetwork?.routes,busLinePicker.value);
   updateBusLineMeta();
   syncTrackerOverlays();sync3DTopology();
-  if(busLinePicker.value&&sfGpsEnabled&&!state.gpsStatus.includes('not_integrated'))pollSantaFeGps();
+  // gpsStatus starts as 'not_integrated' before any worker response. Poll
+  // immediately on the first selection; sfGpsEnabled is the authoritative
+  // fail-closed flag after an actual not_integrated response.
+  if(busLinePicker.value&&sfGpsEnabled)pollSantaFeGps();
 });
 renderInitialMap();
 loadSantaFeBusNetwork();
