@@ -31,11 +31,11 @@
     <div id="map-canvas" class="map-canvas" hidden></div>
     <div id="map-3d-layer" class="map-3d-layer" aria-hidden="true" hidden></div>
     <div class="map-hud" aria-label="Estado del mapa">
-      <p id="truth-pill" class="truth-pill" role="status" aria-live="polite" data-state="no-coverage">
-        <span class="truth-icon" aria-hidden="true">◍</span>
-        <span class="truth-copy">
-          <span id="truth-label">Tiempo real no disponible en esta cobertura</span>
-          <span id="truth-meta" class="truth-meta"></span>
+      <p id="truth-pill" class="truth-pill" role="status" aria-live="polite" aria-label="Estado GPS desconocido" title="Estado GPS desconocido" data-state="unknown">
+        <span class="truth-icon" aria-hidden="true">●</span>
+        <span class="truth-copy" hidden>
+          <span id="truth-label" hidden></span>
+          <span id="truth-meta" class="truth-meta" hidden></span>
         </span>
       </p>
       <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
