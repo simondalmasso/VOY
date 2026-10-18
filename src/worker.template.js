@@ -2327,6 +2327,62 @@ async function apiResponse(request, env, deps) {
   return json({ ok: false, error: "not_found" }, 404);
 }
 __name(apiResponse, "apiResponse");
+const PMTILES_PATH_RE = /^\/data\/santa-fe-3d\/santa-fe-buildings-3d-[a-z-]+\.[a-f0-9]{16}\.pmtiles$/;
+const PMTILES_MAX_RANGE_BYTES = 4 * 1024 * 1024;
+async function servePmtilesRange(request, env, url) {
+  if (request.method !== "GET") return methodNotAllowed(["GET"]);
+  if (!env.ASSETS) return json({ ok: false, error: "asset_binding_unavailable" }, 503);
+  if ([...url.searchParams.keys()].length !== 2 ||
+      !url.searchParams.has("pmtilesOffset") || !url.searchParams.has("pmtilesLength")) {
+    return json({ ok: false, error: "pmtiles_query_invalid" }, 400);
+  }
+  const rawOffset = url.searchParams.get("pmtilesOffset");
+  const rawLength = url.searchParams.get("pmtilesLength");
+  if (!/^[0-9]+$/.test(rawOffset || "") || !/^[0-9]+$/.test(rawLength || "")) {
+    return json({ ok: false, error: "pmtiles_query_invalid" }, 400);
+  }
+  const offset = Number(rawOffset), length = Number(rawLength);
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) ||
+      length < 1 || length > PMTILES_MAX_RANGE_BYTES) {
+    return json({ ok: false, error: "pmtiles_range_invalid" }, 400);
+  }
+  const end = offset + length - 1;
+  if (!Number.isSafeInteger(end) || end < offset || request.headers.get("Range") !== "bytes=" + offset + "-" + end) {
+    return json({ ok: false, error: "pmtiles_range_mismatch" }, 400);
+  }
+  const assetUrl = new URL(url);
+  assetUrl.search = "";
+  assetUrl.hash = "";
+  const assetHeaders = new Headers({
+    "Range": "bytes=" + offset + "-" + end,
+    "Accept": "application/vnd.pmtiles, application/octet-stream",
+    "Accept-Encoding": "identity"
+  });
+  const assetResponse = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET", headers: assetHeaders }));
+  if (assetResponse.status !== 206) return json({ ok: false, error: "pmtiles_asset_range_unavailable" }, 502);
+  const contentRange = assetResponse.headers.get("Content-Range") || "";
+  const match = /^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/.exec(contentRange);
+  const total = match ? Number(match[3]) : NaN;
+  if (!match || Number(match[1]) !== offset || Number(match[2]) !== end ||
+      !Number.isSafeInteger(total) || total <= end) {
+    return json({ ok: false, error: "pmtiles_asset_content_range_invalid" }, 502);
+  }
+  const bytes = await assetResponse.arrayBuffer();
+  if (bytes.byteLength !== length) return json({ ok: false, error: "pmtiles_asset_range_length_mismatch" }, 502);
+  const headers = new Headers({
+    "Accept-Ranges": "bytes",
+    "Content-Length": String(length),
+    "Content-Range": contentRange,
+    "Content-Type": "application/vnd.pmtiles",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff"
+  });
+  for (const name of ["ETag", "Expires", "Last-Modified"]) {
+    const value = assetResponse.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return withSecurity(new Response(bytes, { status: 206, headers }));
+}
 function createRequestHandler(deps = {}) {
   const trainServiceAdapter = deps.trainServiceAdapter ?? createSarmientoScheduledAdapter({ fetchImpl: deps.upstreamFetch ?? fetch });
   const requestDeps = { ...deps, trainServiceAdapter };
@@ -2335,7 +2391,8 @@ function createRequestHandler(deps = {}) {
     const url = new URL(request.url);
     let response;
     try {
-      if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, requestDeps);
+      if (PMTILES_PATH_RE.test(url.pathname) && (url.searchParams.has("pmtilesOffset") || url.searchParams.has("pmtilesLength"))) response = await servePmtilesRange(request, env, url);
+      else if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, requestDeps);
       else if (!env.ASSETS) response = json({ ok: false, error: "assets_binding_unavailable" }, 503);
       else response = withSecurity(await env.ASSETS.fetch(request));
     } catch (error) {
