@@ -2329,9 +2329,65 @@ async function apiResponse(request, env, deps) {
 __name(apiResponse, "apiResponse");
 const PMTILES_PATH_RE = /^\/data\/santa-fe-3d\/santa-fe-buildings-3d-[a-z-]+\.[a-f0-9]{16}\.pmtiles$/;
 const PMTILES_MAX_RANGE_BYTES = 4 * 1024 * 1024;
-async function servePmtilesRange(request, env, url) {
+const PMTILES_ASSET_REGISTRY = Object.freeze({
+  "/data/santa-fe-3d/santa-fe-buildings-3d-north-east.387c3640d8cdc9c7.pmtiles": Object.freeze({
+    size: 12102190, sha256: "387c3640d8cdc9c74d8eee280be902092453778216a88192dbea8d345d6c3276"
+  }),
+  "/data/santa-fe-3d/santa-fe-buildings-3d-north-west.4dd0cfed23dda64f.pmtiles": Object.freeze({
+    size: 23090832, sha256: "4dd0cfed23dda64ff5538146c69a83d30ba2c18c9f6bd7a37d6392893651a6b9"
+  }),
+  "/data/santa-fe-3d/santa-fe-buildings-3d-south-east.124f9b4c76c373e3.pmtiles": Object.freeze({
+    size: 1944687, sha256: "124f9b4c76c373e38357d09f8ba226681a8eb0ae0aa81432082b9dc4369b3d0e"
+  }),
+  "/data/santa-fe-3d/santa-fe-buildings-3d-south-west.996bf12bec657aa0.pmtiles": Object.freeze({
+    size: 16426183, sha256: "996bf12bec657aa0a84648c0bd750ed231e2d87361d56e5995b52f9968aab47a"
+  })
+});
+const PMTILES_ASSET_CACHE = new Map();
+
+async function loadPinnedPmtilesAsset(env, url, metadata, cache) {
+  const key = url.pathname;
+  let pending = cache.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const assetUrl = new URL(url);
+      assetUrl.search = "";
+      assetUrl.hash = "";
+      // Workers Static Assets does not implement Range on ASSETS.fetch: it returns the full file.
+      // Load a pinned archive once per isolate, verify its exact digest and serve slices from memory.
+      const assetResponse = await env.ASSETS.fetch(new Request(assetUrl.toString(), {
+        method: "GET",
+        headers: {
+          "Accept": "application/vnd.pmtiles, application/octet-stream",
+          "Accept-Encoding": "identity"
+        }
+      }));
+      if (assetResponse.status !== 200) throw new Error("pmtiles_asset_http_unavailable");
+      const bytes = new Uint8Array(await assetResponse.arrayBuffer());
+      if (bytes.byteLength !== metadata.size) throw new Error("pmtiles_asset_size_mismatch");
+      const magic = [80, 77, 84, 105, 108, 101, 115, 3];
+      if (magic.some((value, index) => bytes[index] !== value)) throw new Error("pmtiles_asset_magic_invalid");
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      const actualSha = Array.from(digest, value => value.toString(16).padStart(2, "0")).join("");
+      if (actualSha !== metadata.sha256) throw new Error("pmtiles_asset_sha256_mismatch");
+      return bytes;
+    })();
+    cache.set(key, pending);
+  }
+  try {
+    return await pending;
+  } catch (error) {
+    cache.delete(key);
+    throw error;
+  }
+}
+async function servePmtilesRange(request, env, url, deps = {}) {
   if (request.method !== "GET") return methodNotAllowed(["GET"]);
   if (!env.ASSETS) return json({ ok: false, error: "asset_binding_unavailable" }, 503);
+  const registry = deps.pmtilesAssetRegistry ?? PMTILES_ASSET_REGISTRY;
+  const cache = deps.pmtilesAssetCache ?? PMTILES_ASSET_CACHE;
+  const metadata = registry[url.pathname];
+  if (!PMTILES_PATH_RE.test(url.pathname) || !metadata) return json({ ok: false, error: "pmtiles_asset_not_found" }, 404);
   if ([...url.searchParams.keys()].length !== 2 ||
       !url.searchParams.has("pmtilesOffset") || !url.searchParams.has("pmtilesLength")) {
     return json({ ok: false, error: "pmtiles_query_invalid" }, 400);
@@ -2350,40 +2406,39 @@ async function servePmtilesRange(request, env, url) {
   if (!Number.isSafeInteger(end) || end < offset || request.headers.get("Range") !== "bytes=" + offset + "-" + end) {
     return json({ ok: false, error: "pmtiles_range_mismatch" }, 400);
   }
-  const assetUrl = new URL(url);
-  assetUrl.search = "";
-  assetUrl.hash = "";
-  const assetHeaders = new Headers({
-    "Range": "bytes=" + offset + "-" + end,
-    "Accept": "application/vnd.pmtiles, application/octet-stream",
-    "Accept-Encoding": "identity"
-  });
-  const assetResponse = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET", headers: assetHeaders }));
-  if (assetResponse.status !== 206) return json({ ok: false, error: "pmtiles_asset_range_unavailable" }, 502);
-  const contentRange = assetResponse.headers.get("Content-Range") || "";
-  const match = /^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/.exec(contentRange);
-  const total = match ? Number(match[3]) : NaN;
-  if (!match || Number(match[1]) !== offset || Number(match[2]) !== end ||
-      !Number.isSafeInteger(total) || total <= end) {
-    return json({ ok: false, error: "pmtiles_asset_content_range_invalid" }, 502);
+  if (offset >= metadata.size || end >= metadata.size) {
+    return withSecurity(new Response(null, {
+      status: 416,
+      headers: new Headers({
+        "Content-Range": "bytes */" + metadata.size,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-store"
+      })
+    }));
   }
-  const bytes = await assetResponse.arrayBuffer();
-  if (bytes.byteLength !== length) return json({ ok: false, error: "pmtiles_asset_range_length_mismatch" }, 502);
+  let bytes;
+  try {
+    bytes = await loadPinnedPmtilesAsset(env, url, metadata, cache);
+  } catch (error) {
+    const code = error instanceof Error && [
+      "pmtiles_asset_http_unavailable", "pmtiles_asset_size_mismatch",
+      "pmtiles_asset_magic_invalid", "pmtiles_asset_sha256_mismatch"
+    ].includes(error.message) ? error.message : "pmtiles_asset_integrity_failure";
+    return json({ ok: false, error: code }, 502);
+  }
+  const fragment = bytes.subarray(offset, end + 1);
+  if (fragment.byteLength !== length) return json({ ok: false, error: "pmtiles_asset_range_length_mismatch" }, 502);
   const headers = new Headers({
     "Accept-Ranges": "bytes",
     "Content-Length": String(length),
-    "Content-Range": contentRange,
+    "Content-Range": "bytes " + offset + "-" + end + "/" + metadata.size,
     "Content-Type": "application/vnd.pmtiles",
+    "ETag": '"' + metadata.sha256 + '"',
     "Cache-Control": "public, max-age=31536000, immutable",
     "X-Content-Type-Options": "nosniff"
   });
-  for (const name of ["ETag", "Expires", "Last-Modified"]) {
-    const value = assetResponse.headers.get(name);
-    if (value) headers.set(name, value);
-  }
-  return withSecurity(new Response(bytes, { status: 206, headers }));
-}
-function createRequestHandler(deps = {}) {
+  return withSecurity(new Response(fragment, { status: 206, headers }));
+}function createRequestHandler(deps = {}) {
   const trainServiceAdapter = deps.trainServiceAdapter ?? createSarmientoScheduledAdapter({ fetchImpl: deps.upstreamFetch ?? fetch });
   const requestDeps = { ...deps, trainServiceAdapter };
   return /* @__PURE__ */ __name(async function handle(request, env = {}) {
@@ -2391,7 +2446,7 @@ function createRequestHandler(deps = {}) {
     const url = new URL(request.url);
     let response;
     try {
-      if (PMTILES_PATH_RE.test(url.pathname) && (url.searchParams.has("pmtilesOffset") || url.searchParams.has("pmtilesLength"))) response = await servePmtilesRange(request, env, url);
+      if (PMTILES_PATH_RE.test(url.pathname) && (url.searchParams.has("pmtilesOffset") || url.searchParams.has("pmtilesLength"))) response = await servePmtilesRange(request, env, url, requestDeps);
       else if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, requestDeps);
       else if (!env.ASSETS) response = json({ ok: false, error: "assets_binding_unavailable" }, 503);
       else response = withSecurity(await env.ASSETS.fetch(request));

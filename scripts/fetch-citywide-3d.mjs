@@ -17,7 +17,8 @@ if (origin !== 'https://stracker.simondalmasso44.workers.dev' || lock.distributi
 }
 if (manifest.city_id !== 'ar-santa-fe-capital' || manifest.layer !== 'santa_fe_buildings_3d' ||
     manifest.final_features !== 264425 || manifest.asset_paths?.length !== 4 ||
-    manifest.asset_sizes?.length !== 4 || manifest.asset_sha256?.length !== 4) {
+    manifest.asset_sizes?.length !== 4 || manifest.asset_sha256?.length !== 4 || manifest.asset_bounds?.length !== 4 ||
+    manifest.asset_min_zoom !== 13 || manifest.asset_max_zoom !== 17) {
   throw new Error('citywide_3d_manifest_invalid');
 }
 await mkdir(CACHE_DIR, { recursive: true });
@@ -103,7 +104,12 @@ for (let i = 0; i < manifest.asset_paths.length; i++) {
   const archive = new PMTiles(new FileRangeSource('https://voy.test' + path, file));
   const [header, metadata] = await Promise.all([archive.getHeader(), archive.getMetadata()]);
   const layers = Array.isArray(metadata.vector_layers) ? metadata.vector_layers.map(layer => layer.id) : [];
+  const actualBounds = [header.minLon, header.minLat, header.maxLon, header.maxLat];
+  const expectedBounds = manifest.asset_bounds[i];
   if (header.tileType !== 1 || !layers.includes(manifest.layer) ||
+      header.minZoom !== manifest.asset_min_zoom || header.maxZoom !== manifest.asset_max_zoom ||
+      !Array.isArray(expectedBounds) || expectedBounds.length !== 4 ||
+      actualBounds.some((value, index) => Math.abs(value - expectedBounds[index]) > 1e-6) ||
       header.maxLon <= -60.775 || header.minLon >= -60.615 ||
       header.maxLat <= -31.74 || header.minLat >= -31.535) {
     throw new Error('citywide_3d_archive_schema_or_bounds_invalid:' + basename(file));

@@ -243,16 +243,16 @@ export async function activateVoyUrbanMap3D({
           // Heights are visual massing, not surveyed measurements.
           const dataset=await fetch(versionedUrl('/data/santa-fe-3d/manifest.json'),{cache:'force-cache'})
             .then(r=>{if(!r.ok)throw new Error('3d_city_manifest_unavailable');return r.json()});
-          if(!Array.isArray(dataset.asset_paths)||dataset.asset_paths.length!==4||
+          if(!Array.isArray(dataset.asset_paths)||dataset.asset_paths.length!==4||!Array.isArray(dataset.asset_bounds)||dataset.asset_bounds.length!==4||dataset.asset_min_zoom!==13||dataset.asset_max_zoom!==17||
              !Array.isArray(dataset.asset_sha256)||dataset.asset_sha256.length!==4||
              dataset.final_features!==264425||dataset.layer!=='santa_fe_buildings_3d'||dataset.asset_paths.some((path,i)=>typeof path!=='string'||typeof dataset.asset_sha256[i]!=='string'||!path.endsWith('.'+dataset.asset_sha256[i].slice(0,16)+'.pmtiles')))
             throw new Error('3d_city_manifest_invalid');
           const {addVoyPmtilesSources}=await import(versionedUrl('/3d/pmtiles-source.js'));
-          const citySources=await addVoyPmtilesSources(MapLibreMap,dataset.asset_paths.map((path,i)=>({
-            id:['north-east','north-west','south-east','south-west'][i],path
+          const citySources=addVoyPmtilesSources(MapLibreMap,dataset.asset_paths.map((path,i)=>({
+            id:['north-east','north-west','south-east','south-west'][i],path,sha256:dataset.asset_sha256[i],bounds:dataset.asset_bounds[i]
           })));
           for(const citySource of citySources){
-            map.addSource(citySource.id,{type:'vector',url:citySource.url,attribution:citySource.attribution});
+            map.addSource(citySource.id,{type:'vector',url:citySource.url,bounds:citySource.bounds,minzoom:dataset.asset_min_zoom,maxzoom:dataset.asset_max_zoom,attribution:citySource.attribution});
             map.addLayer({id:'voy-overture-extrusion-'+citySource.id,type:'fill-extrusion',
               source:citySource.id,'source-layer':dataset.layer,minzoom:11,
               paint:{
