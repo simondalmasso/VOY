@@ -18,12 +18,12 @@ function numericHeight(item){
   return {height_m:9,height_source:'generic_inferred'};
 }
 const buildings=source.elements.filter(x=>x.kind==='building').map((item,index)=>({
-  id:\`osm-way-\${item.osm_id}\`,
+  id:`osm-way-${item.osm_id}`,
   source:{osm_type:'way',osm_id:item.osm_id,osm_version:item.osm_version,osm_timestamp:item.osm_timestamp},
   footprint_m:item.coordinates.map(project),...numericHeight(item),lod_group:index%2
 }));
 const roads=source.elements.filter(x=>x.kind==='road').map(item=>({
-  id:\`osm-way-\${item.osm_id}\`,
+  id:`osm-way-${item.osm_id}`,
   source:{osm_type:'way',osm_id:item.osm_id,osm_version:item.osm_version,osm_timestamp:item.osm_timestamp},
   class:item.highway||'road',line_m:item.coordinates.map(project)
 }));
@@ -35,7 +35,7 @@ const manifest={schema_version:1,renderer:'three-lazy',lru_max:16,initial_chunks
 await mkdir(new URL('../public/3d/topology/',import.meta.url),{recursive:true});
 await writeFile(new URL('../public/3d/topology/chunk-santa-fe-centro-0.json',import.meta.url),chunkOutput);
 await writeFile(new URL('../public/3d/topology/manifest.json',import.meta.url),JSON.stringify(manifest,null,2)+'\n');
-console.log(\`BUILDINGS=\${buildings.length}\`);
-console.log(\`ROADS=\${roads.length}\`);
-console.log(\`RAW_INPUT_SHA256=\${rawInputSha}\`);
-console.log(\`CHUNK_SHA256=\${chunkSha}\`);
+console.log(`BUILDINGS=${buildings.length}`);
+console.log(`ROADS=${roads.length}`);
+console.log(`RAW_INPUT_SHA256=${rawInputSha}`);
+console.log(`CHUNK_SHA256=${chunkSha}`);
