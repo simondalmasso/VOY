@@ -47,9 +47,10 @@ test('ORDER075 temporal truth pill is visible, stateful and not color-only',asyn
   assert.match(app,/truth-icon|truthPill.*dataset\.state|dataset\.state.*truth/i);
 });
 
-test('ORDER075 2D default with compact 2D|3D control and lazy three',async()=>{
+test('ORDER075 progressive urban 3D default keeps compact controls, lazy loading and 2D fallback',async()=>{
   const [html,app,sw]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/sw.js')]);
   assert.match(html,/data-map-mode="2d"[^>]*aria-pressed="true"/);
+  assert.match(app,/setTimeout\(\(\)=>activate3D\(\),180\)/);
   assert.doesNotMatch(html,/<script[^>]+(?:three|voy3d)/i);
   assert.doesNotMatch(html,/<link[^>]+(?:three|3d\/topology)/i);
   assert.doesNotMatch(sw,/\/3d\//);
