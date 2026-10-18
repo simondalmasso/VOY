@@ -89,7 +89,7 @@ test('ORDER069 frontend removes binary hide copy and renders four independent mo
   for(const literal of ["'A pie'","'Bici'","'Auto'","'Colectivo'"]) assert.ok(app.includes(literal));
   assert.match(app,/Precio no disponible/);
   assert.match(app,/Recorridos publicados: visibles en el mapa/);
-  assert.match(app,/Arribos en VOY: no integrados/);
+  assert.match(app,/Seguimiento GPS: sujeto a observaciones recientes/);
   assert.doesNotMatch(app,/Tiempo real no disponible en VOY/);
 });
 
