@@ -2454,7 +2454,7 @@ async function servePmtilesRange(request, env, url, deps = {}) {
     const url = new URL(request.url);
     let response;
     try {
-      if (PMTILES_PATH_RE.test(url.pathname) && (url.searchParams.has("pmtilesOffset") || url.searchParams.has("pmtilesLength"))) response = await servePmtilesRange(request, env, url, requestDeps);
+      if (PMTILES_PATH_RE.test(url.pathname)) response = await servePmtilesRange(request, env, url, requestDeps);
       else if (url.pathname.startsWith("/api/")) response = await apiResponse(request, env, requestDeps);
       else if (!env.ASSETS) response = json({ ok: false, error: "assets_binding_unavailable" }, 503);
       else response = withSecurity(await env.ASSETS.fetch(request));

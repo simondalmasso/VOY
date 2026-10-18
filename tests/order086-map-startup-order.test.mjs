@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('ORDER086 avoids starting a hidden vector map while urban 3D is the default', async () => {
+test('ORDER086 keeps urban 3D opt-in and avoids loading the 3D map before selection', async () => {
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(app, /let vectorUpgradePromise=null;/, 'the base-map upgrade needs one shared promise');
   assert.ok(app.includes('function startVectorUpgradeOnce(){') && app.includes('substrate.upgradeToVector'), '2D upgrades must share one substrate promise');
@@ -14,5 +14,8 @@ test('ORDER086 avoids starting a hidden vector map while urban 3D is the default
   assert.ok(!activation.includes('startVectorUpgradeOnce('), '3D startup must not create a competing MapLibre map');
   assert.ok(activation.includes('if(vectorUpgradePromise){') && activation.includes('await vectorUpgradePromise;'), 'if a user already opened 2D, finish its startup before creating the 3D map');
   assert.ok(app.includes('if(!substrate.maplibreReady)void startVectorUpgradeOnce()'), '2D requests the vector map only when selected or used as fallback');
-  assert.ok(app.includes('setTimeout(()=>activate3D(),180)'), '3D remains the progressive default');
+  assert.ok(!app.includes('setTimeout(()=>activate3D(),180)'), '3D must not auto-start; citywide PMTiles wait for explicit selection');
+  const startup = app.slice(app.indexOf('updateTruthPill();'), app.indexOf("window.addEventListener('load'"));
+  assert.ok(startup.includes('activate2D();'), 'startup starts the reliable 2D path');
+  assert.ok(!startup.includes('activate3D('), 'startup never constructs the 3D map');
 });

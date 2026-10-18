@@ -320,9 +320,9 @@ html[data-theme="dark"]{
 .tracker-marker.is-selected::after{content:"";position:absolute;width:31px;height:31px;border-radius:50%;border:1px solid var(--hud-ink);animation:none;box-shadow:0 0 0 1px rgba(0,0,0,.64)}
 .tracker-marker.is-selected::before{background:var(--success)}
 /* Native GPS gets a bus glyph oriented by the last two measured fixes. */
-.tracker-bus-icon{display:none;width:25px;height:25px;background:#fff;-webkit-mask-image:url('/icons/bus-transport-icons8.svg');mask-image:url('/icons/bus-transport-icons8.svg');-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;transform:rotate(var(--gps-bearing,0deg));transform-origin:center}
+.tracker-bus-icon{display:none;width:25px;height:25px;background:#111820;-webkit-mask-image:url('/icons/bus-transport-icons8.svg');mask-image:url('/icons/bus-transport-icons8.svg');-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;transform:rotate(var(--gps-bearing,0deg));transform-origin:center}
 .tracker-marker.is-gps-bus{border:0;border-radius:50%;background:transparent;box-shadow:none}
-.tracker-marker.is-gps-bus::before{content:"";display:block;width:29px;height:29px;box-sizing:border-box;border:2px solid #f4fff9;border-radius:50%;background:#0b8f60;box-shadow:0 0 0 1px rgba(3,20,14,.65),0 3px 8px rgba(0,0,0,.42)}
+.tracker-marker.is-gps-bus::before{content:"";display:block;width:29px;height:29px;box-sizing:border-box;border:2px solid #111820;border-radius:50%;background:#ffe600;box-shadow:0 0 0 1px rgba(255,230,0,.28),0 2px 6px rgba(0,0,0,.32)}
 .tracker-marker.is-gps-bus .tracker-bus-icon{display:block}
 .tracker-marker.is-gps-bus .tracker-bus-icon{position:absolute;width:17px;height:17px;z-index:1}
 .tracker-marker.is-gps-bus.is-interpolating{transition:box-shadow 180ms linear}
@@ -441,7 +441,7 @@ html[data-theme="dark"] .map-tile{filter:saturate(.72) brightness(.88) contrast(
 .map-3d-status{border-radius:12px;background:var(--hud-panel);border:1px solid var(--hud-line);backdrop-filter:blur(18px)}
 .bus-line-control{border-radius:14px;background:var(--hud-panel);border-color:var(--hud-line);box-shadow:var(--shadow-soft);backdrop-filter:blur(18px)}
 .bus-line-control select{border-radius:10px;background:var(--surface);color:var(--text)}
-.tracker-marker.is-gps-bus::before{width:24px;height:24px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.22)}
+.tracker-marker.is-gps-bus::before{width:24px;height:24px;border:2px solid #111820;box-shadow:0 1px 4px rgba(0,0,0,.22)}
 .tracker-marker.is-gps-bus .tracker-bus-icon{width:14px;height:14px}
 .tracker-marker.is-gps-bus.is-interpolating{transition:box-shadow 160ms linear}
 @media(min-width:960px){
@@ -484,3 +484,66 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 /* ORDER-090: status stays visually minimal; only stale observations turn red. */
 .truth-pill[data-state="stale"] .truth-icon{color:var(--danger)}
 .truth-pill[data-state="unknown"] .truth-icon,.truth-pill[data-state="no_positions"] .truth-icon{color:var(--muted)}
+
+
+/* ORDER096 — floating map-first control deck; search and suggestions stay above five controls. */
+.voy-sheet{
+  left:12px;right:12px;top:auto;bottom:calc(12px + env(safe-area-inset-bottom));width:auto;
+  max-height:min(72svh,640px);padding:4px 10px 10px;gap:0;
+  border:1px solid var(--hud-line);border-radius:24px;
+  background:var(--hud-panel);box-shadow:0 18px 56px rgba(0,0,0,.22);
+  backdrop-filter:blur(24px);
+}
+.voy-sheet[data-pane="collapsed"]{max-height:var(--sheet-collapsed-max);pointer-events:none}
+.voy-sheet[data-pane="expanded"]{max-height:min(72svh,640px);pointer-events:auto}
+.sheet-handle{min-height:20px;height:20px;padding:0;flex:0 0 20px;justify-content:center;gap:0}
+.sheet-handle .sheet-grip{width:36px;height:4px;border-radius:999px;background:color-mix(in srgb,var(--hud-muted) 42%,transparent)}
+.sheet-body{min-height:0;gap:8px;overflow:hidden}
+.sheet-collapsed{min-height:0;padding:0;gap:0}
+.sheet-summary{margin:0}
+.destination-search-stack{width:100%;max-width:none;flex:0 0 auto;z-index:32}
+.destination-control{min-height:52px;border-radius:17px;padding-inline:14px;background:var(--hud-panel);border-color:var(--hud-line)}
+.destination-control input{font-size:15px;font-weight:620}
+.destination-control .search-icon{width:18px;height:18px}
+.suggestions{max-height:min(228px,28svh);overflow:auto;overscroll-behavior:contain;margin-top:6px;border-radius:16px;background:var(--hud-panel);border-color:var(--hud-line);box-shadow:var(--shadow-float)}
+.suggestion{min-height:48px;border-radius:12px}
+.hero-support{margin-top:3px;min-height:0}
+.status-line{min-height:0;font-size:11px}
+.search-aftercare{min-height:0}
+.map-quick-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(90px,1.4fr) minmax(0,1fr) minmax(0,1fr);align-items:stretch;gap:4px;width:100%;min-width:0;flex:0 0 auto}
+.map-quick-action,.map-quick-view{min-width:0;min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1px solid transparent;border-radius:14px;background:transparent;color:var(--hud-muted);padding:3px 1px;text-decoration:none;transition:background-color var(--motion-fast) ease,color var(--motion-fast) ease,border-color var(--motion-fast) ease,transform var(--motion-fast) var(--ease)}
+.map-quick-action{width:100%;font-size:10px;font-weight:680;line-height:1.05;white-space:nowrap}
+.map-quick-action svg{width:18px;height:18px;flex:0 0 auto;fill:currentColor}
+.map-quick-action span,.quick-action-label{font-size:10px;font-weight:680;line-height:1.1;white-space:nowrap}
+.map-quick-action:hover,.map-quick-action:focus-visible,.map-quick-action[aria-expanded="true"]{background:color-mix(in srgb,var(--accent) 13%,var(--hud-panel));color:var(--hud-ink);border-color:var(--hud-line)}
+.map-quick-action:active{transform:scale(.97)}
+.map-quick-view{gap:3px;color:var(--hud-muted)}
+.map-quick-view .map-mode-toggle{display:flex;align-items:center;justify-content:center;gap:0;padding:0;border:1px solid var(--hud-line);border-radius:10px;background:var(--hud-panel);box-shadow:none;backdrop-filter:none}
+.map-quick-view .map-mode-toggle button{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:7px;background:transparent;color:var(--hud-ink);font:700 10px/1 system-ui}
+.map-quick-view .map-mode-toggle button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.map-quick-view .map-3d-quality{min-height:28px;height:28px;max-width:72px;padding:0 18px 0 5px;font-size:9px}
+.map-quick-view .quick-action-label{color:var(--hud-muted)}
+.voy-sheet[data-pane="expanded"] .sheet-expanded{flex:1 1 auto;min-height:0;max-height:min(52svh,460px);overflow-y:auto;overscroll-behavior:contain;padding:8px 4px 12px;scrollbar-width:thin}
+.voy-sheet[data-pane="expanded"] .context-rail{padding-top:4px}
+.voy-sheet[data-pane="expanded"] .destination-search-stack{flex-shrink:0}
+@media (min-width:960px){
+  .voy-sheet{left:50%;right:auto;bottom:18px;width:min(680px,calc(100vw - 48px));transform:translateX(-50%);max-height:min(72svh,560px);padding:5px 12px 12px;border-radius:24px}
+  .voy-sheet[data-pane="collapsed"]{max-height:min(188px,30svh)}
+  .sheet-body{gap:9px}
+  .map-quick-actions{gap:8px}
+  .map-quick-action,.map-quick-view{min-height:52px;border-radius:16px}
+  .map-quick-action{font-size:11px}
+  .map-quick-action span,.quick-action-label{font-size:11px}
+  .map-quick-action svg{width:19px;height:19px}
+}
+@media (max-width:700px){
+  .voy-sheet{left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));padding:4px 9px 9px;border-radius:23px}
+  .map-quick-actions{gap:3px}
+  .map-quick-action,.map-quick-view{min-height:50px;border-radius:13px;padding-inline:0}
+  .map-quick-action span,.quick-action-label{font-size:9.5px}
+  .map-quick-view .map-mode-toggle button{width:44px;min-width:44px;height:44px;min-height:44px}
+  .suggestions{max-height:min(228px,28svh)}
+}
+@media(prefers-reduced-motion:reduce){
+  .map-quick-action,.map-quick-view{transition:none}
+}

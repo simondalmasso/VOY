@@ -111,4 +111,5 @@ test('public recovery: bus network sync stays in the map sync scope and survives
   assert.match(substrate.slice(syncStart,trailStart),/syncBusNetwork\(networkGeometries\)/);
   assert.doesNotMatch(substrate.slice(trailStart,multiStart),/networkGeometries/);
   assert.match(substrate,/networkMode/);
+  assert.match(substrate,/entry\.element\.style\.removeProperty\(['\"]transform['\"]\)/,'clear MapLibre inline projection transform before raster overlay positioning');
 });

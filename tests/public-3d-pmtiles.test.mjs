@@ -154,6 +154,36 @@ test('PMTiles Worker transport rejects malformed, mismatched and oversized range
   assert.equal(assetReads, 0);
 });
 
+test('PMTiles archive paths never fall through to full-file static downloads', async () => {
+  const path = '/data/santa-fe-3d/santa-fe-buildings-3d-north-east.387c3640d8cdc9c7.pmtiles';
+  const bytes = Uint8Array.from([80, 77, 84, 105, 108, 101, 115, 3, 1, 2, 3, 4]);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  let assetReads = 0;
+  const handler = createRequestHandler({
+    pmtilesAssetRegistry: { [path]: { size: bytes.length, sha256: digest } },
+    pmtilesAssetCache: new Map()
+  });
+  const env = {
+    ASSETS: {
+      async fetch() {
+        assetReads++;
+        return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/vnd.pmtiles' } });
+      }
+    }
+  };
+  const requests = [
+    new Request('https://voy.test' + path),
+    new Request('https://voy.test' + path, { headers: { Range: 'bytes=0-7' } }),
+    new Request('https://voy.test' + path + '?other=1')
+  ];
+  for (const request of requests) {
+    const response = await handler(request, env);
+    assert.equal(response.status, 400, 'archive URLs require a bounded query-v1 range');
+    assert.deepEqual(await response.json(), { ok: false, error: 'pmtiles_query_invalid' });
+  }
+  assert.equal(assetReads, 0, 'invalid requests must not read or return the full PMTiles archive');
+});
+
 test('citywide renderer and builds keep four shards pinned and Overture attribution visible', async () => {
   const [renderer, adapter, windowsBuild, linuxBuild, wrangler, html, fetcher] = await Promise.all([
     readText('public/3d/voy3d.js'),

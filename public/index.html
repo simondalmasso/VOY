@@ -38,15 +38,7 @@
           <span id="truth-meta" class="truth-meta" hidden></span>
         </span>
       </p>
-      <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
-        <button type="button" data-map-mode="2d" aria-pressed="true">2D</button>
-        <button type="button" data-map-mode="3d" aria-pressed="false">3D</button>
-        <select id="map-3d-quality" class="map-3d-quality" aria-label="Calidad 3D" hidden>
-          <option value="auto">Auto</option>
-          <option value="performance">Rendimiento</option>
-          <option value="quality">Calidad</option>
-        </select>
-      </div>
+
     </div>
     <div id="bus-line-control" class="bus-line-control" hidden>
       <label for="bus-line-picker">Líneas de colectivo · recorridos</label>
@@ -59,21 +51,12 @@
     <a id="map-attribution" class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" hidden>© OpenStreetMap</a>
   </section>
 
-  <section id="voy-sheet" class="voy-sheet" data-pane="collapsed" aria-label="Panel de VOY">
-    <button id="sheet-toggle" class="sheet-handle" type="button" aria-expanded="false" aria-controls="sheet-body">
+  <section id="voy-sheet" class="voy-sheet" data-pane="collapsed" aria-label="Panel flotante de VOY">
+    <button id="sheet-toggle" class="sheet-handle" type="button" aria-expanded="false" aria-controls="sheet-body" aria-label="Abrir o cerrar panel">
       <span class="sheet-grip" aria-hidden="true"></span>
-      <span id="sheet-toggle-label">Abrir panel</span>
+      <span id="sheet-toggle-label" class="sr-only">Abrir panel</span>
     </button>
     <div id="sheet-body" class="sheet-body">
-      <div class="sheet-collapsed">
-        <button id="search-chip" class="voy-chip search-chip" type="button" aria-expanded="false" aria-controls="sheet-body">
-          <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 4.9 12l4.05 4.05 1.4-1.4L17.3 14.6A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/></svg>
-          <span>Buscar destino</span>
-        </button>
-        <p id="sheet-summary" class="sheet-summary" aria-live="polite">GPS de VOY: todavía no integrado.</p>
-      </div>
-      <div class="sheet-expanded" hidden>
-
         <div class="destination-search-stack">
 
           <label id="destination-label" for="destination" class="sr-only">Buscar destino</label>
@@ -105,6 +88,41 @@
           </div>
 
         </div>
+      <nav id="map-quick-actions" class="map-quick-actions" aria-label="Acciones rápidas del mapa">
+        <button id="quick-location" class="map-quick-action" type="button" aria-label="Usar mi ubicación" title="Usar mi ubicación">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
+          <span>Ubicación</span>
+        </button>
+        <button id="quick-lines" class="map-quick-action" type="button" aria-label="Elegir línea de colectivo" aria-expanded="false" aria-controls="bus-line-control" title="Líneas de colectivo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12a3 3 0 0 1 3 3v12a2 2 0 0 1-2 2v2h-2v-2H7v2H5v-2a2 2 0 0 1-2-2V5a3 3 0 0 1 3-3Zm-1 5v6h14V7H5Zm2 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm10 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
+          <span>Líneas</span>
+        </button>
+        <div class="map-quick-view" aria-label="Vista del mapa">
+          <span class="quick-action-label">Vista</span>
+          <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
+        <button type="button" data-map-mode="2d" aria-pressed="true">2D</button>
+        <button type="button" data-map-mode="3d" aria-pressed="false">3D</button>
+        <select id="map-3d-quality" class="map-3d-quality" aria-label="Calidad 3D" hidden>
+          <option value="auto">Auto</option>
+          <option value="performance">Rendimiento</option>
+          <option value="quality">Calidad</option>
+        </select>
+      </div>
+        </div>
+        <button id="quick-origin" class="map-quick-action" type="button" aria-label="Elegir origen" title="Elegir o cambiar origen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
+          <span>Origen</span>
+        </button>
+        <button id="quick-plan" class="map-quick-action" type="button" aria-label="Abrir planificador" aria-expanded="false" aria-controls="sheet-body" title="Abrir o cerrar planificador">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 1 1 7 5.5a1.5 1.5 0 0 1-3 0ZM9 4.5h11v2H9v-2ZM4 12a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Zm5-1h11v2H9v-2Zm-5 8.5A1.5 1.5 0 1 1 7 19.5a1.5 1.5 0 0 1-3 0ZM9 18.5h11v2H9v-2Z"/></svg>
+          <span id="quick-plan-label">Más</span>
+        </button>
+      </nav>
+
+      <div class="sheet-collapsed">
+        <p id="sheet-summary" class="sheet-summary sr-only" aria-live="polite">GPS de VOY: todavía no integrado.</p>
+      </div>
+      <div class="sheet-expanded" hidden>
 
         <div class="context-rail">
 

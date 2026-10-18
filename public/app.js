@@ -37,7 +37,8 @@ const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapCanvas=$('#map-canvas
 const busLineControl=$('#bus-line-control'),busLinePicker=$('#bus-line-picker'),busLineMeta=$('#bus-line-meta');
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
-const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary'),searchChip=$('#search-chip');
+const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary');
+const quickLocation=$('#quick-location'),quickLines=$('#quick-lines'),quickOrigin=$('#quick-origin'),quickPlan=$('#quick-plan'),quickPlanLabel=$('#quick-plan-label');
 const truthPill=$('#truth-pill'),truthLabel=$('#truth-label'),truthMeta=$('#truth-meta'),truthIcon=truthPill?.querySelector('.truth-icon');
 const trackerFacts=$('#tracker-facts'),factsLine=$('#facts-line'),factsClose=$('#facts-close'),factsRows=$('#facts-rows'),fixtureBanner=$('#fixture-banner');
 const followButton=$('#follow-button'),returnToNow=$('#return-to-now'),timeRailWrap=$('#time-rail-wrap'),timeRail=$('#time-rail'),timeRailMeta=$('#time-rail-meta');
@@ -148,7 +149,8 @@ async function loadSantaFeBusNetwork(){
     for(const line of lines){const option=document.createElement('option');option.value=line;option.textContent=labelSantaFeLine(line);busLinePicker.appendChild(option)}
     const savedLine=localStorage.getItem('voy.sf.line')||'';
     if(savedLine&&lines.includes(savedLine)){busLinePicker.value=savedLine;state.busNetworkSelectedGeometries=geometriesForSantaFeLine(payload.routes,savedLine)}else{busLinePicker.value='';state.busNetworkSelectedGeometries=[]}
-    busLineControl.hidden=false;
+    busLineControl.hidden=true;
+    quickLines.setAttribute('aria-expanded','false');
     updateBusLineMeta();
   }catch{state.busNetwork=null;state.busNetworkGeometries=[]}
   syncTrackerOverlays();
@@ -393,11 +395,28 @@ function setSheetPane(pane){
   sheetToggleLabel.textContent=expanded?'Cerrar panel':'Abrir panel';
   document.querySelector('.sheet-collapsed').hidden=expanded;
   document.querySelector('.sheet-expanded').hidden=!expanded;
-  searchChip.setAttribute('aria-expanded',String(expanded));
+  quickPlan.setAttribute('aria-expanded',String(expanded));
+  quickPlan.setAttribute('aria-label',expanded?'Cerrar planificador':'Abrir planificador');
+  quickPlanLabel.textContent=expanded?'Cerrar':'Más';
 }
 function openSheetPane(pane){setSheetPane(pane==='facts'?'expanded':pane)}
 sheetToggle.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
-searchChip.addEventListener('click',()=>{setSheetPane('expanded');destinationInput.focus()});
+function toggleBusLineControl(){
+  const opening=busLineControl.hidden;
+  busLineControl.hidden=!opening;
+  quickLines.setAttribute('aria-expanded',String(opening));
+  if(opening)busLinePicker.focus({preventScroll:true});
+}
+quickLocation.addEventListener('click',()=>$('#use-location').click());
+quickLines.addEventListener('click',toggleBusLineControl);
+quickOrigin.addEventListener('click',()=>{
+  setSheetPane('expanded');
+  const manualOrigin=$('#manual-origin');
+  if(!manualOrigin.hidden){manualOrigin.click();originInput.focus();return}
+  setStatus('Para cambiar el origen elegido, tocá “Cambiar” en el panel.','neutral');
+  $('#clear-location').focus({preventScroll:true});
+});
+quickPlan.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
 function setSheetSummary(){
   const selected=trackerStore.selected();
   if(selected){
@@ -668,8 +687,8 @@ async function pollSantaFeGps(){
 setTimeout(()=>{if(busLinePicker.value)pollSantaFeGps()},600);
 setInterval(pollSantaFeGps,15000);
 updateTruthPill();
-// Progressive 3D default: paint the reliable 2D map first, then reveal the urban 3D view; any failure falls back to 2D.
-setTimeout(()=>activate3D(),180);
+// Default to the reliable 2D map; urban 3D and its PMTiles stay lazy until explicit user selection.
+activate2D();
 window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});
 
 // ---------- contextual assistant (inside sheet, unchanged behavior) ----------
