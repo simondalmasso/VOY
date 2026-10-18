@@ -2410,7 +2410,8 @@ async function servePmtilesRange(request, env, url, deps = {}) {
     return json({ ok: false, error: "pmtiles_range_invalid" }, 400);
   }
   const end = offset + length - 1;
-  if (!Number.isSafeInteger(end) || end < offset || request.headers.get("Range") !== "bytes=" + offset + "-" + end) {
+  const rangeHeader = request.headers.get("Range");
+  if (!Number.isSafeInteger(end) || end < offset || (rangeHeader !== null && rangeHeader !== "bytes=" + offset + "-" + end)) {
     return json({ ok: false, error: "pmtiles_range_mismatch" }, 400);
   }
   if (offset >= metadata.size || end >= metadata.size) {
