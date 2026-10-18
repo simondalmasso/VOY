@@ -43,7 +43,7 @@ for f in (root/'public/data').rglob('*'):
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(f, dest)
 for f in (root/'build-assets/santa-fe-3d').glob('*.pmtiles'): shutil.copy2(f, client/'data/santa-fe-3d'/f.name)
-subprocess.run(['node','node_modules/esbuild/bin/esbuild','scripts/pmtiles-browser-entry.mjs','--bundle','--format=esm','--platform=browser','--target=es2022','--outfile=dist/client/vendor/pmtiles.mjs'],check=True)
+subprocess.run(['node_modules/esbuild/bin/esbuild','scripts/pmtiles-browser-entry.mjs','--bundle','--format=esm','--platform=browser','--target=es2022','--outfile=dist/client/vendor/pmtiles.mjs'],check=True)
 for f in (root/'public/3d').rglob('*'):
     if f.is_file():
         dest = client/'3d'/f.relative_to(root/'public/3d')
