@@ -547,3 +547,7 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 @media(prefers-reduced-motion:reduce){
   .map-quick-action,.map-quick-view{transition:none}
 }
+
+
+/* ORDER097: remove the standalone GPS dot from the map UI while preserving its live accessible status. */
+#truth-pill.sr-only{position:absolute!important;display:block!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;min-height:0!important;margin:-1px!important;padding:0!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;background:transparent!important;box-shadow:none!important}

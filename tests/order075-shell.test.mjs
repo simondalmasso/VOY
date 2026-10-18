@@ -40,11 +40,13 @@ test('ORDER096 search and live suggestions stay above the floating quick-action 
   assert.match(css,/\[data-pane="collapsed"\][^{}]*\.sheet-expanded\{[^}]*display:none/s);
 });
 
-test('ORDER075 temporal truth pill is visible, stateful and not color-only',async()=>{
+test('ORDER075 temporal truth status is accessible and visually hidden',async()=>{
   const [html,css,app]=await Promise.all([read('public/index.html'),read('public/styles.css'),read('public/app.js')]);
   assert.match(html,/id="truth-pill"/);
   assert.match(html,/id="truth-pill"[^>]*role="status"/);
   assert.match(html,/id="truth-pill"[^>]*aria-live="polite"/);
+  assert.match(html,/id="truth-pill" class="truth-pill sr-only"/);
+  assert.match(css,/#truth-pill\.sr-only\{/);
   assert.match(css,/\.truth-pill\{/);
   assert.match(app,/TRUTH_STATES|truthPill/);
   for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
