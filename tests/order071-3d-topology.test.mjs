@@ -7,9 +7,11 @@ const text=async(path)=>readFile(new URL('../'+path,import.meta.url),'utf8');
 const json=async(path)=>JSON.parse(await text(path));
 const sha256=value=>createHash('sha256').update(value.replace(/\r\n/g,'\n')).digest('hex');
 
-test('ORDER071 3D is opt-in lazy and the 2D shell has no eager 3D asset',async()=>{
+test('ORDER071 urban 3D becomes the progressive default after a reliable 2D first paint',async()=>{
   const [index,app,sw]=await Promise.all([text('public/index.html'),text('public/app.js'),text('public/sw.js')]);
-  assert.match(index,/data-map-mode="2d"/);
+  assert.match(index,/data-map-mode="2d"[^>]*aria-pressed="true"/);
+  assert.match(app,/setTimeout\(\(\)=>activate3D\(\),180\)/);
+  assert.match(app,/if\(!controller\?\.ok\)\{state\.threeController=null;activate2D/);
   assert.doesNotMatch(index,/<script[^>]+(?:three|voy3d)/i);
   assert.doesNotMatch(index,/<link[^>]+(?:three|3d\/topology)/i);
   assert.match(app,/import\(['"]\.\/3d\/voy3d\.js/);

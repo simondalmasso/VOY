@@ -648,6 +648,8 @@ setTimeout(()=>{if(busLinePicker.value)pollSantaFeGps()},600);
 setInterval(pollSantaFeGps,15000);
 updateTruthPill();
 scheduleVectorUpgrade();
+// Progressive 3D default: paint the reliable 2D map first, then reveal the urban 3D view; any failure falls back to 2D.
+setTimeout(()=>activate3D(),180);
 window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});
 
 // ---------- contextual assistant (inside sheet, unchanged behavior) ----------
