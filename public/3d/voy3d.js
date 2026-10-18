@@ -216,9 +216,8 @@ export async function activateVoyUrbanMap3D({
       }
     }
     if(!geometries.length)throw new Error('3d_topology_no_buildings');
-    // MapLibre uses the established raster source in 3D so streets, names,
-    // the Santa Fe river and real-world orientation remain visible even when
-    // the optional OpenFreeMap vector style is unreachable.
+    // City-wide vector style includes building footprints and building-3d
+    // extrusions; local curated geometry remains a detailed downtown overlay.
     if(!document.querySelector('link[data-voy-maplibre]')){
       const link=document.createElement('link');link.rel='stylesheet';
       link.href='/vendor/maplibre-gl.css?v=__BUILD_ID__';link.dataset.voyMaplibre='true';
@@ -226,17 +225,13 @@ export async function activateVoyUrbanMap3D({
     }
     const {Map:MapLibreMap}=await import('/vendor/maplibre-gl.mjs?v=__BUILD_ID__');
     if(disposed)return {ok:false,reason:'disposed'};
-    const style={version:8,sources:{'voy-urban-raster':{
-      type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize:256,maxzoom:19,attribution:'© OpenStreetMap contributors'
-    }},layers:[{id:'voy-urban-basemap',type:'raster',source:'voy-urban-raster',
-      paint:{'raster-opacity':1}}]};
+    const styleUrl='https://tiles.openfreemap.org/styles/liberty';
     const center=manifest?.initial_chunks?.[0]?.center||
       {lon:-60.7100,lat:-31.6555};
     const cameraCenter=Number.isFinite(center.lon)&&Number.isFinite(center.lat)
       ?[center.lon,center.lat]:[-60.7100,-31.6555];
     map=new MapLibreMap({
-      container:mount,style,center:cameraCenter,zoom:15.3,pitch:57,bearing:-19,
+      container:mount,style:styleUrl,center:cameraCenter,zoom:14.6,pitch:60,bearing:-19,
       maxPitch:70,minZoom:11,maxZoom:19,interactive:true,
       attributionControl:{compact:true},preserveDrawingBuffer:false
     });
@@ -244,6 +239,7 @@ export async function activateVoyUrbanMap3D({
       timeout=setTimeout(()=>resolve({ok:false,reason:'urban_map_timeout'}),12000);
       map.once('load',()=>{
         try{
+          // Add detailed local geometry over the city-wide vector extrusions.
           map.addSource('voy-3d-buildings',{type:'geojson',
             data:{type:'FeatureCollection',features:geometries}});
           map.addLayer({id:'voy-3d-buildings-extrusion',type:'fill-extrusion',
@@ -289,7 +285,7 @@ export async function activateVoyUrbanMap3D({
       map.getSource('voy-3d-transport')?.setData(transportData(transportEntities));
     }
     return {ok:true,renderer:'MAPLIBRE_URBAN_3D',build_id:BUILD_ID,building_count:geometries.length,
-      geographical_basemap:true,route_layer:true,static_bus_network:true,
+      geographical_basemap:true,citywide_vector_buildings:true,route_layer:true,static_bus_network:true,
       update,dispose:cleanup,setCenter(coords){
         if(!coords||!Number.isFinite(coords.lon)||!Number.isFinite(coords.lat))return;
         map.easeTo({center:[coords.lon,coords.lat],duration:reducedMotion?0:350});

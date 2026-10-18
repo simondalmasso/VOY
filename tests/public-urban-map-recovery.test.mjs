@@ -10,7 +10,9 @@ test('public 3D action keeps real cartography rather than isolated Three grid',a
  assert.match(app,/mod\.activateVoyUrbanMap3D\(/);
  assert.match(renderer,/export async function activateVoyUrbanMap3D/);
  assert.match(renderer,/new MapLibreMap\(/);
- assert.match(renderer,/voy-urban-raster/);
+ assert.ok(renderer.includes('https://tiles.openfreemap.org/styles/liberty'));
+ assert.match(renderer,/style:styleUrl/);
+ assert.match(renderer,/citywide_vector_buildings:true/);
  assert.match(renderer,/voy-3d-buildings-extrusion/);
  assert.match(renderer,/fill-extrusion/);
  assert.match(renderer,/voy-3d-bus-network-lines/);
@@ -22,6 +24,7 @@ test('public 3D retains attribution and strict tile host access',async()=>{
  const [app,headers,html]=await Promise.all([
   read('public/app.js'),read('public/_headers'),read('public/index.html')
  ]);
+ assert.match(headers,/connect-src[^;\n]*https:\/\/tiles\.openfreemap\.org/);
  assert.match(headers,/connect-src[^;\n]*https:\/\/tile\.openstreetmap\.org/);
  assert.match(app,/recorridos publicados/);
  assert.match(app,/live\?'GPS reciente':'sin vehículos en vivo'/);

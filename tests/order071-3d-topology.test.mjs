@@ -135,3 +135,13 @@ test('ORDER071 app and renderer share a live update contract and fail closed to 
   assert.match(app,/if\(!controller\?\.ok\)\{state\.threeController=null;activate2D/);
   assert.doesNotMatch(app,/threeController\?\?=await mod\.activateVoy3D/);
 });
+
+test('ORDER071 urban 3D uses city-wide vector buildings instead of a raster-only basemap',async()=>{
+  const renderer=await text('public/3d/voy3d.js');
+  assert.ok(renderer.includes('https://tiles.openfreemap.org/styles/liberty'));
+  assert.match(renderer,/style:styleUrl/);
+  assert.match(renderer,/citywide_vector_buildings:true/);
+  assert.ok(!renderer.includes('tile.openstreetmap.org/{z}/{x}/{y}.png'));
+  const style=await fetch('https://tiles.openfreemap.org/styles/liberty').then(r=>r.json());
+  assert.ok(style.layers.some(layer=>layer.id==='building-3d'&&layer.type==='fill-extrusion'));
+});
