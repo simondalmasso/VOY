@@ -12,7 +12,7 @@ class QueryRangeSource {
     const url=new URL(this.url);
     url.searchParams.set('pmtilesOffset',String(offset));
     url.searchParams.set('pmtilesLength',String(length));
-    const response=await fetch(url,{signal,headers:{Range:'bytes='+offset+'-'+end,Accept:'application/vnd.pmtiles, application/octet-stream','Accept-Encoding':'identity'}});
+    const response=await fetch(url,{signal,headers:{Accept:'application/vnd.pmtiles, application/octet-stream'}});
     if(response.status!==206)throw new Error('pmtiles_range_http_'+response.status);
     const range=response.headers.get('content-range')||'';
     const match=/^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/.exec(range);
