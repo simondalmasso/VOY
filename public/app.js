@@ -419,6 +419,7 @@ function suggestionCacheKey(query,scope){const point=!state.origin&&scope==='loc
 function readSuggestionCache(key,now=Date.now()){const hit=suggestionCache.get(key);if(!hit)return null;if(now-hit.storedAt>SUGGEST_CACHE_TTL_MS){suggestionCache.delete(key);return null}suggestionCache.delete(key);suggestionCache.set(key,hit);return hit.payload}
 function writeSuggestionCache(key,payload,now=Date.now()){suggestionCache.delete(key);suggestionCache.set(key,{storedAt:now,payload});while(suggestionCache.size>SUGGEST_CACHE_MAX)suggestionCache.delete(suggestionCache.keys().next().value)}
 function invalidateSuggestionOriginContext(){state.originRevision+=1;suggestionCache.clear()}
+function trainRadarDistanceMeters(a,b){const rad=n=>Number(n)*Math.PI/180,dLat=rad(Number(b.lat)-Number(a.lat)),dLon=rad(Number(b.lon)-Number(a.lon)),la1=rad(a.lat),la2=rad(b.lat),q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*6371000*Math.asin(Math.min(1,Math.sqrt(q)))}
 async function apiJson(url,options={}){const response=await fetch(url,options);let payload={};try{payload=await response.json()}catch{}if(!response.ok){const error=new Error(payload.error||`http_${response.status}`);error.status=response.status;error.payload=payload;throw error}return payload}
 
 function clearSuggestions(){suggestions.replaceChildren();suggestions.hidden=true;destinationInput.setAttribute('aria-expanded','false');destinationInput.removeAttribute('aria-activedescendant');state.destinationCandidates=[];state.destinationActiveIndex=-1}
