@@ -207,6 +207,14 @@ test('ORDER088 caches build-addressed static assets immutably and invalidates di
 });
 
 
+test('ORDER089 starts the citywide 3D layers on style load instead of waiting for all visible map tiles',async()=>{
+  const renderer=await text('public/3d/voy3d.js');
+  assert.ok(renderer.includes("map.once('style.load',async()=>{"));
+  assert.ok(!renderer.includes("map.once('load',async()=>{"));
+  assert.ok(renderer.includes("urban_map_timeout"));
+});
+
+
 test('ORDER088 avoids repeated 3D GeoJSON renders when GPS frames do not change',async()=>{
   const [renderer,app]=await Promise.all([text('public/3d/voy3d.js'),text('public/app.js')]);
   assert.ok(renderer.includes('let displayedRouteType=initialRoute?.type||null'));
