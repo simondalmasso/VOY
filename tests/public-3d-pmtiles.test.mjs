@@ -118,6 +118,24 @@ test('PMTiles Worker transport slices verified full static assets into exact bou
   assert.deepEqual([...new Uint8Array(await second.arrayBuffer())], [80, 77, 84, 105, 108, 101, 115, 3]);
   assert.equal(assetReads, 1, 'same isolate reuses the SHA-256 verified archive for subsequent byte ranges');
 });
+test('PMTiles Worker transport accepts query-v1 slices when the browser omits the Range header', async () => {
+  const path = '/data/santa-fe-3d/santa-fe-buildings-3d-north-east.387c3640d8cdc9c7.pmtiles';
+  const bytes = Uint8Array.from([80, 77, 84, 105, 108, 101, 115, 3, 1, 2, 3, 4]);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  let assetReads = 0;
+  const handler = createRequestHandler({
+    pmtilesAssetRegistry: { [path]: { size: bytes.length, sha256: digest } },
+    pmtilesAssetCache: new Map()
+  });
+  const response = await handler(new Request('https://voy.test' + path + '?pmtilesOffset=2&pmtilesLength=4'), {
+    ASSETS: { async fetch() { assetReads++; return new Response(bytes, { status: 200 }); } }
+  });
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get('Content-Range'), 'bytes 2-5/12');
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [84, 105, 108, 101]);
+  assert.equal(assetReads, 1);
+});
+
 test('PMTiles Worker transport rejects malformed, mismatched and oversized ranges before reading assets', async () => {
   const handler = createRequestHandler();
   let assetReads = 0;
