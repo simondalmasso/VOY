@@ -6,3 +6,33 @@
   Permissions-Policy: geolocation=(self), microphone=(), camera=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
+
+/app.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/contracts.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/runtime-config.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/styles.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/3d/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/tracker/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/map/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/transit/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/data/santa-fe-3d/manifest.json
+  Cache-Control: public, max-age=31536000, immutable

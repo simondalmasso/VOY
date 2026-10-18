@@ -121,10 +121,13 @@ test('ORDER071 pins Three locally and avoids CDN/runtime Worker coupling',async(
   const [pkg,renderer,build]=await Promise.all([json('package.json'),text('public/3d/voy3d.js'),text('scripts/build.ps1')]);
   assert.equal(pkg.dependencies.three,'0.186.0');
   assert.equal(pkg.devDependencies.three,undefined);
-  assert.match(renderer,/from '\/vendor\/three\.module\.js\?v=__BUILD_ID__'/);
+  assert.match(renderer,/THREE\?\?=await import\('\/vendor\/three\.module\.js\?v=__BUILD_ID__'\)/);
   assert.doesNotMatch(renderer,/cdn\.jsdelivr|unpkg|esm\.sh/i);
   assert.match(build,/three\\build\\three\.module\.js/);
   assert.match(build,/three\\build\\three\.core\.js/);
+  assert.match(build,/maplibre-gl-worker\.mjs/);
+  assert.match(build,/maplibreWorker|worker_module/);
+  assert.match(build,/maplibre-gl-shared\.mjs\?v=/);
   assert.doesNotMatch(renderer,/fetch\(['"]\/api\//);
 });
 
@@ -146,4 +149,70 @@ test('ORDER071 urban 3D uses city-wide vector buildings instead of a raster-only
   assert.ok(!renderer.includes('tile.openstreetmap.org/{z}/{x}/{y}.png'));
   const style=await fetch('https://tiles.openfreemap.org/styles/liberty').then(r=>r.json());
   assert.ok(style.layers.some(layer=>layer.id==='building-3d'&&layer.type==='fill-extrusion'));
+});
+
+
+test('ORDER088 keeps the legacy Three renderer off the default urban-map startup path',async()=>{
+  const [app,renderer]=await Promise.all([text('public/app.js'),text('public/3d/voy3d.js')]);
+  assert.doesNotMatch(renderer,/^import\s+\* as THREE from ['"]\/vendor\/three\.module\.js/m);
+  const fallbackStart=renderer.indexOf('export async function activateVoy3D(');
+  const urbanStart=renderer.indexOf('export async function activateVoyUrbanMap3D(',fallbackStart);
+  assert.ok(fallbackStart>=0&&urbanStart>fallbackStart);
+  assert.match(renderer.slice(fallbackStart,urbanStart),/THREE\s*\?\?=\s*await import\(['"]\/vendor\/three\.module\.js\?v=__BUILD_ID__['"]\)/);
+  assert.match(renderer,/getExtension\('WEBGL_lose_context'\)\?\.loseContext\(\)/);
+  const substrate=await text('public/map/substrate.js');
+  assert.match(substrate,/getExtension\('WEBGL_lose_context'\)\?\.loseContext\(\)/);
+  assert.doesNotMatch(app,/^\s*scheduleVectorUpgrade\(\);\s*$/m);
+  assert.doesNotMatch(app,/await startVectorUpgradeOnce\(\);/);
+  assert.match(app,/function activate2D\([\s\S]*?startVectorUpgradeOnce\(\)/);
+});
+
+
+test('ORDER088 service worker uses versioned cache keys and bypasses APIs and byte ranges',async()=>{
+  const sw=await text('public/sw.js');
+  assert.match(sw,/'\/app\.js\?v='\+BUILD_ID/);
+  assert.match(sw,/if\(url\.pathname\.startsWith\('\/api\/'\)\)/);
+  assert.match(sw,/if\(req\.headers\.has\('range'\)\)\s*return/);
+  assert.match(sw,/const cached=await caches\.match\(req\)/);
+  assert.doesNotMatch(sw,/three\.module\.js|three\.core\.js/);
+});
+
+
+test('ORDER088 registers PMTiles on the MapLibre namespace before adding vector sources',async()=>{
+  const [pmtiles,renderer]=await Promise.all([text('public/3d/pmtiles-source.js'),text('public/3d/voy3d.js')]);
+  assert.match(pmtiles,/maplibre\.addProtocol\('pmtiles',activeProtocol\.tile\)/);
+  assert.ok(renderer.includes("const maplibre=await import('/vendor/maplibre-gl.mjs?v=__BUILD_ID__')"));
+  assert.match(renderer,/addVoyPmtilesSources\(maplibre,/);
+});
+
+
+test('ORDER088 caches build-addressed static assets immutably and invalidates disposed 3D state',async()=>{
+  const [headers,buildPs,buildSh,renderer,pmtiles]=await Promise.all([
+    text('public/_headers'),text('scripts/build.ps1'),
+    text('scripts/build.sh'),text('public/3d/voy3d.js'),
+    text('public/3d/pmtiles-source.js')
+  ]);
+  assert.ok(headers.includes('Cache-Control: public, max-age=31536000, immutable'));
+  for(const path of ['/app.js','/styles.css','/vendor/*','/3d/*','/map/*','/tracker/*','/transit/*']){
+    const start=headers.indexOf(path);
+    assert.ok(start>=0&&headers.slice(start,start+160).includes('Cache-Control: public, max-age=31536000, immutable'), 'immutable cache rule missing for '+path);
+  }
+  assert.ok(buildPs.includes("$maplibreWorkerPath=Join-Path"));
+  assert.ok(buildPs.includes("maplibre-gl-worker.mjs?v="));
+  assert.ok(buildPs.includes(".Replace('maplibre-gl-worker.mjs',") && buildPs.includes('maplibre-gl-worker.mjs?v='));
+  assert.ok(buildSh.includes("maplibre-gl-worker.mjs?v={build_id}"));
+  assert.ok(renderer.includes("delete mount.dataset[key]"));
+  assert.ok(renderer.includes("'citywide3d'"));
+  assert.ok(pmtiles.includes("/vendor/pmtiles.mjs?v=__BUILD_ID__"));
+});
+
+
+test('ORDER088 avoids repeated 3D GeoJSON renders when GPS frames do not change',async()=>{
+  const [renderer,app]=await Promise.all([text('public/3d/voy3d.js'),text('public/app.js')]);
+  assert.ok(renderer.includes('let displayedRouteType=initialRoute?.type||null'));
+  assert.ok(renderer.includes('let displayedRouteCoordinates=initialRoute?.coordinates||null'));
+  assert.ok(renderer.includes('let displayedTransportKey=JSON.stringify(transportData(transport).features)'));
+  assert.ok(renderer.includes('if(nextRouteType!==displayedRouteType||nextRouteCoordinates!==displayedRouteCoordinates)'));
+  assert.ok(renderer.includes('if(nextTransportKey!==displayedTransportKey)'));
+  assert.ok(app.includes('if(map3dStatus.textContent!==copy)map3dStatus.textContent=copy'));
 });

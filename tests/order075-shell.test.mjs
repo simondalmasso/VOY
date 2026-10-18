@@ -150,7 +150,7 @@ test('ORDER075 CSP allows OpenFreeMap vector hosts and keeps strict defaults',as
 test('ORDER075 service worker caches the new map-first shell including tracker modules',async()=>{
   const sw=await read('public/sw.js');
   for(const path of ['/tracker/store.js','/tracker/observations.js','/tracker/fixtures.js','/map/substrate.js']){
-    assert.ok(sw.includes(`'${path}'`),`sw CORE must cache ${path}`);
+    assert.ok(sw.includes("'" + path + "?v='+BUILD_ID"), 'sw CORE must cache the build-addressed '+path);
   }
   const core=sw.slice(sw.indexOf('CORE=['),sw.indexOf(']',sw.indexOf('CORE=[')));
   assert.doesNotMatch(core,/\/api\//,'api stays network-only');

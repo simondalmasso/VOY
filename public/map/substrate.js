@@ -161,7 +161,12 @@ export function createMapSubstrate({
     if (String(vectorConf.maplibre_version) !== '6.11.2') { vectorFailed('version_not_pinned'); return Promise.resolve(false); }
     try {
       const probe = document.createElement('canvas');
-      if (!probe.getContext('webgl2')) { vectorFailed('unsupported_webgl2'); return Promise.resolve(false); }
+      let webgl2 = null;
+      try { webgl2 = probe.getContext('webgl2'); } catch {}
+      if (!webgl2) { vectorFailed('unsupported_webgl2'); return Promise.resolve(false); }
+      try { webgl2.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
+      probe.width = 0;
+      probe.height = 0;
     } catch { vectorFailed('unsupported_webgl2'); return Promise.resolve(false); }
 
     vectorPromise = (async () => {

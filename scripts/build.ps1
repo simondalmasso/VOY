@@ -42,8 +42,11 @@ $threeModulePath=Join-Path $root 'dist\client\vendor\three.module.js'
 $threeModule=[IO.File]::ReadAllText($threeModulePath,[Text.Encoding]::UTF8).Replace('./three.core.js',("./three.core.js?v="+$buildId))
 [IO.File]::WriteAllText($threeModulePath,$threeModule,(New-Object Text.UTF8Encoding($false)))
 $maplibreModulePath=Join-Path $root 'dist\client\vendor\maplibre-gl.mjs'
-$maplibreModule=[IO.File]::ReadAllText($maplibreModulePath,[Text.Encoding]::UTF8).Replace('./maplibre-gl-shared.mjs',("./maplibre-gl-shared.mjs?v="+$buildId))
+$maplibreModule=[IO.File]::ReadAllText($maplibreModulePath,[Text.Encoding]::UTF8).Replace('./maplibre-gl-shared.mjs',("./maplibre-gl-shared.mjs?v="+$buildId)).Replace('maplibre-gl-worker.mjs',("maplibre-gl-worker.mjs?v="+$buildId))
 [IO.File]::WriteAllText($maplibreModulePath,$maplibreModule,(New-Object Text.UTF8Encoding($false)))
+$maplibreWorkerPath=Join-Path $root 'dist\client\vendor\maplibre-gl-worker.mjs'
+$maplibreWorker=[IO.File]::ReadAllText($maplibreWorkerPath,[Text.Encoding]::UTF8).Replace('./maplibre-gl-shared.mjs',("./maplibre-gl-shared.mjs?v="+$buildId))
+[IO.File]::WriteAllText($maplibreWorkerPath,$maplibreWorker,(New-Object Text.UTF8Encoding($false)))
 $textClientFiles=@('index.html','styles.css','app.js','contracts.js','runtime-config.js','sw.js')
 $textClientPaths=@()
 foreach($tf in $textClientFiles){$textClientPaths += Join-Path $root ('dist\client\'+$tf)}

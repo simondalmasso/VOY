@@ -94,10 +94,13 @@ function updateTruthPill(){
     entry=TRUTH_STATES.no_coverage;
     meta='Fixture demo activado';
   }
-  truthPill.dataset.state=datasetState;
-  truthIcon.textContent=entry.icon;
-  truthLabel.textContent=entry.label;
-  if(truthMeta){truthMeta.textContent=meta;truthMeta.hidden=!meta}
+  if(truthPill.dataset.state!==datasetState)truthPill.dataset.state=datasetState;
+  if(truthIcon.textContent!==entry.icon)truthIcon.textContent=entry.icon;
+  if(truthLabel.textContent!==entry.label)truthLabel.textContent=entry.label;
+  if(truthMeta){
+    if(truthMeta.textContent!==meta)truthMeta.textContent=meta;
+    if(truthMeta.hidden===Boolean(meta))truthMeta.hidden=!meta;
+  }
 }
 
 // ---------- map stage + substrate ----------
@@ -167,11 +170,14 @@ function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAt
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transportEntities:current3DTransportEntities()})}
 function update3DGpsStatus(){
  const live=state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000;
- map3dStatus.textContent='Mapa 3D · Santa Fe centro · recorridos publicados · '+(live?'GPS reciente':'sin vehículos en vivo');
+ const copy='Mapa 3D · Santa Fe centro · recorridos publicados · '+(live?'GPS reciente':'sin vehículos en vivo');
+ if(map3dStatus.textContent!==copy)map3dStatus.textContent=copy;
 }
 function activate2D(message=''){
   state.threeController?.dispose?.();state.threeController=null;
-  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
+  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');
+  if(!substrate.maplibreReady)void startVectorUpgradeOnce();
+  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
 }
 function loadVoy3DModule(){
   return state.threeImportAttempt===0
@@ -183,10 +189,12 @@ async function activate3D(){
   if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
   map3dStatus.textContent='Preparando mapa 3D de Santa Fe…';
   try{
-    // Serialize the two MapLibre startup paths. Two fresh WebGL maps starting
-    // together can race the browser's GL/worker budget and make 3D fall back.
-    await startVectorUpgradeOnce();
-    if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
+    // If a user explicitly opened 2D, let its existing vector-map startup settle
+    // before constructing the 3D map; on the default path there is no idle map.
+    if(vectorUpgradePromise){
+      await vectorUpgradePromise;
+      if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
+    }
     map3dStatus.textContent='Abriendo mapa 3D de Santa Fe…';
     state.threeModulePromise??=loadVoy3DModule();
     const mod=await state.threeModulePromise;
@@ -408,11 +416,6 @@ function startVectorUpgradeOnce(){
       .catch(()=>false);
   }
   return vectorUpgradePromise;
-}
-function scheduleVectorUpgrade(){
-  const start=()=>{void startVectorUpgradeOnce()};
-  if('requestIdleCallback'in window)requestIdleCallback(start,{timeout:2500});
-  else setTimeout(start,400);
 }
 
 // ---------- theme ----------
@@ -653,7 +656,6 @@ async function pollSantaFeGps(){
 setTimeout(()=>{if(busLinePicker.value)pollSantaFeGps()},600);
 setInterval(pollSantaFeGps,15000);
 updateTruthPill();
-scheduleVectorUpgrade();
 // Progressive 3D default: paint the reliable 2D map first, then reveal the urban 3D view; any failure falls back to 2D.
 setTimeout(()=>activate3D(),180);
 window.addEventListener('load',()=>{if('serviceWorker'in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1'))navigator.serviceWorker.register('/sw.js').catch(()=>{})});

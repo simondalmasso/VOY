@@ -1,4 +1,4 @@
-import * as THREE from '/vendor/three.module.js?v=__BUILD_ID__';
+let THREE;
 import {presentTransportEntity} from './temporal.js?v=__BUILD_ID__';
 
 export const BUILD_ID='__BUILD_ID__';
@@ -23,7 +23,7 @@ class LruChunkCache{
 }
 function fallbackTo2D(onFallback,reason='unsupported_webgl2'){onFallback?.(reason);return {ok:false,reason}}
 function versionedUrl(input,base=location.href){const url=new URL(input,base);url.searchParams.set('v',BUILD_ID);return url}
-function canUseWebGL2(){const probe=document.createElement('canvas');return Boolean(probe.getContext('webgl2'))}
+function canUseWebGL2(){const probe=document.createElement('canvas');let context=null;try{context=probe.getContext('webgl2')}catch{}if(!context)return false;try{context.getExtension('WEBGL_lose_context')?.loseContext()}catch{}probe.width=0;probe.height=0;return true}
 function llProjectFactory(center){const latM=111320,lonM=111320*Math.cos(Number(center.lat)*Math.PI/180);return ([lon,lat])=>[(Number(lon)-Number(center.lon))*lonM,(Number(lat)-Number(center.lat))*latM]}
 function resolveQualityProfile(requested='auto'){
   if(requested==='performance'||requested==='quality')return {name:requested,profile:QUALITY_PROFILES[requested]};
@@ -76,6 +76,7 @@ export async function activateVoy3D({mount,onFallback=()=>{},routeGeometry:initi
   }
   function handleContextLost(event){event.preventDefault();cleanup();onFallback?.('webgl_context_lost')}
   try{
+    THREE??=await import('/vendor/three.module.js?v=__BUILD_ID__');
     canvas=document.createElement('canvas');canvas.className='voy-3d-canvas';canvas.setAttribute('aria-label','Vista 3D suplementaria de Santa Fe');mount.appendChild(canvas);
     renderer=new THREE.WebGLRenderer({canvas,antialias:profile.antialias,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,profile.dpr,DPR_CAP));renderer.setClearColor(0x0d1114,1);
@@ -184,6 +185,7 @@ export async function activateVoyUrbanMap3D({
     disposed=true;clearTimeout(timeout);
     try{map?.remove()}catch{}
     mount.replaceChildren();
+    for(const key of ['urban3d','buildingCount','mapBased','citywide3d','citywideBuildingCount','citywideDataset'])delete mount.dataset[key];
   }
   try{
     const manifest=await fetch(versionedUrl('/3d/topology/manifest.json'),{cache:'force-cache'})
@@ -223,7 +225,8 @@ export async function activateVoyUrbanMap3D({
       link.href='/vendor/maplibre-gl.css?v=__BUILD_ID__';link.dataset.voyMaplibre='true';
       document.head.appendChild(link);
     }
-    const {Map:MapLibreMap}=await import('/vendor/maplibre-gl.mjs?v=__BUILD_ID__');
+    const maplibre=await import('/vendor/maplibre-gl.mjs?v=__BUILD_ID__');
+    const MapLibreMap=maplibre.Map;
     if(disposed)return {ok:false,reason:'disposed'};
     const styleUrl='https://tiles.openfreemap.org/styles/liberty';
     const center=manifest?.initial_chunks?.[0]?.center||
@@ -248,7 +251,7 @@ export async function activateVoyUrbanMap3D({
              dataset.final_features!==264425||dataset.layer!=='santa_fe_buildings_3d'||dataset.asset_paths.some((path,i)=>typeof path!=='string'||typeof dataset.asset_sha256[i]!=='string'||!path.endsWith('.'+dataset.asset_sha256[i].slice(0,16)+'.pmtiles')))
             throw new Error('3d_city_manifest_invalid');
           const {addVoyPmtilesSources}=await import(versionedUrl('/3d/pmtiles-source.js'));
-          const citySources=addVoyPmtilesSources(MapLibreMap,dataset.asset_paths.map((path,i)=>({
+          const citySources=addVoyPmtilesSources(maplibre,dataset.asset_paths.map((path,i)=>({
             id:['north-east','north-west','south-east','south-west'][i],path,sha256:dataset.asset_sha256[i],bounds:dataset.asset_bounds[i]
           })));
           for(const citySource of citySources){
@@ -306,11 +309,24 @@ export async function activateVoyUrbanMap3D({
     clearTimeout(timeout);
     if(!outcome.ok){cleanup();return fallbackTo2D(onFallback,outcome.reason)}
     let displayedNetwork=networkGeometries;
+    let displayedRouteType=initialRoute?.type||null;
+    let displayedRouteCoordinates=initialRoute?.coordinates||null;
+    let displayedTransportKey=JSON.stringify(transportData(transport).features);
     function update({routeGeometry:nextRoute=null,networkGeometries:nextNetwork=displayedNetwork,transportEntities=[]}={}){
       if(disposed)return;
       if(nextNetwork!==displayedNetwork){map.getSource('voy-3d-bus-network')?.setData(networkData(nextNetwork));displayedNetwork=nextNetwork}
-      map.getSource('voy-3d-selected-route')?.setData(routeData(nextRoute));
-      map.getSource('voy-3d-transport')?.setData(transportData(transportEntities));
+      const nextRouteType=nextRoute?.type||null;
+      const nextRouteCoordinates=nextRoute?.coordinates||null;
+      if(nextRouteType!==displayedRouteType||nextRouteCoordinates!==displayedRouteCoordinates){
+        map.getSource('voy-3d-selected-route')?.setData(routeData(nextRoute));
+        displayedRouteType=nextRouteType;displayedRouteCoordinates=nextRouteCoordinates;
+      }
+      const nextTransport=transportData(transportEntities);
+      const nextTransportKey=JSON.stringify(nextTransport.features);
+      if(nextTransportKey!==displayedTransportKey){
+        map.getSource('voy-3d-transport')?.setData(nextTransport);
+        displayedTransportKey=nextTransportKey;
+      }
     }
     return {ok:true,renderer:'MAPLIBRE_URBAN_3D',build_id:BUILD_ID,building_count:geometries.length,citywide_building_count:outcome.citywideBuildingCount,
       geographical_basemap:true,citywide_vector_buildings:true,route_layer:true,static_bus_network:true,
