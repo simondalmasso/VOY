@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+node scripts/fetch-citywide-3d.mjs
 node scripts/build-order071-topology.mjs
 
 python3 - <<'PYEOF'
@@ -30,11 +31,19 @@ dist = root/'dist'
 if dist.exists(): shutil.rmtree(dist)
 client = dist/'client'
 (client/'icons').mkdir(parents=True)
+(client/'data').mkdir()
 (client/'3d').mkdir(); (client/'vendor').mkdir(); (client/'tracker').mkdir(); (client/'map').mkdir(); (client/'transit').mkdir()
 
 public_files = ['_headers','app.js','contracts.js','coverage.html','index.html','manifest.json','offline.html','privacy.html','runtime-config.js','sources.html','styles.css','sw.js','terms.html']
 for f in public_files: shutil.copy2(root/'public'/f, client/f)
 for f in (root/'public/icons').iterdir(): shutil.copy2(f, client/'icons'/f.name)
+for f in (root/'public/data').rglob('*'):
+    if f.is_file():
+        dest = client/'data'/f.relative_to(root/'public/data')
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, dest)
+for f in (root/'build-assets/santa-fe-3d').glob('*.pmtiles'): shutil.copy2(f, client/'data/santa-fe-3d'/f.name)
+subprocess.run(['node_modules/esbuild/bin/esbuild','scripts/pmtiles-browser-entry.mjs','--bundle','--format=esm','--platform=browser','--target=es2022','--outfile=dist/client/vendor/pmtiles.mjs'],check=True)
 for f in (root/'public/3d').rglob('*'):
     if f.is_file():
         dest = client/'3d'/f.relative_to(root/'public/3d')

@@ -1,6 +1,8 @@
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
+node scripts/fetch-citywide-3d.mjs
+if($LASTEXITCODE -ne 0){throw 'Pinned citywide 3D assets unavailable or invalid'}
 node scripts/build-order071-topology.mjs
 if($LASTEXITCODE -ne 0){throw 'ORDER071 geometry build failed'}
 $sha=(git rev-parse HEAD).Trim()
@@ -19,6 +21,11 @@ New-Item -ItemType Directory -Force dist\client\icons | Out-Null
 Copy-Item public\icons\* dist\client\icons -Force
 New-Item -ItemType Directory -Force dist\client\3d,dist\client\vendor | Out-Null
 Copy-Item public\3d\* dist\client\3d -Recurse -Force
+New-Item -ItemType Directory -Force dist\client\data,dist\client\vendor | Out-Null
+Copy-Item public\data\* dist\client\data -Recurse -Force
+Copy-Item build-assets\santa-fe-3d\*.pmtiles dist\client\data\santa-fe-3d -Force
+node node_modules\esbuild\bin\esbuild scripts\pmtiles-browser-entry.mjs --bundle --format=esm --platform=browser --target=es2022 --outfile=dist\client\vendor\pmtiles.mjs
+if($LASTEXITCODE -ne 0){throw 'PMTiles browser bundle failed'}
 Copy-Item node_modules\three\build\three.module.js dist\client\vendor\three.module.js -Force
 Copy-Item node_modules\three\build\three.core.js dist\client\vendor\three.core.js -Force
 Copy-Item node_modules\three\LICENSE dist\client\vendor\THREE-LICENSE.txt -Force

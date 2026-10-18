@@ -1,4 +1,6 @@
-﻿dist/
+dist/
 .wrangler/
 node_modules/
 evidence/runtime/
+
+/build-assets/

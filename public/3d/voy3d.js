@@ -237,8 +237,33 @@ export async function activateVoyUrbanMap3D({
     });
     const outcome=await new Promise(resolve=>{
       timeout=setTimeout(()=>resolve({ok:false,reason:'urban_map_timeout'}),12000);
-      map.once('load',()=>{
+      map.once('load',async()=>{
         try{
+          // Load four content-addressed PMTiles shards of the Overture/OSM city dataset.
+          // Heights are visual massing, not surveyed measurements.
+          const dataset=await fetch(versionedUrl('/data/santa-fe-3d/manifest.json'),{cache:'force-cache'})
+            .then(r=>{if(!r.ok)throw new Error('3d_city_manifest_unavailable');return r.json()});
+          if(!Array.isArray(dataset.asset_paths)||dataset.asset_paths.length!==4||
+             !Array.isArray(dataset.asset_sha256)||dataset.asset_sha256.length!==4||
+             dataset.final_features!==264425||dataset.layer!=='santa_fe_buildings_3d'||dataset.asset_paths.some((path,i)=>typeof path!=='string'||typeof dataset.asset_sha256[i]!=='string'||!path.endsWith('.'+dataset.asset_sha256[i].slice(0,16)+'.pmtiles')))
+            throw new Error('3d_city_manifest_invalid');
+          const {addVoyPmtilesSources}=await import(versionedUrl('/3d/pmtiles-source.js'));
+          const citySources=await addVoyPmtilesSources(MapLibreMap,dataset.asset_paths.map((path,i)=>({
+            id:['north-east','north-west','south-east','south-west'][i],path
+          })));
+          for(const citySource of citySources){
+            map.addSource(citySource.id,{type:'vector',url:citySource.url,attribution:citySource.attribution});
+            map.addLayer({id:'voy-overture-extrusion-'+citySource.id,type:'fill-extrusion',
+              source:citySource.id,'source-layer':dataset.layer,minzoom:11,
+              paint:{
+                'fill-extrusion-color':['match',['get','height_source'],
+                  'explicit','#e7eee9','floors','#b7d0d5','estimated','#9db8c4','fallback','#82969f','#9aa8ad'],
+                'fill-extrusion-height':['max',3,['min',120,['to-number',['get','height'],9]]],
+                'fill-extrusion-base':['max',0,['min',80,['to-number',['get','min_height'],0]]],
+                'fill-extrusion-opacity':0.88
+              }});
+          }
+
           // Add detailed local geometry over the city-wide vector extrusions.
           map.addSource('voy-3d-buildings',{type:'geojson',
             data:{type:'FeatureCollection',features:geometries}});
@@ -270,7 +295,10 @@ export async function activateVoyUrbanMap3D({
           mount.dataset.urban3d='ready';
           mount.dataset.buildingCount=String(geometries.length);
           mount.dataset.mapBased='true';
-          ready=true;resolve({ok:true});
+          mount.dataset.citywide3d='ready';
+          mount.dataset.citywideBuildingCount=String(dataset.final_features);
+          mount.dataset.citywideDataset='overture-osm-2026-07-22';
+          ready=true;resolve({ok:true,citywideBuildingCount:dataset.final_features});
         }catch(e){resolve({ok:false,reason:'urban_3d_layers_failed'})}
       });
       map.once('error',e=>{if(!ready&&String(e.error?.message||'').includes('style'))resolve({ok:false,reason:'urban_map_style_error'})});
@@ -284,7 +312,7 @@ export async function activateVoyUrbanMap3D({
       map.getSource('voy-3d-selected-route')?.setData(routeData(nextRoute));
       map.getSource('voy-3d-transport')?.setData(transportData(transportEntities));
     }
-    return {ok:true,renderer:'MAPLIBRE_URBAN_3D',build_id:BUILD_ID,building_count:geometries.length,
+    return {ok:true,renderer:'MAPLIBRE_URBAN_3D',build_id:BUILD_ID,building_count:geometries.length,citywide_building_count:outcome.citywideBuildingCount,
       geographical_basemap:true,citywide_vector_buildings:true,route_layer:true,static_bus_network:true,
       update,dispose:cleanup,setCenter(coords){
         if(!coords||!Number.isFinite(coords.lon)||!Number.isFinite(coords.lat))return;
