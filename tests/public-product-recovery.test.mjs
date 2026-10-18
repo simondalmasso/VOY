@@ -81,7 +81,7 @@ test('public recovery: map renders static bus network independently from realtim
 test('public recovery: Santa Fe bus copy distinguishes route existence from temporal evidence',async()=>{
   const app=await read('public/app.js');
   assert.match(app,/Recorridos publicados: visibles en el mapa/);
-  assert.match(app,/Arribos en VOY: no integrados/);
+  assert.match(app,/Seguimiento GPS: sujeto a observaciones recientes/);
   assert.doesNotMatch(app,/Cuándo pasa: no integrado · Tiempo real no disponible en VOY/);
 });
 
