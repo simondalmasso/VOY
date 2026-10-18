@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 
 const text=async(path)=>readFile(new URL('../'+path,import.meta.url),'utf8');
 const json=async(path)=>JSON.parse(await text(path));
+const sha256=value=>createHash('sha256').update(value.replace(/\r\n/g,'\n')).digest('hex');
 
 test('ORDER071 3D is opt-in lazy and the 2D shell has no eager 3D asset',async()=>{
   const [index,app,sw]=await Promise.all([text('public/index.html'),text('public/app.js'),text('public/sw.js')]);
@@ -25,6 +27,7 @@ test('ORDER071 topology manifest is bounded and fully static',async()=>{
   assert.ok(manifest.geometry_source.snapshot_at);
   for(const chunk of manifest.initial_chunks){
     assert.match(chunk.url,/^\.\/chunk-[a-z0-9-]+\.json$/);
+    assert.equal(chunk.sha256,sha256(await text('public/3d/topology/'+chunk.url.slice(2))));
     const payload=await json('public/3d/topology/'+chunk.url.slice(2));
     assert.equal(payload.schema_version,1);
     assert.ok(Array.isArray(payload.buildings));
@@ -98,7 +101,7 @@ test('ORDER071 build source pins provenance and never requires runtime Overpass'
 
 test('ORDER071 3D source only calls bounded first-party APIs; GPS is same-origin',async()=>{
   const [app,renderer,temporal]=await Promise.all([text('public/app.js'),text('public/3d/voy3d.js'),text('public/3d/temporal.js')]);
-  const apiPaths=s=>new Set([...s.matchAll(/['"](\/api\/[a-z0-9_\/-]+)['"]/gi)].map(m=>m[1]));
+  const apiPaths=s=>new Set([...s.matchAll(/['"] \(\/api\/[a-z0-9_\\/-]+)['"]/gi)].map(m=>m[1]));
   const appPaths=apiPaths(app);
   assert.equal(apiPaths(renderer).size,0);
   assert.equal(apiPaths(temporal).size,0);
