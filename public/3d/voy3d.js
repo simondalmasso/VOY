@@ -240,7 +240,7 @@ export async function activateVoyUrbanMap3D({
     });
     const outcome=await new Promise(resolve=>{
       timeout=setTimeout(()=>resolve({ok:false,reason:'urban_map_timeout'}),12000);
-      map.once('load',async()=>{
+      map.once('style.load',async()=>{
         try{
           // Load four content-addressed PMTiles shards of the Overture/OSM city dataset.
           // Heights are visual massing, not surveyed measurements.
