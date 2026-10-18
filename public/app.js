@@ -24,7 +24,7 @@ const suggestionInFlight=new Map();
 const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
-  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
+  originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,threeActivationRevision:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
   substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],busNetworkSelectedGeometries:[],sheetPane:'collapsed',fixtureOn:false,gpsStatus:'not_integrated',gpsLastLiveAt:0
 };
 
@@ -180,6 +180,7 @@ function update3DGpsStatus(){
  if(map3dStatus.textContent!==copy)map3dStatus.textContent=copy;
 }
 function activate2D(message=''){
+  state.threeActivationRevision+=1;
   state.threeController?.dispose?.();state.threeController=null;
   state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');
   if(!substrate.maplibreReady)void startVectorUpgradeOnce();
@@ -192,6 +193,7 @@ function loadVoy3DModule(){
 }
 async function activate3D(){
   if(state.mapMode==='3d'&&state.threeController?.ok)return;
+  const activationRevision=++state.threeActivationRevision;
   if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
   map3dStatus.textContent='Preparando mapa 3D de Santa Fe…';
   try{
@@ -199,18 +201,22 @@ async function activate3D(){
     // before constructing the 3D map; on the default path there is no idle map.
     if(vectorUpgradePromise){
       await vectorUpgradePromise;
+      if(activationRevision!==state.threeActivationRevision)return;
       if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
     }
     map3dStatus.textContent='Abriendo mapa 3D de Santa Fe…';
     state.threeModulePromise??=loadVoy3DModule();
     const mod=await state.threeModulePromise;
+    if(activationRevision!==state.threeActivationRevision)return;
     if(mod.BUILD_ID!==CLIENT_BUILD_ID)throw new Error('3d_build_identity_mismatch');
     map3dLayer.hidden=false;map3dLayer.style.opacity='0';
     const controller=state.threeController?.ok?state.threeController:await mod.activateVoyUrbanMap3D({mount:map3dLayer,onFallback:()=>{state.threeController=null;activate2D('Mapa 3D no disponible; continuamos en 2D.')},routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transport:current3DTransportEntities(),quality:map3dQuality.value,reducedMotion:reducedMotionMedia.matches});
+    if(activationRevision!==state.threeActivationRevision){controller?.dispose?.();return}
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
     state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dLayer.style.opacity='';map3dAttribution.hidden=false;map3dQuality.hidden=controller.renderer==='MAPLIBRE_URBAN_3D';update3DGpsStatus();sync3DTopology();
   }catch(error){
+    if(activationRevision!==state.threeActivationRevision)return;
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
 }
