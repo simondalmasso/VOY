@@ -214,6 +214,7 @@ function trackerMarkerModels(){
     models.push({
       id:entity.id,kind,lat:frame.position.lat,lon:frame.position.lon,selected:trackerStore.selected()?.id===entity.id,
       gpsVehicle:entity.observation.observed_position_only===true,bearing:frame.bearing,
+      displayInterpolated:frame.display_interpolated===true,
       label:markerLabel(entity,frame,cls)
     });
   }
@@ -223,7 +224,8 @@ function markerLabel(entity,frame,cls){
   const line=entity.observation.line?`Línea ${entity.observation.line}`:entity.id;
   const stateText=frame.scrub?'Histórico de esta sesión':truthStateLabel(cls.state).label+(cls.state==='realtime'?` · ${ageLabel(cls.age_ms)}`:'');
   const fixture=entity.observation.synthetic_fixture?' · fixture demo':'';
-  return `${line} · ${stateText} · ${entity.id}${fixture}`;
+  const estimate=frame.display_interpolated?' · Posición estimada entre mediciones':'';
+  return `${line} · ${stateText}${estimate} · ${entity.id}${fixture}`;
 }
 function selectedTrailDots(){
   const selected=trackerStore.selected();
