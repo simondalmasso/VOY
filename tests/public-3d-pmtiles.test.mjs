@@ -27,6 +27,9 @@ test('citywide 3D manifest pins four bounded content-addressed PMTiles shards an
   assert.equal(lock.distribution.origin, 'https://stracker.simondalmasso44.workers.dev');
   assert.equal(lock.distribution.protocol, 'query-v1');
   assert.equal(manifest.asset_paths.length, 4);
+  assert.equal(manifest.asset_bounds.length, 4);
+  assert.equal(manifest.asset_min_zoom, 13);
+  assert.equal(manifest.asset_max_zoom, 17);
   for (let i = 0; i < manifest.asset_paths.length; i++) {
     const path = manifest.asset_paths[i], sha = manifest.asset_sha256[i], size = manifest.asset_sizes[i];
     const name = basename(path);
@@ -74,37 +77,47 @@ test('available citywide PMTiles cache archives match exact SHA-256 and vector-l
   }
 });
 
-test('PMTiles Worker transport returns only the exact requested bounded byte range', async () => {
-  const handler = createRequestHandler();
+test('PMTiles Worker transport slices verified full static assets into exact bounded ranges and caches each archive', async () => {
+  const path = '/data/santa-fe-3d/santa-fe-buildings-3d-north-east.387c3640d8cdc9c7.pmtiles';
   const bytes = Uint8Array.from([80, 77, 84, 105, 108, 101, 115, 3, 1, 2, 3, 4]);
-  let requestedRange = '';
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  let assetReads = 0;
+  let upstreamRangeHeader = null;
   const assets = {
     async fetch(request) {
-      requestedRange = request.headers.get('Range');
-      const match = /^bytes=([0-9]+)-([0-9]+)$/.exec(requestedRange || '');
-      assert.ok(match);
-      const start = Number(match[1]), end = Number(match[2]);
-      return new Response(bytes.slice(start, end + 1), {
-        status: 206,
+      assetReads++;
+      upstreamRangeHeader = request.headers.get('Range');
+      assert.equal(new URL(request.url).pathname, path);
+      return new Response(bytes, {
+        status: 200,
         headers: {
-          'Content-Range': 'bytes ' + start + '-' + end + '/' + bytes.length,
-          'Content-Length': String(end - start + 1),
-          'Content-Type': 'application/vnd.pmtiles',
-          ETag: '"fixture"'
+          'Content-Length': String(bytes.length),
+          'Content-Type': 'application/vnd.pmtiles'
         }
       });
     }
   };
-  const request = new Request('https://voy.test/data/santa-fe-3d/santa-fe-buildings-3d-north-east.387c3640d8cdc9c7.pmtiles?pmtilesOffset=2&pmtilesLength=4', {
-    headers: { Range: 'bytes=2-5' }
+  const handler = createRequestHandler({
+    pmtilesAssetRegistry: { [path]: { size: bytes.length, sha256: digest } },
+    pmtilesAssetCache: new Map()
   });
-  const response = await handler(request, { ASSETS: assets });
-  assert.equal(response.status, 206);
-  assert.equal(requestedRange, 'bytes=2-5');
-  assert.equal(response.headers.get('Content-Range'), 'bytes 2-5/12');
-  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [84, 105, 108, 101]);
-});
+  const first = await handler(new Request('https://voy.test' + path + '?pmtilesOffset=2&pmtilesLength=4', {
+    headers: { Range: 'bytes=2-5' }
+  }), { ASSETS: assets });
+  assert.equal(first.status, 206);
+  assert.equal(upstreamRangeHeader, null, 'Static Assets receives a full-file GET, not an unsupported Range request');
+  assert.equal(first.headers.get('Content-Range'), 'bytes 2-5/12');
+  assert.equal(first.headers.get('ETag'), '"' + digest + '"');
+  assert.deepEqual([...new Uint8Array(await first.arrayBuffer())], [84, 105, 108, 101]);
 
+  const second = await handler(new Request('https://voy.test' + path + '?pmtilesOffset=0&pmtilesLength=8', {
+    headers: { Range: 'bytes=0-7' }
+  }), { ASSETS: assets });
+  assert.equal(second.status, 206);
+  assert.equal(second.headers.get('Content-Range'), 'bytes 0-7/12');
+  assert.deepEqual([...new Uint8Array(await second.arrayBuffer())], [80, 77, 84, 105, 108, 101, 115, 3]);
+  assert.equal(assetReads, 1, 'same isolate reuses the SHA-256 verified archive for subsequent byte ranges');
+});
 test('PMTiles Worker transport rejects malformed, mismatched and oversized ranges before reading assets', async () => {
   const handler = createRequestHandler();
   let assetReads = 0;
@@ -141,6 +154,9 @@ test('citywide renderer and builds keep four shards pinned and Overture attribut
   assert.match(adapter, /pmtilesOffset/);
   assert.match(adapter, /pmtilesLength/);
   assert.match(adapter, /status!==206/);
+  assert.match(adapter, /bounds:asset\.bounds/);
+  assert.doesNotMatch(adapter, /await archive\.getHeader\(\)/);
+  assert.match(renderer, /bounds:citySource\.bounds/);
   assert.match(windowsBuild, /fetch-citywide-3d\.mjs/);
   assert.match(windowsBuild, /esbuild/);
   assert.match(linuxBuild, /fetch-citywide-3d\.mjs/);
