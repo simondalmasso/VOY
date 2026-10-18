@@ -315,9 +315,10 @@ html[data-theme="dark"]{
 .tracker-marker.is-selected::before{background:var(--success)}
 /* Native GPS gets a bus glyph oriented by the last two measured fixes. */
 .tracker-bus-icon{display:none;width:25px;height:25px;background:#fff;-webkit-mask-image:url('/icons/bus-transport-icons8.svg');mask-image:url('/icons/bus-transport-icons8.svg');-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;transform:rotate(var(--gps-bearing,0deg));transform-origin:center}
-.tracker-marker.is-gps-bus{border:2px solid #f4fff9;border-radius:50%;background:#0b8f60;box-shadow:0 0 0 1px rgba(3,20,14,.65),0 4px 12px rgba(0,0,0,.5)}
-.tracker-marker.is-gps-bus::before{content:none}
+.tracker-marker.is-gps-bus{border:0;border-radius:50%;background:transparent;box-shadow:none}
+.tracker-marker.is-gps-bus::before{content:"";display:block;width:29px;height:29px;box-sizing:border-box;border:2px solid #f4fff9;border-radius:50%;background:#0b8f60;box-shadow:0 0 0 1px rgba(3,20,14,.65),0 3px 8px rgba(0,0,0,.42)}
 .tracker-marker.is-gps-bus .tracker-bus-icon{display:block}
+.tracker-marker.is-gps-bus .tracker-bus-icon{position:absolute;width:17px;height:17px;z-index:1}
 .tracker-marker.is-gps-bus.is-interpolating{transition:box-shadow 180ms linear}
 @media (prefers-reduced-motion:reduce){
   .tracker-marker.is-gps-bus,.tracker-bus-icon{transition:none}
@@ -369,3 +370,96 @@ dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:v
 
 /* Public product recovery: published Santa Fe bus network, static geometry only. */
 .transit-network-overlay{color:rgba(255,212,42,.80);pointer-events:none}
+
+/* ORDER078 — VOY quiet interface system: map-first, restrained, accessible. */
+:root{
+  --bg:#f5f5f2;--surface:rgba(255,255,252,.94);--surface-2:#ecece7;--text:#20211e;--muted:#73766e;--line:rgba(35,38,31,.13);
+  --accent:#f7cb35;--accent-2:#d9a900;--accent-ink:#17150c;--success:#087b55;--danger:#b33d30;--map:#e5e4dd;
+  --hud-ink:#20211e;--hud-muted:#6e7169;--hud-panel:rgba(250,250,247,.88);--hud-line:rgba(35,38,31,.14);
+  --shadow-soft:0 8px 30px rgba(18,20,15,.08);--shadow-float:0 20px 64px rgba(18,20,15,.18);
+  --r-lg:24px;--r-md:17px;--r-sm:12px;--ease:cubic-bezier(.2,.75,.25,1);--motion-fast:160ms;--motion-slow:280ms;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#10110f;--surface:rgba(26,27,24,.94);--surface-2:#242520;--text:#f2f2ec;--muted:#a1a39a;--line:rgba(238,240,229,.13);
+  --accent:#f7cf49;--accent-2:#e2b529;--accent-ink:#17150c;--success:#70d5ac;--danger:#ff9385;--map:#1b1d19;
+  --hud-ink:#f2f2ec;--hud-muted:#a1a39a;--hud-panel:rgba(22,23,20,.84);--hud-line:rgba(238,240,229,.15);
+  --shadow-soft:0 10px 32px rgba(0,0,0,.24);--shadow-float:0 24px 70px rgba(0,0,0,.42);
+}
+@media(prefers-color-scheme:dark){html[data-theme="system"]{
+  --bg:#10110f;--surface:rgba(26,27,24,.94);--surface-2:#242520;--text:#f2f2ec;--muted:#a1a39a;--line:rgba(238,240,229,.13);
+  --accent:#f7cf49;--accent-2:#e2b529;--accent-ink:#17150c;--success:#70d5ac;--danger:#ff9385;--map:#1b1d19;
+  --hud-ink:#f2f2ec;--hud-muted:#a1a39a;--hud-panel:rgba(22,23,20,.84);--hud-line:rgba(238,240,229,.15);
+}}
+body{letter-spacing:-.012em}
+.topbar.voy-topbar{padding-inline:clamp(14px,2.2vw,28px);height:64px}
+.brand-lockup{gap:9px;color:var(--accent);filter:drop-shadow(0 1px 5px rgba(0,0,0,.18))}
+.brand-mark{width:29px;height:29px;filter:none}
+.brand-wordmark{width:79px;height:20px;color:var(--hud-ink)}
+.theme-button{width:42px;height:42px;border:1px solid var(--hud-line);border-radius:50%;background:var(--hud-panel);box-shadow:0 3px 12px rgba(0,0,0,.07);backdrop-filter:blur(16px)}
+.theme-button:hover{background:var(--surface-2);color:var(--text);border-color:var(--line)}
+.map-shell.voy-map-stage::after{box-shadow:inset 0 0 80px rgba(0,0,0,.08);background:linear-gradient(180deg,rgba(0,0,0,.12),transparent 18%,transparent 78%,rgba(0,0,0,.08))}
+.map-tile{filter:saturate(.68) brightness(.94) contrast(1.01)}
+html[data-theme="dark"] .map-tile{filter:grayscale(.36) saturate(.5) brightness(.72) contrast(1.06)}
+.map-hud{top:74px;left:clamp(12px,2vw,22px);right:clamp(12px,2vw,22px);gap:10px}
+.truth-pill{max-width:min(68vw,390px);padding:8px 12px;border-radius:14px;min-height:46px;font-size:12px;font-weight:650;box-shadow:0 4px 18px rgba(0,0,0,.10);backdrop-filter:blur(20px)}
+.truth-meta{font-size:10px;letter-spacing:.01em}
+.map-mode-toggle{padding:3px;gap:2px;border:1px solid var(--hud-line);border-radius:13px;background:var(--hud-panel);box-shadow:0 4px 18px rgba(0,0,0,.10);backdrop-filter:blur(20px)}
+.map-mode-toggle button{min-width:44px;min-height:40px;border-radius:10px;font:650 12px/1 inherit;color:var(--hud-ink);transition:background-color var(--motion-fast) ease,color var(--motion-fast) ease,transform var(--motion-fast) var(--ease)}
+.map-mode-toggle button:first-child,.map-mode-toggle button:last-of-type{border-radius:10px}
+.map-mode-toggle button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+.map-mode-toggle button:active{transform:scale(.96)}
+.map-3d-quality{min-height:40px;border-radius:10px;background:var(--surface-2);color:var(--text);font:600 11px/1 inherit}
+.map-attribution,.map-3d-attribution{border-radius:9px;padding:6px 10px;background:var(--hud-panel);color:var(--hud-muted);border:1px solid var(--hud-line);backdrop-filter:blur(14px)}
+.voy-sheet{background:var(--hud-panel);border:1px solid var(--hud-line);border-radius:20px 20px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.14);backdrop-filter:blur(24px)}
+.sheet-handle{font-family:inherit;font-size:11px;font-weight:650;letter-spacing:0;color:var(--hud-muted)}
+.sheet-grip{width:34px;height:4px;border-radius:99px;background:color-mix(in srgb,var(--hud-muted) 40%,transparent)}
+.voy-chip,.destination-control,.suggestions,.tracker-facts,.origin-editor,.assistant-panel,.train-station-card,.mobility-disclosure{border-radius:15px;background:var(--surface);border-color:var(--hud-line);color:var(--text);box-shadow:0 2px 10px rgba(0,0,0,.025)}
+.voy-chip{min-height:48px;padding:0 15px;font-weight:650}
+.destination-control{min-height:54px;padding-inline:15px}
+.destination-control input{color:var(--text);font-size:15px}
+.destination-control input::placeholder{color:var(--muted)}
+.destination-control:focus-within{border-color:color-mix(in srgb,var(--accent-2) 65%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.suggestion{border-radius:11px}
+.tracker-facts{padding:15px}
+.fact-row{border-top-color:var(--line)}
+.sheet-action,.option-action,.quiet-action,.origin-action,.assistant-action{border-radius:12px;transition:transform var(--motion-fast) var(--ease),background-color var(--motion-fast) ease,border-color var(--motion-fast) ease}
+.sheet-action,.option-action{font-weight:680}
+.sheet-action{background:var(--accent);color:var(--accent-ink)}
+.sheet-action:hover,.option-action:hover{filter:brightness(1.025)}
+.sheet-action:active,.option-action:active,.quiet-action:active{transform:scale(.985)}
+.origin-action{border:1px solid var(--line);padding-inline:12px}
+.origin-action:hover{background:var(--surface-2)}
+.assistant-panel{box-shadow:var(--shadow-float);border-radius:18px}
+.assistant-symbol{border-radius:10px;box-shadow:none}
+.map-3d-status{border-radius:12px;background:var(--hud-panel);border:1px solid var(--hud-line);backdrop-filter:blur(18px)}
+.bus-line-control{border-radius:14px;background:var(--hud-panel);border-color:var(--hud-line);box-shadow:var(--shadow-soft);backdrop-filter:blur(18px)}
+.bus-line-control select{border-radius:10px;background:var(--surface);color:var(--text)}
+.tracker-marker.is-gps-bus::before{width:24px;height:24px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.22)}
+.tracker-marker.is-gps-bus .tracker-bus-icon{width:14px;height:14px}
+.tracker-marker.is-gps-bus.is-interpolating{transition:box-shadow 160ms linear}
+@media(min-width:960px){
+ .topbar.voy-topbar{height:64px;padding-inline:24px}
+ .voy-sheet{top:78px;bottom:18px;right:18px;width:min(400px,34vw);border:1px solid var(--hud-line);border-radius:22px;box-shadow:0 12px 44px rgba(0,0,0,.12)}
+ .map-hud{top:78px;left:24px;right:calc(min(400px,34vw) + 42px)}
+ .sheet-expanded{padding:4px 18px 20px}
+ .sheet-collapsed{padding:4px 18px 14px}
+}
+@media(max-width:700px){
+ .topbar.voy-topbar{height:56px;padding-inline:12px}
+ .map-hud{top:62px;left:10px;right:10px;gap:7px}
+ .truth-pill{max-width:calc(100vw - 138px);font-size:11px;gap:6px;padding:7px 9px;border-radius:12px}
+ .truth-meta{font-size:9px;max-width:52vw}
+ .map-mode-toggle{border-radius:12px}
+ .map-mode-toggle button{min-width:38px;min-height:40px}
+ .voy-sheet{background:var(--hud-panel);border-radius:20px 20px 0 0}
+ .sheet-expanded{padding-inline:14px}
+ .sheet-collapsed{padding-inline:14px}
+ .assistant-panel{border-radius:18px!important}
+ .bus-line-control{top:118px;max-width:190px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* GPS source truth states: distinguish empty live feed from failed/unintegrated coverage. */
+.truth-pill[data-state="no_positions"] .truth-icon{color:var(--hud-muted)}
+.truth-pill[data-state="source_unavailable"] .truth-icon{color:var(--danger)}

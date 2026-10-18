@@ -164,9 +164,11 @@ export async function activateVoyUrbanMap3D({
         Number.isFinite(observedTime)&&Date.now()-observedTime>=-5000&&
         Date.now()-observedTime<=REALTIME_FRESHNESS_MS&&
         Number.isFinite(reported.lat)&&Number.isFinite(reported.lon);
-      const presented=pointOnly
-        ?{render:true,temporal_state:'realtime',position:{lat:reported.lat,lon:reported.lon}}
-        :presentTransportEntity(
+      const presented=entry.displayFrame?.render&&entry.displayFrame?.position
+        ?entry.displayFrame
+        :pointOnly
+          ?{render:true,temporal_state:'realtime',position:{lat:reported.lat,lon:reported.lon}}
+          :presentTransportEntity(
         entry.previous,entry.next,Date.now(),
         {freshnessMs:REALTIME_FRESHNESS_MS,maxSpeedMps:REALTIME_MAX_SPEED_MPS,
          maxSnapMeters:ROUTE_SNAP_MAX_METERS,reducedMotion,
@@ -265,7 +267,7 @@ export async function activateVoyUrbanMap3D({
           map.addSource('voy-3d-transport',{type:'geojson',data:transportData(transport)});
           map.addLayer({id:'voy-3d-transport-markers',type:'circle',source:'voy-3d-transport',
             paint:{
-              'circle-radius':7,'circle-stroke-width':2,'circle-stroke-color':'#0b1518',
+              'circle-radius':5,'circle-stroke-width':1.5,'circle-stroke-color':'#0b1518',
               'circle-color':['match',['get','temporal_state'],
                 'realtime','#36d7ff','predicted','#ffb54a','#aebdc2']
             }});

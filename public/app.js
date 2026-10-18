@@ -57,6 +57,8 @@ const TRUTH_STATES={
   predicted:{icon:'◔',label:'Estimado'},
   scheduled:{icon:'◷',label:'Programado'},
   unknown:{icon:'○',label:'Estado desconocido'},
+  no_positions:{icon:'○',label:'Sin posiciones GPS actuales'},
+  source_unavailable:{icon:'!',label:'Fuente GPS no disponible'},
   no_coverage:{icon:'◍',label:'Estado en vivo no integrado'}
 };
 const TRUTH_NETWORK_LIVE={icon:'●',label:'GPS de colectivos en vivo'};
@@ -87,6 +89,14 @@ function updateTruthPill(){
     datasetState='realtime';
     const live=trackerStore.entities().filter(entity=>entity.observation.temporal_state==='realtime').length;
     meta=`${live} vehículos observados · ${state.gpsSourceId||'fuente GPS'}`;
+  } else if(state.gpsStatus==='no_current_positions'){
+    entry=TRUTH_STATES.no_positions;
+    datasetState='no_positions';
+    meta='La fuente responde; sin posiciones actuales';
+  } else if(state.gpsStatus==='source_unavailable'){
+    entry=TRUTH_STATES.source_unavailable;
+    datasetState='source_unavailable';
+    meta='No se pudo consultar la fuente GPS';
   } else if(state.fixtureOn){
     entry=TRUTH_STATES.no_coverage;
     meta='Fixture demo activado';
@@ -144,7 +154,7 @@ async function loadSantaFeBusNetwork(){
 
 // ---------- 2D/3D mode (existing lazy Three architecture preserved) ----------
 function current3DTransportEntities(){
-  return trackerStore.transportEntries().filter(entity=>entity.next?.temporal_state==='realtime');
+  return trackerStore.transportEntries().filter(entity=>entity.next?.temporal_state==='realtime').map(entity=>({...entity,displayFrame:trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches})}));
 }
 function currentSelectedRouteGeometry(){
   const trackerSelection=trackerStore.selected();
@@ -253,14 +263,18 @@ function syncTrackerOverlays(){
 }
 function trackerTick(){
   if(document.hidden)return;
-  if(state.mapMode!=='2d')return;
   if(trackerStore.entities().length===0)return;
-  const selected=trackerStore.selected();
-  if(trackerStore.follow()==='following'&&selected){
-    const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
-    if(frame.render&&frame.position)substrate.focusTo(frame.position);
+  if(state.mapMode==='2d'){
+    const selected=trackerStore.selected();
+    if(trackerStore.follow()==='following'&&selected){
+      const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
+      if(frame.render&&frame.position)substrate.focusTo(frame.position);
+    }
+    syncTrackerOverlays();
+  }else{
+    sync3DTopology();
+    update3DGpsStatus();
   }
-  syncTrackerOverlays();
   updateTruthPill();
   updateFactsSheet();
 }
@@ -376,8 +390,11 @@ function setSheetSummary(){
   if(state.fixtureOn){sheetSummary.textContent=`${FIXTURE_LABEL} · entidades sintéticas para evidencia de desarrollo`;return}
   if(state.substrateState==='vector_failed'){sheetSummary.textContent='Mapa vectorial no disponible; seguimos en mapa raster.';return}
   if(state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000){sheetSummary.textContent='Colectivos GPS observados · fuente verificada';return}
-  if(state.gpsStatus==='source_unavailable'||state.gpsStatus==='no_current_positions'){
-    sheetSummary.textContent='GPS: sin posiciones recientes verificables.';return
+  if(state.gpsStatus==='no_current_positions'){
+    sheetSummary.textContent='La fuente GPS respondi\u00f3, pero no public\u00f3 posiciones actuales para esta l\u00ednea. Puede ser fuera del horario de servicio; el recorrido publicado sigue disponible.';return
+  }
+  if(state.gpsStatus==='source_unavailable'){
+    sheetSummary.textContent='No se pudo consultar la fuente GPS. El recorrido publicado sigue disponible; no se muestran posiciones sin verificar.';return
   }
   sheetSummary.textContent='GPS de VOY: todavía no integrado.';
 }
@@ -588,7 +605,8 @@ function updateBusLineMeta(){
   const selected=busLinePicker.value;
   if(!selected){busLineMeta.textContent='Elegí una línea para ver recorrido y GPS en vivo';return}
   const live=state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000;
-  busLineMeta.textContent=labelSantaFeLine(selected)+(live?' · trazado publicado + GPS en vivo':' · trazado publicado, no GPS');
+  const status=live?'trazado publicado + GPS en vivo':state.gpsStatus==='no_current_positions'?'trazado publicado · sin posiciones GPS actuales':state.gpsStatus==='source_unavailable'?'trazado publicado · fuente GPS no disponible':'trazado publicado, GPS sin confirmar';
+  busLineMeta.textContent=labelSantaFeLine(selected)+' · '+status;
 }
 busLinePicker.addEventListener('change',()=>{
   if(busLinePicker.value)localStorage.setItem('voy.sf.line',busLinePicker.value);else localStorage.removeItem('voy.sf.line');

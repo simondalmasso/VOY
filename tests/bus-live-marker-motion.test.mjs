@@ -26,4 +26,11 @@ test('live bus markers use the credited Icons8 bus icon and animate only estimat
   assert.match(sources, /Icons8.*CC BY 4\.0/);
   assert.match(sources, /https:\/\/icon-icons\.com\/icon\/bus-transport\/4422/);
   assert.match(sw, /'\/icons\/bus-transport-icons8\.svg'/);
+  assert.match(css, /\.tracker-marker\.is-gps-bus::before\{content:"";display:block;width:29px;height:29px/);
+  assert.match(css, /\.tracker-marker\.is-gps-bus \.tracker-bus-icon\{position:absolute;width:17px;height:17px/);
+  const three = await read('../public/3d/voy3d.js');
+  assert.match(app, /function current3DTransportEntities\(\)[\s\S]*?displayFrame:trackerStore\.displayFrame/);
+  assert.match(app, /function trackerTick\(\)[\s\S]*?sync3DTopology\(\);[\s\S]*?update3DGpsStatus\(\);/);
+  assert.match(three, /entry\.displayFrame\?\.render&&entry\.displayFrame\?\.position/);
+  assert.match(three, /'circle-radius':5,'circle-stroke-width':1\.5/);
 });
