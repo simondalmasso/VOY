@@ -2087,7 +2087,7 @@ function sfGpsSource(env={}){
 // no DST) → epoch ms. Verified by temporal coherence against live polls: ages
 // of 13-100 s only reconcile under the UTC-3 offset.
 function parseCuandopasaArtTimestamp(value){
-  const match=/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(value??'').trim());
+  const match=/^(\d{2})\/(\d{2})\/(\d{4}) (\d{1,2}):(\d{2}):(\d{2})$/.exec(String(value??'').trim());
   if(!match)return null;
   const [,dd,mm,yyyy,hh,mi,ss]=match.map(part=>Number(part));
   const ms=Date.UTC(yyyy,mm-1,dd,hh+3,mi,ss);
