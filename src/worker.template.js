@@ -2043,7 +2043,7 @@ function health() {
     config_digest: RELEASE_META.config_digest,
     registry_digest: RELEASE_META.registry_digest,
     provenance: PROVENANCE,
-    features: { auth: false, voice: false, ai_required: false, pwa: true, national_territory: true, routing: true, mobility_computation: true, map_provider: APP_CONFIG.MAP_PROVIDER.id }
+    features: { auth: false, voice: false, ai_required: false, pwa: true, national_territory: true, routing: true, mobility_computation: true, map_provider: APP_CONFIG.MAP_VECTOR.enabled ? APP_CONFIG.MAP_VECTOR.id : APP_CONFIG.MAP_PROVIDER.id }
   };
 }
 __name(health, "health");

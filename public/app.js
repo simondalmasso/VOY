@@ -50,8 +50,8 @@ const TRUTH_STATES={
   predicted:{icon:'◔',label:'Estimado'},
   scheduled:{icon:'◷',label:'Programado'},
   unknown:{icon:'○',label:'Estado desconocido'},
-  no_positions:{icon:'○',label:'Sin posiciones GPS actuales'},
-  source_unavailable:{icon:'!',label:'Fuente GPS no disponible'},
+  no_positions:{icon:'●',label:''},
+  source_unavailable:{icon:'●',label:''},
   no_coverage:{icon:'◍',label:'Estado en vivo no integrado'}
 };
 const TRUTH_NETWORK_LIVE={icon:'●',label:'GPS de colectivos en vivo'};
@@ -66,41 +66,47 @@ function truthConclusion(cls,observation,{historical=false}={}){
 }
 function updateTruthPill(){
   if(!truthPill)return;
-  let entry=TRUTH_STATES.no_coverage,meta='',datasetState='no_coverage';
+  let entry=TRUTH_STATES.no_coverage,accessibleStatus='Estado GPS desconocido',datasetState='unknown';
   const selected=trackerStore.selected();
   if(selected){
     const observation=selected.entity.observation;
     const cls=classifyObservation(observation,Date.now());
     entry=truthStateLabel(cls.state);
-    datasetState=cls.state;
-    const parts=[];
-    if(Number.isFinite(cls.age_ms))parts.push(ageLabel(cls.age_ms));
-    if(observation.source_id)parts.push(observation.synthetic_fixture?'fixture demo':observation.source_id);
-    meta=parts.join(' · ');
+    datasetState=cls.reason==='stale_source'?'stale':cls.state==='realtime'?'realtime':'unknown';
+    const age=Number.isFinite(cls.age_ms)?ageLabel(cls.age_ms):'';
+    accessibleStatus=[truthConclusion(cls,observation),age,observation.source_id].filter(Boolean).join(' · ');
   } else if(state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000){
     entry=TRUTH_NETWORK_LIVE;
     datasetState='realtime';
     const live=trackerStore.entities().filter(entity=>entity.observation.temporal_state==='realtime').length;
-    meta=`${live} vehículos observados · ${state.gpsSourceId||'fuente GPS'}`;
+    accessibleStatus=`GPS de colectivos en vivo; ${live} vehículos observados`;
   } else if(state.gpsStatus==='no_current_positions'){
     entry=TRUTH_STATES.no_positions;
     datasetState='no_positions';
-    meta='La fuente responde; sin posiciones actuales';
+    accessibleStatus='La fuente GPS respondió, pero no hay posiciones actuales';
   } else if(state.gpsStatus==='source_unavailable'){
     entry=TRUTH_STATES.source_unavailable;
-    datasetState='source_unavailable';
-    meta='No se pudo consultar la fuente GPS';
+    datasetState='unknown';
+    accessibleStatus='No se pudo consultar la fuente GPS';
   } else if(state.fixtureOn){
-    entry=TRUTH_STATES.no_coverage;
-    meta='Fixture demo activado';
+    entry={icon:'●',label:''};
+    datasetState='unknown';
+    accessibleStatus='Fixture de demostración activado';
+  } else {
+    entry={icon:'●',label:''};
+    datasetState='unknown';
+    accessibleStatus='Estado GPS desconocido';
   }
   if(truthPill.dataset.state!==datasetState)truthPill.dataset.state=datasetState;
-  if(truthIcon.textContent!==entry.icon)truthIcon.textContent=entry.icon;
-  if(truthLabel.textContent!==entry.label)truthLabel.textContent=entry.label;
+  if(truthIcon.textContent!=='●')truthIcon.textContent='●';
+  if(truthLabel.textContent)truthLabel.textContent='';
+  truthLabel.hidden=true;
   if(truthMeta){
-    if(truthMeta.textContent!==meta)truthMeta.textContent=meta;
-    if(truthMeta.hidden===Boolean(meta))truthMeta.hidden=!meta;
+    if(truthMeta.textContent)truthMeta.textContent='';
+    truthMeta.hidden=true;
   }
+  truthPill.setAttribute('aria-label',accessibleStatus);
+  truthPill.title=accessibleStatus;
 }
 
 // ---------- map stage + substrate ----------

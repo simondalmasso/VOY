@@ -480,3 +480,7 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 .offline-retry:focus-visible{outline:3px solid #fff;outline-offset:3px}
 /* Brand wordmark remains yellow; realtime status uses green independently. */
 .brand-wordmark{color:var(--accent)}
+
+/* ORDER-090: status stays visually minimal; only stale observations turn red. */
+.truth-pill[data-state="stale"] .truth-icon{color:var(--danger)}
+.truth-pill[data-state="unknown"] .truth-icon,.truth-pill[data-state="no_positions"] .truth-icon{color:var(--muted)}
