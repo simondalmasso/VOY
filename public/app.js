@@ -400,8 +400,18 @@ function setSheetSummary(){
 trackerStore.onChange(()=>setSheetSummary());
 
 // ---------- vector upgrade after first paint (raster stays fallback) ----------
+let vectorUpgradePromise=null;
+function startVectorUpgradeOnce(){
+  if(substrate.maplibreReady)return Promise.resolve(true);
+  if(!vectorUpgradePromise){
+    vectorUpgradePromise=Promise.resolve()
+      .then(()=>substrate.upgradeToVector(state.mapCenter||DEFAULT_MAP_CENTER))
+      .catch(()=>false);
+  }
+  return vectorUpgradePromise;
+}
 function scheduleVectorUpgrade(){
-  const start=()=>substrate.upgradeToVector(state.mapCenter||DEFAULT_MAP_CENTER);
+  const start=()=>{void startVectorUpgradeOnce()};
   if('requestIdleCallback'in window)requestIdleCallback(start,{timeout:2500});
   else setTimeout(start,400);
 }
