@@ -182,8 +182,13 @@ function loadVoy3DModule(){
 async function activate3D(){
   if(state.mapMode==='3d'&&state.threeController?.ok)return;
   if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
-  map3dStatus.textContent='Abriendo mapa 3D de Santa Fe…';
+  map3dStatus.textContent='Preparando mapa 3D de Santa Fe…';
   try{
+    // Serialize the two MapLibre startup paths. Two fresh WebGL maps starting
+    // together can race the browser's GL/worker budget and make 3D fall back.
+    await startVectorUpgradeOnce();
+    if(!has3DContext()){activate2D('3D urbano disponible en Santa Fe centro; mové el mapa a esa zona.');return}
+    map3dStatus.textContent='Abriendo mapa 3D de Santa Fe…';
     state.threeModulePromise??=loadVoy3DModule();
     const mod=await state.threeModulePromise;
     if(mod.BUILD_ID!==CLIENT_BUILD_ID)throw new Error('3d_build_identity_mismatch');
@@ -395,8 +400,18 @@ function setSheetSummary(){
 trackerStore.onChange(()=>setSheetSummary());
 
 // ---------- vector upgrade after first paint (raster stays fallback) ----------
+let vectorUpgradePromise=null;
+function startVectorUpgradeOnce(){
+  if(substrate.maplibreReady)return Promise.resolve(true);
+  if(!vectorUpgradePromise){
+    vectorUpgradePromise=Promise.resolve()
+      .then(()=>substrate.upgradeToVector(state.mapCenter||DEFAULT_MAP_CENTER))
+      .catch(()=>false);
+  }
+  return vectorUpgradePromise;
+}
 function scheduleVectorUpgrade(){
-  const start=()=>substrate.upgradeToVector(state.mapCenter||DEFAULT_MAP_CENTER);
+  const start=()=>{void startVectorUpgradeOnce()};
   if('requestIdleCallback'in window)requestIdleCallback(start,{timeout:2500});
   else setTimeout(start,400);
 }
