@@ -128,6 +128,40 @@ test('ORDER058 nearby endpoint keeps station geometry but fails service closed w
 });
 
 
+test('national rail discovery renders official nearby stations without inventing current service',()=>{
+  const snapshot=buildTrainRadarSnapshot({
+    coordinates:{lat:-32.93081,lon:-60.65752},
+    providerResult:{available:false,reason:'schedule_scope_unsupported',observation:null,cache_hit:false},
+    nowMs:Date.parse('2026-10-18T12:30:00.000Z')
+  });
+  assert.equal(snapshot.source_status,'static_only');
+  assert.equal(snapshot.source.id,'src_rail_station_catalog_2022');
+  assert.ok(snapshot.stations.length>=1&&snapshot.stations.length<=3);
+  const rosario=snapshot.stations.find(item=>item.station.name==='Rosario Norte');
+  assert.ok(rosario,'official 2022 catalogue must resolve Rosario Norte');
+  assert.equal(rosario.temporal_state,'unknown');
+  assert.equal(rosario.service,null);
+  assert.equal(rosario.station.catalog_source,'src_rail_station_catalog_2022');
+  assert.equal('position' in rosario,false);
+});
+
+test('national rail endpoint reads no realtime/schedule upstream outside supported schedule scope',async()=>{
+  let reads=0;
+  const handler=(await import('../src/worker.template.js')).createRequestHandler({
+    trainServiceAdapter:{read:async()=>{reads++;return {available:false,reason:'should_not_be_called',observation:null,cache_hit:false}}}
+  });
+  const response=await handler(new Request('http://local/api/radar/trains/nearby',{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({coordinates:{lat:-32.93081,lon:-60.65752}})
+  }),{});
+  assert.equal(response.status,200);
+  const body=await response.json();
+  assert.equal(reads,0);
+  assert.equal(body.radar.source_status,'static_only');
+  assert.ok(body.radar.stations.some(item=>item.station.name==='Rosario Norte'));
+  assert.ok(body.radar.stations.every(item=>item.temporal_state==='unknown'&&item.service===null));
+});
+
 test('ORDER058 UI exposes a map-first train radar region and incremental station markers',async()=>{
   const {readFile}=await import('node:fs/promises');
   const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
