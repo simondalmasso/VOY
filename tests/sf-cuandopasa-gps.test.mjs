@@ -42,6 +42,19 @@ test('cross-stop dedupe keeps the newest GPS fix per vehicle id',()=>{
  assert.equal(Date.parse(deduped[0].observed_at),now-40000);
  assert.equal(deduped[1].id,'s:75-4120');
 });
+test('accepts fresh GPS timestamps whose local hour has no leading zero',async()=>{
+ const now=Date.parse('2026-10-18T12:00:00.000Z');
+ const item=arribo('4118',now-50000);
+ item.UltimaFechaHoraGPS='18/10/2026 8:59:10';
+ const observations=normalizeSfGpsVehicles(payload([item]),'sf_gps_single_hour',now);
+ assert.equal(observations.length,1);
+ assert.equal(observations[0].observed_at,'2026-10-18T11:59:10.000Z');
+ const answer=await readSantaFeGps(env('single_hour'),async()=>jsonResponse(payload([item])),now,'9');
+ assert.equal(answer.status,'live');
+ assert.equal(answer.observations.length,1);
+ assert.equal(answer.observations[0].observed_at,'2026-10-18T11:59:10.000Z');
+});
+
 test('stride sample is bounded, deterministic and preserves order',()=>{
  const codes=Array.from({length:154},(_,i)=>String(1000+i));
  const a=strideSample(codes,12),b=strideSample(codes,12);
