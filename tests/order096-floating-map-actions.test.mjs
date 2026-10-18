@@ -55,3 +55,5 @@ test('mobile and desktop sheet dimensions remain floating, bounded and touch acc
   assert.match(css, /@media\s*\(min-width:\s*960px\)[\s\S]*?\.voy-sheet\{[^}]*left:50%;[^}]*bottom:18px;[^}]*width:min\(680px,calc\(100vw - 48px\)\)/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });
+
+// Keep the PR's canonical CI rerun anchored to the normalized UTF-8 source tree.
