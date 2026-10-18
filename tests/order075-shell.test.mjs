@@ -168,7 +168,7 @@ test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
   assert.match(app,/function updateTrainStationMarkers/);
   assert.match(app,/state\.mapCenter=\{lat:Number\(coords\.lat\),lon:Number\(coords\.lon\)\}/);
   for(const literal of ["'A pie'","'Bici'","'Auto'","'Colectivo'"])assert.ok(app.includes(literal));
-  assert.ok(app.includes('Arribos en VOY: no integrados'));
+  assert.ok(app.includes('Seguimiento GPS: sujeto a observaciones recientes'));
   assert.ok(app.includes('Recorridos publicados: visibles en el mapa'));
   assert.match(app,/renderInitialMap\(\)/);
   assert.match(app,/renderMap\(DEFAULT_MAP_CENTER/);
