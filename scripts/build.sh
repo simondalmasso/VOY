@@ -67,8 +67,10 @@ shutil.copy2(root/'node_modules/maplibre-gl/LICENSE.txt', three/'MAPLIBRE-LICENS
 # release-bound vendored modules (same pattern as three.core.js in build.ps1)
 tm = (three/'three.module.js').read_text(encoding='utf-8').replace('./three.core.js', f'./three.core.js?v={build_id}')
 (three/'three.module.js').write_text(tm, encoding='utf-8')
-mm = (three/'maplibre-gl.mjs').read_text(encoding='utf-8').replace('./maplibre-gl-shared.mjs', f'./maplibre-gl-shared.mjs?v={build_id}')
+mm = (three/'maplibre-gl.mjs').read_text(encoding='utf-8').replace('./maplibre-gl-shared.mjs', f'./maplibre-gl-shared.mjs?v={build_id}').replace('maplibre-gl-worker.mjs', f'maplibre-gl-worker.mjs?v={build_id}')
 (three/'maplibre-gl.mjs').write_text(mm, encoding='utf-8')
+worker_module = (three/'maplibre-gl-worker.mjs').read_text(encoding='utf-8').replace('./maplibre-gl-shared.mjs', f'./maplibre-gl-shared.mjs?v={build_id}')
+(three/'maplibre-gl-worker.mjs').write_text(worker_module, encoding='utf-8')
 
 text_paths = [client/f for f in ['index.html','styles.css','app.js','contracts.js','runtime-config.js','sw.js']]
 for d in ['3d','tracker','map','transit']:

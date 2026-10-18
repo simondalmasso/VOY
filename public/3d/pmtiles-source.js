@@ -1,4 +1,4 @@
-import {PMTiles,Protocol} from '/vendor/pmtiles.mjs';
+import {PMTiles,Protocol} from '/vendor/pmtiles.mjs?v=__BUILD_ID__';
 const MAX_RANGE=4*1024*1024;
 const ATTRIBUTION='\u00A9 OpenStreetMap contributors; \u00A9 Overture Maps Foundation';
 let activeProtocol=null;
@@ -22,9 +22,9 @@ class QueryRangeSource {
     return {data,etag:response.headers.get('etag')||undefined,expires:response.headers.get('expires')||undefined,cacheControl:response.headers.get('cache-control')||undefined};
   }
 }
-export function addVoyPmtilesSources(MapLibreMap,assets,expectedLayer='santa_fe_buildings_3d'){
+export function addVoyPmtilesSources(maplibre,assets,expectedLayer='santa_fe_buildings_3d'){
   if(!Array.isArray(assets)||assets.length!==4||expectedLayer!=='santa_fe_buildings_3d')throw new Error('pmtiles_asset_count_or_layer_invalid');
-  if(!activeProtocol){activeProtocol=new Protocol({metadata:true});MapLibreMap.addProtocol('pmtiles',activeProtocol.tile);}
+  if(!activeProtocol){activeProtocol=new Protocol({metadata:true});maplibre.addProtocol('pmtiles',activeProtocol.tile);}
   const sources=[];
   for(const asset of assets){
     if(!asset||typeof asset.path!=='string'||!/^\/data\/santa-fe-3d\/santa-fe-buildings-3d-[a-z-]+\.[a-f0-9]{16}\.pmtiles$/.test(asset.path))throw new Error('pmtiles_asset_path_invalid');
