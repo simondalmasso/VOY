@@ -101,7 +101,7 @@ test('ORDER071 build source pins provenance and never requires runtime Overpass'
 
 test('ORDER071 3D source only calls bounded first-party APIs; GPS is same-origin',async()=>{
   const [app,renderer,temporal]=await Promise.all([text('public/app.js'),text('public/3d/voy3d.js'),text('public/3d/temporal.js')]);
-  const apiPaths=s=>new Set([...s.matchAll(/['"] \(\/api\/[a-z0-9_\\/-]+)['"]/gi)].map(m=>m[1]));
+  const apiPaths=s=>new Set([...s.matchAll(/['"](\/api\/[a-z0-9_\/-]+)['"]/gi)].map(m=>m[1]));
   const appPaths=apiPaths(app);
   assert.equal(apiPaths(renderer).size,0);
   assert.equal(apiPaths(temporal).size,0);
