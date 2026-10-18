@@ -157,6 +157,23 @@ export async function activateVoyUrbanMap3D({
     .slice(0,600).map((coordinates,i)=>({type:'Feature',
       properties:{index:i,temporal_state:'unknown'},
       geometry:{type:'LineString',coordinates}}))});
+function install3DBusGlyph(map){
+    if(map.hasImage('voy-3d-bus-glyph'))return;
+    const canvas=document.createElement('canvas');canvas.width=48;canvas.height=72;
+    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('bus_glyph_canvas_unavailable');
+    ctx.clearRect(0,0,48,72);
+    ctx.fillStyle='#101820';ctx.beginPath();ctx.roundRect(5,2,38,68,9);ctx.fill();
+    ctx.fillStyle='#f5d32a';ctx.beginPath();ctx.roundRect(8,4,32,64,6);ctx.fill();
+    ctx.fillStyle='#0b1518';ctx.beginPath();ctx.roundRect(12,12,24,17,3);ctx.fill();
+    ctx.fillStyle='#8ed8ef';ctx.fillRect(14,14,20,13);
+    ctx.fillStyle='#0b1518';ctx.beginPath();ctx.roundRect(12,34,24,17,3);ctx.fill();
+    ctx.fillStyle='#c6edf7';ctx.fillRect(14,36,20,13);
+    ctx.fillStyle='#101820';ctx.fillRect(2,15,6,12);ctx.fillRect(40,15,6,12);ctx.fillRect(2,45,6,12);ctx.fillRect(40,45,6,12);
+    ctx.fillStyle='#f8fbff';ctx.fillRect(12,7,5,3);ctx.fillRect(31,7,5,3);
+    ctx.fillStyle='#ef3e36';ctx.fillRect(12,62,5,3);ctx.fillRect(31,62,5,3);
+    map.addImage('voy-3d-bus-glyph',canvas,{pixelRatio:2});
+  }
+
   const transportData=entries=>({type:'FeatureCollection',features:
     (Array.isArray(entries)?entries:[]).slice(0,64).flatMap(entry=>{
       const reported=entry.next;
@@ -176,7 +193,7 @@ export async function activateVoyUrbanMap3D({
          verifiedGeometry:entry.verifiedGeometry}
       );
       return presented.render&&['realtime','predicted'].includes(presented.temporal_state)
-       ?[{type:'Feature',properties:{temporal_state:presented.temporal_state},
+       ?[{type:'Feature',properties:{temporal_state:presented.temporal_state,vehicle_type:String(reported?.source_id||'').includes('cuandopasa')?'bus':'unknown',bearing:Number.isFinite(presented.bearing)?presented.bearing:0,display_interpolated:presented.display_interpolated===true},
           geometry:{type:'Point',coordinates:[presented.position.lon,presented.position.lat]}}]
        :[];
     })});
@@ -289,12 +306,21 @@ export async function activateVoyUrbanMap3D({
           map.addLayer({id:'voy-3d-selected-route-line',type:'line',source:'voy-3d-selected-route',
             paint:{'line-color':'#00d7ff','line-width':5.5,'line-opacity':1}});
           map.addSource('voy-3d-transport',{type:'geojson',data:transportData(transport)});
+          install3DBusGlyph(map);
           map.addLayer({id:'voy-3d-transport-markers',type:'circle',source:'voy-3d-transport',
+            filter:['!=',['get','vehicle_type'],'bus'],
             paint:{
               'circle-radius':5,'circle-stroke-width':1.5,'circle-stroke-color':'#0b1518',
               'circle-color':['match',['get','temporal_state'],
                 'realtime','#36d7ff','predicted','#ffb54a','#aebdc2']
             }});
+          map.addLayer({id:'voy-3d-transport-bus-icons',type:'symbol',source:'voy-3d-transport',
+            filter:['==',['get','vehicle_type'],'bus'],
+            layout:{'icon-image':'voy-3d-bus-glyph','icon-size':0.9,
+              'icon-rotate':['to-number',['get','bearing'],0],
+              'icon-rotation-alignment':'map','icon-pitch-alignment':'map',
+              'icon-anchor':'center','icon-allow-overlap':true,'icon-ignore-placement':true},
+            paint:{'icon-opacity':['match',['get','temporal_state'],'predicted',0.72,1]}});
           mount.dataset.urban3d='ready';
           mount.dataset.buildingCount=String(geometries.length);
           mount.dataset.mapBased='true';
