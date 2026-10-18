@@ -550,22 +550,26 @@ function createSarmientoScheduledAdapter({ fetchImpl = fetch, now = Date.now, tt
 function buildTrainRadarSnapshot({ coordinates, providerResult, nowMs = Date.now(), freshnessMs = TRAIN_RADAR_CACHE_TTL_MS } = {}) {
   const center = validCoordinates(coordinates);
   if (!center) throw new VoyError("invalid_coordinates", 400);
-  const observation = providerResult?.available ? providerResult.observation : null;
+  const scheduleScopeSupported = trainRadarCoverageSupported(center);
+  const observation = scheduleScopeSupported && providerResult?.available ? providerResult.observation : null;
   const observedMs = Date.parse(observation?.observed_at ?? "");
   const fresh = observation && Number.isFinite(observedMs) && nowMs - observedMs <= freshnessMs && nowMs >= observedMs;
-  const sourceStatus = !providerResult?.available ? "unavailable" : fresh ? "available" : "stale";
-  const nearby = nearestRailStations(center, 10, TRAIN_RADAR_RADIUS_METERS, "SOFSE")
-    .filter((station) => TRAIN_RADAR_STATION_NAMES.has(foldText(station.name)) && railLineIdentity(station.line) === "sarmiento")
-    .slice(0, 3);
+  const sourceStatus = !scheduleScopeSupported ? "static_only" : !providerResult?.available ? "unavailable" : fresh ? "available" : "stale";
+  const nearby = scheduleScopeSupported
+    ? nearestRailStations(center, 10, TRAIN_RADAR_RADIUS_METERS, "SOFSE")
+      .filter((station) => TRAIN_RADAR_STATION_NAMES.has(foldText(station.name)) && railLineIdentity(station.line) === "sarmiento")
+      .slice(0, 3)
+    : nearestRailStations(center, 3, TRAIN_RADAR_RADIUS_METERS, "SOFSE");
   return {
     source_status: sourceStatus,
     radius_meters: TRAIN_RADAR_RADIUS_METERS,
-    source: TRAIN_RADAR_SOURCE,
+    source: scheduleScopeSupported ? TRAIN_RADAR_SOURCE : RAIL_STATIC_SOURCE,
     stations: nearby.map((station) => {
-      const times = fresh ? observation.service.stations[station.name] ?? null : null;
+      const scheduleSupported = scheduleScopeSupported && TRAIN_RADAR_STATION_NAMES.has(foldText(station.name)) && railLineIdentity(station.line) === "sarmiento";
+      const times = fresh && scheduleSupported ? observation.service?.stations?.[station.name] ?? null : null;
       return {
-        source: TRAIN_RADAR_SOURCE,
-        observed_at: fresh ? observation.observed_at : null,
+        source: times ? TRAIN_RADAR_SOURCE : RAIL_STATIC_SOURCE,
+        observed_at: times && fresh ? observation.observed_at : null,
         temporal_state: times ? "scheduled" : "unknown",
         station: {
           id: `rail:${station.catalog_id}`,
@@ -574,7 +578,7 @@ function buildTrainRadarSnapshot({ coordinates, providerResult, nowMs = Date.now
           distance_meters: station.distance_meters,
           catalog_source: station.source_id
         },
-        line: "Sarmiento",
+        line: times ? "Sarmiento" : station.line,
         branch: times ? observation.branch : null,
         service: times ? { days: observation.service.days, scheduled_times: [...times] } : null
       };
@@ -2281,8 +2285,11 @@ async function apiResponse(request, env, deps) {
     if (request.method !== "POST") return methodNotAllowed(["POST"]);
     const payload = await parseSmallJsonBody(request);
     if (!validCoordinates(payload.coordinates)) throw new VoyError("invalid_coordinates", 400);
-    if (!trainRadarCoverageSupported(payload.coordinates)) return json({ ok: true, radar: unsupportedTrainRadarSnapshot(payload.coordinates) });
-    const providerResult = await deps.trainServiceAdapter.read();
+    const nearbyStations = nearestRailStations(payload.coordinates, 1, TRAIN_RADAR_RADIUS_METERS, "SOFSE");
+    if (!nearbyStations.length) return json({ ok: true, radar: unsupportedTrainRadarSnapshot(payload.coordinates) });
+    const providerResult = trainRadarCoverageSupported(payload.coordinates)
+      ? await deps.trainServiceAdapter.read()
+      : { available: false, reason: "schedule_scope_unsupported", observation: null, cache_hit: false };
     return json({ ok: true, radar: buildTrainRadarSnapshot({ coordinates: payload.coordinates, providerResult, nowMs: Date.now() }) });
   }
   if (url.pathname.startsWith("/api/coverage/")) {
