@@ -19,12 +19,6 @@ const THREE_TOPOLOGY_RADIUS_METERS=6000;
 const SUGGEST_DEBOUNCE_MS=400;
 const SUGGEST_CACHE_TTL_MS=45000;
 const SUGGEST_CACHE_MAX=20;
-const TRAIN_RADAR_RADIUS_METERS=8000;
-const TRAIN_RADAR_COVERAGE_POINTS=Object.freeze([
-  Object.freeze({name:'Once',lat:-34.60827979749716,lon:-58.4075158087721}),
-  Object.freeze({name:'Haedo',lat:-34.644477144900506,lon:-58.59194588896136}),
-  Object.freeze({name:'Moreno',lat:-34.65055409620922,lon:-58.7896992362823})
-]);
 const suggestionCache=new Map();
 const suggestionInFlight=new Map();
 
@@ -425,8 +419,6 @@ function suggestionCacheKey(query,scope){const point=!state.origin&&scope==='loc
 function readSuggestionCache(key,now=Date.now()){const hit=suggestionCache.get(key);if(!hit)return null;if(now-hit.storedAt>SUGGEST_CACHE_TTL_MS){suggestionCache.delete(key);return null}suggestionCache.delete(key);suggestionCache.set(key,hit);return hit.payload}
 function writeSuggestionCache(key,payload,now=Date.now()){suggestionCache.delete(key);suggestionCache.set(key,{storedAt:now,payload});while(suggestionCache.size>SUGGEST_CACHE_MAX)suggestionCache.delete(suggestionCache.keys().next().value)}
 function invalidateSuggestionOriginContext(){state.originRevision+=1;suggestionCache.clear()}
-function trainRadarDistanceMeters(a,b){const rad=n=>Number(n)*Math.PI/180,dLat=rad(Number(b.lat)-Number(a.lat)),dLon=rad(Number(b.lon)-Number(a.lon)),la1=rad(a.lat),la2=rad(b.lat),q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*6371000*Math.asin(Math.min(1,Math.sqrt(q)))}
-function trainRadarCoverageSupportedClient(coords){const lat=Number(coords?.lat),lon=Number(coords?.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return false;return TRAIN_RADAR_COVERAGE_POINTS.some(point=>trainRadarDistanceMeters({lat,lon},point)<=TRAIN_RADAR_RADIUS_METERS)}
 async function apiJson(url,options={}){const response=await fetch(url,options);let payload={};try{payload=await response.json()}catch{}if(!response.ok){const error=new Error(payload.error||`http_${response.status}`);error.status=response.status;error.payload=payload;throw error}return payload}
 
 function clearSuggestions(){suggestions.replaceChildren();suggestions.hidden=true;destinationInput.setAttribute('aria-expanded','false');destinationInput.removeAttribute('aria-activedescendant');state.destinationCandidates=[];state.destinationActiveIndex=-1}
@@ -468,7 +460,7 @@ function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRad
 function radarObservedLabel(value){if(!value)return '';try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return ''}}
 function renderTrainRadar(radar){
   state.trainRadar=radar;trainRadar.hidden=false;trainRadarList.replaceChildren();
-  const status=radar?.source_status==='available'?'scheduled':radar?.source_status==='stale'?'unknown · fuente vencida':'unknown · fuente no disponible';
+  const status=radar?.source_status==='available'?'horarios publicados':radar?.source_status==='stale'?'unknown · fuente vencida':radar?.source_status==='static_only'?'solo estaciones · horarios no confirmados':'unknown · fuente no disponible';
   const observed=radar?.stations?.find(item=>item.observed_at)?.observed_at;
   trainRadarMeta.textContent=[status,observed?`consultado ${radarObservedLabel(observed)}`:'',radar?.source?.published_at?`publicado ${radar.source.published_at}`:'',radar?.source?.authority?`Fuente: ${radar.source.authority}`:''].filter(Boolean).join(' · ');
   if(!radar?.stations?.length){const empty=document.createElement('p');empty.className='train-radar-empty';empty.textContent='No hay estaciones cubiertas por este primer vertical dentro del radio cercano.';trainRadarList.appendChild(empty);return}
@@ -492,7 +484,6 @@ async function refreshTrainRadar(){
   if(!state.origin?.coordinates){clearTrainRadar();return}
   const center=state.origin.coordinates,sameCenter=state.mapCenter&&Math.abs(state.mapCenter.lat-center.lat)<1e-7&&Math.abs(state.mapCenter.lon-center.lon)<1e-7;
   if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa del origen');
-  if(!trainRadarCoverageSupportedClient(center)){clearTrainRadar();return}
   try{
     const payload=await apiJson('/api/radar/trains/nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({coordinates:center})});
     renderTrainRadar(payload.radar);updateTrainStationMarkers(payload.radar?.stations||[]);
