@@ -211,8 +211,8 @@ test('browser never hardcodes the upstream host and keeps the truth budgets in c
 
 test('GPS UI distinguishes an empty live feed from a failed or unintegrated source',async()=>{
  const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
- assert.match(app,/no_positions:\{icon:'●',label:''\}/);
- assert.match(app,/source_unavailable:\{icon:'●',label:''\}/);
+ assert.match(app,/no_positions:\{icon:'●',label:'Sin posiciones actuales'\}/);
+ assert.match(app,/source_unavailable:\{icon:'●',label:'Fuente no disponible'\}/);
  assert.match(app,/state\.gpsStatus==='no_current_positions'[\s\S]*?entry=TRUTH_STATES\.no_positions/);
  assert.match(app,/state\.gpsStatus==='source_unavailable'[\s\S]*?entry=TRUTH_STATES\.source_unavailable/);
  assert.match(app,/accessibleStatus='La fuente GPS respondió, pero no hay posiciones actuales'/);

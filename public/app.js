@@ -1,7 +1,6 @@
 import { APP_CONFIG } from './runtime-config.js?v=__BUILD_ID__';
 import { isSafeOfficialHandoff, isSafeExternalNavigationUrl, buildExternalNavigationUrl, normalizeResolvedCandidate, normalizeDestinationSuggestion, normalizeMobilityDecision, normalizeMobilityComputation } from './contracts.js?v=__BUILD_ID__';
 import { createTrackerStore, TRAIL_MAX_OBSERVATIONS } from './tracker/store.js?v=__BUILD_ID__';
-import { fixtureEnabled, createFixtureEngine, FIXTURE_LABEL, FIXTURE_SOURCE_ID, FIXTURE_TICK_PARAM, FIXTURE_DEFAULT_TICK_MS } from './tracker/fixtures.js?v=__BUILD_ID__';
 import { classifyObservation, ageLabel } from './tracker/observations.js?v=__BUILD_ID__';
 import { createMapSubstrate } from './map/substrate.js?v=__BUILD_ID__';
 import { listSantaFeLines, geometriesForSantaFeLine, labelSantaFeLine } from './transit/line-picker.js?v=__BUILD_ID__';
@@ -13,6 +12,13 @@ const escapeHtml=(value='')=>{const div=document.createElement('div');div.textCo
 function makeSessionToken(){const bytes=new Uint8Array(18);crypto.getRandomValues(bytes);return [...bytes].map(v=>v.toString(16).padStart(2,'0')).join('')}
 
 const DEFAULT_MAP_CENTER={lat:-31.6333,lon:-60.7000};
+const TRANSIT_CITIES=Object.freeze({
+  'santa-fe':{id:'santa-fe',label:'Santa Fe',center:DEFAULT_MAP_CENTER,bus:{coverage:'partial',source:'sf_gps_cuandopasa',geometry:'/transit/santa-fe-lines.json'},train:{coverage:'catalogue_2022',source:'src_rail_station_catalog_2022'}},
+  parana:{id:'parana',label:'Paraná',center:{lat:-31.73197,lon:-60.52975},bus:{coverage:'not_integrated',source:null},train:{coverage:'catalogue_2022',source:'src_rail_station_catalog_2022'}},
+  rosario:{id:'rosario',label:'Rosario',center:{lat:-32.94682,lon:-60.63932},bus:{coverage:'not_integrated',source:null},train:{coverage:'catalogue_2022',source:'src_rail_station_catalog_2022'}},
+  mendoza:{id:'mendoza',label:'Mendoza',center:{lat:-32.88946,lon:-68.84584},bus:{coverage:'not_integrated',source:null},train:{coverage:'catalogue_2022',source:'src_rail_station_catalog_2022'}},
+  caba:{id:'caba',label:'Buenos Aires',center:{lat:-34.60372,lon:-58.38159},bus:{coverage:'pending_official_api_access',source:null},train:{coverage:'catalogue_2022',source:'src_rail_station_catalog_2022'}}
+});
 const THREE_TOPOLOGY_CENTER=Object.freeze({lat:-31.6555,lon:-60.7100});
 const THREE_TOPOLOGY_RADIUS_METERS=6000;
 const SUGGEST_DEBOUNCE_MS=400;
@@ -25,7 +31,8 @@ const state={
   destination:null,destinationLabel:'',origin:null,mobilityDecision:null,mobilityComputation:null,selectedRouteMode:null,destinationCandidates:[],destinationActiveIndex:-1,
   trainRadar:null,mapCenter:null,searchTimer:null,searchController:null,searchScope:'local',sessionToken:makeSessionToken(),handoff:null,handoffNonce:0,
   originRevision:0,mapMode:'2d',threeController:null,threeModulePromise:null,threeImportAttempt:0,threeActivationRevision:0,locationGranted:false,theme:localStorage.getItem('voy-theme')||'dark',
-  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],busNetworkSelectedGeometries:[],sheetPane:'collapsed',fixtureOn:false,gpsStatus:'not_integrated',gpsLastLiveAt:0
+  substrateState:'raster',stationModels:[],busNetwork:null,busNetworkGeometries:[],busNetworkSelectedGeometries:[],sheetPane:'collapsed',fixtureOn:false,gpsStatus:'not_integrated',gpsLastLiveAt:0,
+  activeCityId:'santa-fe',activeTransportMode:'bus'
 };
 
 // ---------- DOM refs ----------
@@ -35,6 +42,7 @@ const statusLine=$('#destination-status'),decision=$('#decision'),options=$('#op
 const dialog=$('#handoff-dialog'),confirmHandoff=$('#confirm-handoff'),cancelHandoff=$('#cancel-handoff');
 const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapCanvas=$('#map-canvas'),map3dLayer=$('#map-3d-layer'),map3dStatus=$('#map-3d-status'),map3dAttribution=$('#map-3d-attribution'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution'),map3dQuality=$('#map-3d-quality');
 const busLineControl=$('#bus-line-control'),busLinePicker=$('#bus-line-picker'),busLineMeta=$('#bus-line-meta');
+const cityPicker=$('#city-picker'),transportModePicker=$('#transport-mode-picker'),transitContextStatus=$('#transit-context-status');
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary');
@@ -51,9 +59,9 @@ const TRUTH_STATES={
   predicted:{icon:'◔',label:'Estimado'},
   scheduled:{icon:'◷',label:'Programado'},
   unknown:{icon:'○',label:'Estado desconocido'},
-  no_positions:{icon:'●',label:''},
-  source_unavailable:{icon:'●',label:''},
-  no_coverage:{icon:'◍',label:'Estado en vivo no integrado'}
+  no_positions:{icon:'●',label:'Sin posiciones actuales'},
+  source_unavailable:{icon:'●',label:'Fuente no disponible'},
+  no_coverage:{icon:'◍',label:'Tiempo real no disponible en esta cobertura'}
 };
 const TRUTH_NETWORK_LIVE={icon:'●',label:'GPS de colectivos en vivo'};
 function truthStateLabel(key){return TRUTH_STATES[key]||TRUTH_STATES.no_coverage}
@@ -69,13 +77,21 @@ function updateTruthPill(){
   if(!truthPill)return;
   let entry=TRUTH_STATES.no_coverage,accessibleStatus='Estado GPS desconocido',datasetState='unknown';
   const selected=trackerStore.selected();
-  if(selected){
+  if(state.activeTransportMode==='bus'&&state.activeCityId!=='santa-fe'){
+    entry=TRUTH_STATES.no_coverage;datasetState='no_coverage';
+    accessibleStatus='Tiempo real no disponible en esta cobertura';
+  } else if(selected){
     const observation=selected.entity.observation;
     const cls=classifyObservation(observation,Date.now());
     entry=truthStateLabel(cls.state);
     datasetState=cls.reason==='stale_source'?'stale':cls.state==='realtime'?'realtime':'unknown';
     const age=Number.isFinite(cls.age_ms)?ageLabel(cls.age_ms):'';
     accessibleStatus=[truthConclusion(cls,observation),age,observation.source_id].filter(Boolean).join(' · ');
+  } else if(state.activeTransportMode==='train'){
+    const city=getTransitCity();
+    entry={icon:'◷',label:'Estaciones / horarios por verificar'};
+    datasetState='unknown';
+    accessibleStatus=city.train.coverage==='catalogue_2022'?'Catálogo de estaciones 2022; servicio en vivo no confirmado':'Servicio ferroviario no confirmado';
   } else if(state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000){
     entry=TRUTH_NETWORK_LIVE;
     datasetState='realtime';
@@ -101,12 +117,15 @@ function updateTruthPill(){
     accessibleStatus='Estado GPS desconocido';
   }
   if(truthPill.dataset.state!==datasetState)truthPill.dataset.state=datasetState;
-  if(truthIcon.textContent!=='●')truthIcon.textContent='●';
-  if(truthLabel.textContent)truthLabel.textContent='';
-  truthLabel.hidden=true;
+  truthIcon.textContent=entry.icon;
+  truthLabel.textContent=entry.label||accessibleStatus;
+  truthLabel.hidden=false;
+  truthPill.querySelector('.truth-copy').hidden=false;
   if(truthMeta){
-    if(truthMeta.textContent)truthMeta.textContent='';
-    truthMeta.hidden=true;
+    const city=getTransitCity();
+    const detail=state.activeTransportMode==='train'?'Trenes · '+city.label:'Colectivos · '+city.label;
+    truthMeta.textContent=detail;
+    truthMeta.hidden=false;
   }
   truthPill.setAttribute('aria-label',accessibleStatus);
   truthPill.title=accessibleStatus;
@@ -131,7 +150,8 @@ function renderMap(coords,label='Mapa del destino',showPin=true){
   substrate.setCenter(state.mapCenter,{label,showPin});
   syncTrackerOverlays();
 }
-function renderInitialMap(){renderMap(DEFAULT_MAP_CENTER,'Mapa inicial de Santa Fe',false)}
+function getTransitCity(cityId=state.activeCityId){return TRANSIT_CITIES[cityId]||TRANSIT_CITIES['santa-fe']}
+function renderInitialMap(){renderMap(getTransitCity().center,'Mapa inicial de '+getTransitCity().label,false)}
 function clearMap(){renderInitialMap()}
 function currentBusNetworkGeometries(){
   const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;
@@ -139,6 +159,7 @@ function currentBusNetworkGeometries(){
 }
 let busNetworkLoadStarted=false;
 async function loadSantaFeBusNetwork(){
+  if(state.activeCityId!=='santa-fe'||state.activeTransportMode!=='bus')return;
   if(state.busNetwork||busNetworkLoadStarted)return;
   busNetworkLoadStarted=true;
   const controlWasOpen=!busLineControl.hidden;
@@ -335,8 +356,8 @@ function trackerTick(){
       }
     }
   }
-  if(state.mapMode==='2d'&&!selected&&trackerStore.follow()!=='following'&&!interpolating)return;
-  if(state.mapMode==='3d'&&!selected&&!interpolating){update3DGpsStatus();return;}
+  if(state.mapMode==='2d'&&!selected&&trackerStore.follow()!=='following'&&!interpolating&&!state.fixtureOn)return;
+  if(state.mapMode==='3d'&&!selected&&!interpolating&&!state.fixtureOn){update3DGpsStatus();return;}
   if(state.mapMode==='2d'){
     if(trackerStore.follow()==='following'&&selected){
       const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
@@ -427,15 +448,18 @@ factsClose?.addEventListener('click',()=>{trackerStore.clearSelection();trackerF
 
 // ---------- deterministic fixtures ---------- (development evidence only)
 const urlParams=new URLSearchParams(location.search);
-if(fixtureEnabled(urlParams)){
-  state.fixtureOn=true;
-  const tickMs=Math.max(1200,Number(urlParams.get(FIXTURE_TICK_PARAM))||FIXTURE_DEFAULT_TICK_MS);
-  const engine=createFixtureEngine({push:observation=>trackerStore.ingest(observation),tickMs});
-  engine.start();
-  window.__voyFixtureEngine=engine;
-  window.__voyDebug={store:trackerStore,substrate,state};
-  fixtureBanner.hidden=false;
-  sheetSummary.textContent=`${FIXTURE_LABEL} · entidades sintéticas en movimiento`;
+if(urlParams.get('fixture')==='realtime'){
+  const fixtures=await import('./tracker/fixtures.js?v=__BUILD_ID__');
+  if(fixtures.fixtureEnabled(urlParams)){
+    state.fixtureOn=true;
+    const tickMs=Math.max(1200,Number(urlParams.get(fixtures.FIXTURE_TICK_PARAM))||fixtures.FIXTURE_DEFAULT_TICK_MS);
+    const engine=fixtures.createFixtureEngine({push:observation=>trackerStore.ingest(observation),tickMs});
+    engine.start();
+    window.__voyFixtureEngine=engine;
+    window.__voyDebug={store:trackerStore,substrate,state};
+    fixtureBanner.hidden=false;
+    sheetSummary.textContent=`${fixtures.FIXTURE_LABEL} · entidades sintéticas en movimiento`;
+  }
 }
 
 // ---------- bottom sheet ----------
@@ -454,6 +478,10 @@ function setSheetPane(pane){
 function openSheetPane(pane){setSheetPane(pane==='facts'?'expanded':pane)}
 sheetToggle.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
 function toggleBusLineControl(){
+  if(state.activeCityId!=='santa-fe'||state.activeTransportMode!=='bus'){
+    transitContextStatus.textContent='Las líneas de colectivo aún no están integradas con una fuente validada para esta ciudad.';
+    return;
+  }
   const opening=busLineControl.hidden;
   busLineControl.hidden=!opening;
   quickLines.setAttribute('aria-expanded',String(opening));
@@ -581,10 +609,11 @@ function updateTrainStationMarkers(stations=[]){
   }).filter(Boolean);
   syncTrackerOverlays();
 }
-async function refreshTrainRadar(){
-  if(!state.origin?.coordinates){clearTrainRadar();return}
-  const center=state.origin.coordinates,sameCenter=state.mapCenter&&Math.abs(state.mapCenter.lat-center.lat)<1e-7&&Math.abs(state.mapCenter.lon-center.lon)<1e-7;
-  if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa del origen');
+async function refreshTrainRadar(centerOverride=null){
+  const center=centerOverride||state.origin?.coordinates;
+  if(!center){clearTrainRadar();return}
+  const sameCenter=state.mapCenter&&Math.abs(state.mapCenter.lat-center.lat)<1e-7&&Math.abs(state.mapCenter.lon-center.lon)<1e-7;
+  if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa ferroviario de '+getTransitCity().label,false);
   try{
     const payload=await apiJson('/api/radar/trains/nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({coordinates:center})});
     renderTrainRadar(payload.radar);updateTrainStationMarkers(payload.radar?.stations||[]);
@@ -592,6 +621,41 @@ async function refreshTrainRadar(){
     renderTrainRadar({source_status:'unavailable',stations:[],source:null});updateTrainStationMarkers([]);
   }
 }
+function applyTransitContext({cityId=cityPicker?.value||'santa-fe',mode=transportModePicker?.value||'bus',initial=false}={}){
+  const city=TRANSIT_CITIES[cityId]?TRANSIT_CITIES[cityId]:TRANSIT_CITIES['santa-fe'];
+  state.activeCityId=city.id;
+  state.activeTransportMode=mode==='train'?'train':'bus';
+  if(cityPicker&&cityPicker.value!==city.id)cityPicker.value=city.id;
+  if(transportModePicker&&transportModePicker.value!==state.activeTransportMode)transportModePicker.value=state.activeTransportMode;
+  state.gpsStatus='not_integrated';state.gpsLastLiveAt=0;
+  trackerStore.clearSelection();
+  state.busNetworkSelectedGeometries=[];
+  busLineControl.hidden=true;
+  quickLines.setAttribute('aria-expanded','false');
+  clearTrainRadar();
+  renderMap(city.center,'Mapa de '+city.label+' · '+(state.activeTransportMode==='bus'?'colectivos':'trenes'),false);
+  if(state.activeTransportMode==='train'){
+    transitContextStatus.textContent=city.train.coverage==='catalogue_2022'
+      ? city.label+' · estaciones del catálogo 2022; servicio en vivo no confirmado.'
+      : city.label+' · servicio ferroviario no confirmado.';
+    busLineControl.hidden=true;
+    refreshTrainRadar(city.center);
+  }else if(city.id==='santa-fe'){
+    transitContextStatus.textContent='Santa Fe · recorridos publicados; GPS en vivo solo cuando la fuente entrega posiciones actuales.';
+    state.busNetworkSelectedGeometries=state.busNetworkGeometries;
+    updateBusLineMeta();
+  }else{
+    transitContextStatus.textContent=city.bus.coverage==='pending_official_api_access'
+      ? city.label+' · API oficial solicitada; acceso pendiente de respuesta.'
+      : city.label+' · Tiempo real no disponible en esta cobertura. Fuente y recorridos por validar.';
+    busLineMeta.textContent='Tiempo real no disponible en esta cobertura';
+  }
+  updateTruthPill();
+  setSheetSummary();
+  syncTrackerOverlays();
+}
+cityPicker?.addEventListener('change',()=>applyTransitContext({cityId:cityPicker.value,mode:transportModePicker.value}));
+transportModePicker?.addEventListener('change',()=>applyTransitContext({cityId:cityPicker.value,mode:transportModePicker.value}));
 function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');if(!state.origin)clearTrainRadar();if(state.origin)renderMap(state.origin.coordinates,'Mapa del origen');else clearMap();nationalSearch.hidden=true}
 destinationInput.addEventListener('input',()=>{resetDestinationState();clearSuggestions();clearTimeout(state.searchTimer);const q=destinationInput.value.trim();contextHelp.hidden=true;if(q.length<3){setStatus();return}state.searchTimer=setTimeout(()=>suggestDestinationQuery(q,'local'),SUGGEST_DEBOUNCE_MS)});
 destinationInput.addEventListener('keydown',(event)=>{if(event.key==='ArrowDown'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex+1)}else if(event.key==='ArrowUp'){event.preventDefault();updateActiveSuggestion(state.destinationActiveIndex-1)}else if(event.key==='Enter'){if(state.destinationActiveIndex>=0){event.preventDefault();selectDestination(state.destinationCandidates[state.destinationActiveIndex])}else if(destinationInput.value.trim().length>=3){event.preventDefault();clearTimeout(state.searchTimer);suggestDestinationQuery(destinationInput.value.trim(),state.searchScope)}}else if(event.key==='Escape'){clearSuggestions();nationalSearch.hidden=true}});
@@ -712,7 +776,7 @@ busLinePicker.addEventListener('change',()=>{
   // gpsStatus starts as not_integrated before the first worker response; the enabled flag is authoritative after a real response.
   if(busLinePicker.value&&sfGpsEnabled)pollSantaFeGps();
 });
-renderInitialMap();
+applyTransitContext({cityId:cityPicker?.value||'santa-fe',mode:transportModePicker?.value||'bus',initial:true});
 busLinePicker.addEventListener('focus',loadSantaFeBusNetwork);
 busLinePicker.addEventListener('pointerdown',loadSantaFeBusNetwork);
 if(localStorage.getItem('voy.sf.line'))loadSantaFeBusNetwork();
@@ -720,6 +784,7 @@ setSheetSummary();
 // Fail-closed native GPS polling; unconfigured deployments stop after the first response.
 let sfGpsPolling=false,sfGpsEnabled=true;
 async function pollSantaFeGps(){
+  if(state.activeCityId!=='santa-fe'||state.activeTransportMode!=='bus')return;
   if(!sfGpsEnabled||sfGpsPolling||state.fixtureOn||document.hidden||!String(busLinePicker.value||'').trim())return;
   const center=substrate.getCenter()||DEFAULT_MAP_CENTER;
   if(trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)>30000)return;

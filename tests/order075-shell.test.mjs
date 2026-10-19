@@ -40,19 +40,21 @@ test('ORDER096 search and live suggestions stay above the floating quick-action 
   assert.match(css,/\[data-pane="collapsed"\][^{}]*\.sheet-expanded\{[^}]*display:none/s);
 });
 
-test('ORDER075 temporal truth status is accessible and visually hidden',async()=>{
+test('ORDER075 map-first shell exposes temporal truth and transit context visibly',async()=>{
   const [html,css,app]=await Promise.all([read('public/index.html'),read('public/styles.css'),read('public/app.js')]);
-  assert.match(html,/id="truth-pill"/);
+  assert.match(html,/id="truth-pill" class="truth-pill"/);
   assert.match(html,/id="truth-pill"[^>]*role="status"/);
   assert.match(html,/id="truth-pill"[^>]*aria-live="polite"/);
-  assert.match(html,/id="truth-pill" class="truth-pill sr-only"/);
-  assert.match(css,/#truth-pill\.sr-only\{/);
+  assert.doesNotMatch(html,/id="truth-pill" class="truth-pill sr-only"/);
+  assert.doesNotMatch(css,/#truth-pill\.sr-only\{/);
   assert.match(css,/\.truth-pill\{/);
+  assert.match(html,/id="city-picker"/);
+  assert.match(html,/id="transport-mode-picker"/);
   assert.match(app,/TRUTH_STATES|truthPill/);
   for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
     assert.ok(app.includes(`'${label}'`)||app.includes(`"${label}"`)||app.includes(label),'missing truth label: '+label);
   }
-  assert.ok(app.includes('Estado en vivo no integrado'),'non-integrated realtime state must remain explicit');
+  assert.ok(app.includes('Tiempo real no disponible en esta cobertura'),'non-integrated realtime state must remain explicit');
   assert.match(app,/truth-icon|truthPill.*dataset\.state|dataset\.state.*truth/i);
 });
 
@@ -159,13 +161,15 @@ test('ORDER075 CSP allows OpenFreeMap vector hosts and keeps strict defaults',as
 
 test('ORDER075 service worker caches the new map-first shell including tracker modules',async()=>{
   const sw=await read('public/sw.js');
-  for(const path of ['/tracker/store.js','/tracker/observations.js','/tracker/fixtures.js','/map/substrate.js']){
+  for(const path of ['/tracker/store.js','/tracker/observations.js','/map/substrate.js']){
     assert.ok(sw.includes("'" + path + "?v='+BUILD_ID"), 'sw CORE must cache the build-addressed '+path);
   }
   const core=sw.slice(sw.indexOf('CORE=['),sw.indexOf(']',sw.indexOf('CORE=[')));
   assert.doesNotMatch(core,/\/api\//,'api stays network-only');
   assert.doesNotMatch(core,/\/3d\//);
   assert.doesNotMatch(core,/vendor\//);
+  assert.doesNotMatch(core,/\/tracker\/fixtures\.js|\/transit\/santa-fe-lines\.json|\/icons\/bus-transport-icons8\.svg/);
+  assert.match(await read('public/app.js'),/if\(urlParams\.get\('fixture'\)==='realtime'\)[\s\S]*?await import\('\.\/tracker\/fixtures\.js/);
 });
 
 test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
@@ -181,5 +185,5 @@ test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
   assert.ok(app.includes('Seguimiento GPS: sujeto a observaciones recientes'));
   assert.ok(app.includes('Recorridos publicados: visibles en el mapa'));
   assert.match(app,/renderInitialMap\(\)/);
-  assert.match(app,/renderMap\(DEFAULT_MAP_CENTER/);
+  assert.match(app,/renderMap\(getTransitCity\(\)\.center/);
 });

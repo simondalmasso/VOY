@@ -116,6 +116,6 @@ test('ORDER069 Amendment A is map-first on desktop and mobile without new map li
   assert.match(css,/\.map-shell\.voy-map-stage\{[^}]*position:absolute[^}]*inset:0/s);
   assert.match(css,/\.voy-sheet\{[^}]*position:absolute[^}]*bottom:0/s);
   assert.match(app,/renderInitialMap\(\)/);
-  assert.match(app,/renderMap\(DEFAULT_MAP_CENTER/);
+  assert.match(app,/renderMap\(getTransitCity\(\)\.center/);
   assert.doesNotMatch(app,/leaflet|mapbox|openlayers/i);
 });

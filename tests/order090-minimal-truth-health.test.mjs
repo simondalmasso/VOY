@@ -4,19 +4,18 @@ import { readFile } from 'node:fs/promises';
 
 const read = async name => readFile(new URL('../' + name, import.meta.url), 'utf8');
 
-test('GPS truth status stays accessible but has no visible dot or pill', async () => {
+test('MAP-FIRST temporal truth is visible and accessible, including empty and unavailable GPS states', async () => {
   const app = await read('public/app.js');
   const html = await read('public/index.html');
   const css = await read('public/styles.css');
-  assert.doesNotMatch(app, /La fuente responde; sin posiciones actuales/);
-  assert.doesNotMatch(html, /Tiempo real no disponible en esta cobertura/);
-  assert.match(html, /id="truth-pill" class="truth-pill sr-only"[^>]*role="status"[^>]*aria-live="polite"/);
-  assert.match(css, /#truth-pill\.sr-only\{[^}]*clip-path:inset\(50%\)[^}]*\}/);
+  assert.match(html, /id="truth-pill" class="truth-pill"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.doesNotMatch(html, /id="truth-pill" class="truth-pill sr-only"/);
+  assert.doesNotMatch(css, /#truth-pill\.sr-only\{/);
   assert.match(app, /truthPill\.setAttribute\('aria-label',\s*accessibleStatus\)/);
-  assert.match(app, /truthLabel\.hidden\s*=\s*true/);
-  assert.match(app, /truthMeta\.hidden\s*=\s*true/);
-  assert.match(app, /no_positions:\{icon:'●',label:''\}/);
-  assert.match(app, /source_unavailable:\{icon:'●',label:''\}/);
+  assert.match(app, /truthLabel\.hidden\s*=\s*false/);
+  assert.match(app, /truthMeta\.hidden\s*=\s*false/);
+  assert.match(app, /no_positions:\{icon:'●',label:'Sin posiciones actuales'\}/);
+  assert.match(app, /source_unavailable:\{icon:'●',label:'Fuente no disponible'\}/);
   assert.match(app, /entry=TRUTH_STATES\.no_positions/);
   assert.match(css, /\.truth-pill\[data-state="stale"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
 });
