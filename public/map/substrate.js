@@ -1,7 +1,7 @@
-// ORDER-075 GLM53 — map substrate controller.
-// Strategy: raster-first instant paint, MapLibre+OpenFreeMap as async vector
-// upgrade, raster as mandatory fallback. Facts/selection/truth live in DOM
-// outside any canvas, so a vector failure never loses tracker state.
+// ORDER-075 — map substrate controller.
+// Strategy: vector-first map startup, MapLibre+OpenFreeMap as the primary surface,
+// raster only after vector failure. Facts/selection/truth live in DOM outside any
+// canvas, so a vector failure never loses tracker state.
 // This module never calls the VOY Worker: external map hosts only.
 // Vector style/tiles/glyphs host: https://tiles.openfreemap.org (public, keyless).
 // Attribution is preserved on both substrates (© OpenStreetMap contributors;)
@@ -80,7 +80,7 @@ export function createMapSubstrate({
   canvasEl.addEventListener('pointercancel', endPointerGesture);
   canvasEl.addEventListener('lostpointercapture', endPointerGesture);
 
-  // ---------- raster: instant first paint + mandatory fallback ----------
+  // ---------- raster fallback: invoked only after vector failure ----------
   function renderRaster(coords, { label = 'Mapa', showPin = false } = {}) {
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
     rasterCenter = { ...center };

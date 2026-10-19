@@ -9,6 +9,27 @@ export const MAX_TRACKER_ENTITIES = 16;
 export const MAX_NEARBY_MARKERS = 8;
 export const NEARBY_RADIUS_METERS = 5000;
 
+function transportModeOf(observation) {
+  if (!observation || typeof observation !== 'object') return null;
+  const hints = [observation.vehicle_type, observation.transport_mode, observation.mode]
+    .map(value => {
+      const hint = String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      if (/train|rail|tren|ferrovi/.test(hint)) return 'train';
+      if (/bus|colect|omni|autobus/.test(hint)) return 'bus';
+      return null;
+    })
+    .filter(Boolean);
+  const sourceId = String(observation.source_id || observation.source || '').trim().toLowerCase();
+  if (sourceId === 'sf_gps_cuandopasa') hints.push('bus');
+  const distinct = [...new Set(hints)];
+  return distinct.length === 1 ? distinct[0] : null;
+}
+
+export function matchesTransportMode(observation, mode) {
+  const expected = mode === 'bus' || mode === 'train' ? mode : null;
+  return expected !== null && transportModeOf(observation) === expected;
+}
+
 function distanceMeters(a,b){
   const rad=value=>Number(value)*Math.PI/180;
   const dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon);
