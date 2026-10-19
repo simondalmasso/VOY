@@ -6,7 +6,7 @@ const ENDPOINTS = Object.freeze({
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 function unavailable(reason) {
-  return { available: false, source_status: 'unavailable', reason, observed_at: null, data: null };
+  return { available: false, source_status: 'unavailable', reason, fetched_at: null, temporal_state: 'unknown', data: null };
 }
 
 function validBaseUrl(value) {
@@ -21,9 +21,11 @@ function validBaseUrl(value) {
 }
 
 /**
- * Server-side adapter for the official Buenos Aires transport API.
+ * Server-side scaffold for the official Buenos Aires transport API.
  * Credentials must be Worker secrets; never pass them from browser input.
  * Network access is opt-in: without both credentials this adapter fails closed.
+ * The upstream payload is deliberately not promoted to a vehicle observation
+ * until the issued API's current schema and timestamp semantics are verified.
  */
 export function createCabaTransportAdapter({
   env = {},
@@ -48,14 +50,13 @@ export function createCabaTransportAdapter({
     if (typeof fetchImpl !== 'function') return unavailable('fetch_unavailable');
 
     const url = new URL(path, origin);
-    // The API currently documents app credentials as query parameters.
-    // Never log this URL: it contains the secret. Verify auth details against
-    // the owner's issued credentials before enabling production polling.
+    // Auth parameter placement must be confirmed against the credentials/API
+    // documentation issued to the owner. Never log this URL: it contains a secret.
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('client_secret', clientSecret);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort('upstream_timeout'), timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchImpl(url.toString(), {
         method: 'GET',
@@ -90,8 +91,8 @@ export function createCabaTransportAdapter({
         reason: null,
         source_id: 'caba_datosabiertos_transport',
         mode,
-        temporal_state: 'realtime',
-        observed_at: new Date(now()).toISOString(),
+        temporal_state: 'unknown',
+        fetched_at: new Date(now()).toISOString(),
         data,
         cache_hit: false
       };
