@@ -8,9 +8,10 @@ const FAKE_ENV = {
 };
 
 function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
+  const body = JSON.stringify(data);
+  return new Response(body, {
     status,
-    headers: { 'content-type': 'application/json', 'content-length': String(JSON.stringify(data).length) }
+    headers: { 'content-type': 'application/json', 'content-length': String(new TextEncoder().encode(body).byteLength) }
   });
 }
 
@@ -25,7 +26,7 @@ test('CABA adapter fails closed when either credential is missing and makes no r
   assert.equal(calls, 0);
 });
 
-test('CABA bus endpoint uses server-side simulated credentials and normalizes truthful metadata', async () => {
+test('CABA bus endpoint uses simulated credentials without claiming live positions from an empty feed', async () => {
   let requested;
   const adapter = createCabaTransportAdapter({
     env: FAKE_ENV,
@@ -41,8 +42,8 @@ test('CABA bus endpoint uses server-side simulated credentials and normalizes tr
   assert.equal(requested.url.searchParams.get('client_secret'), FAKE_ENV.CABA_TRANSPORT_CLIENT_SECRET);
   assert.equal(requested.init.method, 'GET');
   assert.equal(result.available, true);
-  assert.equal(result.temporal_state, 'realtime');
-  assert.equal(result.observed_at, '2026-10-19T12:00:00.000Z');
+  assert.equal(result.temporal_state, 'unknown');
+  assert.equal(result.fetched_at, '2026-10-19T12:00:00.000Z');
   assert.deepEqual(result.data.entity, []);
   assert.equal(result.cache_hit, false);
 });
@@ -53,13 +54,14 @@ test('CABA train endpoint is independently addressable', async () => {
     env: FAKE_ENV,
     fetchImpl: async url => {
       pathname = new URL(url).pathname;
-      return jsonResponse({ entity: [] });
+      return jsonResponse({ entity: [{ id: 'fixture-only' }] });
     }
   });
   const result = await adapter.readTrains();
   assert.equal(pathname, CABA_TRANSPORT_ENDPOINTS.trains);
   assert.equal(result.available, true);
   assert.equal(result.mode, 'trains');
+  assert.equal(result.temporal_state, 'unknown');
 });
 
 test('CABA adapter fails closed on HTTP errors, invalid JSON and non-JSON content', async t => {
@@ -108,7 +110,7 @@ test('CABA adapter reports network failure without exposing credentials', async 
   const result = await adapter.readTrains();
   assert.deepEqual(result, {
     available: false, source_status: 'unavailable', reason: 'source_unavailable',
-    observed_at: null, data: null
+    fetched_at: null, temporal_state: 'unknown', data: null
   });
   assert.equal(JSON.stringify(result).includes(FAKE_ENV.CABA_TRANSPORT_CLIENT_SECRET), false);
 });
