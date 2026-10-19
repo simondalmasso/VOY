@@ -51,7 +51,11 @@ for f in (root/'public/3d').rglob('*'):
         shutil.copy2(f, dest)
 for f in (root/'public/tracker').iterdir(): shutil.copy2(f, client/'tracker'/f.name)
 for f in (root/'public/map').iterdir(): shutil.copy2(f, client/'map'/f.name)
-for f in (root/'public/transit').iterdir(): shutil.copy2(f, client/'transit'/f.name)
+for f in (root/'public/transit').rglob('*'):
+    if f.is_file():
+        dest = client/'transit'/f.relative_to(root/'public/transit')
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, dest)
 
 three = client/'vendor'
 shutil.copy2(root/'node_modules/three/build/three.module.js', three/'three.module.js')
