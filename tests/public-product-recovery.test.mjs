@@ -49,7 +49,7 @@ test('public recovery: 3D can open from verified local topology context without 
   assert.doesNotMatch(app,/if\(!has3DContext\(\)\)\{activate2D\('Seleccioná un servicio o recorrido para abrir 3D\.'/);
   assert.match(app,/Mapa 3D/);
   assert.match(app,/GPS EN VIVO/);
-  assert.match(app,/Sin posiciones GPS en vivo/);
+  assert.match(app,/GPS en vivo: elegí una línea/);
 });
 
 test('public recovery: client sends visible map center as search viewport when origin is absent',async()=>{

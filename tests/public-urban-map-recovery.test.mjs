@@ -28,7 +28,7 @@ test('public 3D retains attribution and strict tile host access',async()=>{
  assert.match(headers,/connect-src[^;\n]*https:\/\/tile\.openstreetmap\.org/);
  assert.match(app,/recorridos publicados/);
  assert.match(app,/GPS EN VIVO/);
- assert.match(app,/Sin posiciones GPS en vivo/);
+ assert.match(app,/GPS en vivo: elegí una línea/);
  assert.match(app,/sin posiciones actuales confirmadas/);
  assert.match(html,/Vista 3D cartográfica/);
 });
