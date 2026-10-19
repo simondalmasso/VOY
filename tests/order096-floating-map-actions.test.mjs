@@ -32,7 +32,7 @@ test('floating map controls are bound to existing actions without adding externa
   assert.match(app, /quickPlan\.addEventListener\('click'/);
   assert.match(app, /mapModeButtons\.forEach\(button=>button\.addEventListener\('click'/);
   assert.match(html, /id="quick-location"[^>]*aria-label="Usar mi ubicación"/);
-  assert.match(html, /id="quick-lines"[^>]*aria-label="Elegir línea de colectivo"/);
+  assert.match(html, /id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
   assert.match(html, /id="quick-origin"[^>]*aria-label="Elegir origen"/);
   assert.match(html, /id="quick-plan"[^>]*aria-label="Abrir planificador"/);
   assert.doesNotMatch(html, /cuandopasa\.app|href="https?:\/\/(?:www\.)?trackviewer\.app/i);

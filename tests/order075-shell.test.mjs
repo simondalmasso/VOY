@@ -48,8 +48,14 @@ test('ORDER075 map-first shell exposes temporal truth and transit context visibl
   assert.doesNotMatch(html,/id="truth-pill" class="truth-pill sr-only"/);
   assert.doesNotMatch(css,/#truth-pill\.sr-only\{/);
   assert.match(css,/\.truth-pill\{/);
-  assert.match(html,/id="city-picker"/);
-  assert.match(html,/id="transport-mode-picker"/);
+  assert.doesNotMatch(html,/id="city-picker"/);
+  const linesStart=html.indexOf('<div class="map-quick-lines-wrap">');
+  const mapViewStart=html.indexOf('<div class="map-quick-view"',linesStart);
+  assert.ok(linesStart>=0&&mapViewStart>linesStart,'transport context lives inside Lines');
+  const linesRegion=html.slice(linesStart,mapViewStart);
+  assert.match(linesRegion,/id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
+  assert.match(linesRegion,/id="transport-mode-picker"/);
+  assert.match(linesRegion,/id="bus-line-picker"/);
   assert.match(app,/TRUTH_STATES|truthPill/);
   for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
     assert.ok(app.includes(`'${label}'`)||app.includes(`"${label}"`)||app.includes(label),'missing truth label: '+label);
@@ -185,5 +191,7 @@ test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
   assert.ok(app.includes('Seguimiento GPS: sujeto a observaciones recientes'));
   assert.ok(app.includes('Recorridos publicados: visibles en el mapa'));
   assert.match(app,/renderInitialMap\(\)/);
-  assert.match(app,/renderMap\(getTransitCity\(\)\.center/);
+  assert.match(app,/function renderInitialMap\(\)\{renderMap\(state\.mapCenter\|\|DEFAULT_MAP_CENTER/);
+  assert.doesNotMatch(app,/getTransitCity|cityPicker/);
+  assert.match(app,/void restoreGrantedLocation\(\)/);
 });

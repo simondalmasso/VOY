@@ -4,15 +4,19 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
-test('map-first transit control exposes all five requested cities and both modes', async () => {
+test('map-first transit controls remove city selection and keep bus/train choices inside Lines', async () => {
   const html = await read('public/index.html');
-  assert.match(html, /id="city-picker"/);
-  for (const id of ['santa-fe', 'parana', 'rosario', 'mendoza', 'caba']) {
-    assert.match(html, new RegExp('value="' + id + '"'));
-  }
-  assert.match(html, /id="transport-mode-picker"/);
-  assert.match(html, /value="bus"/);
-  assert.match(html, /value="train"/);
+  assert.doesNotMatch(html, /id="city-picker"/);
+  assert.doesNotMatch(html, /aria-label="Ciudad del mapa"/);
+  const linesStart = html.indexOf('<div class="map-quick-lines-wrap">');
+  const mapViewStart = html.indexOf('<div class="map-quick-view"', linesStart);
+  assert.ok(linesStart >= 0 && mapViewStart > linesStart, 'Lines owns the transport controls');
+  const linesRegion = html.slice(linesStart, mapViewStart);
+  assert.match(linesRegion, /id="quick-lines"/);
+  assert.match(linesRegion, /id="transport-mode-picker"/);
+  assert.match(linesRegion, /option value="bus"/);
+  assert.match(linesRegion, /option value="train"/);
+  assert.match(linesRegion, /id="bus-line-picker"/);
 });
 
 test('temporal truth is visibly rendered over the map, not screen-reader-only', async () => {
@@ -26,22 +30,29 @@ test('temporal truth is visibly rendered over the map, not screen-reader-only', 
   assert.doesNotMatch(css, /#truth-pill\.sr-only\{position:absolute!important;display:block!important;left:-10000px!important/);
 });
 
-test('city and mode changes are source-aware and recenter the primary map', async () => {
-  const app = await read('public/app.js');
-  assert.match(app, /getTransitCity/);
-  assert.match(app, /applyTransitContext/);
-  assert.match(app, /cityPicker\?\.addEventListener\('change'/);
+test('transport mode changes preserve the active map center and restore previously granted location', async () => {
+  const [html, app] = await Promise.all([read('public/index.html'), read('public/app.js')]);
+  assert.doesNotMatch(html, /id="city-picker"/);
+  assert.doesNotMatch(app, /getTransitCity|cityPicker/);
+  assert.match(app, /function renderInitialMap\(\)\{renderMap\(state\.mapCenter\|\|DEFAULT_MAP_CENTER/);
+  assert.match(app, /function applyTransitContext/);
   assert.match(app, /transportModePicker\?\.addEventListener\('change'/);
-  assert.match(app, /renderMap\(city\.center/);
+  assert.match(app, /function restoreGrantedLocation\(/);
+  assert.match(app, /permission\.state==='granted'/);
+  assert.match(app, /renderMap\(\{lat:Number\(position\.coords\.latitude\),lon:Number\(position\.coords\.longitude\)\}/);
   assert.match(app, /Tiempo real no disponible/);
 });
 
-test('non-Santa-Fe buses do not reuse Santa Fe geometry or GPS feed', async () => {
+test('bus routes and GPS are gated to local coverage and the active transport mode', async () => {
   const app = await read('public/app.js');
-  assert.match(app, /state\.activeCityId\s*!==\s*'santa-fe'/);
-  assert.match(app, /activeTransportMode\s*===\s*'bus'/);
-  assert.match(app, /pollSantaFeGps/);
-  assert.match(app, /city\.bus\.coverage/);
+  assert.doesNotMatch(app, /activeCityId|cityPicker|getTransitCity/);
+  assert.match(app, /function hasSantaFeBusCoverage\(center=null\)/);
+  assert.match(app, /return trainRadarDistanceMeters\(point,DEFAULT_MAP_CENTER\)<=30000/);
+  assert.match(app, /function currentBusNetworkGeometries\(\)\{\s*if\(state\.activeTransportMode!=='bus'\)return\[\]/);
+  assert.match(app, /trackerStore\.nearby\(center,\{filter:entity=>matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)\}\)/);
+  assert.match(app, /entity\.observation\.temporal_state==='realtime'&&matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)/);
+  assert.match(app, /entity\.next\?\.temporal_state==='realtime'&&matchesTransportMode\(entity\.next,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.next\)/);
+  assert.match(app, /if\(state\.activeTransportMode!=='bus'\|\|!hasSantaFeBusCoverage\(\)\)return/);
 });
 
 test('train city mode keeps station catalogue explicitly historical and never invents live trains', async () => {

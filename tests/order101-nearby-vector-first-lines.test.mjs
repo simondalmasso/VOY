@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createTrackerStore, MAX_NEARBY_MARKERS, NEARBY_RADIUS_METERS } from '../public/tracker/store.js';
+import * as trackerStoreModule from '../public/tracker/store.js';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 const NOW = Date.parse('2026-10-19T10:00:00.000Z');
@@ -13,6 +14,19 @@ function observation(id, lat, lon) {
     observed_at: new Date(NOW - 1000).toISOString(), lat, lon
   };
 }
+
+test('transport mode matching is explicit and fails closed on unknown or conflicting vehicle identity', () => {
+  const matchesTransportMode = trackerStoreModule.matchesTransportMode;
+  assert.equal(typeof matchesTransportMode, 'function', 'transport filtering must be a reusable tested contract');
+  assert.equal(matchesTransportMode({ mode: 'bus' }, 'bus'), true);
+  assert.equal(matchesTransportMode({ mode: 'bus' }, 'train'), false);
+  assert.equal(matchesTransportMode({ mode: 'rail' }, 'train'), true);
+  assert.equal(matchesTransportMode({ mode: 'rail' }, 'bus'), false);
+  assert.equal(matchesTransportMode({ source_id: 'sf_gps_cuandopasa', observed_position_only: true }, 'bus'), true);
+  assert.equal(matchesTransportMode({ source_id: 'sf_gps_cuandopasa', observed_position_only: true, mode: 'train' }, 'train'), false);
+  assert.equal(matchesTransportMode({ observed_position_only: true }, 'train'), false);
+  assert.equal(matchesTransportMode({ mode: 'bus' }, 'air'), false);
+});
 
 test('nearby vehicle discovery is distance-bounded and capped instead of loading the whole fleet', () => {
   assert.equal(MAX_NEARBY_MARKERS, 8);

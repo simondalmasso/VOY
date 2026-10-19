@@ -69,8 +69,8 @@ test('ORDER077: 3D GPS state remains current for an empty store and only counts 
 test('ORDER077: changing selected line cannot render stale GPS pins or accept an old in-flight reply', () => {
   assert.match(app, /function matchesSelectedGpsLine\(observation\)/);
   assert.match(app, /return Boolean\(selectedLine\)&&String\(observation\.line\|\|''\)\.trim\(\)===selectedLine/);
-  assert.match(app, /trackerStore\.nearby\(center\)\.filter\(entity=>matchesSelectedGpsLine\(entity\.observation\)\)/);
-  assert.match(app, /entity\.next\?\.temporal_state==='realtime'&&matchesSelectedGpsLine\(entity\.next\)/);
+  assert.match(app, /trackerStore\.nearby\(center,\{filter:entity=>matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)\}\)/);
+  assert.match(app, /entity\.next\?\.temporal_state==='realtime'&&matchesTransportMode\(entity\.next,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.next\)/);
   assert.match(app, /state\.gpsStatus='not_integrated';state\.gpsLastLiveAt=0/);
   assert.ok(app.includes("if(String(busLinePicker.value||'').trim()!==selectedLine)return;"));
   assert.match(app, /currentLine!==selectedLineAtRequest/);
