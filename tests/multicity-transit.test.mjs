@@ -55,7 +55,31 @@ test('bus routes and GPS are gated to local coverage and the active transport mo
   assert.match(app, /if\(state\.activeTransportMode!=='bus'\|\|!hasSantaFeBusCoverage\(\)\)return/);
 });
 
-test('train city mode keeps station catalogue explicitly historical and never invents live trains', async () => {
+test('train radar is mode-scoped, stale requests are ignored, and station changes refresh 3D immediately', async () => {
+  const app = await read('public/app.js');
+  const clearStart = app.indexOf('function clearTrainRadar()');
+  const clearEnd = app.indexOf('function radarObservedLabel', clearStart);
+  const refreshStart = app.indexOf('async function refreshTrainRadar(', clearEnd);
+  const refreshEnd = app.indexOf('function applyTransitContext(', refreshStart);
+  const applyEnd = app.indexOf('transportModePicker?.addEventListener', refreshEnd);
+  const clear = app.slice(clearStart, clearEnd);
+  const refresh = app.slice(refreshStart, refreshEnd);
+  const apply = app.slice(refreshEnd, applyEnd);
+  const stationStart = app.indexOf('function updateTrainStationMarkers(', clearEnd);
+  const stationEnd = app.indexOf('async function refreshTrainRadar(', stationStart);
+  const station = app.slice(stationStart, stationEnd);
+
+  assert.match(clear, /trainRadarRequestRevision\+\+/);
+  assert.match(clear, /syncTrackerOverlays\(\);sync3DTopology\(\)/);
+  assert.match(refresh, /if\(state\.activeTransportMode!=='train'\)\{clearTrainRadar\(\);return\}/);
+  assert.match(refresh, /const requestRevision=\+\+trainRadarRequestRevision/);
+  assert.match(refresh, /requestRevision!==trainRadarRequestRevision\|\|state\.activeTransportMode!=='train'/);
+  assert.match(station, /state\.activeTransportMode==='train'\?/);
+  assert.match(station, /syncTrackerOverlays\(\);sync3DTopology\(\)/);
+  assert.match(apply, /syncTrackerOverlays\(\);update3DGpsStatus\(\)/);
+});
+
+test('train mode keeps station catalogue explicitly historical and never invents live trains', async () => {
   const app = await read('public/app.js');
   assert.match(app, /activeTransportMode\s*===\s*'train'/);
   assert.match(app, /stationModels/);
