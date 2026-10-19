@@ -90,7 +90,12 @@ test('ORDER075 map substrate: pinned MapLibre + OpenFreeMap with raster fallback
   assert.match(substrate,/onVectorError|styledata-error|error/);
   assert.match(substrate,/attribution/i);
   assert.match(substrate,/OpenStreetMap/);
-  assert.match(substrate,/raster-first|rasterFirst|paintRaster/);
+  const setCenterStart=substrate.indexOf('function setCenter(');
+  const getCenterStart=substrate.indexOf('function getCenter()',setCenterStart);
+  const setCenter=substrate.slice(setCenterStart,getCenterStart);
+  assert.match(setCenter,/void upgradeToVector\(center\)/,'normal 2D startup must enter the vector path first');
+  assert.match(setCenter,/substrate === 'vector_failed'/,'raster is used only after vector failure');
+  assert.doesNotMatch(setCenter,/renderRaster\(center/,'normal startup must not paint raster tiles first');
 });
 
 test('ORDER075 vector failure keeps raster map and tracker facts',async()=>{

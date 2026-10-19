@@ -28,6 +28,44 @@ test('transport mode matching is explicit and fails closed on unknown or conflic
   assert.equal(matchesTransportMode({ mode: 'bus' }, 'air'), false);
 });
 
+test('measured GPS movement produces compass bearings and the 2D/3D renderers apply orientation', async () => {
+  const directions = [
+    { name: 'north', dLat: 0.001, dLon: 0, bearing: 0 },
+    { name: 'east', dLat: 0, dLon: 0.001, bearing: 90 },
+    { name: 'south', dLat: -0.001, dLon: 0, bearing: 180 },
+    { name: 'west', dLat: 0, dLon: -0.001, bearing: 270 }
+  ];
+  for (const direction of directions) {
+    const store = createTrackerStore({ now: () => NOW, presentTransportEntity: () => null });
+    const id = 'heading-' + direction.name;
+    const first = {
+      id, source_id: 'sf_gps_cuandopasa', temporal_state: 'realtime',
+      observed_at: new Date(NOW - 6000).toISOString(), lat: -31.65, lon: -60.71,
+      observed_position_only: true, mode: 'bus'
+    };
+    store.ingest(first);
+    store.ingest({
+      ...first,
+      observed_at: new Date(NOW - 1000).toISOString(),
+      lat: first.lat + direction.dLat,
+      lon: first.lon + direction.dLon
+    });
+    const frame = store.displayFrame(id);
+    assert.equal(frame.render, true, direction.name + ' GPS fix should render');
+    assert.ok(Math.abs(frame.bearing - direction.bearing) < 1e-6,
+      direction.name + ' bearing should follow the compass convention');
+  }
+
+  const [app, substrate, css, three] = await Promise.all([
+    read('public/app.js'), read('public/map/substrate.js'),
+    read('public/styles.css'), read('public/3d/voy3d.js')
+  ]);
+  assert.match(app, /bearing:frame\.bearing/);
+  assert.match(substrate, /Number\.isFinite\(Number\(model\.bearing\)\)[\s\S]*?setProperty\('--gps-bearing'/);
+  assert.match(css, /transform:rotate\(var\(--gps-bearing,0deg\)\)/);
+  assert.match(three, /'icon-rotate':\['get','bearing'\]/);
+});
+
 test('nearby vehicle discovery is distance-bounded and capped instead of loading the whole fleet', () => {
   assert.equal(MAX_NEARBY_MARKERS, 8);
   assert.equal(NEARBY_RADIUS_METERS, 5000);
