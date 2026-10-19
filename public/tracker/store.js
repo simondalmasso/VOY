@@ -6,7 +6,8 @@ import { normalizeObservation, classifyObservation, REALTIME_FRESHNESS_MS, REALT
 export const TRAIL_MAX_OBSERVATIONS = 32;
 export const TRAIL_MAX_AGE_MS = 120000;
 export const MAX_TRACKER_ENTITIES = 16;
-export const MAX_NEARBY_MARKERS = 12;
+export const MAX_NEARBY_MARKERS = 8;
+export const NEARBY_RADIUS_METERS = 5000;
 
 function distanceMeters(a,b){
   const rad=value=>Number(value)*Math.PI/180;
@@ -178,12 +179,23 @@ export function createTrackerStore({now=()=>Date.now(),presentTransportEntity=nu
     };
   }
 
-  function nearby(center,{limit=MAX_NEARBY_MARKERS}={}){
+  function nearby(center,{limit=MAX_NEARBY_MARKERS,radiusMeters=NEARBY_RADIUS_METERS,filter=()=>true}={}){
     if(!center||!Number.isFinite(Number(center.lat))||!Number.isFinite(Number(center.lon)))return[];
-    const rows=entityList().map(entity=>({entity,distance:distanceMeters(center,entity.observation)})).sort((a,b)=>a.distance-b.distance);
-    const picked=rows.slice(0,limit).map(row=>row.entity);
+    const cap=Math.max(0,Number.isFinite(Number(limit))?Math.floor(Number(limit)):MAX_NEARBY_MARKERS);
+    const radius=Math.max(0,Number.isFinite(Number(radiusMeters))?Number(radiusMeters):NEARBY_RADIUS_METERS);
+    const accepts=entity=>{try{return typeof filter!=='function'||filter(entity)===true}catch{return false}};
+    const rows=entityList()
+      .filter(accepts)
+      .map(entity=>({entity,distance:distanceMeters(center,entity.observation)}))
+      .filter(row=>Number.isFinite(row.distance)&&row.distance<=radius)
+      .sort((a,b)=>a.distance-b.distance);
+    const picked=rows.slice(0,cap).map(row=>row.entity);
     const selectedEntity=selectedId?entities.get(selectedId):null;
-    if(selectedEntity&&!picked.some(entity=>entity.id===selectedId))picked[Math.min(picked.length,limit-1)]=selectedEntity;
+    // An explicit user selection is allowed to remain visible outside the automatic radius.
+    if(selectedEntity&&accepts(selectedEntity)&&cap>0&&!picked.some(entity=>entity.id===selectedId)){
+      if(picked.length<cap)picked.push(selectedEntity);
+      else picked[picked.length-1]=selectedEntity;
+    }
     return picked;
   }
 
