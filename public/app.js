@@ -215,7 +215,8 @@ function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.t
 function update3DGpsStatus(){
  const now=Date.now();
  if(state.activeTransportMode==='train'){
-  const fixtureTrains=state.fixtureOn?trackerStore.entities().filter(entity=>entity.observation.synthetic_fixture===true&&matchesTransportMode(entity.observation,'train')&&classifyObservation(entity.observation,now).state==='realtime').length:0;
+  const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;
+  const fixtureTrains=state.fixtureOn?trackerStore.nearby(center,{filter:entity=>entity.observation.synthetic_fixture===true&&matchesTransportMode(entity.observation,'train')&&classifyObservation(entity.observation,now).state==='realtime'}).length:0;
   const copy=fixtureTrains?'Mapa 3D · FIXTURE DEMO · '+fixtureTrains+' trenes sintéticos':'Mapa 3D · GPS de trenes no confirmado; no se inventan posiciones';
   if(map3dStatus.textContent!==copy)map3dStatus.textContent=copy;
   return;
@@ -607,7 +608,12 @@ async function suggestDestinationQuery(query,scope=state.searchScope){
   finally{loading.hidden=true}
 }
 
-function clearTrainRadar(){state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();state.stationModels=[];syncTrackerOverlays()}
+let trainRadarRequestRevision=0;
+function clearTrainRadar(){
+  trainRadarRequestRevision++;
+  state.trainRadar=null;trainRadar.hidden=true;trainRadarMeta.textContent='';trainRadarList.replaceChildren();state.stationModels=[];
+  syncTrackerOverlays();sync3DTopology();
+}
 function radarObservedLabel(value){if(!value)return '';try{return new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value))}catch{return ''}}
 function renderTrainRadar(radar){
   state.trainRadar=radar;trainRadar.hidden=false;trainRadarList.replaceChildren();
@@ -624,22 +630,26 @@ function renderTrainRadar(radar){
   }
 }
 function updateTrainStationMarkers(stations=[]){
-  state.stationModels=stations.map(item=>{
+  state.stationModels=(state.activeTransportMode==='train'?stations:[]).map(item=>{
     const coords=item?.station?.coordinates;
     if(!coords)return null;
     return {name:item.station.name,lat:Number(coords.lat),lon:Number(coords.lon)};
   }).filter(Boolean);
-  syncTrackerOverlays();
+  syncTrackerOverlays();sync3DTopology();
 }
 async function refreshTrainRadar(centerOverride=null){
+  if(state.activeTransportMode!=='train'){clearTrainRadar();return}
+  const requestRevision=++trainRadarRequestRevision;
   const center=centerOverride||state.origin?.coordinates;
   if(!center){clearTrainRadar();return}
   const sameCenter=state.mapCenter&&Math.abs(state.mapCenter.lat-center.lat)<1e-7&&Math.abs(state.mapCenter.lon-center.lon)<1e-7;
   if(mapShell.hidden||!sameCenter)renderMap(center,'Mapa ferroviario cerca de tu ubicación',false);
   try{
     const payload=await apiJson('/api/radar/trains/nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({coordinates:center})});
+    if(requestRevision!==trainRadarRequestRevision||state.activeTransportMode!=='train')return;
     renderTrainRadar(payload.radar);updateTrainStationMarkers(payload.radar?.stations||[]);
   }catch{
+    if(requestRevision!==trainRadarRequestRevision||state.activeTransportMode!=='train')return;
     renderTrainRadar({source_status:'unavailable',stations:[],source:null});updateTrainStationMarkers([]);
   }
 }
@@ -669,7 +679,7 @@ function applyTransitContext({mode=transportModePicker?.value||'bus',initial=fal
   quickLines.setAttribute('aria-expanded',String(!busLineControl.hidden));
   updateTruthPill();
   setSheetSummary();
-  syncTrackerOverlays();
+  syncTrackerOverlays();update3DGpsStatus();
 }
 transportModePicker?.addEventListener('change',()=>applyTransitContext({mode:transportModePicker.value}));
 function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');if(!state.origin)clearTrainRadar();if(state.origin)renderMap(state.origin.coordinates,'Mapa del origen');else clearMap();nationalSearch.hidden=true}
