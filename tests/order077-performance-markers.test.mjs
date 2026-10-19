@@ -7,6 +7,7 @@ const css = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8
 const substrate = readFileSync(new URL('../public/map/substrate.js', import.meta.url), 'utf8');
 const three = readFileSync(new URL('../public/3d/voy3d.js', import.meta.url), 'utf8');
 const build = readFileSync(new URL('../scripts/build.ps1', import.meta.url), 'utf8');
+const linuxBuild = readFileSync(new URL('../scripts/build.sh', import.meta.url), 'utf8');
 const headers = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
 
 test('ORDER077: static route catalog is lazy until line picker focus or saved selection', () => {
@@ -51,6 +52,8 @@ test('ORDER077: PNG sprites are valid, transparent PNG files under 5 KB each', (
 
 test('ORDER077: build includes nested PNG sprites and content-addressed PMTiles are immutable-cached', () => {
   assert.match(build, /Copy-Item public\\transit\\\* dist\\client\\transit -Recurse -Force/);
+  assert.ok(linuxBuild.includes("for f in (root/'public/transit').rglob('*'):"));
+  assert.match(linuxBuild, /dest\.parent\.mkdir\(parents=True, exist_ok=True\)/);
   assert.match(headers, /\/data\/santa-fe-3d\/\*\.pmtiles\s+Cache-Control: public, max-age=31536000, immutable/);
 });
 
