@@ -33,7 +33,7 @@ export function normalizeObservation(raw) {
     lat,
     lon
   };
-  for (const key of ['route_id', 'trip_id', 'line', 'next_stop']) {
+  for (const key of ['route_id', 'trip_id', 'line', 'next_stop', 'vehicle_type', 'transport_mode', 'mode']) {
     const value = raw[key];
     if (typeof value === 'string' && value.trim()) observation[key] = value.trim();
   }
