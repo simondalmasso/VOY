@@ -23,21 +23,30 @@ test('ORDER075 mobile first viewport is map-first (shell structure)',async()=>{
   assert.ok(html.indexOf('id="destination"')>html.indexOf('id="voy-sheet"'),'destination search is inside the sheet (secondary)');
 });
 
-test('ORDER075 search is available but secondary (chip + sheet)',async()=>{
+test('ORDER096 search and live suggestions stay above the floating quick-action bar',async()=>{
   const [html,css,app]=await Promise.all([read('public/index.html'),read('public/styles.css'),read('public/app.js')]);
-  assert.match(html,/id="search-chip"/);
-  assert.match(html,/id="search-chip"[^>]*aria-controls="sheet-body"|id="search-chip"[^>]*aria-expanded/);
-  assert.match(app,/id="search-chip"|searchChip/);
-  assert.match(css,/\.search-chip\{|\.voy-chip\{/);
-  assert.ok(html.indexOf('id="destination"')>html.indexOf('id="sheet-body"'));
+  const sheetStart=html.indexOf('id="voy-sheet"');
+  const sheet=html.slice(sheetStart,html.indexOf('</section>',sheetStart));
+  assert.ok(sheet.indexOf('id="destination"')>sheet.indexOf('id="sheet-body"'));
+  assert.ok(sheet.indexOf('id="destination-suggestions"')>sheet.indexOf('id="destination"'));
+  assert.ok(sheet.indexOf('id="map-quick-actions"')>sheet.indexOf('id="destination-suggestions"'));
+  assert.match(html,/id="destination"[^>]*role="combobox"/);
+  assert.match(html,/id="destination-suggestions"[^>]*role="listbox"/);
+  assert.match(app,/destinationInput\.addEventListener\('input'/);
+  assert.match(app,/suggestDestinationQuery\(q,'local'\)/);
+  assert.match(css,/\.map-quick-actions\{/);
+  assert.match(css,/\.destination-search-stack\{/);
+  assert.doesNotMatch(html,/id="search-chip"/,'the old duplicate search chip is removed');
   assert.match(css,/\[data-pane="collapsed"\][^{}]*\.sheet-expanded\{[^}]*display:none/s);
 });
 
-test('ORDER075 temporal truth pill is visible, stateful and not color-only',async()=>{
+test('ORDER075 temporal truth status is accessible and visually hidden',async()=>{
   const [html,css,app]=await Promise.all([read('public/index.html'),read('public/styles.css'),read('public/app.js')]);
   assert.match(html,/id="truth-pill"/);
   assert.match(html,/id="truth-pill"[^>]*role="status"/);
   assert.match(html,/id="truth-pill"[^>]*aria-live="polite"/);
+  assert.match(html,/id="truth-pill" class="truth-pill sr-only"/);
+  assert.match(css,/#truth-pill\.sr-only\{/);
   assert.match(css,/\.truth-pill\{/);
   assert.match(app,/TRUTH_STATES|truthPill/);
   for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
@@ -47,10 +56,11 @@ test('ORDER075 temporal truth pill is visible, stateful and not color-only',asyn
   assert.match(app,/truth-icon|truthPill.*dataset\.state|dataset\.state.*truth/i);
 });
 
-test('ORDER075 progressive urban 3D default keeps compact controls, lazy loading and 2D fallback',async()=>{
+test('ORDER075 opt-in urban 3D keeps compact controls, lazy loading and 2D fallback',async()=>{
   const [html,app,sw]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/sw.js')]);
   assert.match(html,/data-map-mode="2d"[^>]*aria-pressed="true"/);
-  assert.match(app,/setTimeout\(\(\)=>activate3D\(\),180\)/);
+  assert.doesNotMatch(app,/setTimeout\(\(\)=>activate3D\(\),180\)/);
+  assert.match(app,/activate2D\(\);/);
   assert.doesNotMatch(html,/<script[^>]+(?:three|voy3d)/i);
   assert.doesNotMatch(html,/<link[^>]+(?:three|3d\/topology)/i);
   assert.doesNotMatch(sw,/\/3d\//);

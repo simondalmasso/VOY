@@ -23,6 +23,16 @@ class LruChunkCache{
 }
 function fallbackTo2D(onFallback,reason='unsupported_webgl2'){onFallback?.(reason);return {ok:false,reason}}
 function versionedUrl(input,base=location.href){const url=new URL(input,base);url.searchParams.set('v',BUILD_ID);return url}
+async function loadBusSprite(map){
+  if(map.hasImage('voy-bus-3d'))return true;
+  try{
+    const image=new Image();image.decoding='async';
+    image.src=versionedUrl('/icons/bus-3d.svg').href;
+    await image.decode();
+    if(!map.hasImage('voy-bus-3d'))map.addImage('voy-bus-3d',image,{pixelRatio:2});
+    return map.hasImage('voy-bus-3d');
+  }catch{return false}
+}
 function canUseWebGL2(){const probe=document.createElement('canvas');let context=null;try{context=probe.getContext('webgl2')}catch{}if(!context)return false;try{context.getExtension('WEBGL_lose_context')?.loseContext()}catch{}probe.width=0;probe.height=0;return true}
 function llProjectFactory(center){const latM=111320,lonM=111320*Math.cos(Number(center.lat)*Math.PI/180);return ([lon,lat])=>[(Number(lon)-Number(center.lon))*lonM,(Number(lat)-Number(center.lat))*latM]}
 function resolveQualityProfile(requested='auto'){
@@ -176,7 +186,7 @@ export async function activateVoyUrbanMap3D({
          verifiedGeometry:entry.verifiedGeometry}
       );
       return presented.render&&['realtime','predicted'].includes(presented.temporal_state)
-       ?[{type:'Feature',properties:{temporal_state:presented.temporal_state},
+       ?[{type:'Feature',properties:{temporal_state:presented.temporal_state,...(Number.isFinite(entry.displayFrame?.bearing)?{bearing:entry.displayFrame.bearing}:{})},
           geometry:{type:'Point',coordinates:[presented.position.lon,presented.position.lat]}}]
        :[];
     })});
@@ -242,6 +252,7 @@ export async function activateVoyUrbanMap3D({
       timeout=setTimeout(()=>resolve({ok:false,reason:'urban_map_timeout'}),12000);
       map.once('style.load',async()=>{
         try{
+          const busSpritePromise=loadBusSprite(map);
           // Load four content-addressed PMTiles shards of the Overture/OSM city dataset.
           // Heights are visual massing, not surveyed measurements.
           const dataset=await fetch(versionedUrl('/data/santa-fe-3d/manifest.json'),{cache:'force-cache'})
@@ -288,13 +299,22 @@ export async function activateVoyUrbanMap3D({
             paint:{'line-color':'#10263f','line-width':10,'line-opacity':0.98}});
           map.addLayer({id:'voy-3d-selected-route-line',type:'line',source:'voy-3d-selected-route',
             paint:{'line-color':'#00d7ff','line-width':5.5,'line-opacity':1}});
+          const hasBusSprite=await busSpritePromise;
           map.addSource('voy-3d-transport',{type:'geojson',data:transportData(transport)});
-          map.addLayer({id:'voy-3d-transport-markers',type:'circle',source:'voy-3d-transport',
+          const transportCircleLayer={id:'voy-3d-transport-markers',type:'circle',source:'voy-3d-transport',
             paint:{
               'circle-radius':5,'circle-stroke-width':1.5,'circle-stroke-color':'#0b1518',
               'circle-color':['match',['get','temporal_state'],
                 'realtime','#36d7ff','predicted','#ffb54a','#aebdc2']
-            }});
+            }};
+          if(hasBusSprite)transportCircleLayer.filter=['!', ['has','bearing']];
+          map.addLayer(transportCircleLayer);
+          if(hasBusSprite)map.addLayer({id:'voy-3d-transport-icons',type:'symbol',source:'voy-3d-transport',
+            filter:['has','bearing'],
+            layout:{'icon-image':'voy-bus-3d','icon-size':0.7,'icon-rotate':['get','bearing'],
+              'icon-rotation-alignment':'map','icon-pitch-alignment':'viewport',
+              'icon-allow-overlap':true,'icon-ignore-placement':true},
+            paint:{'icon-opacity':['match',['get','temporal_state'],'realtime',1,'predicted',0.72,0.5]}});
           mount.dataset.urban3d='ready';
           mount.dataset.buildingCount=String(geometries.length);
           mount.dataset.mapBased='true';

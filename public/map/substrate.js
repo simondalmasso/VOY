@@ -273,6 +273,9 @@ export function createMapSubstrate({
     } else {
       entry.element.classList.remove('is-vector');
       if (entry.mlMarker) { try { entry.mlMarker.remove(); } catch {} entry.mlMarker = null; }
+      // MapLibre writes its own translate() to the element's inline transform. Clear it
+      // before returning to raster's left/top positioning, or every marker drifts twice.
+      entry.element.style.removeProperty('transform');
       if (!entry.element.isConnected) tilesEl.appendChild(entry.element);
     }
   }

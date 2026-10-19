@@ -4,12 +4,14 @@ import { readFile } from 'node:fs/promises';
 
 const read = async name => readFile(new URL('../' + name, import.meta.url), 'utf8');
 
-test('GPS truth HUD exposes status accessibly but renders only a state dot', async () => {
+test('GPS truth status stays accessible but has no visible dot or pill', async () => {
   const app = await read('public/app.js');
   const html = await read('public/index.html');
   const css = await read('public/styles.css');
   assert.doesNotMatch(app, /La fuente responde; sin posiciones actuales/);
   assert.doesNotMatch(html, /Tiempo real no disponible en esta cobertura/);
+  assert.match(html, /id="truth-pill" class="truth-pill sr-only"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.match(css, /#truth-pill\.sr-only\{[^}]*clip-path:inset\(50%\)[^}]*\}/);
   assert.match(app, /truthPill\.setAttribute\('aria-label',\s*accessibleStatus\)/);
   assert.match(app, /truthLabel\.hidden\s*=\s*true/);
   assert.match(app, /truthMeta\.hidden\s*=\s*true/);
