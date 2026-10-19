@@ -178,13 +178,21 @@ function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAt
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transportEntities:current3DTransportEntities()})}
 function update3DGpsStatus(){
  const now=Date.now();
+ const selectedLine=String(busLinePicker.value||'').trim();
  const fresh=trackerStore.entities().filter(entity=>classifyObservation(entity.observation,now).state==='realtime');
  const sourceFresh=state.gpsStatus==='live'&&now-state.gpsLastLiveAt<=20000;
+ const lineLabel=selectedLine?labelSantaFeLine(selectedLine):'';
  const copy=fresh.length
    ?'Mapa 3D · GPS EN VIVO · '+fresh.length+' '+(fresh.length===1?'vehículo observado':'vehículos observados')
-   :sourceFresh
-     ?'Mapa 3D · Fuente GPS activa · sin posiciones actuales confirmadas'
-     :'Mapa 3D · Sin posiciones GPS en vivo · recorridos publicados';
+   :!selectedLine
+     ?'Mapa 3D · GPS en vivo: elegí una línea · recorridos publicados'
+     :sourceFresh
+       ?'Mapa 3D · '+lineLabel+' · fuente GPS activa, sin posiciones confirmadas'
+       :state.gpsStatus==='no_current_positions'
+         ?'Mapa 3D · '+lineLabel+' · sin posiciones GPS actuales'
+         :state.gpsStatus==='source_unavailable'
+           ?'Mapa 3D · '+lineLabel+' · fuente GPS no disponible'
+           :'Mapa 3D · '+lineLabel+' · GPS sin confirmar · recorrido publicado';
  if(map3dStatus.textContent!==copy)map3dStatus.textContent=copy;
 }
 function activate2D(message=''){
@@ -687,7 +695,7 @@ async function pollSantaFeGps(){
       for(const obs of payload.observations)trackerStore.ingest(obs);
     }else state.gpsStatus=payload?.status==='no_current_positions'?'no_current_positions':'source_unavailable';
     syncTrackerOverlays();sync3DTopology();update3DGpsStatus();updateTruthPill();setSheetSummary();updateBusLineMeta();
-  }catch{state.gpsStatus='source_unavailable';setSheetSummary()}
+  }catch{state.gpsStatus='source_unavailable';update3DGpsStatus();updateTruthPill();updateBusLineMeta();setSheetSummary()}
   finally{sfGpsPolling=false}
 }
 setTimeout(()=>{if(busLinePicker.value)pollSantaFeGps()},600);
