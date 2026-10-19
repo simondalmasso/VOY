@@ -148,7 +148,8 @@ export function createMapSubstrate({
     canvasEl.hidden = true;
     tilesEl.classList.remove('is-underlay');
     tilesEl.hidden = mode === '3d';
-    // raster keeps rendering: selection/facts/truth are DOM-owned and untouched
+    // Raster tiles are created only after the vector path has failed.
+    if (!rasterCenter && center) renderRaster(center, { label: 'Mapa de VOY', showPin: false });
     onVectorFailed(reason);
     resyncOverlayElements();
     updateAttribution();
@@ -157,7 +158,7 @@ export function createMapSubstrate({
   function upgradeToVector(coords) {
     if (vectorPromise) return vectorPromise;
     if (substrate === 'vector_failed' || substrate === 'vector') return Promise.resolve(substrate === 'vector');
-    if (!vectorConf || vectorConf.enabled === false) return Promise.resolve(false);
+    if (!vectorConf || vectorConf.enabled === false) { vectorFailed('vector_disabled'); return Promise.resolve(false); }
     if (String(vectorConf.maplibre_version) !== '6.11.2') { vectorFailed('version_not_pinned'); return Promise.resolve(false); }
     try {
       const probe = document.createElement('canvas');
@@ -184,7 +185,7 @@ export function createMapSubstrate({
         vectorFailed('style_host_not_allowed');
         return false;
       }
-      const startCenter = coords && Number.isFinite(Number(coords.lon)) ? [Number(coords.lon), Number(coords.lat)] : [-60.7050, -31.6520];
+      const startCenter = center ? [center.lon, center.lat] : [-60.7050, -31.6520];
       // MapLibre needs a laid-out container: keep it invisible but dimensioned
       // (visibility keeps layout; [hidden] display:none would give width 0).
       canvasEl.hidden = false;
@@ -570,8 +571,11 @@ export function createMapSubstrate({
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
     if (inVector()) {
       map.jumpTo({ center: [center.lon, center.lat] });
+    } else if (mode === '2d' && substrate === 'vector_failed') {
+      renderRaster({ lat: center.lat, lon: center.lon }, { label, showPin });
     } else if (mode === '2d') {
-      renderRaster(center, { label, showPin });
+      // Vector is the sole normal startup path; do not paint raster tiles first.
+      void upgradeToVector(center).catch(() => { vectorFailed('vector_init_rejected'); });
     }
   }
 
