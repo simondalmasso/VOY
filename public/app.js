@@ -177,8 +177,14 @@ function has3DContext(){
 function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transportEntities:current3DTransportEntities()})}
 function update3DGpsStatus(){
- const live=state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000;
- const copy='Mapa 3D · Santa Fe centro · recorridos publicados · '+(live?'GPS reciente':'sin vehículos en vivo');
+ const now=Date.now();
+ const fresh=trackerStore.entities().filter(entity=>classifyObservation(entity.observation,now).state==='realtime');
+ const sourceFresh=state.gpsStatus==='live'&&now-state.gpsLastLiveAt<=20000;
+ const copy=fresh.length
+   ?'Mapa 3D · GPS EN VIVO · '+fresh.length+' '+(fresh.length===1?'vehículo observado':'vehículos observados')
+   :sourceFresh
+     ?'Mapa 3D · Fuente GPS activa · sin posiciones actuales confirmadas'
+     :'Mapa 3D · Sin posiciones GPS en vivo · recorridos publicados';
  if(map3dStatus.textContent!==copy)map3dStatus.textContent=copy;
 }
 function activate2D(message=''){
