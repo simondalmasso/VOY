@@ -549,8 +549,23 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 }
 
 
-/* ORDER097: remove the standalone GPS dot from the map UI while preserving its live accessible status. */
-#truth-pill.sr-only{position:absolute!important;display:block!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;min-height:0!important;margin:-1px!important;padding:0!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;background:transparent!important;box-shadow:none!important}
+/* MAP-FIRST city/mode context: compact, visible, source-truthful map controls. */
+.transit-context-control{display:grid;grid-template-columns:auto minmax(112px,1fr);align-items:center;gap:5px 8px;width:min(286px,54vw);padding:9px 10px;border:1px solid var(--hud-line);border-radius:14px;background:var(--hud-panel);color:var(--hud-ink);box-shadow:var(--shadow-soft);backdrop-filter:blur(16px)}
+.transit-context-control label{font-size:10px;font-weight:750;color:var(--muted);letter-spacing:.02em}
+.transit-context-control select{width:100%;min-width:0;min-height:38px;padding:0 28px 0 9px;border:1px solid var(--hud-line);border-radius:9px;background:var(--surface);color:var(--text);font:700 12px/1.2 system-ui,sans-serif}
+.transit-context-control p{grid-column:1/-1;margin:2px 0 0;font-size:10px;line-height:1.35;color:var(--muted);max-width:42ch}
+.transit-context-control select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.truth-pill .truth-copy{display:flex}
+.truth-pill #truth-label:not([hidden]){display:block}
+.truth-pill #truth-meta:not([hidden]){display:block}
+@media(max-width:700px){
+  .transit-context-control{width:min(224px,57vw);grid-template-columns:1fr;gap:3px 6px;padding:6px 8px;border-radius:12px}
+  .transit-context-control label{font-size:9px}
+  .transit-context-control select{min-height:36px;font-size:11px}
+  .transit-context-control p{font-size:9px}
+  .truth-pill{max-width:39vw;padding:5px 8px;font-size:10.5px;gap:5px}
+  .truth-meta{max-width:34vw}
+}
 
 
 /* ORDER098: remove the entire top brand bar; keep map mode controls accessible. */
@@ -572,3 +587,12 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 }
 .tracker-marker.is-gps-train .tracker-bus-icon{display:none}
 .tracker-marker.is-gps-bus.is-selected::before,.tracker-marker.is-gps-train.is-selected::before{background-color:transparent}
+
+/* Multicity map HUD: preserve touch targets and keep both controls inside narrow viewports. */
+.transit-context-control,.truth-pill{box-sizing:border-box}
+@media(max-width:700px){
+  .map-hud{gap:8px}
+  .truth-pill{max-width:44vw;min-width:0}
+  .transit-context-control{width:min(44vw,172px);min-width:0}
+  .transit-context-control select{min-height:44px}
+}

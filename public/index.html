@@ -9,6 +9,8 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/app-icon-192.png">
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+  <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
 
 <link rel="stylesheet" href="/styles.css?v=__BUILD_ID__">
 </head>
@@ -30,15 +32,30 @@
     <div id="map-tiles" class="map-tiles" aria-hidden="true"></div>
     <div id="map-canvas" class="map-canvas" hidden></div>
     <div id="map-3d-layer" class="map-3d-layer" aria-hidden="true" hidden></div>
-    <div class="map-hud" aria-label="Estado del mapa">
-      <p id="truth-pill" class="truth-pill sr-only" role="status" aria-live="polite" aria-label="Estado GPS desconocido" title="Estado GPS desconocido" data-state="unknown">
-        <span class="truth-icon" aria-hidden="true">●</span>
-        <span class="truth-copy" hidden>
-          <span id="truth-label" hidden></span>
+    <div class="map-hud" aria-label="Estado y cobertura del mapa">
+      <p id="truth-pill" class="truth-pill" role="status" aria-live="polite" aria-label="Estado GPS desconocido" title="Estado GPS desconocido" data-state="no_coverage">
+        <span class="truth-icon" aria-hidden="true">◍</span>
+        <span class="truth-copy">
+          <span id="truth-label">Estado en vivo no integrado</span>
           <span id="truth-meta" class="truth-meta" hidden></span>
         </span>
       </p>
-
+      <div class="transit-context-control" aria-label="Ciudad y transporte">
+        <label for="city-picker">Ciudad</label>
+        <select id="city-picker" aria-label="Ciudad del mapa">
+          <option value="santa-fe">Santa Fe</option>
+          <option value="parana">Paraná</option>
+          <option value="rosario">Rosario</option>
+          <option value="mendoza">Mendoza</option>
+          <option value="caba">Buenos Aires</option>
+        </select>
+        <label for="transport-mode-picker">Transporte</label>
+        <select id="transport-mode-picker" aria-label="Tipo de transporte">
+          <option value="bus">Colectivos</option>
+          <option value="train">Trenes</option>
+        </select>
+        <p id="transit-context-status" role="status" aria-live="polite">Santa Fe · colectivos; GPS solo si la fuente entrega posiciones actuales.</p>
+      </div>
     </div>
     <div id="bus-line-control" class="bus-line-control" hidden>
       <label for="bus-line-picker">Líneas de colectivo · recorridos</label>

@@ -11,13 +11,10 @@ const CORE=[
   '/icons/app-icon.svg',
   '/icons/app-icon-192.png',
   '/icons/app-icon-512.png',
-  '/icons/bus-transport-icons8.svg',
   '/tracker/store.js?v='+BUILD_ID,
   '/tracker/observations.js?v='+BUILD_ID,
-  '/tracker/fixtures.js?v='+BUILD_ID,
   '/map/substrate.js?v='+BUILD_ID,
-  '/transit/line-picker.js?v='+BUILD_ID,
-  '/transit/santa-fe-lines.json?v='+BUILD_ID
+  '/transit/line-picker.js?v='+BUILD_ID
 ];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
