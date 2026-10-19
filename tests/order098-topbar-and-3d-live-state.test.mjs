@@ -15,6 +15,6 @@ test('ORDER098 3D status explicitly distinguishes verified live vehicles from ro
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(app, /classifyObservation\(entity\.observation,now\)\.state==='realtime'/);
   assert.match(app, /GPS EN VIVO/);
-  assert.match(app, /sin posiciones actuales confirmadas/);
-  assert.match(app, /Sin posiciones GPS en vivo · recorridos publicados/);
+  assert.match(app, /sin posiciones confirmadas/);
+  assert.match(app, /GPS en vivo: elegí una línea/);
 });
