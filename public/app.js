@@ -79,7 +79,9 @@ function updateTruthPill(){
   } else if(state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000){
     entry=TRUTH_NETWORK_LIVE;
     datasetState='realtime';
-    const live=trackerStore.entities().filter(entity=>entity.observation.temporal_state==='realtime').length;
+    const live=trackerStore.entities().filter(entity=>
+      entity.observation.temporal_state==='realtime'&&matchesSelectedGpsLine(entity.observation)
+    ).length;
     accessibleStatus=`GPS de colectivos en vivo; ${live} vehículos observados`;
   } else if(state.gpsStatus==='no_current_positions'){
     entry=TRUTH_STATES.no_positions;
@@ -135,7 +137,12 @@ function currentBusNetworkGeometries(){
   const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;
   return state.busNetworkSelectedGeometries.length&&trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)<=30000?state.busNetworkSelectedGeometries:[];
 }
+let busNetworkLoadStarted=false;
 async function loadSantaFeBusNetwork(){
+  if(state.busNetwork||busNetworkLoadStarted)return;
+  busNetworkLoadStarted=true;
+  const controlWasOpen=!busLineControl.hidden;
+  busLineMeta.textContent='Cargando recorridos publicados…';
   try{
     const response=await fetch('/transit/santa-fe-lines.json?v='+encodeURIComponent(CLIENT_BUILD_ID),{cache:'force-cache'});
     if(!response.ok)throw new Error('bus_network_unavailable');
@@ -149,16 +156,21 @@ async function loadSantaFeBusNetwork(){
     for(const line of lines){const option=document.createElement('option');option.value=line;option.textContent=labelSantaFeLine(line);busLinePicker.appendChild(option)}
     const savedLine=localStorage.getItem('voy.sf.line')||'';
     if(savedLine&&lines.includes(savedLine)){busLinePicker.value=savedLine;state.busNetworkSelectedGeometries=geometriesForSantaFeLine(payload.routes,savedLine)}else{busLinePicker.value='';state.busNetworkSelectedGeometries=[]}
-    busLineControl.hidden=true;
-    quickLines.setAttribute('aria-expanded','false');
+    busLineControl.hidden=!controlWasOpen;
+    quickLines.setAttribute('aria-expanded',String(controlWasOpen));
     updateBusLineMeta();
-  }catch{state.busNetwork=null;state.busNetworkGeometries=[]}
+  }catch{
+    state.busNetwork=null;state.busNetworkGeometries=[];busNetworkLoadStarted=false;
+    busLineMeta.textContent='Recorridos no disponibles; abrí Líneas para reintentar.';
+  }
   syncTrackerOverlays();
 }
 
 // ---------- 2D/3D mode (existing lazy Three architecture preserved) ----------
 function current3DTransportEntities(){
-  return trackerStore.transportEntries().filter(entity=>entity.next?.temporal_state==='realtime').map(entity=>({...entity,displayFrame:trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches})}));
+  return trackerStore.transportEntries().filter(entity=>
+    entity.next?.temporal_state==='realtime'&&matchesSelectedGpsLine(entity.next)
+  ).map(entity=>({...entity,displayFrame:trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches})}));
 }
 function currentSelectedRouteGeometry(){
   const trackerSelection=trackerStore.selected();
@@ -179,7 +191,9 @@ function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.t
 function update3DGpsStatus(){
  const now=Date.now();
  const selectedLine=String(busLinePicker.value||'').trim();
- const fresh=trackerStore.entities().filter(entity=>classifyObservation(entity.observation,now).state==='realtime');
+ const fresh=selectedLine?trackerStore.entities().filter(entity=>
+   String(entity.observation.line||'').trim()===selectedLine&&
+   classifyObservation(entity.observation,now).state==='realtime'):[];
  const sourceFresh=state.gpsStatus==='live'&&now-state.gpsLastLiveAt<=20000;
  const lineLabel=selectedLine?labelSantaFeLine(selectedLine):'';
  const copy=fresh.length
@@ -246,18 +260,28 @@ map3dLayer.addEventListener('pointerdown',()=>{trackerStore.userPanSuspend();upd
 // ---------- TrackerView ----------
 const trackerStore=createTrackerStore();
 
+function matchesSelectedGpsLine(observation){
+  if(observation?.synthetic_fixture===true||observation?.observed_position_only!==true)return true;
+  const selectedLine=String(busLinePicker.value||'').trim();
+  return Boolean(selectedLine)&&String(observation.line||'').trim()===selectedLine;
+}
 function trackerMarkerModels(){
   const center=substrate.getCenter()||DEFAULT_MAP_CENTER;
-  const entities=trackerStore.nearby(center);
+  const entities=trackerStore.nearby(center).filter(entity=>matchesSelectedGpsLine(entity.observation));
   const models=[];
   for(const entity of entities){
     const frame=trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches});
     const kind=frame.temporal_state==='predicted'?'predicted':frame.temporal_state;
     if(!frame.render||!frame.position)continue;
     const cls=classifyObservation(entity.observation,Date.now());
+    const observedPosition=entity.observation.observed_position_only===true;
+    const vehicleHint=String(entity.observation.vehicle_type||entity.observation.transport_mode||entity.observation.mode||'').toLowerCase();
+    const sourceHint=String(entity.observation.source_id||entity.observation.source||'').toLowerCase();
+    const vehicleType=/train|rail|tren|ferrovi/.test(vehicleHint)?'train':
+      (/bus|colect|omnibus/.test(vehicleHint)||sourceHint==='sf_gps_cuandopasa')?'bus':'unknown';
     models.push({
       id:entity.id,kind,lat:frame.position.lat,lon:frame.position.lon,selected:trackerStore.selected()?.id===entity.id,
-      gpsVehicle:entity.observation.observed_position_only===true,bearing:frame.bearing,
+      gpsVehicle:observedPosition,vehicleType:observedPosition?vehicleType:null,bearing:frame.bearing,
       displayInterpolated:frame.display_interpolated===true,
       label:markerLabel(entity,frame,cls)
     });
@@ -297,9 +321,23 @@ function syncTrackerOverlays(){
 }
 function trackerTick(){
   if(document.hidden)return;
-  if(trackerStore.entities().length===0)return;
+  const entities=trackerStore.entities();
+  const selected=trackerStore.selected();
+  if(state.mapMode==='3d'&&entities.length===0){update3DGpsStatus();return}
+  if(entities.length===0)return;
+  const needsAnimationCheck=(state.mapMode==='2d'&&!selected&&trackerStore.follow()!=='following')||
+    (state.mapMode==='3d'&&!selected);
+  let interpolating=false;
+  if(needsAnimationCheck){
+    for(const entity of entities){
+      if(trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches}).display_interpolated){
+        interpolating=true;break;
+      }
+    }
+  }
+  if(state.mapMode==='2d'&&!selected&&trackerStore.follow()!=='following'&&!interpolating)return;
+  if(state.mapMode==='3d'&&!selected&&!interpolating){update3DGpsStatus();return;}
   if(state.mapMode==='2d'){
-    const selected=trackerStore.selected();
     if(trackerStore.follow()==='following'&&selected){
       const frame=trackerStore.displayFrame(selected.id,{reducedMotion:reducedMotionMedia.matches});
       if(frame.render&&frame.position)substrate.focusTo(frame.position);
@@ -664,14 +702,20 @@ function updateBusLineMeta(){
 }
 busLinePicker.addEventListener('change',()=>{
   if(busLinePicker.value)localStorage.setItem('voy.sf.line',busLinePicker.value);else localStorage.removeItem('voy.sf.line');
+  state.gpsStatus='not_integrated';state.gpsLastLiveAt=0;
+  const selectedGps=trackerStore.selected();
+  if(selectedGps&&!matchesSelectedGpsLine(selectedGps.entity.observation))trackerStore.clearSelection();
   state.busNetworkSelectedGeometries=geometriesForSantaFeLine(state.busNetwork?.routes,busLinePicker.value);
   updateBusLineMeta();
+  update3DGpsStatus();
   syncTrackerOverlays();sync3DTopology();
   // gpsStatus starts as not_integrated before the first worker response; the enabled flag is authoritative after a real response.
   if(busLinePicker.value&&sfGpsEnabled)pollSantaFeGps();
 });
 renderInitialMap();
-loadSantaFeBusNetwork();
+busLinePicker.addEventListener('focus',loadSantaFeBusNetwork);
+busLinePicker.addEventListener('pointerdown',loadSantaFeBusNetwork);
+if(localStorage.getItem('voy.sf.line'))loadSantaFeBusNetwork();
 setSheetSummary();
 // Fail-closed native GPS polling; unconfigured deployments stop after the first response.
 let sfGpsPolling=false,sfGpsEnabled=true;
@@ -679,24 +723,34 @@ async function pollSantaFeGps(){
   if(!sfGpsEnabled||sfGpsPolling||state.fixtureOn||document.hidden||!String(busLinePicker.value||'').trim())return;
   const center=substrate.getCenter()||DEFAULT_MAP_CENTER;
   if(trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)>30000)return;
+  const selectedLineAtRequest=String(busLinePicker.value||'').trim();
+  if(!selectedLineAtRequest)return;
   sfGpsPolling=true;
   try{
     // Line filter (picker short_name): the worker polls that line's stops and
     // filters arrivals by the line code, so markers track the selected line only.
-    const selectedLine=String(busLinePicker.value||'').trim();
-    if(!selectedLine)return;
+    const selectedLine=selectedLineAtRequest;
     const gpsUrl='/api/transit/santa-fe/vehicles?line='+encodeURIComponent(selectedLine);
     const response=await fetch(gpsUrl,{cache:'no-store',signal:AbortSignal.timeout(4500)});
     if(!response.ok)throw new Error('gps_gateway_unavailable');
     const payload=await response.json();
+    if(String(busLinePicker.value||'').trim()!==selectedLine)return;
     if(payload?.status==='not_integrated'){sfGpsEnabled=false;state.gpsStatus='not_integrated'}
     else if(payload?.ok&&payload?.status==='live'&&Array.isArray(payload.observations)){
       state.gpsStatus='live';state.gpsLastLiveAt=Date.now();state.gpsSourceId=payload.source_id||state.gpsSourceId;
       for(const obs of payload.observations)trackerStore.ingest(obs);
     }else state.gpsStatus=payload?.status==='no_current_positions'?'no_current_positions':'source_unavailable';
     syncTrackerOverlays();sync3DTopology();update3DGpsStatus();updateTruthPill();setSheetSummary();updateBusLineMeta();
-  }catch{state.gpsStatus='source_unavailable';update3DGpsStatus();updateTruthPill();updateBusLineMeta();setSheetSummary()}
-  finally{sfGpsPolling=false}
+  }catch{
+    if(String(busLinePicker.value||'').trim()===selectedLineAtRequest){
+      state.gpsStatus='source_unavailable';update3DGpsStatus();updateTruthPill();updateBusLineMeta();setSheetSummary();
+    }
+  }finally{
+    sfGpsPolling=false;
+    const currentLine=String(busLinePicker.value||'').trim();
+    if(sfGpsEnabled&&currentLine&&currentLine!==selectedLineAtRequest&&!document.hidden)
+      setTimeout(()=>pollSantaFeGps(),0);
+  }
 }
 setTimeout(()=>{if(busLinePicker.value)pollSantaFeGps()},600);
 setInterval(pollSantaFeGps,15000);

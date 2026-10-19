@@ -36,3 +36,6 @@
 
 /data/santa-fe-3d/manifest.json
   Cache-Control: public, max-age=31536000, immutable
+
+/data/santa-fe-3d/*.pmtiles
+  Cache-Control: public, max-age=31536000, immutable

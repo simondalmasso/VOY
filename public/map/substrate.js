@@ -331,7 +331,8 @@ export function createMapSubstrate({
       seen.add(model.id);
       const entry = ensureMarker(model.id, model.kind, model.label);
       entry.element.classList.toggle('is-selected', model.selected === true);
-      entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true);
+      entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true && model.vehicleType === 'bus');
+      entry.element.classList.toggle('is-gps-train', model.gpsVehicle === true && model.vehicleType === 'train');
       entry.element.classList.toggle('is-interpolating', model.displayInterpolated === true);
       if (Number.isFinite(Number(model.bearing))) entry.element.style.setProperty('--gps-bearing', `${Number(model.bearing)}deg`);
       else entry.element.style.removeProperty('--gps-bearing');
