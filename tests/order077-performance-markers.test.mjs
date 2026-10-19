@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
+import { normalizeObservation } from '../public/tracker/observations.js';
 
 const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
@@ -74,4 +75,16 @@ test('ORDER077: changing selected line cannot render stale GPS pins or accept an
   assert.ok(app.includes("if(String(busLinePicker.value||'').trim()!==selectedLine)return;"));
   assert.match(app, /currentLine!==selectedLineAtRequest/);
   assert.match(app, /if\(selectedGps&&!matchesSelectedGpsLine\(selectedGps\.entity\.observation\)\)trackerStore\.clearSelection\(\)/);
+});
+
+test('ORDER077: explicit bus/train identity survives GPS observation normalization', () => {
+  const normalized = normalizeObservation({
+    id: 'vehicle-type-fixture', source_id: 'sf_gps_cuandopasa',
+    temporal_state: 'realtime', observed_at: new Date().toISOString(),
+    lat: -31.65061, lon: -60.71, observed_position_only: true, line: '9',
+    vehicle_type: 'train', transport_mode: 'rail', mode: 'train'
+  });
+  assert.equal(normalized.vehicle_type, 'train');
+  assert.equal(normalized.transport_mode, 'rail');
+  assert.equal(normalized.mode, 'train');
 });
