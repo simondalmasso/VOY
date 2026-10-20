@@ -33,7 +33,7 @@ async function loadVehicleSprite(map,imageId,path){
     return map.hasImage(imageId);
   }catch{return false}
 }
-const loadBusSprite=map=>loadVehicleSprite(map,'voy-bus-3d','/transit/markers/bus-side.png');
+const loadBusSprite=map=>loadVehicleSprite(map,'voy-bus-3d','/transit/markers/bus-top.png');
 const loadTrainSprite=map=>loadVehicleSprite(map,'voy-train-3d','/transit/markers/train-side.png');
 function canUseWebGL2(){const probe=document.createElement('canvas');let context=null;try{context=probe.getContext('webgl2')}catch{}if(!context)return false;try{context.getExtension('WEBGL_lose_context')?.loseContext()}catch{}probe.width=0;probe.height=0;return true}
 function llProjectFactory(center){const latM=111320,lonM=111320*Math.cos(Number(center.lat)*Math.PI/180);return ([lon,lat])=>[(Number(lon)-Number(center.lon))*lonM,(Number(lat)-Number(center.lat))*latM]}

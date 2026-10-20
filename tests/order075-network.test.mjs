@@ -42,7 +42,7 @@ test('ORDER075 scrub/follow/truth-pill perform zero Worker calls by wiring',asyn
   assert.ok(trackerStart>0&&trackerEnd>trackerStart,'tracker wiring region must exist');
   const trackerRegion=app.slice(trackerStart,trackerEnd);
   const sheetStart=app.indexOf('---------- bottom sheet ----------');
-  const sheetEnd=app.indexOf('---------- vector upgrade');
+  const sheetEnd=app.indexOf('---------- vector map startup; raster is retained only as failure fallback');
   assert.ok(sheetStart>0&&sheetEnd>sheetStart,'sheet wiring region must exist');
   const sheetRegion=app.slice(sheetStart,sheetEnd);
   const pillStart=app.indexOf('function updateTruthPill');

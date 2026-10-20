@@ -1,0 +1,122 @@
+{
+  "sourceCommit": "6aecf8f4a0875df6c125f571c2bce1f50d3511b1",
+  "workingTreeClean": true,
+  "gitStatus": "",
+  "fixtureOnly": true,
+  "cloudflareApiCalls": 0,
+  "viewports": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 900,
+      "layout": {
+        "mapVisible": true,
+        "horizontalOverflow": false,
+        "fixtureBannerVisible": true,
+        "markers": 4,
+        "mapMode": "2d",
+        "substrateState": "vector"
+      },
+      "bearingChecks": [
+        {
+          "id": "visual-north",
+          "expected": 0,
+          "actualFrame": 0,
+          "actualCss": 0,
+          "frameError": 0,
+          "cssError": 0
+        },
+        {
+          "id": "visual-east",
+          "expected": 90,
+          "actualFrame": 90,
+          "actualCss": 90,
+          "frameError": 0,
+          "cssError": 0
+        },
+        {
+          "id": "visual-south",
+          "expected": 180,
+          "actualFrame": 180,
+          "actualCss": 180,
+          "frameError": 0,
+          "cssError": 0
+        },
+        {
+          "id": "visual-west",
+          "expected": 270,
+          "actualFrame": 270,
+          "actualCss": 270,
+          "frameError": 0,
+          "cssError": 0
+        }
+      ],
+      "movementPixels": 5,
+      "screenshot": "artifacts-live\\order104-browser-visual\\gps-headings-desktop.png",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "apiCalls": [],
+      "injectedCenter": {
+        "lat": -31.6333,
+        "lon": -60.7
+      }
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844,
+      "layout": {
+        "mapVisible": true,
+        "horizontalOverflow": false,
+        "fixtureBannerVisible": true,
+        "markers": 4,
+        "mapMode": "2d",
+        "substrateState": "vector"
+      },
+      "bearingChecks": [
+        {
+          "id": "visual-north",
+          "expected": 0,
+          "actualFrame": 0,
+          "actualCss": 0,
+          "frameError": 0,
+          "cssError": 0
+        },
+        {
+          "id": "visual-east",
+          "expected": 90,
+          "actualFrame": 90,
+          "actualCss": 90,
+          "frameError": 0,
+          "cssError": 0
+        },
+        {
+          "id": "visual-south",
+          "expected": 180,
+          "actualFrame": 180,
+          "actualCss": 180,
+          "frameError": 0,
+          "cssError": 0
+        },
+        {
+          "id": "visual-west",
+          "expected": 270,
+          "actualFrame": 270,
+          "actualCss": 270,
+          "frameError": 0,
+          "cssError": 0
+        }
+      ],
+      "movementPixels": 5,
+      "screenshot": "artifacts-live\\order104-browser-visual\\gps-headings-mobile.png",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "apiCalls": [],
+      "injectedCenter": {
+        "lat": -31.6333,
+        "lon": -60.7
+      }
+    }
+  ],
+  "pass": true
+}

@@ -196,5 +196,6 @@ test('line-first GPS UX has no all-lines option and persists only an explicit se
   assert.match(app, /!String\(busLinePicker\.value\|\|['"]['"]\)\.trim\(\)/);
   assert.match(app, /const gpsUrl='\/api\/transit\/santa-fe\/vehicles\?line='/);
   assert.match(app, /localStorage\.getItem\(['"]voy\.sf\.line['"]/);
-  assert.match(css, /max-width:170px/);
+  assert.match(css, /\.bus-line-control\{[^}]*width:min\(286px,calc\(100vw - 24px\)\)/);
+  assert.match(css, /@media\(max-width:700px\)\{\.bus-line-control\{[^}]*width:min\(286px,calc\(100vw - 24px\)\)/);
 });

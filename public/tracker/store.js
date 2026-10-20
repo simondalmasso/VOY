@@ -6,7 +6,36 @@ import { normalizeObservation, classifyObservation, REALTIME_FRESHNESS_MS, REALT
 export const TRAIL_MAX_OBSERVATIONS = 32;
 export const TRAIL_MAX_AGE_MS = 120000;
 export const MAX_TRACKER_ENTITIES = 16;
-export const MAX_NEARBY_MARKERS = 12;
+export const MAX_NEARBY_MARKERS = 8;
+export const NEARBY_RADIUS_METERS = 5000;
+
+function transportModeOf(observation) {
+  if (!observation || typeof observation !== 'object') return null;
+  const hints = [observation.vehicle_type, observation.transport_mode, observation.mode]
+    .map(value => {
+      const hint = String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      if (/train|rail|tren|ferrovi/.test(hint)) return 'train';
+      if (/bus|colect|omni|autobus/.test(hint)) return 'bus';
+      return null;
+    })
+    .filter(Boolean);
+  const sourceId = String(observation.source_id || observation.source || '').trim().toLowerCase();
+  if (sourceId === 'sf_gps_cuandopasa') hints.push('bus');
+  const distinct = [...new Set(hints)];
+  return distinct.length === 1 ? distinct[0] : null;
+}
+
+export function matchesTransportMode(observation, mode) {
+  const expected = mode === 'bus' || mode === 'train' ? mode : null;
+  return expected !== null && transportModeOf(observation) === expected;
+}
+
+export function shouldPollGpsLine(line, now, lastPollByLine, intervalMs = 30000) {
+  const key = String(line ?? '').trim();
+  if (!key || !Number.isFinite(now) || !Number.isFinite(intervalMs) || intervalMs < 0) return false;
+  const last = lastPollByLine?.get(key);
+  return !Number.isFinite(last) || now - last >= intervalMs;
+}
 
 function distanceMeters(a,b){
   const rad=value=>Number(value)*Math.PI/180;
@@ -178,12 +207,23 @@ export function createTrackerStore({now=()=>Date.now(),presentTransportEntity=nu
     };
   }
 
-  function nearby(center,{limit=MAX_NEARBY_MARKERS}={}){
+  function nearby(center,{limit=MAX_NEARBY_MARKERS,radiusMeters=NEARBY_RADIUS_METERS,filter=()=>true}={}){
     if(!center||!Number.isFinite(Number(center.lat))||!Number.isFinite(Number(center.lon)))return[];
-    const rows=entityList().map(entity=>({entity,distance:distanceMeters(center,entity.observation)})).sort((a,b)=>a.distance-b.distance);
-    const picked=rows.slice(0,limit).map(row=>row.entity);
+    const cap=Math.max(0,Number.isFinite(Number(limit))?Math.floor(Number(limit)):MAX_NEARBY_MARKERS);
+    const radius=Math.max(0,Number.isFinite(Number(radiusMeters))?Number(radiusMeters):NEARBY_RADIUS_METERS);
+    const accepts=entity=>{try{return typeof filter!=='function'||filter(entity)===true}catch{return false}};
+    const rows=entityList()
+      .filter(accepts)
+      .map(entity=>({entity,distance:distanceMeters(center,entity.observation)}))
+      .filter(row=>Number.isFinite(row.distance)&&row.distance<=radius)
+      .sort((a,b)=>a.distance-b.distance);
+    const picked=rows.slice(0,cap).map(row=>row.entity);
     const selectedEntity=selectedId?entities.get(selectedId):null;
-    if(selectedEntity&&!picked.some(entity=>entity.id===selectedId))picked[Math.min(picked.length,limit-1)]=selectedEntity;
+    // An explicit user selection is allowed to remain visible outside the automatic radius.
+    if(selectedEntity&&accepts(selectedEntity)&&cap>0&&!picked.some(entity=>entity.id===selectedId)){
+      if(picked.length<cap)picked.push(selectedEntity);
+      else picked[picked.length-1]=selectedEntity;
+    }
     return picked;
   }
 
