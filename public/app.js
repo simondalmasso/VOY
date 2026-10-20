@@ -493,13 +493,19 @@ function updateTransitControlAvailability(){
   const center=substrate.getCenter()||state.mapCenter||DEFAULT_MAP_CENTER;
   const busMode=state.activeTransportMode==='bus';
   const hasCoverage=trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)<=30000;
-  if(busLineSelection)busLineSelection.hidden=!busMode;
-  if(busLinePicker)busLinePicker.disabled=busMode&&!hasCoverage;
+  const selectionHidden=!busMode;
+  if(busLineSelection&&busLineSelection.hidden!==selectionHidden)busLineSelection.hidden=selectionHidden;
+  const pickerDisabled=busMode&&!hasCoverage;
+  if(busLinePicker&&busLinePicker.disabled!==pickerDisabled)busLinePicker.disabled=pickerDisabled;
   if(busMode&&!hasCoverage){
-    transitContextStatus.textContent='No hay una fuente GPS de colectivos integrada cerca de esta ubicación; no se muestran vehículos de otras zonas.';
-    busLineMeta.textContent='Cobertura local no disponible';
+    const unavailableMessage='No hay una fuente GPS de colectivos integrada cerca de esta ubicación; no se muestran vehículos de otras zonas.';
+    if(transitContextStatus.textContent!==unavailableMessage)transitContextStatus.textContent=unavailableMessage;
+    const coverageMessage='Cobertura local no disponible';
+    if(busLineMeta.textContent!==coverageMessage)busLineMeta.textContent=coverageMessage;
   }else if(busMode&&transitContextStatus.textContent.startsWith('No hay una fuente GPS de colectivos integrada')){
-    transitContextStatus.textContent='Recorridos publicados y GPS confirmado solo donde existe una fuente local.';
+    const availableMessage='Recorridos publicados y GPS confirmado solo donde existe una fuente local.';
+    if(transitContextStatus.textContent!==availableMessage)transitContextStatus.textContent=availableMessage;
+    updateBusLineMeta();
   }
 }
 function toggleBusLineControl(){
@@ -574,6 +580,31 @@ function writeSuggestionCache(key,payload,now=Date.now()){suggestionCache.delete
 function invalidateSuggestionOriginContext(){state.originRevision+=1;suggestionCache.clear()}
 function trainRadarDistanceMeters(a,b){const rad=n=>Number(n)*Math.PI/180,dLat=rad(Number(b.lat)-Number(a.lat)),dLon=rad(Number(b.lon)-Number(a.lon)),la1=rad(a.lat),la2=rad(b.lat),q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*6371000*Math.asin(Math.min(1,Math.sqrt(q)))}
 async function apiJson(url,options={}){const response=await fetch(url,options);let payload={};try{payload=await response.json()}catch{}if(!response.ok){const error=new Error(payload.error||`http_${response.status}`);error.status=response.status;error.payload=payload;throw error}return payload}
+const REVERSE_LOCATION_CACHE_TTL_MS=60_000;
+const REVERSE_LOCATION_CACHE_MAX=8;
+const reverseLocationCache=new Map();
+const reverseLocationInFlight=new Map();
+function reverseLocationCacheKey(lat,lon){return Number(lat).toFixed(4)+','+Number(lon).toFixed(4)}
+async function resolveReverseLocation(lat,lon){
+  const key=reverseLocationCacheKey(lat,lon),now=Date.now(),cached=reverseLocationCache.get(key);
+  if(cached&&now-cached.storedAt<=REVERSE_LOCATION_CACHE_TTL_MS){
+    reverseLocationCache.delete(key);reverseLocationCache.set(key,cached);
+    return cached.candidate;
+  }
+  if(cached)reverseLocationCache.delete(key);
+  const existing=reverseLocationInFlight.get(key);if(existing)return existing;
+  const promise=apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:Number(lat),lon:Number(lon)})})
+    .then(payload=>{
+      const candidate=normalizeResolvedCandidate(payload.candidate);
+      if(!candidate)throw new Error('invalid_reverse');
+      reverseLocationCache.set(key,{storedAt:Date.now(),candidate});
+      while(reverseLocationCache.size>REVERSE_LOCATION_CACHE_MAX)reverseLocationCache.delete(reverseLocationCache.keys().next().value);
+      return candidate;
+    })
+    .finally(()=>{if(reverseLocationInFlight.get(key)===promise)reverseLocationInFlight.delete(key)});
+  reverseLocationInFlight.set(key,promise);
+  return promise;
+}
 
 function clearSuggestions(){suggestions.replaceChildren();suggestions.hidden=true;destinationInput.setAttribute('aria-expanded','false');destinationInput.removeAttribute('aria-activedescendant');state.destinationCandidates=[];state.destinationActiveIndex=-1}
 function renderSuggestions(candidates,showNational=false){
@@ -722,7 +753,44 @@ async function restoreGrantedLocation(){
     }
   }catch{}
 }
-$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{renderMap({lat:Number(position.coords.latitude),lon:Number(position.coords.longitude)},'Mapa cerca de tu ubicación',false);updateTransitControlAvailability();try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=true;originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
+let locationResolutionInFlight=false;
+function finishLocationLookup(){
+  locationResolutionInFlight=false;
+  quickLocation.disabled=false;
+  $('#use-location').disabled=false;
+}
+$('#use-location').addEventListener('click',()=>{
+  if(locationResolutionInFlight)return;
+  if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}
+  locationResolutionInFlight=true;
+  quickLocation.disabled=true;
+  $('#use-location').disabled=true;
+  setStatus('Buscando tu ubicación…');
+  try{
+    navigator.geolocation.getCurrentPosition(async(position)=>{
+      const lat=Number(position.coords.latitude),lon=Number(position.coords.longitude);
+      renderMap({lat,lon},'Mapa cerca de tu ubicación',false);
+      updateTransitControlAvailability();
+      try{
+        const candidate=await resolveReverseLocation(lat,lon);
+        state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=true;
+        originLabel.textContent=candidate.locality?.name?'Tu ubicación · '+candidate.locality.name:'Tu ubicación';
+        $('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;
+        $('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();
+        await refreshTrainRadar();
+        if(state.destination)await refreshMobilityComputation();
+        else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local');
+      }catch{setStatus('No pudimos ubicarte ahora.','error')}
+      finally{finishLocationLookup()}
+    },()=>{
+      setStatus('Podés elegir un origen manualmente.');
+      finishLocationLookup();
+    },{enableHighAccuracy:false,timeout:8000,maximumAge:0});
+  }catch{
+    setStatus('Podés elegir un origen manualmente.');
+    finishLocationLookup();
+  }
+});
 $('#clear-location').addEventListener('click',()=>{state.origin=null;invalidateSuggestionOriginContext();state.locationGranted=false;state.mobilityComputation=null;state.selectedRouteMode=null;clearTrainRadar();clearMap();originInput.value='';originLabel.textContent='Sin origen elegido';$('#clear-location').hidden=true;$('#use-location').hidden=false;$('#manual-origin').hidden=false;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination){renderMap(state.destination.coordinates);renderOptions();setStatus('Elegí un origen para calcular recorridos y precios.')}else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')});
 
 async function refreshMobilityComputation(){
