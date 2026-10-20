@@ -23,3 +23,9 @@
 - Desktop 1440×900 and mobile 390×844 both pass with four synthetic GPS markers, all visible, no horizontal overflow, no browser console errors, no page errors, and zero same-origin /api/* calls.
 - Cardinal heading checks: north 0°, east 90°, south 180°, west 270°. Both the tracker frame and computed CSS rotation match each expected heading with 0° error.
 - A new measured GPS fix moves the rendered marker by 5 CSS pixels during the observation window in both viewports. Synthetic-fixture banner remains visible; no real fleet data is represented.
+
+## Dependency audit
+
+- Upgraded the development-only Wrangler CLI from 4.125.0 to 4.151.2.
+- This clears the four high-severity findings previously reported through the Wrangler development dependency tree (Miniflare, sharp and undici).
+- Full dependency-tree npm audit now reports 0 vulnerabilities; the production-only audit also reports 0.
