@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 test('3D transport with a measured bearing uses compact first-party bus and train PNG sprites', async () => {
   const renderer = await readFile(new URL('../public/3d/voy3d.js', import.meta.url), 'utf8');
-  assert.match(renderer, /bus-side\.png/);
+  assert.match(renderer, /bus-top\.png/);
   assert.match(renderer, /train-side\.png/);
   assert.match(renderer, /map\.addImage\(imageId,image,\{pixelRatio:2\}\)/);
   assert.match(renderer, /id:'voy-3d-transport-icons',type:'symbol'/);
@@ -15,7 +15,7 @@ test('3D transport with a measured bearing uses compact first-party bus and trai
   assert.match(renderer, /'icon-pitch-alignment':'viewport'/);
   assert.match(renderer, /Number\.isFinite\(entry\.displayFrame\?\.bearing\)/);
   assert.match(renderer, /bearing:entry\.displayFrame\.bearing/);
-  for (const name of ['bus-side.png', 'train-side.png']) {
+  for (const name of ['bus-top.png', 'train-side.png']) {
     const image = await readFile(new URL('../public/transit/markers/' + name, import.meta.url));
     assert.deepEqual([...image.subarray(0, 8)], [137,80,78,71,13,10,26,10]);
     assert.ok(image.byteLength < 5 * 1024);
@@ -30,8 +30,8 @@ test('3D transport without a measured bearing keeps the truthful circle fallback
   assert.match(renderer, /'circle-color':\['match',\['get','temporal_state'\]/);
 });
 
-test('2D live bus glyph shares the black-and-yellow VOY visual language', async () => {
+test('2D live bus glyph uses the Gemini PNG and rotates by measured bearing', async () => {
   const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  assert.match(css, /\.tracker-bus-icon\{[^}]*background:#111820;/);
-  assert.match(css, /\.tracker-marker\.is-gps-bus::before\{[^}]*background:#ffe600;/);
+  assert.match(css, /background-image:url\('\/transit\/markers\/bus-top\.png\?v=__BUILD_ID__'\)/);
+  assert.match(css, /\.tracker-marker\.is-gps-bus::before\{[^}]*transform:rotate\(var\(--gps-bearing,0deg\)\)/);
 });

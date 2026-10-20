@@ -572,8 +572,9 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 
 /* ORDER-077: lightweight top-down vehicle silhouettes for live 2D markers. */
 .tracker-marker.is-gps-bus::before{
-  width:24px;height:36px;border:0;border-radius:0;box-shadow:none;background-color:transparent;
+  width:20px;height:40px;border:0;border-radius:0;box-shadow:none;background-color:transparent;
   background-image:url('/transit/markers/bus-top.png?v=__BUILD_ID__');background-position:center;background-size:contain;background-repeat:no-repeat;
+  transform:rotate(var(--gps-bearing,0deg));transform-origin:center;
 }
 .tracker-marker.is-gps-bus .tracker-bus-icon{display:none}
 .tracker-marker.is-gps-train::before{

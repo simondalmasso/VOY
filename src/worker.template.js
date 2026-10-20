@@ -2173,7 +2173,7 @@ function sfGpsLineScope(lineFilter){
   return {routes,lineCodes,codes:strideSample(codes,SF_GPS_STOPS_PER_LINE)};
 }
 // Citywide scope: one rotating stop per route (deterministic per minute), so a
-// 15 s poll cycle observes a bounded, honest sample of the network.
+// 30 s poll cycle observes a bounded, honest sample of the network.
 function sfGpsCitywideScope(now){
   const minute=Math.floor(now/60000);
   const codes=[];

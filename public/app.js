@@ -1,6 +1,6 @@
 import { APP_CONFIG } from './runtime-config.js?v=__BUILD_ID__';
 import { isSafeOfficialHandoff, isSafeExternalNavigationUrl, buildExternalNavigationUrl, normalizeResolvedCandidate, normalizeDestinationSuggestion, normalizeMobilityDecision, normalizeMobilityComputation } from './contracts.js?v=__BUILD_ID__';
-import { createTrackerStore, TRAIL_MAX_OBSERVATIONS, matchesTransportMode } from './tracker/store.js?v=__BUILD_ID__';
+import { createTrackerStore, TRAIL_MAX_OBSERVATIONS, matchesTransportMode, shouldPollGpsLine } from './tracker/store.js?v=__BUILD_ID__';
 import { classifyObservation, ageLabel } from './tracker/observations.js?v=__BUILD_ID__';
 import { createMapSubstrate } from './map/substrate.js?v=__BUILD_ID__';
 import { listSantaFeLines, geometriesForSantaFeLine, labelSantaFeLine } from './transit/line-picker.js?v=__BUILD_ID__';
@@ -21,6 +21,8 @@ function hasSantaFeBusCoverage(center=null){
 const SUGGEST_DEBOUNCE_MS=400;
 const SUGGEST_CACHE_TTL_MS=45000;
 const SUGGEST_CACHE_MAX=20;
+const SF_GPS_POLL_INTERVAL_MS=30000;
+const FIXTURE_LABEL='FIXTURE DEMO · no producción';
 const suggestionCache=new Map();
 const suggestionInFlight=new Map();
 
@@ -826,6 +828,7 @@ if(localStorage.getItem('voy.sf.line'))loadSantaFeBusNetwork();
 setSheetSummary();
 // Fail-closed native GPS polling; unconfigured deployments stop after the first response.
 let sfGpsPolling=false,sfGpsEnabled=true;
+const sfGpsLastPollByLine=new Map();
 async function pollSantaFeGps(){
   if(state.activeTransportMode!=='bus'||!hasSantaFeBusCoverage())return;
   if(!sfGpsEnabled||sfGpsPolling||state.fixtureOn||document.hidden||!String(busLinePicker.value||'').trim())return;
@@ -833,7 +836,10 @@ async function pollSantaFeGps(){
   if(trainRadarDistanceMeters(center,DEFAULT_MAP_CENTER)>30000)return;
   const selectedLineAtRequest=String(busLinePicker.value||'').trim();
   if(!selectedLineAtRequest)return;
+  const pollStartedAt=Date.now();
+  if(!shouldPollGpsLine(selectedLineAtRequest,pollStartedAt,sfGpsLastPollByLine,SF_GPS_POLL_INTERVAL_MS))return;
   sfGpsPolling=true;
+  sfGpsLastPollByLine.set(selectedLineAtRequest,pollStartedAt);
   try{
     // Line filter (picker short_name): the worker polls that line's stops and
     // filters arrivals by the line code, so markers track the selected line only.
@@ -861,7 +867,8 @@ async function pollSantaFeGps(){
   }
 }
 setTimeout(()=>{if(busLinePicker.value)pollSantaFeGps()},600);
-setInterval(pollSantaFeGps,15000);
+setInterval(pollSantaFeGps,SF_GPS_POLL_INTERVAL_MS);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollSantaFeGps()});
 updateTruthPill();
 // Default to the reliable 2D map; urban 3D and its PMTiles stay lazy until explicit user selection.
 activate2D();

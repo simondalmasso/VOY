@@ -30,6 +30,13 @@ export function matchesTransportMode(observation, mode) {
   return expected !== null && transportModeOf(observation) === expected;
 }
 
+export function shouldPollGpsLine(line, now, lastPollByLine, intervalMs = 30000) {
+  const key = String(line ?? '').trim();
+  if (!key || !Number.isFinite(now) || !Number.isFinite(intervalMs) || intervalMs < 0) return false;
+  const last = lastPollByLine?.get(key);
+  return !Number.isFinite(last) || now - last >= intervalMs;
+}
+
 function distanceMeters(a,b){
   const rad=value=>Number(value)*Math.PI/180;
   const dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon);
