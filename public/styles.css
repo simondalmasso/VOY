@@ -596,3 +596,15 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
   .transit-context-control{width:min(44vw,172px);min-width:0}
   .transit-context-control select{min-height:44px}
 }
+
+/* ORDER099 — line picker is an upward popover owned by the Lines action, never a free-floating map panel. */
+.quick-lines-wrap{position:relative;display:flex;align-items:stretch;flex:0 0 auto;min-width:0}
+.quick-lines-wrap>.map-quick-action{height:100%}
+.bus-line-control{position:absolute;top:auto;bottom:calc(100% + 8px);left:50%;z-index:60;display:flex;flex-direction:column;gap:7px;width:min(270px,calc(100vw - 24px));max-width:calc(100vw - 24px);padding:10px;border:1px solid var(--hud-line);border-radius:14px;background:var(--hud-panel);color:var(--text);box-shadow:var(--shadow-float);backdrop-filter:blur(18px);transform:translateX(-50%)}
+.bus-line-control[hidden]{display:none}
+.bus-line-control select{width:100%;min-width:0;min-height:44px;padding:9px 12px;border:1px solid var(--hud-line);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;cursor:pointer}
+.bus-line-control span{font:10px/1.4 var(--mono);color:var(--muted)}
+.quick-lines-wrap:has(#bus-line-control[hidden]){z-index:auto}
+.quick-lines-wrap:has(#bus-line-control:not([hidden])){z-index:61}
+@media(max-width:700px){.bus-line-control{left:0;bottom:calc(100% + 8px);width:min(260px,calc(100vw - 16px));max-width:calc(100vw - 16px);transform:none;padding:8px}.bus-line-control select{min-height:44px}.bus-line-control span{display:block}}
+@media(min-width:701px){.bus-line-control{left:50%;width:270px}}

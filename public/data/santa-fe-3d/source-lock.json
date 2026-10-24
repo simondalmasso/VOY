@@ -38,8 +38,9 @@
   "distribution": {
     "provider": "STRACKER same-owner static asset transport",
     "origin": "https://stracker.simondalmasso44.workers.dev",
+    "fallback_origin": "https://voy-app.simondalmasso44.workers.dev",
     "protocol": "query-v1",
-    "verification": "each range requires HTTP 206, exact Content-Range, x-stracker-pmtiles-transport=query-v1, exact pinned size and SHA-256",
+    "verification": "each range requires HTTP 206 and exact Content-Range; STRACKER must attest query-v1, the pinned VOY fallback must return application/vnd.pmtiles, and each full archive must match exact pinned size and SHA-256",
     "timing": "build-time only; VOY runtime requests same-origin Worker assets"
   }
 }

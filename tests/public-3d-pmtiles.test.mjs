@@ -25,6 +25,7 @@ test('citywide 3D manifest pins four bounded content-addressed PMTiles shards an
   assert.deepEqual(manifest.source_attributions, ['© OpenStreetMap contributors', '© Overture Maps Foundation']);
   assert.equal(lock.data_license, 'ODbL-1.0');
   assert.equal(lock.distribution.origin, 'https://stracker.simondalmasso44.workers.dev');
+  assert.equal(lock.distribution.fallback_origin, 'https://voy-app.simondalmasso44.workers.dev');
   assert.equal(lock.distribution.protocol, 'query-v1');
   assert.equal(manifest.asset_paths.length, 4);
   assert.equal(manifest.asset_bounds.length, 4);

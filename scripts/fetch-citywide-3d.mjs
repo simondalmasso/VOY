@@ -12,7 +12,10 @@ const MAX_RANGE = 4 * 1024 * 1024;
 const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
 const lock = JSON.parse(await readFile(LOCK_PATH, 'utf8'));
 const origin = lock.distribution?.origin;
-if (origin !== 'https://stracker.simondalmasso44.workers.dev' || lock.distribution?.protocol !== 'query-v1') {
+const fallbackOrigin = lock.distribution?.fallback_origin;
+if (origin !== 'https://stracker.simondalmasso44.workers.dev' ||
+    fallbackOrigin !== 'https://voy-app.simondalmasso44.workers.dev' ||
+    lock.distribution?.protocol !== 'query-v1') {
   throw new Error('citywide_3d_distribution_lock_invalid');
 }
 if (manifest.city_id !== 'ar-santa-fe-capital' || manifest.layer !== 'santa_fe_buildings_3d' ||
@@ -35,23 +38,46 @@ async function hashFile(file) {
 }
 async function requestRange(assetPath, offset, length, totalSize) {
   const end = offset + length - 1;
-  const url = new URL(assetPath, origin);
-  url.searchParams.set('pmtilesOffset', String(offset));
-  url.searchParams.set('pmtilesLength', String(length));
-  const response = await fetch(url, {
-    headers: { Accept: 'application/vnd.pmtiles, application/octet-stream', Range: 'bytes=' + offset + '-' + end },
-    signal: AbortSignal.timeout(30000),
-  });
-  if (response.status !== 206) throw new Error('citywide_3d_range_http_' + response.status);
-  if (response.headers.get('x-stracker-pmtiles-transport') !== 'query-v1') throw new Error('citywide_3d_transport_header_missing');
-  const contentRange = response.headers.get('content-range') || '';
-  const match = /^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/.exec(contentRange);
-  if (!match || Number(match[1]) !== offset || Number(match[2]) !== end || Number(match[3]) !== totalSize) {
-    throw new Error('citywide_3d_content_range_invalid');
+  const candidates = [
+    { origin, kind: 'stracker' },
+    { origin: fallbackOrigin, kind: 'voy' },
+  ];
+  const failures = [];
+  for (const candidate of candidates) {
+    const url = new URL(assetPath, candidate.origin);
+    url.searchParams.set('pmtilesOffset', String(offset));
+    url.searchParams.set('pmtilesLength', String(length));
+    let response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: 'application/vnd.pmtiles, application/octet-stream', Range: 'bytes=' + offset + '-' + end },
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (error) {
+      failures.push(candidate.kind + '_network_error');
+      continue;
+    }
+    if (response.status !== 206) {
+      failures.push(candidate.kind + '_http_' + response.status);
+      await response.body?.cancel().catch(() => {});
+      continue;
+    }
+    if (candidate.kind === 'stracker' && response.headers.get('x-stracker-pmtiles-transport') !== 'query-v1') {
+      throw new Error('citywide_3d_transport_header_missing');
+    }
+    if (candidate.kind === 'voy' && response.headers.get('content-type')?.split(';')[0].trim() !== 'application/vnd.pmtiles') {
+      throw new Error('citywide_3d_fallback_content_type_invalid');
+    }
+    const contentRange = response.headers.get('content-range') || '';
+    const match = /^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/.exec(contentRange);
+    if (!match || Number(match[1]) !== offset || Number(match[2]) !== end || Number(match[3]) !== totalSize) {
+      throw new Error('citywide_3d_content_range_invalid');
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length !== length) throw new Error('citywide_3d_range_length_invalid');
+    return bytes;
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length !== length) throw new Error('citywide_3d_range_length_invalid');
-  return bytes;
+  throw new Error('citywide_3d_range_sources_unavailable:' + failures.join(','));
 }
 async function downloadArchive(path, size, sha, file) {
   const temp = file + '.part';
