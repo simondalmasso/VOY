@@ -630,3 +630,47 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 .truth-pill[data-state="unknown"] .truth-icon{color:var(--muted)}
 .truth-pill[data-state="no_positions"] .truth-icon{color:var(--muted)}
 .truth-pill[data-state="no_coverage"] .truth-icon{color:var(--muted)}
+
+
+/* ORDER-110 — compact map dashboard. Keep touch targets and action icons intact. */
+:root{--voy-dashboard-max-height:min(36svh,320px)}
+.voy-sheet[data-pane="expanded"]{max-height:var(--voy-dashboard-max-height)}
+.voy-sheet[data-pane="expanded"] .sheet-expanded{max-height:min(26svh,230px)}
+.voy-sheet[data-pane="collapsed"]{max-height:min(136px,24svh)}
+@media(min-width:960px){
+  .voy-sheet[data-pane="expanded"]{max-height:min(36svh,320px)}
+  .voy-sheet[data-pane="collapsed"]{max-height:min(136px,24svh)}
+}
+
+/* The search field's visible capsule is half-height; its input remains a 44px touch target. */
+.destination-control{
+  position:relative;
+  height:44px;
+  min-height:44px;
+  padding-inline:14px;
+  border:0;
+  background:transparent;
+  overflow:visible;
+}
+.destination-control::before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  left:0;right:0;top:9px;
+  height:26px;
+  box-sizing:border-box;
+  border:1px solid var(--hud-line);
+  border-radius:12px;
+  background:var(--hud-panel);
+  pointer-events:none;
+}
+.destination-control:focus-within{border-color:transparent;box-shadow:none}
+.destination-control:focus-within::before{
+  border-color:color-mix(in srgb,var(--accent-2) 65%,var(--line));
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent);
+}
+.destination-control>*{position:relative;z-index:1}
+.destination-control input{height:44px;min-height:44px;padding-block:0;background:transparent;font-size:13px}
+.destination-control .search-icon{width:18px;height:18px;flex:0 0 18px}
+.map-quick-action svg{width:18px;height:18px;flex:0 0 18px}
+.map-quick-view .map-mode-toggle button{width:44px;min-width:44px;height:44px;min-height:44px}
