@@ -45,12 +45,11 @@ const transportModePicker=$('#transport-mode-picker'),transitContextStatus=$('#t
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary');
-const quickLocation=$('#quick-location'),quickLines=$('#quick-lines'),quickLinesLabel=$('#quick-lines-label'),quickOrigin=$('#quick-origin'),quickPlan=$('#quick-plan'),quickPlanLabel=$('#quick-plan-label');
+const quickLocation=$('#quick-location'),quickLines=$('#quick-lines'),quickLinesLabel=$('#quick-lines-label'),quickOrigin=$('#quick-origin');
 const truthPill=$('#truth-pill'),truthLabel=$('#truth-label'),truthMeta=$('#truth-meta'),truthIcon=truthPill?.querySelector('.truth-icon');
 const trackerFacts=$('#tracker-facts'),factsLine=$('#facts-line'),factsClose=$('#facts-close'),factsRows=$('#facts-rows'),fixtureBanner=$('#fixture-banner');
 const followButton=$('#follow-button'),returnToNow=$('#return-to-now'),timeRailWrap=$('#time-rail-wrap'),timeRail=$('#time-rail'),timeRailMeta=$('#time-rail-meta');
 
-const mapModeButtons=[...document.querySelectorAll('[data-map-mode]')];
 
 // ---------- truth states (icon shape + text; never color alone) ----------
 const TRUTH_STATES={
@@ -211,7 +210,6 @@ function has3DContext(){
   }
   return Boolean(currentSelectedRouteGeometry())||hasLocal3DTopologyContext(substrate.getCenter()||DEFAULT_MAP_CENTER);
 }
-function setMapModeButtons(mode){for(const button of mapModeButtons)button.setAttribute('aria-pressed',String(button.dataset.mapMode===mode))}
 function sync3DTopology(){if(state.mapMode==='3d'&&state.threeController)state.threeController.update({routeGeometry:currentSelectedRouteGeometry(),networkGeometries:currentBusNetworkGeometries(),transportEntities:current3DTransportEntities()})}
 function update3DGpsStatus(){
  const now=Date.now();
@@ -244,7 +242,7 @@ function update3DGpsStatus(){
 function activate2D(message=''){
   state.threeActivationRevision+=1;
   state.threeController?.dispose?.();state.threeController=null;
-  state.mapMode='2d';setMapModeButtons('2d');substrate.setCameraMode('2d');substrate.setMode('2d');
+  state.mapMode='2d';substrate.setCameraMode('2d');substrate.setMode('2d');
   if(!substrate.maplibreReady)void startVectorUpgradeOnce();
   map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality?.setAttribute('hidden','');map3dStatus.textContent=message;syncTrackerOverlays();
 }
@@ -276,30 +274,12 @@ async function activate3D(){
     if(activationRevision!==state.threeActivationRevision){controller?.dispose?.();return}
     if(!controller?.ok){state.threeController=null;activate2D('3D no disponible en este equipo; seguimos en 2D.');return}
     state.threeController=controller;
-    state.mapMode='3d';setMapModeButtons('3d');substrate.setMode('3d');map3dLayer.hidden=false;map3dLayer.style.opacity='';map3dAttribution.hidden=false;map3dQuality.hidden=controller.renderer==='MAPLIBRE_URBAN_3D';update3DGpsStatus();sync3DTopology();
+    state.mapMode='3d';substrate.setMode('3d');map3dLayer.hidden=false;map3dLayer.style.opacity='';map3dAttribution.hidden=false;map3dQuality.hidden=controller.renderer==='MAPLIBRE_URBAN_3D';update3DGpsStatus();sync3DTopology();
   }catch(error){
     if(activationRevision!==state.threeActivationRevision)return;
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
 }
-async function activateIso(){
-  const activationRevision=++state.threeActivationRevision;
-  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality?.setAttribute('hidden','');
-  map3dStatus.textContent='Preparando vista isométrica ligera…';
-  if(!substrate.maplibreReady){
-    const ready=await startVectorUpgradeOnce();
-    if(activationRevision!==state.threeActivationRevision)return;
-    if(!ready||!substrate.maplibreReady){activate2D('Vista isométrica no disponible; continuamos en 2D.');return}
-  }
-  if(activationRevision!==state.threeActivationRevision)return;
-  if(!substrate.setCameraMode('isometric')){activate2D('Vista isométrica no disponible; continuamos en 2D.');return}
-  state.mapMode='2d';
-  setMapModeButtons('iso');
-  substrate.setMode('2d');
-  map3dStatus.textContent='Vista isométrica ligera · mapa vectorial';
-  syncTrackerOverlays();
-}
-mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.dataset.mapMode==='iso'?activateIso():activate2D()));
 async function restart3DForRenderPolicy(){if(state.mapMode!=='3d')return;state.threeController?.dispose?.();state.threeController=null;await activate3D()}
 
 reducedMotionMedia.addEventListener?.('change',restart3DForRenderPolicy);
@@ -502,9 +482,6 @@ function setSheetPane(pane){
   sheetToggleLabel.textContent=expanded?'Cerrar panel':'Abrir panel';
   document.querySelector('.sheet-collapsed').hidden=expanded;
   document.querySelector('.sheet-expanded').hidden=!expanded;
-  quickPlan.setAttribute('aria-expanded',String(expanded));
-  quickPlan.setAttribute('aria-label',expanded?'Cerrar planificador':'Abrir planificador');
-  quickPlanLabel.textContent=expanded?'Cerrar':'Más';
 }
 function openSheetPane(pane){setSheetPane(pane==='facts'?'expanded':pane)}
 sheetToggle.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
@@ -559,7 +536,6 @@ quickOrigin.addEventListener('click',()=>{
   setStatus('Para cambiar el origen elegido, tocá “Cambiar” en el panel.','neutral');
   $('#clear-location').focus({preventScroll:true});
 });
-quickPlan.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
 function setSheetSummary(){
   const selected=trackerStore.selected();
   if(selected){
