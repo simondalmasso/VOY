@@ -30,12 +30,12 @@ test('floating map controls are bound to existing actions without adding externa
   assert.match(app, /function toggleBusLineControl\(/);
   assert.match(app, /quickOrigin\.addEventListener\('click'/);
   assert.match(app, /sheetToggle\.addEventListener\('click'/);
-  assert.match(app, /sheetToggle\.addEventListener\('click'/);
-  assert.doesNotMatch(app, /quickPlan|mapModeButtons|activateIso/);
+  assert.doesNotMatch(app, /quickPlan|mapModeButtons/);
   assert.match(html, /id="quick-location"[^>]*aria-label="Usar mi ubicación"/);
   assert.match(html, /id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
   assert.match(html, /id="quick-origin"[^>]*aria-label="Elegir origen"/);
-  assert.match(html, /id="quick-plan"[^>]*aria-label="Abrir planificador"/);
+  assert.match(html, /id="sheet-toggle"[^>]*aria-controls="sheet-body"/);
+  assert.doesNotMatch(html, /id="quick-plan"/);
   assert.doesNotMatch(html, /cuandopasa\.app|href="https?:\/\/(?:www\.)?trackviewer\.app/i);
 });
 
