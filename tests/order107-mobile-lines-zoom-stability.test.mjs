@@ -27,3 +27,14 @@ test('Lines popover keeps semantic expanded state and controls associated with t
   assert.match(app, /quickLines\.addEventListener\('click'/);
   assert.match(app, /busLineControl\.hidden=!open/);
 });
+
+test('choosing a bus line closes the Lines panel so the map is no longer covered', async () => {
+  const app = await read('public/app.js');
+  const start = app.indexOf("busLinePicker.addEventListener('change',()=>{");
+  assert.ok(start >= 0, 'line selection must have a change handler');
+  const end = app.indexOf("\n});", start);
+  assert.ok(end > start, 'line selection handler must be bounded');
+  const handler = app.slice(start, end);
+  assert.match(handler, /busLineControl\.hidden\s*=\s*true/, 'selection closes the picker panel');
+  assert.match(handler, /quickLines\.setAttribute\('aria-expanded','false'\)/, 'accessibility state reports the panel closed');
+});

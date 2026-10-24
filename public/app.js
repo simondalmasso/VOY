@@ -879,6 +879,9 @@ function updateBusLineMeta(){
   busLineMeta.textContent=labelSantaFeLine(selected)+' · '+status;
 }
 busLinePicker.addEventListener('change',()=>{
+  busLineControl.hidden=true;
+  quickLines.setAttribute('aria-expanded','false');
+  quickLines.focus({preventScroll:true});
   if(busLinePicker.value)localStorage.setItem('voy.sf.line',busLinePicker.value);else localStorage.removeItem('voy.sf.line');
   state.gpsStatus='not_integrated';state.gpsLastLiveAt=0;
   const selectedGps=trackerStore.selected();
