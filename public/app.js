@@ -115,17 +115,16 @@ function updateTruthPill(){
     accessibleStatus='Estado GPS desconocido';
   }
   if(truthPill.dataset.state!==datasetState)truthPill.dataset.state=datasetState;
-  truthIcon.textContent=entry.icon;
-  truthLabel.textContent=entry.label||accessibleStatus;
-  truthLabel.hidden=false;
-  truthPill.querySelector('.truth-copy').hidden=false;
+  truthIcon.textContent='●';
+  truthLabel.textContent=accessibleStatus;
+  truthLabel.hidden=true;
+  truthPill.querySelector('.truth-copy').hidden=true;
   if(truthMeta){
-    const detail=state.activeTransportMode==='train'?'Trenes · zona cercana':'Colectivos · zona cercana';
-    truthMeta.textContent=detail;
-    truthMeta.hidden=false;
+    truthMeta.textContent='';
+    truthMeta.hidden=true;
   }
   truthPill.setAttribute('aria-label',accessibleStatus);
-  truthPill.title=accessibleStatus;
+  truthPill.removeAttribute('title');
 }
 
 // ---------- map stage + substrate ----------

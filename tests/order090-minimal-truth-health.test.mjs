@@ -12,8 +12,10 @@ test('MAP-FIRST temporal truth is visible and accessible, including empty and un
   assert.doesNotMatch(html, /id="truth-pill" class="truth-pill sr-only"/);
   assert.doesNotMatch(css, /#truth-pill\.sr-only\{/);
   assert.match(app, /truthPill\.setAttribute\('aria-label',\s*accessibleStatus\)/);
-  assert.match(app, /truthLabel\.hidden\s*=\s*false/);
-  assert.match(app, /truthMeta\.hidden\s*=\s*false/);
+  assert.match(app, /truthLabel\.hidden\s*=\s*true/);
+  assert.match(app, /truthPill\.querySelector\('\.truth-copy'\)\.hidden\s*=\s*true/);
+  assert.match(app, /truthMeta\.hidden\s*=\s*true/);
+  assert.match(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
   assert.match(app, /no_positions:\{icon:'●',label:'Sin posiciones actuales'\}/);
   assert.match(app, /source_unavailable:\{icon:'●',label:'Fuente no disponible'\}/);
   assert.match(app, /entry=TRUTH_STATES\.no_positions/);

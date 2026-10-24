@@ -25,8 +25,11 @@ test('temporal truth is visibly rendered over the map, not screen-reader-only', 
   const app = await read('public/app.js');
   assert.match(html, /id="truth-pill" class="truth-pill"/);
   assert.doesNotMatch(html, /id="truth-pill" class="truth-pill sr-only"/);
-  assert.match(app, /truthLabel\.textContent\s*=\s*entry\.label/);
-  assert.match(app, /truthLabel\.hidden\s*=\s*false/);
+  assert.match(app, /truthIcon\.textContent\s*=\s*['"]●['"]/);
+  assert.match(app, /truthLabel\.hidden\s*=\s*true/);
+  assert.match(app, /truthPill\.querySelector\('\.truth-copy'\)\.hidden\s*=\s*true/);
+  assert.match(css, /\.truth-pill\{[^}]*width:\s*12px[^}]*height:\s*12px/s);
+  assert.match(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
   assert.doesNotMatch(css, /#truth-pill\.sr-only\{position:absolute!important;display:block!important;left:-10000px!important/);
 });
 
