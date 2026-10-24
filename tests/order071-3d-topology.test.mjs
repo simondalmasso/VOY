@@ -9,7 +9,7 @@ const sha256=value=>createHash('sha256').update(value.replace(/\r\n/g,'\n')).dig
 
 test('ORDER071 urban 3D stays opt-in after a reliable 2D first paint',async()=>{
   const [index,app,sw]=await Promise.all([text('public/index.html'),text('public/app.js'),text('public/sw.js')]);
-  assert.match(index,/data-map-mode="2d"[^>]*aria-pressed="true"/);
+  assert.doesNotMatch(index,/data-map-mode|map-mode-toggle|map-quick-view|quick-plan/);
   assert.doesNotMatch(app,/setTimeout\(\(\)=>activate3D\(\),180\)/);
   assert.match(app,/activate2D\(\);/);
   assert.match(app,/if\(!controller\?\.ok\)\{state\.threeController=null;activate2D/);

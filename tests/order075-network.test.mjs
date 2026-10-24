@@ -72,10 +72,11 @@ test('ORDER075 baseline 2D keeps zero Three/topology fetches before opt-in',asyn
   const [html,app,sw]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/sw.js')]);
   assert.doesNotMatch(html,/<script[^>]+(?:three|voy3d)/i);
   assert.doesNotMatch(html,/<link[^>]+(?:three|3d\/topology)/i);
-  assert.match(app,/button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
-  assert.doesNotMatch(html,/data-map-mode=\"3d\"/);
+  assert.doesNotMatch(html,/data-map-mode|map-mode-toggle|map-quick-view/);
   assert.doesNotMatch(sw,/\/3d\//);
   const substrate=await read('public/map/substrate.js');
+  assert.match(substrate,/touchPitch:\s*true/);
+  assert.match(substrate,/touchZoomRotate:\s*true/);
   assert.doesNotMatch(substrate,/three/i);
 });
 

@@ -50,9 +50,10 @@ test('ORDER075 map-first shell exposes temporal truth and transit context visibl
   assert.match(css,/\.truth-pill\{/);
   assert.doesNotMatch(html,/id="city-picker"/);
   const linesStart=html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
-  const mapViewStart=html.indexOf('<div class="map-quick-view"',linesStart);
-  assert.ok(linesStart>=0&&mapViewStart>linesStart,'transport context lives inside Lines');
-  const linesRegion=html.slice(linesStart,mapViewStart);
+  const originStart=html.indexOf('<button id="quick-origin"',linesStart);
+  assert.ok(linesStart>=0&&originStart>linesStart,'transport context lives inside Lines before Origin');
+  const linesRegion=html.slice(linesStart,originStart);
+  assert.doesNotMatch(html,/data-map-mode|map-mode-toggle|map-quick-view|quick-plan/);
   assert.match(linesRegion,/id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
   assert.match(linesRegion,/id="transport-mode-picker"/);
   assert.match(linesRegion,/id="bus-line-picker"/);
@@ -64,9 +65,9 @@ test('ORDER075 map-first shell exposes temporal truth and transit context visibl
   assert.match(app,/truth-icon|truthPill.*dataset\.state|dataset\.state.*truth/i);
 });
 
-test('ORDER075 opt-in urban 3D keeps compact controls, lazy loading and 2D fallback',async()=>{
+test('ORDER075 camera relies on two-finger gestures and retains a 2D failure fallback',async()=>{
   const [html,app,sw]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/sw.js')]);
-  assert.match(html,/data-map-mode="2d"[^>]*aria-pressed="true"/);
+  assert.doesNotMatch(html,/data-map-mode|map-mode-toggle|map-quick-view|quick-plan/);
   assert.doesNotMatch(app,/setTimeout\(\(\)=>activate3D\(\),180\)/);
   assert.match(app,/activate2D\(\);/);
   assert.doesNotMatch(html,/<script[^>]+(?:three|voy3d)/i);
@@ -141,7 +142,10 @@ test('ORDER075 no horizontal overflow at 200% text (layout contracts)',async()=>
 
 test('ORDER075 keyboard can reach map controls, sheet, markers and follow',async()=>{
   const html=await read('public/index.html');
-  assert.match(html,/id="map-mode-toggle"[^>]*role="group"/);
+  assert.match(html,/id="quick-location"/);
+  assert.match(html,/id="quick-lines"/);
+  assert.match(html,/id="quick-origin"/);
+  assert.doesNotMatch(html,/data-map-mode|map-mode-toggle|map-quick-view|quick-plan/);
   assert.match(html,/id="sheet-toggle"[^>]*aria-expanded/);
   assert.match(html,/id="time-rail"[^>]*(?:aria-label|title)/);
   assert.match(html,/id="follow-button"[^>]*type="button"/);

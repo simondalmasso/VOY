@@ -213,7 +213,9 @@ export function createMapSubstrate({
             center: startCenter,
             zoom: zoom + 0.5,
             attributionControl: { compact: true },
-            interactive: true
+            interactive: true,
+            touchPitch: true,
+            touchZoomRotate: true
           });
           for (const gesture of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) {
             map.on(gesture, () => emitUserInteraction('map_' + gesture));
