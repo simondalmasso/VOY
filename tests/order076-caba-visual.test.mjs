@@ -32,7 +32,7 @@ test('ORDER076 map and panels adopt low-chrome night treatment without new asset
   assert.doesNotMatch(css,/\.map-tiles,#map-canvas canvas\{[^}]*grayscale\(/s);
   assert.match(css,/\.voy-sheet\{[^}]*background:var\(--hud-panel\)/s);
   assert.match(css,/\.truth-pill\{[^}]*background:var\(--hud-panel\)/s);
-  assert.match(css,/\.map-mode-toggle\{[^}]*background:var\(--hud-panel\)/s);
+  assert.match(css,/\.map-quick-actions\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)/s);
   assert.match(css,/\.tracker-marker\.is-selected::after\{[^}]*animation:none/s);
   assert.doesNotMatch(css,/scanline|crt-turn|background-music/i);
 });
