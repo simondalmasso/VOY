@@ -91,3 +91,39 @@ test('train mode keeps station catalogue explicitly historical and never invents
   assert.match(app, /no se confirma.*servicio|servicio.*no confirmado/i);
   assert.match(app, /api\/radar\/trains\/nearby/);
 });
+
+
+test('line labels are idempotent when a feed already supplies the Línea prefix', async () => {
+  const { labelSantaFeLine } = await import('../public/transit/line-picker.js');
+  assert.equal(labelSantaFeLine('3'), 'Línea 3');
+  assert.equal(labelSantaFeLine('Línea 3'), 'Línea 3');
+  assert.equal(labelSantaFeLine('Linea 3'), 'Línea 3');
+});
+
+test('compact search preserves a usable touch target while halving the visible field', async () => {
+  const css = await read('public/styles.css');
+  assert.match(css, /\.destination-control::before/);
+  assert.match(css, /\.destination-control\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.destination-control::before\s*\{[^}]*height:\s*26px/s);
+  assert.match(css, /\.destination-control input\s*\{[^}]*min-height:\s*44px/s);
+});
+
+test('the view switch offers lightweight isometric MapLibre instead of Three.js 3D', async () => {
+  const [html, app, substrate] = await Promise.all([
+    read('public/index.html'), read('public/app.js'), read('public/map/substrate.js')
+  ]);
+  assert.match(html, /data-map-mode="iso"[^>]*>Iso(?:métrica)?</);
+  assert.doesNotMatch(html, /data-map-mode="3d"|map-3d-quality/);
+  assert.match(app, /async function activateIso\(/);
+  assert.match(app, /substrate\.setCameraMode\('isometric'\)/);
+  assert.match(app, /button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
+  assert.match(substrate, /function setCameraMode\(/);
+  assert.match(substrate, /pitch:\s*isometric\s*\?\s*55\s*:\s*0/);
+});
+
+test('the compact dashboard keeps the existing quick-action icon dimensions', async () => {
+  const css = await read('public/styles.css');
+  assert.match(css, /--voy-dashboard-max-height:\s*min\(36svh,320px\)/);
+  assert.match(css, /\.map-quick-action svg\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/s);
+  assert.match(css, /\.map-quick-view \.map-mode-toggle button\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s);
+});

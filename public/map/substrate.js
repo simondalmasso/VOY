@@ -576,6 +576,24 @@ export function createMapSubstrate({
     if (mode === '2d') resyncOverlayElements();
   }
 
+  // Lightweight isometric camera reuses the already-loaded MapLibre vector map.
+  // No second renderer or additional topology payload is required.
+  function setCameraMode(nextMode) {
+    if (!inVector()) return false;
+    const isometric = nextMode === 'isometric';
+    try {
+      map.easeTo({
+        pitch: isometric ? 55 : 0,
+        bearing: isometric ? -35 : 0,
+        duration: reducedMotion() ? 0 : 280,
+        essential: true
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function setCenter(coords, { label = 'Mapa', showPin = false } = {}) {
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
     if (inVector()) {
@@ -592,7 +610,7 @@ export function createMapSubstrate({
   function state() { return { substrate, mode, center: getCenter(), markerCount: markers.size }; }
 
   return {
-    renderRaster, upgradeToVector, sync, focusTo, setMode, setCenter, getCenter, state,
+    renderRaster, upgradeToVector, sync, focusTo, setMode, setCameraMode, setCenter, getCenter, state,
     get maplibreReady() { return inVector(); },
     get center() { return getCenter(); },
     dispose() {

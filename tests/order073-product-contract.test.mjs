@@ -14,19 +14,14 @@ test('ORDER073 topology manifest pins the raw input SHA',async()=>{
   assert.equal(manifest.geometry_source.raw_input_sha256,sha256(raw));
 });
 
-test('ORDER073 exposes only Auto Rendimiento Calidad as compact 3D quality tiers',async()=>{
-  const [html,app,renderer]=await Promise.all([text('public/index.html'),text('public/app.js'),text('public/3d/voy3d.js')]);
-  assert.match(html,/id="map-3d-quality"/);
-  for(const value of ['auto','performance','quality'])assert.match(html,new RegExp('value="'+value+'"'));
-  assert.match(app,/map3dQuality\.value/);
-  assert.match(renderer,/QUALITY_PROFILES/);
-  assert.match(renderer,/performance/);
-  assert.match(renderer,/quality/);
-  assert.match(renderer,/profile\.dpr/);
-  assert.match(renderer,/profile\.antialias/);
-  assert.doesNotMatch(renderer,/shadowMap\.enabled\s*=\s*true/);
+test('ORDER073 replaces the 3D quality selector with a lightweight isometric mode',async()=>{
+  const [html,app,substrate]=await Promise.all([text('public/index.html'),text('public/app.js'),text('public/map/substrate.js')]);
+  assert.doesNotMatch(html,/id="map-3d-quality"|data-map-mode="3d"/);
+  assert.match(html,/data-map-mode="iso"[^>]*>Iso</);
+  assert.match(app,/button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
+  assert.match(app,/substrate\.setCameraMode\('isometric'\)/);
+  assert.match(substrate,/pitch: isometric \? 55 : 0/);
 });
-
 test('ORDER073 renderer keeps predicted markers visually distinct from realtime',async()=>{
   const renderer=await text('public/3d/voy3d.js');
   assert.match(renderer,/realtimeMaterial/);

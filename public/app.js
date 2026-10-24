@@ -244,9 +244,9 @@ function update3DGpsStatus(){
 function activate2D(message=''){
   state.threeActivationRevision+=1;
   state.threeController?.dispose?.();state.threeController=null;
-  state.mapMode='2d';setMapModeButtons('2d');substrate.setMode('2d');
+  state.mapMode='2d';setMapModeButtons('2d');substrate.setCameraMode('2d');substrate.setMode('2d');
   if(!substrate.maplibreReady)void startVectorUpgradeOnce();
-  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
+  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality?.setAttribute('hidden','');map3dStatus.textContent=message;syncTrackerOverlays();
 }
 function loadVoy3DModule(){
   return state.threeImportAttempt===0
@@ -282,9 +282,26 @@ async function activate3D(){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
 }
-mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.dataset.mapMode==='3d'?activate3D():activate2D()));
+async function activateIso(){
+  const activationRevision=++state.threeActivationRevision;
+  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality?.setAttribute('hidden','');
+  map3dStatus.textContent='Preparando vista isométrica ligera…';
+  if(!substrate.maplibreReady){
+    const ready=await startVectorUpgradeOnce();
+    if(activationRevision!==state.threeActivationRevision)return;
+    if(!ready||!substrate.maplibreReady){activate2D('Vista isométrica no disponible; continuamos en 2D.');return}
+  }
+  if(activationRevision!==state.threeActivationRevision)return;
+  if(!substrate.setCameraMode('isometric')){activate2D('Vista isométrica no disponible; continuamos en 2D.');return}
+  state.mapMode='2d';
+  setMapModeButtons('iso');
+  substrate.setMode('2d');
+  map3dStatus.textContent='Vista isométrica ligera · mapa vectorial';
+  syncTrackerOverlays();
+}
+mapModeButtons.forEach(button=>button.addEventListener('click',()=>button.dataset.mapMode==='iso'?activateIso():activate2D()));
 async function restart3DForRenderPolicy(){if(state.mapMode!=='3d')return;state.threeController?.dispose?.();state.threeController=null;await activate3D()}
-map3dQuality.addEventListener('change',restart3DForRenderPolicy);
+
 reducedMotionMedia.addEventListener?.('change',restart3DForRenderPolicy);
 // orbiting in 3D is also user interaction: it suspends follow immediately
 map3dLayer.addEventListener('pointerdown',()=>{trackerStore.userPanSuspend();updateFollowUI()});
