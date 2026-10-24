@@ -577,7 +577,7 @@ export function createMapSubstrate({
   }
 
   // Lightweight isometric camera reuses the already-loaded MapLibre vector map.
-  // No second renderer, Three.js scene, or additional topology payload is required.
+  // No second renderer or additional topology payload is required.
   function setCameraMode(nextMode) {
     if (!inVector()) return false;
     const isometric = nextMode === 'isometric';
