@@ -8,7 +8,7 @@ test('ORDER086 keeps urban 3D opt-in and avoids loading the 3D map before select
   assert.ok(app.includes('function startVectorUpgradeOnce(){') && app.includes('substrate.upgradeToVector'), '2D upgrades must share one substrate promise');
   assert.ok(!app.includes('function scheduleVectorUpgrade('), 'the hidden base vector map is not booted on idle');
   const start = app.indexOf('async function activate3D(){');
-  const end = app.indexOf('mapModeButtons.forEach', start);
+  const end = app.indexOf('async function activateIso()', start);
   assert.ok(start >= 0 && end > start, 'urban 3D activation handler must exist');
   const activation = app.slice(start, end);
   assert.ok(!activation.includes('startVectorUpgradeOnce('), '3D startup must not create a competing MapLibre map');
