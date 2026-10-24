@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = async path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
-test('floating sheet keeps search and suggestions above five real map actions', async () => {
+test('floating sheet keeps search and suggestions above three essential map actions', async () => {
   const html = await read('public/index.html');
   const sheetStart = html.indexOf('id="voy-sheet"');
   const sheet = html.slice(sheetStart, html.indexOf('</section>', sheetStart));
@@ -15,10 +15,10 @@ test('floating sheet keeps search and suggestions above five real map actions', 
   assert.ok(search >= 0 && suggestions > search, 'search input and suggestions must remain together');
   assert.ok(bar > suggestions, 'quick actions must sit beneath destination suggestions');
   assert.ok(expanded > bar, 'detailed planner content sits below the quick controls');
-  for (const id of ['quick-location', 'quick-lines', 'quick-origin', 'quick-plan']) {
+  for (const id of ['quick-location', 'quick-lines', 'quick-origin']) {
     assert.ok(sheet.includes('id="' + id + '"'), id + ' must be a real button');
   }
-  assert.match(sheet, /id="map-mode-toggle"[^>]*role="group"/, '2D and 3D remain keyboard-accessible in the floating bar');
+  assert.doesNotMatch(sheet, /quick-plan|data-map-mode|map-mode-toggle|map-quick-view/, 'redundant view and empty More buttons are absent');
   assert.doesNotMatch(sheet, /id="search-chip"/, 'do not retain a redundant hidden search trigger');
 });
 
@@ -30,7 +30,8 @@ test('floating map controls are bound to existing actions without adding externa
   assert.match(app, /function toggleBusLineControl\(/);
   assert.match(app, /quickOrigin\.addEventListener\('click'/);
   assert.match(app, /quickPlan\.addEventListener\('click'/);
-  assert.match(app, /mapModeButtons\.forEach\(button=>button\.addEventListener\('click'/);
+  assert.match(app, /sheetToggle\.addEventListener\('click'/);
+  assert.doesNotMatch(app, /quickPlan|mapModeButtons|activateIso/);
   assert.match(html, /id="quick-location"[^>]*aria-label="Usar mi ubicación"/);
   assert.match(html, /id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
   assert.match(html, /id="quick-origin"[^>]*aria-label="Elegir origen"/);
@@ -43,13 +44,9 @@ test('mobile and desktop sheet dimensions remain floating, bounded and touch acc
   assert.match(css, /\.voy-sheet\[data-pane="collapsed"\]\{[^}]*pointer-events:none\}/);
   assert.match(css, /\.voy-sheet\[data-pane="collapsed"\] \.sheet-body button,/);
   assert.match(css, /\.voy-sheet\{[^}]*left:12px;[^}]*right:12px;[^}]*bottom:calc\(12px \+ env\(safe-area-inset-bottom\)\)/s);
-  assert.match(css, /\.map-quick-actions\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) minmax\(90px,1\.4fr\) minmax\(0,1fr\) minmax\(0,1fr\)/s,
-    'reserve enough width for two accessible map-mode targets');
-  assert.match(css, /\.map-quick-action,\.map-quick-view\{[^}]*min-height:48px/s);
-  assert.match(css, /\.map-quick-view \.map-mode-toggle button\{[^}]*width:44px;min-width:44px;height:44px;min-height:44px/s,
-    'both map mode controls meet the 44 by 44 CSS-pixel target');
-  assert.doesNotMatch(css, /\.map-quick-view \.map-mode-toggle button\{width:25px;min-width:25px\}/,
-    'mobile rules must not shrink the map mode hit targets');
+  assert.match(css, /\.map-quick-actions\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s,
+    'the three remaining actions use all available width');
+  assert.match(css, /\.map-quick-action\{[^}]*min-height:48px/s);
   assert.match(css, /\.destination-control\{[^}]*min-height:52px/s);
   assert.match(css, /\.suggestions\{[^}]*max-height:min\(228px,28svh\)[^}]*overflow:auto/s);
   assert.match(css, /@media\s*\(min-width:\s*960px\)[\s\S]*?\.voy-sheet\{[^}]*left:50%;[^}]*bottom:18px;[^}]*width:min\(680px,calc\(100vw - 48px\)\)/);
