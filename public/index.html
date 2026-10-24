@@ -57,11 +57,6 @@
         <p id="transit-context-status" role="status" aria-live="polite">Santa Fe · colectivos; GPS solo si la fuente entrega posiciones actuales.</p>
       </div>
     </div>
-    <div id="bus-line-control" class="bus-line-control" hidden>
-      <label for="bus-line-picker">Líneas de colectivo · recorridos</label>
-      <select id="bus-line-picker" aria-label="Línea de colectivo" aria-describedby="bus-line-meta"><option value="">Seleccioná una línea</option></select>
-      <span id="bus-line-meta" role="status" aria-live="polite">Recorridos publicados · no es GPS en vivo</span>
-    </div>
     <p id="map-3d-status" class="map-3d-status" aria-live="polite"></p>
     <div id="map-3d-attribution" class="map-3d-attribution" hidden>Vista 3D cartográfica · © OpenStreetMap contributors · © Overture Maps Foundation · alturas visuales publicadas/inferidas</div>
     <div id="map-fallback" class="map-fallback" hidden>Mapa no disponible</div>
@@ -110,10 +105,17 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
           <span>Ubicación</span>
         </button>
-        <button id="quick-lines" class="map-quick-action" type="button" aria-label="Elegir línea de colectivo" aria-expanded="false" aria-controls="bus-line-control" title="Líneas de colectivo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12a3 3 0 0 1 3 3v12a2 2 0 0 1-2 2v2h-2v-2H7v2H5v-2a2 2 0 0 1-2-2V5a3 3 0 0 1 3-3Zm-1 5v6h14V7H5Zm2 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm10 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
-          <span>Líneas</span>
-        </button>
+        <div id="quick-lines-wrap" class="quick-lines-wrap">
+          <button id="quick-lines" class="map-quick-action" type="button" aria-label="Elegir línea de colectivo" aria-expanded="false" aria-controls="bus-line-control" title="Líneas de colectivo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12a3 3 0 0 1 3 3v12a2 2 0 0 1-2 2v2h-2v-2H7v2H5v-2a2 2 0 0 1-2-2V5a3 3 0 0 1 3-3Zm-1 5v6h14V7H5Zm2 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm10 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
+            <span id="quick-lines-label">Líneas</span>
+          </button>
+          <div id="bus-line-control" class="bus-line-control" hidden>
+            <label class="sr-only" for="bus-line-picker">Elegir línea de colectivo</label>
+            <select id="bus-line-picker" aria-label="Línea de colectivo" aria-describedby="bus-line-meta"><option value="">Seleccioná una línea</option></select>
+            <span id="bus-line-meta" role="status" aria-live="polite">Recorridos publicados · no es GPS en vivo</span>
+          </div>
+        </div>
         <div class="map-quick-view" aria-label="Vista del mapa">
           <span class="quick-action-label">Vista</span>
           <div id="map-mode-toggle" class="map-mode-toggle" role="group" aria-label="Vista del mapa">
