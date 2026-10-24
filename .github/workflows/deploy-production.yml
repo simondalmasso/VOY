@@ -1,0 +1,97 @@
+name: VOY protected production deploy
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DEPLOY to deploy the verified current main commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: voy-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'DEPLOY'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Unit regression
+        run: npm test
+
+      - name: Build exact main commit
+        run: npm run build:linux
+
+      - name: Fail closed unless yellow-marker release identity matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const m = JSON.parse(fs.readFileSync('dist/BUILD_MANIFEST.json', 'utf8'));
+          if (m.source_commit !== process.env.GITHUB_SHA) {
+            throw new Error('build_source_mismatch: ' + JSON.stringify(m));
+          }
+          NODE
+          expected='4d1ac2acc49aba15094f452ff15ecf5a57801e933845ba06c7b4b09e4d8fa1c3'
+          actual="$(sha256sum dist/client/transit/markers/bus-top.png | awk '{print $1}')"
+          bytes="$(wc -c < dist/client/transit/markers/bus-top.png | tr -d ' ')"
+          test "$actual" = "$expected" || { echo "Refusing deploy: yellow bus PNG hash mismatch ($actual)"; exit 1; }
+          test "$bytes" = '3769' || { echo "Refusing deploy: yellow bus PNG size mismatch ($bytes)"; exit 1; }
+          echo "SOURCE_COMMIT=$GITHUB_SHA"
+          echo "YELLOW_BUS_PNG_SHA256=$actual"
+          echo "YELLOW_BUS_PNG_BYTES=$bytes"
+
+      - name: Runtime dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Wrangler dry-run
+        run: npx wrangler deploy --config wrangler.jsonc --dry-run --minify
+
+      - name: Deploy production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.jsonc --minify
+
+      - name: Verify live source and original yellow PNG
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://voy-app.simondalmasso44.workers.dev'
+          curl --fail --silent --show-error "$base/api/health?verify=$GITHUB_SHA" -o /tmp/voy-health.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const h = JSON.parse(fs.readFileSync('/tmp/voy-health.json', 'utf8'));
+          if (h.source_commit !== process.env.GITHUB_SHA) {
+            throw new Error('live_source_mismatch: ' + JSON.stringify(h));
+          }
+          console.log('LIVE_SOURCE_COMMIT=' + h.source_commit);
+          console.log('LIVE_VERSION=' + h.version);
+          NODE
+          curl --fail --silent --show-error "$base/transit/markers/bus-top.png?verify=$GITHUB_SHA" -o /tmp/voy-bus-top.png
+          actual="$(sha256sum /tmp/voy-bus-top.png | awk '{print $1}')"
+          bytes="$(wc -c < /tmp/voy-bus-top.png | tr -d ' ')"
+          test "$actual" = '4d1ac2acc49aba15094f452ff15ecf5a57801e933845ba06c7b4b09e4d8fa1c3'
+          test "$bytes" = '3769'
+          echo "LIVE_YELLOW_BUS_PNG_SHA256=$actual"
+          echo "LIVE_YELLOW_BUS_PNG_BYTES=$bytes"
