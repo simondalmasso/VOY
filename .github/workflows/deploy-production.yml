@@ -78,7 +78,31 @@ jobs:
         run: |
           set -euo pipefail
           base='https://voy-app.simondalmasso44.workers.dev'
-          curl --fail --silent --show-error "$base/api/health?verify=$GITHUB_SHA" -o /tmp/voy-health.json
+          live_source=''
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "$base/api/health?verify=$GITHUB_SHA&attempt=$attempt" -o /tmp/voy-health.json; then
+              live_source="$(node - <<'NODE'
+          const fs = require('node:fs');
+          try {
+            const h = JSON.parse(fs.readFileSync('/tmp/voy-health.json', 'utf8'));
+            console.log(h.source_commit || '');
+          } catch {
+            console.log('');
+          }
+          NODE
+          )"
+              if [ "$live_source" = "$GITHUB_SHA" ]; then
+                break
+              fi
+            fi
+            echo "Waiting for deployed source propagation (attempt $attempt/30; got $live_source)"
+            sleep 2
+          done
+          if [ "$live_source" != "$GITHUB_SHA" ]; then
+            echo "live_source_mismatch: expected $GITHUB_SHA got $live_source"
+            cat /tmp/voy-health.json || true
+            exit 1
+          fi
           node - <<'NODE'
           const fs = require('node:fs');
           const h = JSON.parse(fs.readFileSync('/tmp/voy-health.json', 'utf8'));
