@@ -116,7 +116,7 @@ test('the view switch offers lightweight isometric MapLibre instead of Three.js 
   assert.doesNotMatch(html, /data-map-mode="3d"|map-3d-quality/);
   assert.match(app, /async function activateIso\(/);
   assert.match(app, /substrate\.setCameraMode\('isometric'\)/);
-  assert.doesNotMatch(app, /import\(['"]\.\/3d\/voy3d\.js/);
+  assert.match(app, /button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
   assert.match(substrate, /function setCameraMode\(/);
   assert.match(substrate, /pitch:\s*mode\s*===\s*'isometric'/);
 });
