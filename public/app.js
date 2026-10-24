@@ -299,8 +299,11 @@ function matchesSelectedGpsLine(observation){
   return Boolean(selectedLine)&&String(observation.line||'').trim()===selectedLine;
 }
 function trackerMarkerModels(){
+  // Keep live vehicles stable while pinch-zoom changes the map's effective center.
+  // A wider nearby envelope avoids markers popping out at the edge of a zoom gesture;
+  // the store still caps the rendered set and sorts closest vehicles first.
   const center=substrate.getCenter()||DEFAULT_MAP_CENTER;
-  const entities=trackerStore.nearby(center,{filter:entity=>matchesTransportMode(entity.observation,state.activeTransportMode)&&matchesSelectedGpsLine(entity.observation)});
+  const entities=trackerStore.nearby(center,{limit:24,radiusMeters:20000,filter:entity=>matchesTransportMode(entity.observation,state.activeTransportMode)&&matchesSelectedGpsLine(entity.observation)});
   const models=[];
   for(const entity of entities){
     const frame=trackerStore.displayFrame(entity.id,{reducedMotion:reducedMotionMedia.matches});

@@ -472,6 +472,30 @@ html[data-theme="dark"] .map-tile{filter:saturate(.72) brightness(.88) contrast(
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 
+/* MOBILE MAP-FIRST: the Lines picker is a viewport-bounded popover above the dashboard. */
+.voy-sheet:has(#bus-line-control:not([hidden])){z-index:1000}
+.sheet-body:has(#bus-line-control:not([hidden])){overflow:visible}
+.map-quick-actions:has(#bus-line-control:not([hidden])){position:relative;z-index:1001}
+.bus-line-control{
+  box-sizing:border-box;max-width:calc(100vw - 24px);
+  max-height:min(52svh,420px);overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.bus-line-control select{min-height:44px}
+@media(max-width:700px){
+  .bus-line-control{
+    position:fixed;left:12px;right:12px;top:auto;bottom:calc(var(--sheet-collapsed-max) + 20px + env(safe-area-inset-bottom));
+    transform:none;width:auto;max-width:none;max-height:min(54svh,430px);
+    padding:12px;gap:10px;border-radius:16px;z-index:1002;
+  }
+  .bus-line-control select{min-height:48px;font-size:16px;padding:10px 12px}
+  .bus-line-control label{font-size:12px}
+  .bus-line-control span,.bus-line-control p{font-size:11px;line-height:1.45}
+}
+@media(min-width:701px){
+  .bus-line-control{z-index:1002}
+}
+
 /* GPS source truth states: distinguish empty live feed from failed/unintegrated coverage. */
 .truth-pill[data-state="no_positions"] .truth-icon{color:var(--hud-muted)}
 .truth-pill[data-state="source_unavailable"] .truth-icon{color:var(--danger)}

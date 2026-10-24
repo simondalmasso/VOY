@@ -183,9 +183,62 @@ try {
     if(!layout.fixtureBannerVisible)throw new Error(vp.name+' synthetic fixture banner not visible');
     if(layout.markers<4)throw new Error(vp.name+' expected four GPS markers, found '+layout.markers);
     if(apiCalls.length)throw new Error(vp.name+' fixture visual test made same-origin API calls: '+JSON.stringify(apiCalls));
+    // Reproduce the mobile pinch/zoom regression: nearby live markers must not be
+    // discarded merely because the effective map center shifts during zoom.
+    await page.mouse.move(vp.width * 0.48, vp.height * 0.43);
+    const markersBeforeZoom = await page.locator('.tracker-marker.is-gps-bus').count();
+    await page.mouse.wheel(0, -360);
+    await page.waitForTimeout(350);
+    await page.mouse.wheel(0, 520);
+    await page.waitForTimeout(500);
+    const markersAfterZoom = await page.locator('.tracker-marker.is-gps-bus').count();
+    if(markersAfterZoom < Math.min(markersBeforeZoom,4)) throw new Error(vp.name+' live bus markers dropped across zoom: '+markersBeforeZoom+' -> '+markersAfterZoom);
+
+    // Exercise Lines picker while the collapsed dashboard is active, then while
+    // the dashboard is expanded; check real hit-testing, not just CSS visibility.
+    await page.locator('#quick-lines').click();
+    await page.waitForFunction(()=>document.querySelectorAll('#bus-line-picker option').length>1,{timeout:10000});
+    const pickerGeometry = await page.evaluate(()=>{
+      const panel=document.querySelector('#bus-line-control');
+      const r=panel.getBoundingClientRect();
+      const x=Math.min(innerWidth-2,Math.max(2,r.left+r.width/2));
+      const y=Math.min(innerHeight-2,Math.max(2,r.top+Math.min(18,r.height/2)));
+      const hit=document.elementFromPoint(x,y);
+      return {hidden:panel.hidden,rect:{x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right},
+        viewport:{width:innerWidth,height:innerHeight},hitInside:Boolean(hit&&panel.contains(hit)),
+        selectHeight:document.querySelector('#bus-line-picker').getBoundingClientRect().height,
+        optionCount:document.querySelectorAll('#bus-line-picker option').length};
+    });
+    if(pickerGeometry.hidden||pickerGeometry.rect.x<0||pickerGeometry.rect.y<0||pickerGeometry.rect.right>vp.width+1||pickerGeometry.rect.bottom>vp.height+1||!pickerGeometry.hitInside||pickerGeometry.selectHeight<44) {
+      throw new Error(vp.name+' Lines popover not fully tappable in collapsed dashboard: '+JSON.stringify(pickerGeometry));
+    }
+    await page.locator('#quick-plan').click();
+    await page.waitForTimeout(120);
+    const expandedPicker = await page.evaluate(()=>{
+      const panel=document.querySelector('#bus-line-control');
+      const r=panel.getBoundingClientRect();
+      const hit=document.elementFromPoint(r.left+Math.min(24,r.width/2),r.top+Math.min(18,r.height/2));
+      return {pane:document.querySelector('#voy-sheet').dataset.pane,hidden:panel.hidden,
+        rect:{x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom},
+        hitInside:Boolean(hit&&panel.contains(hit)),zIndex:getComputedStyle(document.querySelector('#voy-sheet')).zIndex};
+    });
+    if(expandedPicker.pane!=='expanded'||expandedPicker.hidden||!expandedPicker.hitInside||expandedPicker.rect.x<0||expandedPicker.rect.right>vp.width+1||expandedPicker.rect.bottom>vp.height+1) {
+      throw new Error(vp.name+' Lines popover was clipped/covered by expanded dashboard: '+JSON.stringify(expandedPicker));
+    }
+    await page.locator('#bus-line-picker').selectOption('9');
+    const selectedLineEvidence = await page.evaluate(()=>({
+      selected:document.querySelector('#bus-line-picker').value,
+      persisted:localStorage.getItem('voy.sf.line'),
+      routeSegments:window.__voyDebug.state.busNetworkSelectedGeometries.length
+    }));
+    if(selectedLineEvidence.selected!=='9'||selectedLineEvidence.persisted!=='9'||selectedLineEvidence.routeSegments<1) {
+      throw new Error(vp.name+' selecting line 9 did not persist and load published route geometry: '+JSON.stringify(selectedLineEvidence));
+    }
+    const linesEvidence={linesPicker:pickerGeometry,expandedDashboardPicker:expandedPicker,selectedLine:selectedLineEvidence,zoomMarkers:{before:markersBeforeZoom,after:markersAfterZoom}};
+
     const screenshot=path.join(OUT,'gps-headings-'+vp.name+'.png');
     await page.screenshot({path:screenshot,fullPage:false});
-    report.viewports.push({name:vp.name,width:vp.width,height:vp.height,layout,bearingChecks,movementPixels,screenshot:path.relative(process.cwd(),screenshot),consoleErrors,pageErrors,apiCalls,injectedCenter:injected.center});
+    report.viewports.push({name:vp.name,width:vp.width,height:vp.height,layout,bearingChecks,movementPixels,linesEvidence,screenshot:path.relative(process.cwd(),screenshot),consoleErrors,pageErrors,apiCalls,injectedCenter:injected.center});
     await context.close();
   }
 } catch(error) {
