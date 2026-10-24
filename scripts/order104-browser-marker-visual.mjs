@@ -238,7 +238,7 @@ try {
     if(pickerGeometry.hidden||pickerGeometry.rect.x<0||pickerGeometry.rect.y<0||pickerGeometry.rect.right>vp.width+1||pickerGeometry.rect.bottom>vp.height+1||!pickerGeometry.hitInside||pickerGeometry.selectHeight<44) {
       throw new Error(vp.name+' Lines popover not fully tappable in collapsed dashboard: '+JSON.stringify(pickerGeometry));
     }
-    await page.locator('#quick-plan').click();
+    await page.locator('#sheet-toggle').click();
     await page.waitForTimeout(120);
     const expandedPicker = await page.evaluate(()=>{
       const panel=document.querySelector('#bus-line-control');
