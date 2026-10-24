@@ -48,8 +48,14 @@ test('ORDER075 map-first shell exposes temporal truth and transit context visibl
   assert.doesNotMatch(html,/id="truth-pill" class="truth-pill sr-only"/);
   assert.doesNotMatch(css,/#truth-pill\.sr-only\{/);
   assert.match(css,/\.truth-pill\{/);
-  assert.match(html,/id="city-picker"/);
-  assert.match(html,/id="transport-mode-picker"/);
+  assert.doesNotMatch(html,/id="city-picker"/);
+  const linesStart=html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
+  const mapViewStart=html.indexOf('<div class="map-quick-view"',linesStart);
+  assert.ok(linesStart>=0&&mapViewStart>linesStart,'transport context lives inside Lines');
+  const linesRegion=html.slice(linesStart,mapViewStart);
+  assert.match(linesRegion,/id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
+  assert.match(linesRegion,/id="transport-mode-picker"/);
+  assert.match(linesRegion,/id="bus-line-picker"/);
   assert.match(app,/TRUTH_STATES|truthPill/);
   for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
     assert.ok(app.includes(`'${label}'`)||app.includes(`"${label}"`)||app.includes(label),'missing truth label: '+label);
@@ -84,7 +90,12 @@ test('ORDER075 map substrate: pinned MapLibre + OpenFreeMap with raster fallback
   assert.match(substrate,/onVectorError|styledata-error|error/);
   assert.match(substrate,/attribution/i);
   assert.match(substrate,/OpenStreetMap/);
-  assert.match(substrate,/raster-first|rasterFirst|paintRaster/);
+  const setCenterStart=substrate.indexOf('function setCenter(');
+  const getCenterStart=substrate.indexOf('function getCenter()',setCenterStart);
+  const setCenter=substrate.slice(setCenterStart,getCenterStart);
+  assert.match(setCenter,/void upgradeToVector\(center\)/,'normal 2D startup must enter the vector path first');
+  assert.match(setCenter,/substrate === 'vector_failed'/,'raster is used only after vector failure');
+  assert.doesNotMatch(setCenter,/renderRaster\(center/,'normal startup must not paint raster tiles first');
 });
 
 test('ORDER075 vector failure keeps raster map and tracker facts',async()=>{
@@ -185,5 +196,19 @@ test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
   assert.ok(app.includes('Seguimiento GPS: sujeto a observaciones recientes'));
   assert.ok(app.includes('Recorridos publicados: visibles en el mapa'));
   assert.match(app,/renderInitialMap\(\)/);
-  assert.match(app,/renderMap\(getTransitCity\(\)\.center/);
+  assert.match(app,/function renderInitialMap\(\)\{renderMap\(state\.mapCenter\|\|DEFAULT_MAP_CENTER/);
+  assert.doesNotMatch(app,/getTransitCity|cityPicker/);
+  assert.match(app,/void restoreGrantedLocation\(\)/);
+});
+
+
+test('ORDER108 vector map becomes visible at style readiness instead of waiting for all initial tiles',async()=>{
+  const substrate=await read('public/map/substrate.js');
+  const styleReady=substrate.indexOf("map.once('style.load', () => {");
+  const fullyLoaded=substrate.indexOf("map.on('load', () => finish(true));");
+  assert.ok(styleReady>=0&&fullyLoaded>styleReady,'style readiness handler must run before the full-load handler');
+  const earlyReveal=substrate.slice(styleReady,fullyLoaded);
+  assert.match(earlyReveal,/if\s*\(!settled\)\s*canvasEl\.style\.visibility\s*=\s*''/);
+  assert.match(substrate,/slow connections/);
+  assert.match(substrate,/vectorTimer\s*=\s*setTimeout\(\(\)\s*=>\s*finish\(false\),\s*VECTOR_LOAD_TIMEOUT_MS\)/,'the raster failure fallback timeout must remain intact');
 });

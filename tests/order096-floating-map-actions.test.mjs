@@ -32,7 +32,7 @@ test('floating map controls are bound to existing actions without adding externa
   assert.match(app, /quickPlan\.addEventListener\('click'/);
   assert.match(app, /mapModeButtons\.forEach\(button=>button\.addEventListener\('click'/);
   assert.match(html, /id="quick-location"[^>]*aria-label="Usar mi ubicación"/);
-  assert.match(html, /id="quick-lines"[^>]*aria-label="Elegir línea de colectivo"/);
+  assert.match(html, /id="quick-lines"[^>]*aria-label="Elegir transporte o línea"/);
   assert.match(html, /id="quick-origin"[^>]*aria-label="Elegir origen"/);
   assert.match(html, /id="quick-plan"[^>]*aria-label="Abrir planificador"/);
   assert.doesNotMatch(html, /cuandopasa\.app|href="https?:\/\/(?:www\.)?trackviewer\.app/i);
@@ -57,3 +57,64 @@ test('mobile and desktop sheet dimensions remain floating, bounded and touch acc
 });
 
 // Keep the PR's canonical CI rerun anchored to the normalized UTF-8 source tree.
+
+
+test('line picker popover stays reachable above the collapsed sheet on desktop and mobile', async () => {
+  const css = await read('public/styles.css');
+  assert.match(css, /\.map-quick-lines-wrap\{[^}]*z-index:70/,
+    'the open line picker must stack above the sheet handle');
+  assert.match(css, /\.bus-line-control\{[^}]*pointer-events:auto/,
+    'the popover itself must receive pointer input');
+  assert.match(css, /\.bus-line-selection\{[^}]*pointer-events:auto/,
+    'the line selection region must receive pointer input');
+  assert.match(css, /\.sheet-body:has\(#bus-line-control:not\(\[hidden\]\)\)\{overflow:visible\}/,
+    'the collapsed sheet must not clip the open popover');
+  assert.match(css, /\.bus-line-control\{top:auto;left:0;transform:none;width:min\(190px,calc\(100vw - 24px\)\);max-width:none\}/,
+    'mobile layout must retain the upward anchor instead of pinning the panel below the viewport');
+  assert.doesNotMatch(css, /\.bus-line-control\{top:118px;max-width:190px\}/,
+    'the old mobile top offset put the select outside the viewport');
+});
+
+
+test('map viewport updates avoid repeating unchanged transit-control DOM writes', async () => {
+  const app = await read('public/app.js');
+  assert.match(app, /if\(busLineSelection&&busLineSelection\.hidden!==selectionHidden\)busLineSelection\.hidden=selectionHidden/,
+    'do not rewrite the selector visibility on every map move');
+  assert.match(app, /if\(busLinePicker&&busLinePicker\.disabled!==pickerDisabled\)busLinePicker\.disabled=pickerDisabled/,
+    'do not rewrite the disabled state when coverage has not changed');
+  assert.match(app, /if\(transitContextStatus\.textContent!==unavailableMessage\)transitContextStatus\.textContent=unavailableMessage/,
+    'avoid replacing the same out-of-coverage status on every viewport update');
+  assert.match(app, /if\(busLineMeta\.textContent!==coverageMessage\)busLineMeta\.textContent=coverageMessage/,
+    'avoid re-rendering identical coverage metadata');
+  assert.match(app, /if\(transitContextStatus\.textContent!==availableMessage\)transitContextStatus\.textContent=availableMessage/,
+    'only publish the restored-coverage status when it changes');
+});
+
+
+test('location resolution is single-flight and caches nearby reverse-geocodes briefly', async () => {
+  const app = await read('public/app.js');
+  assert.match(app, /const REVERSE_LOCATION_CACHE_TTL_MS=60_000/);
+  assert.match(app, /const REVERSE_LOCATION_CACHE_MAX=8/);
+  assert.match(app, /const existing=reverseLocationInFlight\.get\(key\);if\(existing\)return existing/);
+  assert.match(app, /reverseLocationCache\.set\(key,\{storedAt:Date\.now\(\),candidate\}\)/);
+  assert.match(app, /let locationResolutionInFlight=false/);
+  assert.match(app, /if\(locationResolutionInFlight\)return/);
+  assert.match(app, /quickLocation\.disabled=true/);
+  assert.match(app, /finally\{finishLocationLookup\(\)\}/);
+});
+
+
+test('release build minifies only generated client assets while keeping the source readable', async () => {
+  const [build, linuxBuild, three] = await Promise.all([
+    read('scripts/build.ps1'), read('scripts/build.sh'), read('public/3d/voy3d.js')
+  ]);
+  assert.match(build, /esbuild dist\\client\\app\.js --minify --target=es2022/);
+  assert.match(build, /esbuild dist\\client\\styles\.css --minify/);
+  assert.match(linuxBuild, /'app\.js', 'es2022'.*'styles\.css'/s);
+  assert.match(linuxBuild, /'--minify'/);
+  assert.match(linuxBuild, /command = \['node_modules\/esbuild\/bin\/esbuild',str\(source\),'--minify'\]/,
+    'Linux must execute the esbuild binary directly, not parse its ELF bytes as JavaScript');
+  assert.doesNotMatch(linuxBuild, /command = \['node','node_modules\/esbuild\/bin\/esbuild'/);
+  assert.match(three, /await import\('\/vendor\/three\.module\.js\?v=__BUILD_ID__'\)/,
+    'the heavy 3D engine must remain lazy instead of entering the initial client bundle');
+});

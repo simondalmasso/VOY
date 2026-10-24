@@ -1,7 +1,7 @@
-// ORDER-075 GLM53 — map substrate controller.
-// Strategy: raster-first instant paint, MapLibre+OpenFreeMap as async vector
-// upgrade, raster as mandatory fallback. Facts/selection/truth live in DOM
-// outside any canvas, so a vector failure never loses tracker state.
+// ORDER-075 — map substrate controller.
+// Strategy: vector-first map startup, MapLibre+OpenFreeMap as the primary surface,
+// raster only after vector failure. Facts/selection/truth live in DOM outside any
+// canvas, so a vector failure never loses tracker state.
 // This module never calls the VOY Worker: external map hosts only.
 // Vector style/tiles/glyphs host: https://tiles.openfreemap.org (public, keyless).
 // Attribution is preserved on both substrates (© OpenStreetMap contributors;)
@@ -80,7 +80,7 @@ export function createMapSubstrate({
   canvasEl.addEventListener('pointercancel', endPointerGesture);
   canvasEl.addEventListener('lostpointercapture', endPointerGesture);
 
-  // ---------- raster: instant first paint + mandatory fallback ----------
+  // ---------- raster fallback: invoked only after vector failure ----------
   function renderRaster(coords, { label = 'Mapa', showPin = false } = {}) {
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
     rasterCenter = { ...center };
@@ -148,7 +148,8 @@ export function createMapSubstrate({
     canvasEl.hidden = true;
     tilesEl.classList.remove('is-underlay');
     tilesEl.hidden = mode === '3d';
-    // raster keeps rendering: selection/facts/truth are DOM-owned and untouched
+    // Raster tiles are created only after the vector path has failed.
+    if (!rasterCenter && center) renderRaster(center, { label: 'Mapa de VOY', showPin: false });
     onVectorFailed(reason);
     resyncOverlayElements();
     updateAttribution();
@@ -157,7 +158,7 @@ export function createMapSubstrate({
   function upgradeToVector(coords) {
     if (vectorPromise) return vectorPromise;
     if (substrate === 'vector_failed' || substrate === 'vector') return Promise.resolve(substrate === 'vector');
-    if (!vectorConf || vectorConf.enabled === false) return Promise.resolve(false);
+    if (!vectorConf || vectorConf.enabled === false) { vectorFailed('vector_disabled'); return Promise.resolve(false); }
     if (String(vectorConf.maplibre_version) !== '6.11.2') { vectorFailed('version_not_pinned'); return Promise.resolve(false); }
     try {
       const probe = document.createElement('canvas');
@@ -184,7 +185,7 @@ export function createMapSubstrate({
         vectorFailed('style_host_not_allowed');
         return false;
       }
-      const startCenter = coords && Number.isFinite(Number(coords.lon)) ? [Number(coords.lon), Number(coords.lat)] : [-60.7050, -31.6520];
+      const startCenter = center ? [center.lon, center.lat] : [-60.7050, -31.6520];
       // MapLibre needs a laid-out container: keep it invisible but dimensioned
       // (visibility keeps layout; [hidden] display:none would give width 0).
       canvasEl.hidden = false;
@@ -224,6 +225,11 @@ export function createMapSubstrate({
             onViewportChange({ ...center });
           });
           map.on('error', () => { /* post-load tile hiccups tolerated; init failure handled by timeout */ });
+          // Reveal the map surface when the style is ready, not after every initial tile finishes.
+          // This avoids a blank viewport on slow connections without issuing extra raster requests.
+          map.once('style.load', () => {
+            if (!settled) canvasEl.style.visibility = '';
+          });
           vectorTimer = setTimeout(() => finish(false), VECTOR_LOAD_TIMEOUT_MS);
           map.on('load', () => finish(true));
         } catch {
@@ -334,8 +340,12 @@ export function createMapSubstrate({
       entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true && model.vehicleType === 'bus');
       entry.element.classList.toggle('is-gps-train', model.gpsVehicle === true && model.vehicleType === 'train');
       entry.element.classList.toggle('is-interpolating', model.displayInterpolated === true);
-      if (Number.isFinite(Number(model.bearing))) entry.element.style.setProperty('--gps-bearing', `${Number(model.bearing)}deg`);
-      else entry.element.style.removeProperty('--gps-bearing');
+      // Keep the last measured heading when a partial/stationary GPS frame omits bearing.
+      // Rotate the sprite pseudo-element, never MapLibre's geographic marker anchor.
+      if (model.bearing !== null && model.bearing !== undefined && model.bearing !== '' && Number.isFinite(Number(model.bearing))) {
+        const normalizedBearing = ((Number(model.bearing) % 360) + 360) % 360;
+        entry.element.style.setProperty('--gps-bearing', String(normalizedBearing) + 'deg');
+      }
       place(entry, Number(model.lat), Number(model.lon), {
         animate: model.gpsVehicle === true && model.displayInterpolated === true
       });
@@ -570,8 +580,11 @@ export function createMapSubstrate({
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
     if (inVector()) {
       map.jumpTo({ center: [center.lon, center.lat] });
+    } else if (mode === '2d' && substrate === 'vector_failed') {
+      renderRaster({ lat: center.lat, lon: center.lon }, { label, showPin });
     } else if (mode === '2d') {
-      renderRaster(center, { label, showPin });
+      // Vector is the sole normal startup path; do not paint raster tiles first.
+      void upgradeToVector(center).catch(() => { vectorFailed('vector_init_rejected'); });
     }
   }
 

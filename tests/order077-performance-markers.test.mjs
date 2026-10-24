@@ -35,15 +35,15 @@ test('ORDER077: 2D GPS markers use lightweight top-down PNGs and preserve train/
   assert.match(substrate, /model\.vehicleType === 'bus'/);
 });
 
-test('ORDER077: pitched 3D uses small side sprites for bus and train with circle fallback', () => {
-  assert.match(three, /bus-side\.png/);
+test('ORDER077: pitched 3D uses the Gemini top-down bus sprite and train side sprite with circle fallback', () => {
+  assert.match(three, /bus-top\.png/);
   assert.match(three, /train-side\.png/);
   assert.match(three, /voy-3d-train-icons/);
   assert.match(three, /voy-3d-transport-markers',type:'circle'/);
 });
 
 test('ORDER077: PNG sprites are valid, transparent PNG files under 5 KB each', () => {
-  for (const name of ['bus-top.png', 'train-top.png', 'bus-side.png', 'train-side.png']) {
+  for (const name of ['bus-top.png', 'train-top.png', 'train-side.png']) {
     const path = new URL('../public/transit/markers/' + name, import.meta.url);
     const bytes = readFileSync(path);
     assert.deepEqual([...bytes.subarray(0, 8)], [137,80,78,71,13,10,26,10], name + ' PNG signature');
@@ -69,8 +69,8 @@ test('ORDER077: 3D GPS state remains current for an empty store and only counts 
 test('ORDER077: changing selected line cannot render stale GPS pins or accept an old in-flight reply', () => {
   assert.match(app, /function matchesSelectedGpsLine\(observation\)/);
   assert.match(app, /return Boolean\(selectedLine\)&&String\(observation\.line\|\|''\)\.trim\(\)===selectedLine/);
-  assert.match(app, /trackerStore\.nearby\(center\)\.filter\(entity=>matchesSelectedGpsLine\(entity\.observation\)\)/);
-  assert.match(app, /entity\.next\?\.temporal_state==='realtime'&&matchesSelectedGpsLine\(entity\.next\)/);
+  assert.match(app, /trackerStore\.nearby\(center,\{limit:24,radiusMeters:20000,filter:entity=>matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)\}\)/);
+  assert.match(app, /entity\.next\?\.temporal_state==='realtime'&&matchesTransportMode\(entity\.next,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.next\)/);
   assert.match(app, /state\.gpsStatus='not_integrated';state\.gpsLastLiveAt=0/);
   assert.ok(app.includes("if(String(busLinePicker.value||'').trim()!==selectedLine)return;"));
   assert.match(app, /currentLine!==selectedLineAtRequest/);
