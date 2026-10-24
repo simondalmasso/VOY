@@ -38,6 +38,7 @@ export function createMapSubstrate({
   let mode = '2d';
   let center = null;
   let rasterCenter = null;
+  let pendingView = { label: 'Mapa', showPin: false };
   let map = null;
   let MarkerClass = null; // maplibre.Marker, bound at import
   let vectorPromise = null;
@@ -83,6 +84,7 @@ export function createMapSubstrate({
   // ---------- raster: instant first paint + mandatory fallback ----------
   function renderRaster(coords, { label = 'Mapa', showPin = false } = {}) {
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
+    tilesEl.hidden = false; canvasEl.hidden = true; canvasEl.style.visibility = ''; tilesEl.classList.remove('is-underlay');
     rasterCenter = { ...center };
     tilesEl.replaceChildren();
     trailLine = null;
@@ -334,8 +336,12 @@ export function createMapSubstrate({
       entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true && model.vehicleType === 'bus');
       entry.element.classList.toggle('is-gps-train', model.gpsVehicle === true && model.vehicleType === 'train');
       entry.element.classList.toggle('is-interpolating', model.displayInterpolated === true);
-      if (Number.isFinite(Number(model.bearing))) entry.element.style.setProperty('--gps-bearing', `${Number(model.bearing)}deg`);
-      else entry.element.style.removeProperty('--gps-bearing');
+      // Keep the last real heading when a stationary/partial GPS frame omits bearing.
+      // Rotate the sprite pseudo-element, never MapLibre's geographic marker anchor.
+      if (model.bearing !== null && model.bearing !== undefined && model.bearing !== '' && Number.isFinite(Number(model.bearing))) {
+        const normalizedBearing = ((Number(model.bearing) % 360) + 360) % 360;
+        entry.element.style.setProperty('--gps-bearing', String(normalizedBearing) + 'deg');
+      }
       place(entry, Number(model.lat), Number(model.lon), {
         animate: model.gpsVehicle === true && model.displayInterpolated === true
       });
@@ -555,8 +561,13 @@ export function createMapSubstrate({
       return;
     }
     if (mode === '2d') {
-      if (needsRasterRecenter(target)) renderRaster(target, { showPin: false });
-      else resyncOverlayElements();
+      pendingView = { label: 'Mapa', showPin: false };
+      tilesEl.hidden = true; canvasEl.hidden = true;
+      void upgradeToVector(target).then(ok => {
+        if (mode !== '2d') return;
+        if (ok && inVector()) map.jumpTo({ center: [center.lon, center.lat] });
+        else if (!inVector()) renderRaster(center || target, pendingView);
+      });
     }
   }
 
@@ -568,10 +579,18 @@ export function createMapSubstrate({
 
   function setCenter(coords, { label = 'Mapa', showPin = false } = {}) {
     center = { lat: Number(coords.lat), lon: Number(coords.lon) };
+    pendingView = { label, showPin };
     if (inVector()) {
       map.jumpTo({ center: [center.lon, center.lat] });
     } else if (mode === '2d') {
-      renderRaster(center, { label, showPin });
+      // Vector map is the only first paint. Raster is created only after vector failure.
+      tilesEl.hidden = true; canvasEl.hidden = true;
+      const requested = { ...center };
+      void upgradeToVector(requested).then(ok => {
+        if (mode !== '2d') return;
+        if (ok && inVector()) map.jumpTo({ center: [center.lon, center.lat] });
+        else if (!inVector()) renderRaster(center || requested, pendingView);
+      });
     }
   }
 

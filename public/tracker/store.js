@@ -6,7 +6,8 @@ import { normalizeObservation, classifyObservation, REALTIME_FRESHNESS_MS, REALT
 export const TRAIL_MAX_OBSERVATIONS = 32;
 export const TRAIL_MAX_AGE_MS = 120000;
 export const MAX_TRACKER_ENTITIES = 16;
-export const MAX_NEARBY_MARKERS = 12;
+export const MAX_NEARBY_MARKERS = 8;
+export const MAX_NEARBY_RADIUS_METERS = 5000;
 
 function distanceMeters(a,b){
   const rad=value=>Number(value)*Math.PI/180;
@@ -128,11 +129,18 @@ export function createTrackerStore({now=()=>Date.now(),presentTransportEntity=nu
       if(observation.observed_position_only===true){
         const exactPosition={lat:observation.lat,lon:observation.lon};
         const previous=entity.previous;
-        const staticFrame=(reason='observed_point_only')=>({
-          render:true,animated:false,temporal_state:'realtime',visual_state:'realtime',
-          position:exactPosition,source_observation:observation,source_synthetic:synthetic,
-          classification,reason
-        });
+        const staticFrame=(reason='observed_point_only')=>{
+          let bearing=null;
+          if(previous&&previous.observed_position_only===true&&previous.source_id===observation.source_id){
+            const pAt=Date.parse(previous.observed_at),cAt=Date.parse(observation.observed_at);
+            const span=cAt-pAt,distance=distanceMeters(previous,observation);
+            if(Number.isFinite(span)&&span>0&&span<=freshnessMs&&Number.isFinite(distance)&&distance<=span/1000*maxSpeedMps+20){
+              const dLat=observation.lat-previous.lat,dLon=observation.lon-previous.lon;
+              bearing=(Math.atan2(dLon*Math.cos(observation.lat*Math.PI/180),dLat)*180/Math.PI+360)%360;
+            }
+          }
+          return {render:true,animated:false,temporal_state:'realtime',visual_state:'realtime',position:exactPosition,...(Number.isFinite(bearing)?{bearing}:{}),source_observation:observation,source_synthetic:synthetic,classification,reason};
+        };
         // Ease only between two fresh, measured GPS fixes for the same vehicle.
         // Display-only interpolation is capped at 12 s; trail/history retain raw fixes.
         if(reducedMotion||!previous||previous.observed_position_only!==true||
@@ -178,12 +186,16 @@ export function createTrackerStore({now=()=>Date.now(),presentTransportEntity=nu
     };
   }
 
-  function nearby(center,{limit=MAX_NEARBY_MARKERS}={}){
+  function nearby(center,{limit=MAX_NEARBY_MARKERS,radiusMeters=MAX_NEARBY_RADIUS_METERS}={}){
     if(!center||!Number.isFinite(Number(center.lat))||!Number.isFinite(Number(center.lon)))return[];
-    const rows=entityList().map(entity=>({entity,distance:distanceMeters(center,entity.observation)})).sort((a,b)=>a.distance-b.distance);
-    const picked=rows.slice(0,limit).map(row=>row.entity);
+    const radius=Math.max(0,Number(radiusMeters)||0);
+    const rows=entityList().map(entity=>({entity,distance:distanceMeters(center,entity.observation)}))
+      .filter(row=>row.distance<=radius).sort((a,b)=>a.distance-b.distance);
+    const cap=Math.max(0,Math.min(MAX_NEARBY_MARKERS,Number(limit)||0));
+    const picked=rows.slice(0,cap).map(row=>row.entity);
     const selectedEntity=selectedId?entities.get(selectedId):null;
-    if(selectedEntity&&!picked.some(entity=>entity.id===selectedId))picked[Math.min(picked.length,limit-1)]=selectedEntity;
+    const selectedNearby=Boolean(selectedEntity);
+    if(selectedNearby&&cap>0&&!picked.some(entity=>entity.id===selectedId))picked[picked.length-1]=selectedEntity;
     return picked;
   }
 

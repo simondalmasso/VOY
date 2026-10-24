@@ -1,36 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import sharp from 'sharp';
+import { fileURLToPath } from 'node:url';
 
 const read = path => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('live bus markers use the credited Icons8 bus icon and animate only estimated GPS frames', async () => {
-  const [css, substrate, app, icon, sources, sw] = await Promise.all([
-    read('../public/styles.css'),
-    read('../public/map/substrate.js'),
-    read('../public/app.js'),
-    read('../public/icons/bus-transport-icons8.svg'),
-    read('../public/sources.html'),
-    read('../public/sw.js')
+test('Gemini side-view bus art stays transparent, compact and aligned to GPS bearing', async () => {
+  const [css, substrate, store, app] = await Promise.all([
+    read('../public/styles.css'), read('../public/map/substrate.js'),
+    read('../public/tracker/store.js'), read('../public/app.js')
   ]);
-
-  assert.match(css, /mask-image:url\('\/icons\/bus-transport-icons8\.svg'\)/);
-  assert.match(css, /\.tracker-marker\.is-gps-bus \.tracker-bus-icon\{display:block\}/);
-  assert.match(substrate, /busIcon\.className = 'tracker-bus-icon'/);
-  assert.match(substrate, /animate: model\.gpsVehicle === true && model\.displayInterpolated === true/);
-  assert.match(substrate, /requestAnimationFrame\(step\)/);
-  assert.match(substrate, /cancelAnimationFrame\(entry\.animationFrame\)/);
-  assert.match(app, /displayInterpolated:frame\.display_interpolated===true/);
-  assert.match(app, /Posición estimada entre mediciones/);
-  assert.match(icon, /data:image\/png;base64,/);
-  assert.match(sources, /Icons8.*CC BY 4\.0/);
-  assert.match(sources, /https:\/\/icon-icons\.com\/icon\/bus-transport\/4422/);
-  assert.doesNotMatch(sw, /'\/icons\/bus-transport-icons8\.svg'/);
-  assert.match(css, /\.tracker-marker\.is-gps-bus::before\{content:"";display:block;width:29px;height:29px/);
-  assert.match(css, /\.tracker-marker\.is-gps-bus \.tracker-bus-icon\{position:absolute;width:17px;height:17px/);
-  const three = await read('../public/3d/voy3d.js');
-  assert.match(app, /function current3DTransportEntities\(\)[\s\S]*?displayFrame:trackerStore\.displayFrame/);
-  assert.match(app, /function trackerTick\(\)[\s\S]*?sync3DTopology\(\);[\s\S]*?update3DGpsStatus\(\);/);
-  assert.match(three, /entry\.displayFrame\?\.render&&entry\.displayFrame\?\.position/);
-  assert.match(three, /'circle-radius':5,'circle-stroke-width':1\.5/);
+  assert.match(css, /bus-side-gemini\.png/);
+  assert.match(css, /is-gps-bus::before\{width:24px;height:8px/);
+  assert.match(css, /rotate\(calc\(var\(--gps-bearing,0deg\) - 90deg\)\)/);
+  assert.match(css, /transform-origin:50% 50%/);
+  assert.match(substrate, /style\.setProperty\('--gps-bearing'/);
+  assert.match(substrate, /new MarkerClass\(\{ element: entry\.element, anchor: 'center' \}\)/);
+  assert.match(store, /bearing=\(Math\.atan2/);
+  assert.match(app, /bearing:frame\.bearing/);
+  const metadata = await sharp(fileURLToPath(new URL('../public/transit/markers/bus-side-gemini.png', import.meta.url))).metadata();
+  assert.ok(metadata.width <= 120 && metadata.width >= 80);
+  assert.ok(metadata.height <= 36);
+  assert.equal(metadata.hasAlpha, true);
 });

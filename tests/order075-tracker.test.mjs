@@ -59,6 +59,7 @@ test('ORDER075 measured GPS marker eases between plausible fixes without fabrica
   const reduced=store.displayFrame(first.id,{reducedMotion:true});
   assert.deepEqual(reduced.position,{lat:second.lat,lon:second.lon});
   assert.equal(reduced.animated,false);
+  assert.equal(reduced.bearing,0,'static/reduced-motion GPS frames retain the measured northbound course');
 });
 
 test('ORDER075 movement invariant: unknown => zero movement',()=>{

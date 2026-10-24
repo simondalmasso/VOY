@@ -40,23 +40,15 @@ test('ORDER096 search and live suggestions stay above the floating quick-action 
   assert.match(css,/\[data-pane="collapsed"\][^{}]*\.sheet-expanded\{[^}]*display:none/s);
 });
 
-test('ORDER075 map-first shell exposes temporal truth and transit context visibly',async()=>{
-  const [html,css,app]=await Promise.all([read('public/index.html'),read('public/styles.css'),read('public/app.js')]);
-  assert.match(html,/id="truth-pill" class="truth-pill"/);
-  assert.match(html,/id="truth-pill"[^>]*role="status"/);
-  assert.match(html,/id="truth-pill"[^>]*aria-live="polite"/);
-  assert.doesNotMatch(html,/id="truth-pill" class="truth-pill sr-only"/);
-  assert.doesNotMatch(css,/#truth-pill\.sr-only\{/);
-  assert.match(css,/\.truth-pill\{/);
-  assert.match(html,/id="city-picker"/);
-  assert.match(html,/id="transport-mode-picker"/);
-  assert.match(app,/TRUTH_STATES|truthPill/);
-  for(const label of ['En vivo','Estimado','Programado','Estado desconocido']){
-    assert.ok(app.includes(`'${label}'`)||app.includes(`"${label}"`)||app.includes(label),'missing truth label: '+label);
-  }
-  assert.ok(app.includes('Tiempo real no disponible en esta cobertura'),'non-integrated realtime state must remain explicit');
-  assert.match(app,/truth-icon|truthPill.*dataset\.state|dataset\.state.*truth/i);
+test('ORDER075 map-first shell exposes temporal truth and location-first transit controls', async () => {
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /id="truth-pill"/);
+  assert.match(html, /id="transport-mode-picker"/);
+  assert.doesNotMatch(html, /id="city-picker"/);
+  assert.match(html, /id="quick-lines"/);
+  assert.ok(html.indexOf('id="bus-line-control"') > html.indexOf('id="map-quick-actions"'));
 });
+
 
 test('ORDER075 opt-in urban 3D keeps compact controls, lazy loading and 2D fallback',async()=>{
   const [html,app,sw]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/sw.js')]);

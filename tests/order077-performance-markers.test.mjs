@@ -29,7 +29,7 @@ test('ORDER077: no-op tracker ticks skip map updates but keep 3D GPS status aliv
 });
 
 test('ORDER077: 2D GPS markers use lightweight top-down PNGs and preserve train/bus identity', () => {
-  assert.match(css, /bus-top\.png\?v=__BUILD_ID__/);
+  assert.match(css, /bus-side-gemini\.png\?v=__BUILD_ID__/);
   assert.match(css, /train-top\.png\?v=__BUILD_ID__/);
   assert.match(substrate, /is-gps-train/);
   assert.match(substrate, /model\.vehicleType === 'bus'/);
@@ -43,7 +43,7 @@ test('ORDER077: pitched 3D uses small side sprites for bus and train with circle
 });
 
 test('ORDER077: PNG sprites are valid, transparent PNG files under 5 KB each', () => {
-  for (const name of ['bus-top.png', 'train-top.png', 'bus-side.png', 'train-side.png']) {
+  for (const name of ['bus-side-gemini.png', 'bus-top.png', 'train-top.png', 'bus-side.png', 'train-side.png']) {
     const path = new URL('../public/transit/markers/' + name, import.meta.url);
     const bytes = readFileSync(path);
     assert.deepEqual([...bytes.subarray(0, 8)], [137,80,78,71,13,10,26,10], name + ' PNG signature');

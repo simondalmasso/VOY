@@ -42,7 +42,7 @@ const statusLine=$('#destination-status'),decision=$('#decision'),options=$('#op
 const dialog=$('#handoff-dialog'),confirmHandoff=$('#confirm-handoff'),cancelHandoff=$('#cancel-handoff');
 const mapShell=$('#map-shell'),mapTiles=$('#map-tiles'),mapCanvas=$('#map-canvas'),map3dLayer=$('#map-3d-layer'),map3dStatus=$('#map-3d-status'),map3dAttribution=$('#map-3d-attribution'),mapFallback=$('#map-fallback'),mapAttribution=$('#map-attribution'),map3dQuality=$('#map-3d-quality');
 const busLineControl=$('#bus-line-control'),busLinePicker=$('#bus-line-picker'),busLineMeta=$('#bus-line-meta');
-const cityPicker=$('#city-picker'),transportModePicker=$('#transport-mode-picker'),transitContextStatus=$('#transit-context-status');
+const cityPicker=null,transportModePicker=$('#transport-mode-picker'),transitContextStatus=$('#transit-context-status');
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary');
@@ -172,7 +172,7 @@ async function loadSantaFeBusNetwork(){
     const geometries=geometriesForSantaFeLine(payload.routes);
     if(!geometries.length)throw new Error('bus_network_empty');
     state.busNetwork=payload;state.busNetworkGeometries=geometries;
-    state.busNetworkSelectedGeometries=geometries;
+    state.busNetworkSelectedGeometries=[];
     const lines=listSantaFeLines(payload.routes);
     for(const line of lines){const option=document.createElement('option');option.value=line;option.textContent=labelSantaFeLine(line);busLinePicker.appendChild(option)}
     const savedLine=localStorage.getItem('voy.sf.line')||'';
@@ -478,7 +478,7 @@ function setSheetPane(pane){
 function openSheetPane(pane){setSheetPane(pane==='facts'?'expanded':pane)}
 sheetToggle.addEventListener('click',()=>setSheetPane(state.sheetPane==='expanded'?'collapsed':'expanded'));
 function toggleBusLineControl(){
-  if(state.activeCityId!=='santa-fe'||state.activeTransportMode!=='bus'){
+  if(state.activeTransportMode!=='bus'){
     transitContextStatus.textContent='Las líneas de colectivo aún no están integradas con una fuente validada para esta ciudad.';
     return;
   }
@@ -622,7 +622,7 @@ async function refreshTrainRadar(centerOverride=null){
   }
 }
 function applyTransitContext({cityId=cityPicker?.value||'santa-fe',mode=transportModePicker?.value||'bus',initial=false}={}){
-  const city=TRANSIT_CITIES[cityId]?TRANSIT_CITIES[cityId]:TRANSIT_CITIES['santa-fe'];
+  const city=TRANSIT_CITIES['santa-fe'];
   state.activeCityId=city.id;
   state.activeTransportMode=mode==='train'?'train':'bus';
   if(cityPicker&&cityPicker.value!==city.id)cityPicker.value=city.id;
@@ -639,10 +639,10 @@ function applyTransitContext({cityId=cityPicker?.value||'santa-fe',mode=transpor
       ? city.label+' · estaciones del catálogo 2022; servicio en vivo no confirmado.'
       : city.label+' · servicio ferroviario no confirmado.';
     busLineControl.hidden=true;
-    refreshTrainRadar(city.center);
+    refreshTrainRadar(nearbyCenter);
   }else if(city.id==='santa-fe'){
     transitContextStatus.textContent='Santa Fe · recorridos publicados; GPS en vivo solo cuando la fuente entrega posiciones actuales.';
-    state.busNetworkSelectedGeometries=state.busNetworkGeometries;
+    state.busNetworkSelectedGeometries=geometriesForSantaFeLine(state.busNetwork?.routes,busLinePicker.value);
     updateBusLineMeta();
   }else{
     transitContextStatus.textContent=city.bus.coverage==='pending_official_api_access'
@@ -654,7 +654,6 @@ function applyTransitContext({cityId=cityPicker?.value||'santa-fe',mode=transpor
   setSheetSummary();
   syncTrackerOverlays();
 }
-cityPicker?.addEventListener('change',()=>applyTransitContext({cityId:cityPicker.value,mode:transportModePicker.value}));
 transportModePicker?.addEventListener('change',()=>applyTransitContext({cityId:cityPicker.value,mode:transportModePicker.value}));
 function resetDestinationState(){if(state.searchController){state.searchController.abort();state.searchController=null}state.destination=null;state.destinationLabel='';state.mobilityDecision=null;state.mobilityComputation=null;state.selectedRouteMode=null;state.searchScope='local';decision.hidden=true;options.replaceChildren();document.body.removeAttribute('data-view');if(!state.origin)clearTrainRadar();if(state.origin)renderMap(state.origin.coordinates,'Mapa del origen');else clearMap();nationalSearch.hidden=true}
 destinationInput.addEventListener('input',()=>{resetDestinationState();clearSuggestions();clearTimeout(state.searchTimer);const q=destinationInput.value.trim();contextHelp.hidden=true;if(q.length<3){setStatus();return}state.searchTimer=setTimeout(()=>suggestDestinationQuery(q,'local'),SUGGEST_DEBOUNCE_MS)});
@@ -678,8 +677,8 @@ async function selectDestination(suggestion){
 
 $('#manual-origin').addEventListener('click',()=>{const opening=originEditor.hidden;originEditor.hidden=!opening;$('#manual-origin').setAttribute('aria-expanded',String(opening));if(opening)originInput.focus()});
 $('#resolve-origin').addEventListener('click',resolveManualOrigin);originInput.addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();resolveManualOrigin()}});
-async function resolveManualOrigin(){const query=originInput.value.trim();if(query.length<3){setStatus('Escribí un origen un poco más preciso.');return}try{const payload=await apiJson('/api/origin/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});if(payload.result_class==='ambiguous'){setStatus('Agregá localidad o provincia para ubicar ese origen.');return}const candidate=normalizeResolvedCandidate(payload.candidates?.[0]);if(!candidate)throw new Error('invalid_origin');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=false;originLabel.textContent=[candidate.label,candidate.locality?.name].filter(Boolean).join(' · ');$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch(error){setStatus(error.payload?.error==='external_dependency_unavailable'?'No pudimos ubicar ese origen ahora.':'No pudimos ubicar ese origen.','error')}}
-$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=true;originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
+async function resolveManualOrigin(){const query=originInput.value.trim();if(query.length<3){setStatus('Escribí un origen un poco más preciso.');return}try{const payload=await apiJson('/api/origin/resolve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});if(payload.result_class==='ambiguous'){setStatus('Agregá localidad o provincia para ubicar ese origen.');return}const candidate=normalizeResolvedCandidate(payload.candidates?.[0]);if(!candidate)throw new Error('invalid_origin');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=false;renderMap(candidate.coordinates,'Map near selected origin',false);originLabel.textContent=[candidate.label,candidate.locality?.name].filter(Boolean).join(' · ');$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch(error){setStatus(error.payload?.error==='external_dependency_unavailable'?'No pudimos ubicar ese origen ahora.':'No pudimos ubicar ese origen.','error')}}
+$('#use-location').addEventListener('click',()=>{if(!navigator.geolocation){setStatus('La ubicación no está disponible en este navegador.');return}setStatus('Buscando tu ubicación…');navigator.geolocation.getCurrentPosition(async(position)=>{try{const payload=await apiJson('/api/location/reverse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:position.coords.latitude,lon:position.coords.longitude})});const candidate=normalizeResolvedCandidate(payload.candidate);if(!candidate)throw new Error('invalid_reverse');state.origin=candidate;invalidateSuggestionOriginContext();state.locationGranted=true;renderMap(candidate.coordinates,'Nearby map',false);originLabel.textContent=candidate.locality?.name?`Tu ubicación · ${candidate.locality.name}`:'Tu ubicación';$('#clear-location').hidden=false;$('#use-location').hidden=true;$('#manual-origin').hidden=true;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();await refreshTrainRadar();if(state.destination)await refreshMobilityComputation();else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')}catch{setStatus('No pudimos ubicarte ahora.','error')}},()=>setStatus('Podés elegir un origen manualmente.'),{enableHighAccuracy:false,timeout:8000,maximumAge:0})});
 $('#clear-location').addEventListener('click',()=>{state.origin=null;invalidateSuggestionOriginContext();state.locationGranted=false;state.mobilityComputation=null;state.selectedRouteMode=null;clearTrainRadar();clearMap();originInput.value='';originLabel.textContent='Sin origen elegido';$('#clear-location').hidden=true;$('#use-location').hidden=false;$('#manual-origin').hidden=false;$('#manual-origin').setAttribute('aria-expanded','false');originEditor.hidden=true;setStatus();if(state.destination){renderMap(state.destination.coordinates);renderOptions();setStatus('Elegí un origen para calcular recorridos y precios.')}else if(destinationInput.value.trim().length>=3)suggestDestinationQuery(destinationInput.value.trim(),'local')});
 
 async function refreshMobilityComputation(){
@@ -781,6 +780,18 @@ busLinePicker.addEventListener('focus',loadSantaFeBusNetwork);
 busLinePicker.addEventListener('pointerdown',loadSantaFeBusNetwork);
 if(localStorage.getItem('voy.sf.line'))loadSantaFeBusNetwork();
 setSheetSummary();
+function restoreGrantedDeviceLocation(){
+  if(!navigator.geolocation||!navigator.permissions?.query)return;
+  navigator.permissions.query({name:'geolocation'}).then(permission=>{
+    if(permission.state!=='granted')return;
+    navigator.geolocation.getCurrentPosition(position=>{
+      const center={lat:position.coords.latitude,lon:position.coords.longitude};
+      state.locationGranted=true;
+      renderMap(center,'Mapa cerca de tu ubicaci?n',false);
+    },()=>{},{enableHighAccuracy:false,timeout:5000,maximumAge:60000});
+  }).catch(()=>{});
+}
+restoreGrantedDeviceLocation();
 // Fail-closed native GPS polling; unconfigured deployments stop after the first response.
 let sfGpsPolling=false,sfGpsEnabled=true;
 async function pollSantaFeGps(){
