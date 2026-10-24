@@ -14,11 +14,11 @@ test('ORDER073 topology manifest pins the raw input SHA',async()=>{
   assert.equal(manifest.geometry_source.raw_input_sha256,sha256(raw));
 });
 
-test('ORDER073 replaces the 3D quality selector with a lightweight isometric mode',async()=>{
+test('ORDER073 uses gesture-driven pitch without explicit camera-mode buttons',async()=>{
   const [html,app,substrate]=await Promise.all([text('public/index.html'),text('public/app.js'),text('public/map/substrate.js')]);
-  assert.doesNotMatch(html,/id="map-3d-quality"|data-map-mode="3d"/);
-  assert.match(html,/data-map-mode="iso"[^>]*>Iso</);
-  assert.match(app,/button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
+  assert.doesNotMatch(html,/id="map-3d-quality"|data-map-mode|map-mode-toggle|map-quick-view|quick-plan/);
+  assert.match(substrate,/touchPitch:\s*true/);
+  assert.match(substrate,/touchZoomRotate:\s*true/);
   assert.match(app,/substrate\.setCameraMode\('isometric'\)/);
   assert.match(substrate,/pitch: isometric \? 55 : 0/);
 });
