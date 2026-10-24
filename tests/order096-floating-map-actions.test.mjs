@@ -112,6 +112,9 @@ test('release build minifies only generated client assets while keeping the sour
   assert.match(build, /esbuild dist\\client\\styles\.css --minify/);
   assert.match(linuxBuild, /'app\.js', 'es2022'.*'styles\.css'/s);
   assert.match(linuxBuild, /'--minify'/);
+  assert.match(linuxBuild, /command = \['node_modules\/esbuild\/bin\/esbuild',str\(source\),'--minify'\]/,
+    'Linux must execute the esbuild binary directly, not parse its ELF bytes as JavaScript');
+  assert.doesNotMatch(linuxBuild, /command = \['node','node_modules\/esbuild\/bin\/esbuild'/);
   assert.match(three, /await import\('\/vendor\/three\.module\.js\?v=__BUILD_ID__'\)/,
     'the heavy 3D engine must remain lazy instead of entering the initial client bundle');
 });

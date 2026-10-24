@@ -87,7 +87,7 @@ for p in text_paths:
 for name, target in [('app.js', 'es2022'), ('styles.css', None)]:
     source = client/name
     output = client/(name + '.min')
-    command = ['node','node_modules/esbuild/bin/esbuild',str(source),'--minify']
+    command = ['node_modules/esbuild/bin/esbuild',str(source),'--minify']
     if target: command.append('--target='+target)
     command.append('--outfile='+str(output))
     subprocess.run(command,check=True)
