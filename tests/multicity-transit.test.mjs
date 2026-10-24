@@ -9,9 +9,10 @@ test('map-first transit controls remove city selection and keep bus/train choice
   assert.doesNotMatch(html, /id="city-picker"/);
   assert.doesNotMatch(html, /aria-label="Ciudad del mapa"/);
   const linesStart = html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
-  const mapViewStart = html.indexOf('<div class="map-quick-view"', linesStart);
-  assert.ok(linesStart >= 0 && mapViewStart > linesStart, 'Lines owns the transport controls');
-  const linesRegion = html.slice(linesStart, mapViewStart);
+  const originStart = html.indexOf('<button id="quick-origin"', linesStart);
+  assert.ok(linesStart >= 0 && originStart > linesStart, 'Lines owns the transport controls before Origin');
+  const linesRegion = html.slice(linesStart, originStart);
+  assert.doesNotMatch(html, /data-map-mode|map-mode-toggle|map-quick-view/);
   assert.match(linesRegion, /id="quick-lines"/);
   assert.match(linesRegion, /id="transport-mode-picker"/);
   assert.match(linesRegion, /option value="bus"/);
@@ -108,22 +109,19 @@ test('compact search preserves a usable touch target while halving the visible f
   assert.match(css, /\.destination-control input\s*\{[^}]*min-height:\s*44px/s);
 });
 
-test('the view switch offers lightweight isometric MapLibre instead of Three.js 3D', async () => {
-  const [html, app, substrate] = await Promise.all([
-    read('public/index.html'), read('public/app.js'), read('public/map/substrate.js')
+test('map camera mode buttons are absent and two-finger pitch is enabled', async () => {
+  const [html, substrate] = await Promise.all([
+    read('public/index.html'), read('public/map/substrate.js')
   ]);
-  assert.match(html, /data-map-mode="iso"[^>]*>Iso(?:métrica)?</);
-  assert.doesNotMatch(html, /data-map-mode="3d"|map-3d-quality/);
-  assert.match(app, /async function activateIso\(/);
-  assert.match(app, /substrate\.setCameraMode\('isometric'\)/);
-  assert.match(app, /button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
-  assert.match(substrate, /function setCameraMode\(/);
-  assert.match(substrate, /pitch:\s*isometric\s*\?\s*55\s*:\s*0/);
+  assert.doesNotMatch(html, /data-map-mode|map-mode-toggle|map-quick-view|map-3d-quality/);
+  assert.match(substrate, /touchPitch:\\s*true/);
+  assert.match(substrate, /touchZoomRotate:\\s*true/);
+  assert.match(substrate, /function setCameraMode\\(/);
 });
 
 test('the compact dashboard keeps the existing quick-action icon dimensions', async () => {
   const css = await read('public/styles.css');
   assert.match(css, /--voy-dashboard-max-height:\s*min\(36svh,320px\)/);
   assert.match(css, /\.map-quick-action svg\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/s);
-  assert.match(css, /\.map-quick-view \.map-mode-toggle button\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.map-quick-actions\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s);
 });
