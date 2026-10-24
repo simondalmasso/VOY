@@ -41,7 +41,7 @@ test('choosing a bus line closes the Lines panel so the map is no longer covered
   assert.match(closeHandler, /quickLines\.setAttribute\('aria-expanded','false'\)/, 'accessibility state reports the panel closed');
 });
 
-test('GPS HUD is a dot only: green for verified realtime, red otherwise, with accessible status text', async () => {
+test('GPS HUD is a dot only: colors reflect realtime, predicted, and unavailable states', async () => {
   const html = await read('public/index.html');
   const app = await read('public/app.js');
   const css = await read('public/styles.css');
@@ -52,7 +52,9 @@ test('GPS HUD is a dot only: green for verified realtime, red otherwise, with ac
   assert.match(css, /\.truth-pill\{[^}]*width:\s*12px[^}]*height:\s*12px/s);
   assert.match(css, /\.truth-copy\s*\{[^}]*display:\s*none\s*!important/s);
   assert.match(css, /\.truth-pill\[data-state="realtime"\] \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
-  assert.match(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
+  assert.doesNotMatch(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon/);
+  assert.match(css, /\.truth-pill\[data-state="stale"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
+  assert.match(css, /\.truth-pill\[data-state="source_unavailable"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
 });
 
 
