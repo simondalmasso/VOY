@@ -29,7 +29,7 @@ test('floating map controls are bound to existing actions without adding externa
   assert.match(app, /quickLines\.addEventListener\('click'/);
   assert.match(app, /function toggleBusLineControl\(/);
   assert.match(app, /quickOrigin\.addEventListener\('click'/);
-  assert.match(app, /quickPlan\.addEventListener\('click'/);
+  assert.match(app, /sheetToggle\.addEventListener\('click'/);
   assert.match(app, /sheetToggle\.addEventListener\('click'/);
   assert.doesNotMatch(app, /quickPlan|mapModeButtons|activateIso/);
   assert.match(html, /id="quick-location"[^>]*aria-label="Usar mi ubicación"/);
