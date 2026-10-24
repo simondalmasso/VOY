@@ -114,9 +114,9 @@ test('map camera mode buttons are absent and two-finger pitch is enabled', async
     read('public/index.html'), read('public/map/substrate.js')
   ]);
   assert.doesNotMatch(html, /data-map-mode|map-mode-toggle|map-quick-view|map-3d-quality/);
-  assert.match(substrate, /touchPitch:\\s*true/);
-  assert.match(substrate, /touchZoomRotate:\\s*true/);
-  assert.match(substrate, /function setCameraMode\\(/);
+  assert.match(substrate, /touchPitch:\s*true/);
+  assert.match(substrate, /touchZoomRotate:\s*true/);
+  assert.match(substrate, /function setCameraMode\(/);
 });
 
 test('the compact dashboard keeps the existing quick-action icon dimensions', async () => {
