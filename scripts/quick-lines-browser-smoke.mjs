@@ -26,7 +26,7 @@ try {
     return { buttonTop: button.top, pickerBottom: picker.bottom, pickerTop: picker.top, width: picker.width };
   });
   assert.ok(mobileGeometry.pickerBottom <= mobileGeometry.buttonTop + 1, 'mobile picker opens above Lines button');
-  assert.ok(mobileGeometry.pickerTop >= 0 && mobileGeometry.width <= innerWidth, 'mobile picker remains in viewport');
+  assert.ok(mobileGeometry.pickerTop >= 0 && mobileGeometry.width <= 390, 'mobile picker remains in viewport');
 
   const chosen = await page.locator('#bus-line-picker option').nth(1).getAttribute('value');
   assert.ok(chosen, 'published line option exists');
@@ -53,7 +53,7 @@ try {
     return { buttonTop: button.top, pickerBottom: picker.bottom, pickerLeft: picker.left, pickerRight: picker.right };
   });
   assert.ok(desktopGeometry.pickerBottom <= desktopGeometry.buttonTop + 1, 'desktop picker opens above Lines button');
-  assert.ok(desktopGeometry.pickerLeft >= 0 && desktopGeometry.pickerRight <= innerWidth, 'desktop picker stays in viewport');
+  assert.ok(desktopGeometry.pickerLeft >= 0 && desktopGeometry.pickerRight <= 1440, 'desktop picker stays in viewport');
   assert.deepEqual(pageErrors, [], 'no uncaught browser exceptions');
 
   console.log(JSON.stringify({
