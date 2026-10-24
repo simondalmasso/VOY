@@ -46,7 +46,7 @@ test('mobile and desktop sheet dimensions remain floating, bounded and touch acc
   assert.match(css, /\.voy-sheet\{[^}]*left:12px;[^}]*right:12px;[^}]*bottom:calc\(12px \+ env\(safe-area-inset-bottom\)\)/s);
   assert.match(css, /\.map-quick-actions\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s,
     'the three remaining actions use all available width');
-  assert.match(css, /\.map-quick-action\{[^}]*min-height:48px/s);
+  assert.match(css, /\.map-quick-action[^{}]*\{[^}]*min-height:48px/s);
   assert.match(css, /\.destination-control\{[^}]*min-height:52px/s);
   assert.match(css, /\.suggestions\{[^}]*max-height:min\(228px,28svh\)[^}]*overflow:auto/s);
   assert.match(css, /@media\s*\(min-width:\s*960px\)[\s\S]*?\.voy-sheet\{[^}]*left:50%;[^}]*bottom:18px;[^}]*width:min\(680px,calc\(100vw - 48px\)\)/);
