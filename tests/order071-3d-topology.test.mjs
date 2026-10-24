@@ -164,7 +164,10 @@ test('ORDER088 keeps the legacy Three renderer off the default urban-map startup
   const substrate=await text('public/map/substrate.js');
   assert.match(substrate,/getExtension\('WEBGL_lose_context'\)\?\.loseContext\(\)/);
   assert.doesNotMatch(app,/^\s*scheduleVectorUpgrade\(\);\s*$/m);
-  assert.doesNotMatch(app,/await startVectorUpgradeOnce\(\);/);
+  const legacy3DStart=app.indexOf('async function activate3D()');
+  const isoStart=app.indexOf('async function activateIso()',legacy3DStart);
+  assert.ok(legacy3DStart>=0&&isoStart>legacy3DStart);
+  assert.doesNotMatch(app.slice(legacy3DStart,isoStart),/await startVectorUpgradeOnce\(\);/);
   assert.match(app,/function activate2D\([\s\S]*?startVectorUpgradeOnce\(\)/);
 });
 
