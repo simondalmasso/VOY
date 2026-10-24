@@ -11,7 +11,8 @@ page.on('pageerror', error => pageErrors.push(error.message));
 try {
   await page.goto(baseURL, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('#transport-mode-picker');
-  await page.waitForTimeout(2500);
+  // The vector style can take several seconds; sample the final substrate after its 8 s timeout.
+  await page.waitForTimeout(9000);
 
   assert.equal(await page.locator('#truth-pill').isVisible(), true, 'temporal truth must be visible');
   assert.equal(await page.locator('.map-shell').isVisible(), true, 'map must be visible');
