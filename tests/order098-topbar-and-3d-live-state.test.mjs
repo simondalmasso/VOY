@@ -2,12 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('ORDER098 removes the top bar while retaining map mode controls', async () => {
+test('ORDER098 removes the top bar and explicit map mode buttons', async () => {
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(html, /class="topbar voy-topbar"/);
-  assert.match(html, /data-map-mode="iso"/);
-  assert.doesNotMatch(html, /data-map-mode="3d"/);
+  assert.doesNotMatch(html, /data-map-mode|map-mode-toggle|map-quick-view/);
   assert.match(css, /\.topbar\.voy-topbar\{display:none!important\}/);
   assert.match(css, /\.map-hud\{top:10px!important\}/);
 });
