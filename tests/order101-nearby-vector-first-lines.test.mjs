@@ -96,9 +96,10 @@ test('transit choices are inside Lines; there is no city filter and no route pan
   assert.doesNotMatch(html, /id="city-picker"/);
   assert.doesNotMatch(html, /aria-label="Ciudad del mapa"/);
   const wrapperStart = html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
-  const quickViewStart = html.indexOf('<div class="map-quick-view"', wrapperStart);
-  assert.ok(wrapperStart >= 0 && quickViewStart > wrapperStart, 'Lines owns a bounded popover in the quick-action bar');
-  const linesRegion = html.slice(wrapperStart, quickViewStart);
+  const originStart = html.indexOf('<button id="quick-origin"', wrapperStart);
+  assert.ok(wrapperStart >= 0 && originStart > wrapperStart, 'Lines owns a bounded popover in the quick-action bar');
+  const linesRegion = html.slice(wrapperStart, originStart);
+  assert.doesNotMatch(html,/data-map-mode|map-mode-toggle|map-quick-view|quick-plan/);
   assert.ok(linesRegion.includes('id="quick-lines"'));
   assert.ok(linesRegion.includes('id="bus-line-control"'));
   assert.ok(linesRegion.includes('id="transport-mode-picker"'), 'bus/train mode belongs inside Lines');
