@@ -8,7 +8,7 @@ test('map-first transit controls remove city selection and keep bus/train choice
   const html = await read('public/index.html');
   assert.doesNotMatch(html, /id="city-picker"/);
   assert.doesNotMatch(html, /aria-label="Ciudad del mapa"/);
-  const linesStart = html.indexOf('<div class="map-quick-lines-wrap">');
+  const linesStart = html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
   const mapViewStart = html.indexOf('<div class="map-quick-view"', linesStart);
   assert.ok(linesStart >= 0 && mapViewStart > linesStart, 'Lines owns the transport controls');
   const linesRegion = html.slice(linesStart, mapViewStart);

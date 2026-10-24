@@ -95,7 +95,7 @@ test('transit choices are inside Lines; there is no city filter and no route pan
   const html = await read('public/index.html');
   assert.doesNotMatch(html, /id="city-picker"/);
   assert.doesNotMatch(html, /aria-label="Ciudad del mapa"/);
-  const wrapperStart = html.indexOf('<div class="map-quick-lines-wrap">');
+  const wrapperStart = html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
   const quickViewStart = html.indexOf('<div class="map-quick-view"', wrapperStart);
   assert.ok(wrapperStart >= 0 && quickViewStart > wrapperStart, 'Lines owns a bounded popover in the quick-action bar');
   const linesRegion = html.slice(wrapperStart, quickViewStart);

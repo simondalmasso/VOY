@@ -35,8 +35,10 @@ test('choosing a bus line closes the Lines panel so the map is no longer covered
   const end = app.indexOf("\n});", start);
   assert.ok(end > start, 'line selection handler must be bounded');
   const handler = app.slice(start, end);
-  assert.match(handler, /busLineControl\.hidden\s*=\s*true/, 'selection closes the picker panel');
-  assert.match(handler, /quickLines\.setAttribute\('aria-expanded','false'\)/, 'accessibility state reports the panel closed');
+  assert.match(handler, /closeBusLineControl\(\)/, 'selection closes the picker panel through the shared close handler');
+  const closeHandler = app.slice(app.indexOf('function closeBusLineControl(){'), app.indexOf('\nfunction toggleBusLineControl(){'));
+  assert.match(closeHandler, /busLineControl\.hidden=true/);
+  assert.match(closeHandler, /quickLines\.setAttribute\('aria-expanded','false'\)/, 'accessibility state reports the panel closed');
 });
 
 test('GPS HUD is a dot only: green for verified realtime, red otherwise, with accessible status text', async () => {

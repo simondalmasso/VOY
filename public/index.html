@@ -89,10 +89,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
           <span>Ubicación</span>
         </button>
-        <div class="map-quick-lines-wrap">
+        <div id="quick-lines-wrap" class="map-quick-lines-wrap">
           <button id="quick-lines" class="map-quick-action" type="button" aria-label="Elegir transporte o línea" aria-expanded="false" aria-controls="bus-line-control" title="Líneas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12a3 3 0 0 1 3 3v12a2 2 0 0 1-2 2v2h-2v-2H7v2H5v-2a2 2 0 0 1-2-2V5a3 3 0 0 1 3-3Zm-1 5v6h14V7H5Zm2 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm10 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>
-            <span>Líneas</span>
+            <span id="quick-lines-label">Líneas</span>
           </button>
           <div id="bus-line-control" class="bus-line-control" role="group" aria-label="Transporte y líneas" hidden>
             <label for="transport-mode-picker">Transporte</label>

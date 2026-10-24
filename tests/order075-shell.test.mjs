@@ -49,7 +49,7 @@ test('ORDER075 map-first shell exposes temporal truth and transit context visibl
   assert.doesNotMatch(css,/#truth-pill\.sr-only\{/);
   assert.match(css,/\.truth-pill\{/);
   assert.doesNotMatch(html,/id="city-picker"/);
-  const linesStart=html.indexOf('<div class="map-quick-lines-wrap">');
+  const linesStart=html.indexOf('id="quick-lines-wrap" class="map-quick-lines-wrap"');
   const mapViewStart=html.indexOf('<div class="map-quick-view"',linesStart);
   assert.ok(linesStart>=0&&mapViewStart>linesStart,'transport context lives inside Lines');
   const linesRegion=html.slice(linesStart,mapViewStart);

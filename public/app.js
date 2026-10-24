@@ -45,7 +45,7 @@ const transportModePicker=$('#transport-mode-picker'),transitContextStatus=$('#t
 const reducedMotionMedia=matchMedia('(prefers-reduced-motion: reduce)');
 const trainRadar=$('#train-radar'),trainRadarMeta=$('#train-radar-meta'),trainRadarList=$('#train-radar-list');
 const sheet=$('#voy-sheet'),sheetToggle=$('#sheet-toggle'),sheetToggleLabel=$('#sheet-toggle-label'),sheetBody=$('#sheet-body'),sheetSummary=$('#sheet-summary');
-const quickLocation=$('#quick-location'),quickLines=$('#quick-lines'),quickOrigin=$('#quick-origin'),quickPlan=$('#quick-plan'),quickPlanLabel=$('#quick-plan-label');
+const quickLocation=$('#quick-location'),quickLines=$('#quick-lines'),quickLinesLabel=$('#quick-lines-label'),quickOrigin=$('#quick-origin'),quickPlan=$('#quick-plan'),quickPlanLabel=$('#quick-plan-label');
 const truthPill=$('#truth-pill'),truthLabel=$('#truth-label'),truthMeta=$('#truth-meta'),truthIcon=truthPill?.querySelector('.truth-icon');
 const trackerFacts=$('#tracker-facts'),factsLine=$('#facts-line'),factsClose=$('#facts-close'),factsRows=$('#facts-rows'),fixtureBanner=$('#fixture-banner');
 const followButton=$('#follow-button'),returnToNow=$('#return-to-now'),timeRailWrap=$('#time-rail-wrap'),timeRail=$('#time-rail'),timeRailMeta=$('#time-rail-meta');
@@ -510,14 +510,27 @@ function updateTransitControlAvailability(){
     updateBusLineMeta();
   }
 }
+let busLineCloseTimer=null;
+function closeBusLineControl(){
+  if(busLineCloseTimer!==null){clearTimeout(busLineCloseTimer);busLineCloseTimer=null;}
+  busLineControl.hidden=true;
+  quickLines.setAttribute('aria-expanded','false');
+  const selected=busLinePicker.value;
+  quickLinesLabel.textContent=selected?'Línea '+labelSantaFeLine(selected):'Líneas';
+  quickLines.setAttribute('aria-label',selected?'Línea '+labelSantaFeLine(selected)+' · cambiar línea':'Elegir transporte o línea');
+}
 function toggleBusLineControl(){
+  if(busLineCloseTimer!==null){clearTimeout(busLineCloseTimer);busLineCloseTimer=null;}
   const opening=busLineControl.hidden;
   busLineControl.hidden=!opening;
   quickLines.setAttribute('aria-expanded',String(opening));
-  updateTransitControlAvailability();
   if(opening){
+    updateTransitControlAvailability();
     if(state.activeTransportMode==='bus'&&hasSantaFeBusCoverage())void loadSantaFeBusNetwork();
     transportModePicker.focus({preventScroll:true});
+    busLineCloseTimer=setTimeout(closeBusLineControl,10000);
+  }else{
+    closeBusLineControl();
   }
 }
 quickLocation.addEventListener('click',()=>$('#use-location').click());
@@ -872,14 +885,14 @@ function renderRouteGeometry(geometry){
 // ---------- boot: vector-first map; raster is failure-only fallback ----------
 function updateBusLineMeta(){
   const selected=busLinePicker.value;
+  quickLinesLabel.textContent=selected?'Línea '+labelSantaFeLine(selected):'Líneas';
+  quickLines.setAttribute('aria-label',selected?'Línea '+labelSantaFeLine(selected)+' · cambiar línea':'Elegir transporte o línea');
   if(!selected){busLineMeta.textContent='Elegí una línea para ver recorrido y GPS en vivo';return}
   const live=state.gpsStatus==='live'&&Date.now()-state.gpsLastLiveAt<=20000;
   const status=live?'trazado publicado + GPS en vivo':state.gpsStatus==='no_current_positions'?'trazado publicado · sin posiciones GPS actuales':state.gpsStatus==='source_unavailable'?'trazado publicado · fuente GPS no disponible':'trazado publicado, GPS sin confirmar';
   busLineMeta.textContent=labelSantaFeLine(selected)+' · '+status;
 }
 busLinePicker.addEventListener('change',()=>{
-  busLineControl.hidden=true;
-  quickLines.setAttribute('aria-expanded','false');
   quickLines.focus({preventScroll:true});
   if(busLinePicker.value)localStorage.setItem('voy.sf.line',busLinePicker.value);else localStorage.removeItem('voy.sf.line');
   state.gpsStatus='not_integrated';state.gpsLastLiveAt=0;
@@ -893,6 +906,7 @@ busLinePicker.addEventListener('change',()=>{
   syncTrackerOverlays();sync3DTopology();
   // gpsStatus starts as not_integrated before the first worker response; the enabled flag is authoritative after a real response.
   if(busLinePicker.value&&sfGpsEnabled)pollSantaFeGps();
+  closeBusLineControl();
 });
 applyTransitContext({mode:transportModePicker?.value||'bus',initial:true});
 busLinePicker.addEventListener('focus',loadSantaFeBusNetwork);
