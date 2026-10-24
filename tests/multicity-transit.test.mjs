@@ -118,7 +118,7 @@ test('the view switch offers lightweight isometric MapLibre instead of Three.js 
   assert.match(app, /substrate\.setCameraMode\('isometric'\)/);
   assert.match(app, /button\.dataset\.mapMode==='iso'\?activateIso\(\):activate2D\(\)/);
   assert.match(substrate, /function setCameraMode\(/);
-  assert.match(substrate, /pitch:\s*mode\s*===\s*'isometric'/);
+  assert.match(substrate, /pitch:\s*isometric\s*\?\s*55\s*:\s*0/);
 });
 
 test('the compact dashboard keeps the existing quick-action icon dimensions', async () => {
