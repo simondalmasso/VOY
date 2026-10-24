@@ -200,3 +200,15 @@ test('ORDER075 app wiring keeps planner behavior contracts alive',async()=>{
   assert.doesNotMatch(app,/getTransitCity|cityPicker/);
   assert.match(app,/void restoreGrantedLocation\(\)/);
 });
+
+
+test('ORDER108 vector map becomes visible at style readiness instead of waiting for all initial tiles',async()=>{
+  const substrate=await read('public/map/substrate.js');
+  const styleReady=substrate.indexOf("map.once('style.load', () => {");
+  const fullyLoaded=substrate.indexOf("map.on('load', () => finish(true));");
+  assert.ok(styleReady>=0&&fullyLoaded>styleReady,'style readiness handler must run before the full-load handler');
+  const earlyReveal=substrate.slice(styleReady,fullyLoaded);
+  assert.match(earlyReveal,/if\s*\(!settled\)\s*canvasEl\.style\.visibility\s*=\s*''/);
+  assert.match(substrate,/slow connections/);
+  assert.match(substrate,/vectorTimer\s*=\s*setTimeout\(\(\)\s*=>\s*finish\(false\),\s*VECTOR_LOAD_TIMEOUT_MS\)/,'the raster failure fallback timeout must remain intact');
+});

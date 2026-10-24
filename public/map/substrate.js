@@ -225,6 +225,11 @@ export function createMapSubstrate({
             onViewportChange({ ...center });
           });
           map.on('error', () => { /* post-load tile hiccups tolerated; init failure handled by timeout */ });
+          // Reveal the map surface when the style is ready, not after every initial tile finishes.
+          // This avoids a blank viewport on slow connections without issuing extra raster requests.
+          map.once('style.load', () => {
+            if (!settled) canvasEl.style.visibility = '';
+          });
           vectorTimer = setTimeout(() => finish(false), VECTOR_LOAD_TIMEOUT_MS);
           map.on('load', () => finish(true));
         } catch {
