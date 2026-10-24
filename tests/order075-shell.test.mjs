@@ -63,7 +63,7 @@ test('ORDER075 opt-in urban 3D keeps compact controls, lazy loading and 2D fallb
 });
 
 test('ORDER075 map substrate: pinned MapLibre + OpenFreeMap with raster fallback',async()=>{
-  const [app,substrate,pkg,lock,config]=await Promise.all([read('public/app.js'),read('public/map/substrate.js'),json('package.json'),json('package-lock.json'),read('public/runtime-config.js')]);
+  const [app,substrate,pkg,lock,config,html]=await Promise.all([read('public/app.js'),read('public/map/substrate.js'),json('package.json'),json('package-lock.json'),read('public/runtime-config.js'),read('public/index.html')]);
   assert.equal(pkg.dependencies['maplibre-gl'],'6.11.2','exact pinned maplibre version');
   assert.equal(lock.packages?.['node_modules/maplibre-gl']?.version,'6.11.2');
   assert.doesNotMatch(substrate,/latest/);
@@ -76,7 +76,9 @@ test('ORDER075 map substrate: pinned MapLibre + OpenFreeMap with raster fallback
   assert.match(substrate,/onVectorError|styledata-error|error/);
   assert.match(substrate,/attribution/i);
   assert.match(substrate,/OpenStreetMap/);
-  assert.match(substrate,/raster-first|rasterFirst|paintRaster/);
+  assert.match(html,/id="map-tiles" class="map-tiles" aria-hidden="true" hidden/,'raster stays hidden on the initial HTML paint');
+  assert.match(substrate,/Vector map is the only first paint/,'vector is the intended first map substrate');
+  assert.match(substrate,/renderRaster\(center\s*\|\|\s*requested,\s*pendingView\)/,'raster appears only in the vector-failure fallback path');
 });
 
 test('ORDER075 vector failure keeps raster map and tracker facts',async()=>{
