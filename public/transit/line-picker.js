@@ -6,7 +6,7 @@ const lineId=value=>{
   const ronda=/^ronda\s*([a-z])$/i.exec(raw);
   return ronda?'Ronda '+ronda[1].toUpperCase():raw;
 };
-export const labelSantaFeLine=line=>/^\d+$/.test(line)?'Línea '+line:line;
+export const labelSantaFeLine=line=>{const value=String(line??'').trim();const match=/^l[ií]nea\s+(\d+)$/i.exec(value);return match?'Línea '+match[1]:/^\d+$/.test(value)?'Línea '+value:value};
 
 export function listSantaFeLines(routes){
   if(!Array.isArray(routes))return[];
