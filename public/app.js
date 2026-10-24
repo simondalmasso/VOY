@@ -246,7 +246,7 @@ function activate2D(message=''){
   state.threeController?.dispose?.();state.threeController=null;
   state.mapMode='2d';setMapModeButtons('2d');substrate.setCameraMode('2d');substrate.setMode('2d');
   if(!substrate.maplibreReady)void startVectorUpgradeOnce();
-  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality.hidden=true;map3dStatus.textContent=message;syncTrackerOverlays();
+  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality?.setAttribute('hidden','');map3dStatus.textContent=message;syncTrackerOverlays();
 }
 function loadVoy3DModule(){
   return state.threeImportAttempt===0
