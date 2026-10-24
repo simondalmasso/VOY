@@ -58,6 +58,12 @@ foreach($tp in $textClientPaths){
   $txt=[IO.File]::ReadAllText($tp,[Text.Encoding]::UTF8).Replace('__BUILD_ID__',$buildId)
   [IO.File]::WriteAllText($tp,$txt,(New-Object Text.UTF8Encoding($false)))
 }
+node node_modules\esbuild\bin\esbuild dist\client\app.js --minify --target=es2022 --outfile=dist\client\app.min.js
+if($LASTEXITCODE -ne 0){throw 'Client JavaScript minification failed'}
+Move-Item dist\client\app.min.js dist\client\app.js -Force
+node node_modules\esbuild\bin\esbuild dist\client\styles.css --minify --outfile=dist\client\styles.min.css
+if($LASTEXITCODE -ne 0){throw 'Client CSS minification failed'}
+Move-Item dist\client\styles.min.css dist\client\styles.css -Force
 $authority=[IO.File]::ReadAllText((Join-Path $root 'src\georef-authority.generated.js'),[Text.Encoding]::UTF8)
 if($authority -notmatch 'OFFICIAL_GEOREF_RUNTIME_AUTHORITY_META'){throw 'Pinned GeoRef runtime authority missing metadata'}
 $authority=$authority.Replace('export const ','const ')

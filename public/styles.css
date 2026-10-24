@@ -366,9 +366,9 @@ dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:v
 }
 
 
-.map-quick-lines-wrap{position:relative;display:flex;min-width:0}
+.map-quick-lines-wrap{position:relative;display:flex;min-width:0;z-index:70}
 .map-quick-lines-wrap>.map-quick-action{height:100%}
-.bus-line-control{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:40;display:flex;flex-direction:column;gap:9px;width:min(286px,calc(100vw - 24px));max-height:min(62svh,430px);overflow:auto;padding:12px;border:1px solid var(--hud-line);border-radius:16px;background:var(--hud-panel);color:var(--hud-ink);box-shadow:var(--shadow-float);backdrop-filter:blur(18px)}
+.bus-line-control{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:80;pointer-events:auto;display:flex;flex-direction:column;gap:9px;width:min(286px,calc(100vw - 24px));max-height:min(62svh,430px);overflow:auto;padding:12px;border:1px solid var(--hud-line);border-radius:16px;background:var(--hud-panel);color:var(--hud-ink);box-shadow:var(--shadow-float);backdrop-filter:blur(18px)}
 .bus-line-control[hidden],.bus-line-selection[hidden]{display:none}
 .bus-line-control label{font-size:11px;font-weight:750;color:var(--hud-muted)}
 .bus-line-control select{width:100%;min-width:0;min-height:42px;padding:8px 10px;border:1px solid var(--hud-line);border-radius:10px;background:var(--surface);color:var(--text);font:650 12px/1.2 system-ui,sans-serif}
@@ -376,7 +376,8 @@ dialog{border-radius:10px;background:#07100a;color:var(--hud-ink);border-color:v
 .bus-line-control select:disabled{opacity:.55;cursor:not-allowed}
 .bus-line-control p{margin:0;color:var(--hud-muted);font:11px/1.45 system-ui,sans-serif}
 .bus-line-control span{display:block;color:var(--hud-muted);font:10px/1.45 var(--mono);overflow-wrap:anywhere}
-.bus-line-selection{display:flex;flex-direction:column;gap:7px}
+.bus-line-selection{display:flex;flex-direction:column;gap:7px;pointer-events:auto}
+.sheet-body:has(#bus-line-control:not([hidden])){overflow:visible}
 @media(max-width:700px){.bus-line-control{width:min(286px,calc(100vw - 24px));max-width:none;left:50%;bottom:calc(100% + 8px);flex-direction:column;align-items:stretch;gap:9px;padding:10px;border-radius:15px}.bus-line-control label,.bus-line-control span{display:block}.bus-line-control select{width:100%;max-width:none;min-height:40px;padding:7px 9px;font-size:12px;border-radius:9px}}
 
 /* Public product recovery: published Santa Fe bus network, static geometry only. */
@@ -467,9 +468,33 @@ html[data-theme="dark"] .map-tile{filter:saturate(.72) brightness(.88) contrast(
  .sheet-expanded{padding-inline:14px}
  .sheet-collapsed{padding-inline:14px}
  .assistant-panel{border-radius:18px!important}
- .bus-line-control{top:118px;max-width:190px}
+ .bus-line-control{top:auto;left:0;transform:none;width:min(190px,calc(100vw - 24px));max-width:none}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* MOBILE MAP-FIRST: the Lines picker is a viewport-bounded popover above the dashboard. */
+.voy-sheet:has(#bus-line-control:not([hidden])){z-index:1000}
+.sheet-body:has(#bus-line-control:not([hidden])){overflow:visible}
+.map-quick-actions:has(#bus-line-control:not([hidden])){position:relative;z-index:1001}
+.bus-line-control{
+  box-sizing:border-box;max-width:calc(100vw - 24px);
+  max-height:min(52svh,420px);overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.bus-line-control select{min-height:44px}
+@media(max-width:700px){
+  .bus-line-control{
+    position:fixed;left:12px;right:12px;top:auto;bottom:calc(var(--sheet-collapsed-max) + 20px + env(safe-area-inset-bottom));
+    transform:none;width:auto;max-width:none;max-height:min(54svh,430px);
+    padding:12px;gap:10px;border-radius:16px;z-index:1002;
+  }
+  .bus-line-control select{min-height:48px;font-size:16px;padding:10px 12px}
+  .bus-line-control label{font-size:12px}
+  .bus-line-control span,.bus-line-control p{font-size:11px;line-height:1.45}
+}
+@media(min-width:701px){
+  .bus-line-control{z-index:1002}
+}
 
 /* GPS source truth states: distinguish empty live feed from failed/unintegrated coverage. */
 .truth-pill[data-state="no_positions"] .truth-icon{color:var(--hud-muted)}

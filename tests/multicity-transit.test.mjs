@@ -49,7 +49,7 @@ test('bus routes and GPS are gated to local coverage and the active transport mo
   assert.match(app, /function hasSantaFeBusCoverage\(center=null\)/);
   assert.match(app, /return trainRadarDistanceMeters\(point,DEFAULT_MAP_CENTER\)<=30000/);
   assert.match(app, /function currentBusNetworkGeometries\(\)\{\s*if\(state\.activeTransportMode!=='bus'\)return\[\]/);
-  assert.match(app, /trackerStore\.nearby\(center,\{filter:entity=>matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)\}\)/);
+  assert.match(app, /trackerStore\.nearby\(center,\{limit:24,radiusMeters:20000,filter:entity=>matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)\}\)/);
   assert.match(app, /entity\.observation\.temporal_state==='realtime'&&matchesTransportMode\(entity\.observation,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.observation\)/);
   assert.match(app, /entity\.next\?\.temporal_state==='realtime'&&matchesTransportMode\(entity\.next,state\.activeTransportMode\)&&matchesSelectedGpsLine\(entity\.next\)/);
   assert.match(app, /if\(state\.activeTransportMode!=='bus'\|\|!hasSantaFeBusCoverage\(\)\)return/);

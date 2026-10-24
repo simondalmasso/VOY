@@ -83,6 +83,17 @@ for d in ['3d','tracker','map','transit']:
 for p in text_paths:
     p.write_text(p.read_text(encoding='utf-8').replace('__BUILD_ID__', build_id), encoding='utf-8')
 
+# Keep source modules readable while shipping minified, release-bound client assets.
+for name, target in [('app.js', 'es2022'), ('styles.css', None)]:
+    source = client/name
+    output = client/(name + '.min')
+    command = ['node','node_modules/esbuild/bin/esbuild',str(source),'--minify']
+    if target: command.append('--target='+target)
+    command.append('--outfile='+str(output))
+    subprocess.run(command,check=True)
+    source.unlink()
+    output.rename(source)
+
 authority = (root/'src/georef-authority.generated.js').read_text(encoding='utf-8')
 if 'OFFICIAL_GEOREF_RUNTIME_AUTHORITY_META' not in authority: raise SystemExit('Pinned GeoRef runtime authority missing metadata')
 authority = authority.replace('export const ','const ')

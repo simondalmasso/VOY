@@ -225,6 +225,11 @@ export function createMapSubstrate({
             onViewportChange({ ...center });
           });
           map.on('error', () => { /* post-load tile hiccups tolerated; init failure handled by timeout */ });
+          // Reveal the map surface when the style is ready, not after every initial tile finishes.
+          // This avoids a blank viewport on slow connections without issuing extra raster requests.
+          map.once('style.load', () => {
+            if (!settled) canvasEl.style.visibility = '';
+          });
           vectorTimer = setTimeout(() => finish(false), VECTOR_LOAD_TIMEOUT_MS);
           map.on('load', () => finish(true));
         } catch {
@@ -335,8 +340,12 @@ export function createMapSubstrate({
       entry.element.classList.toggle('is-gps-bus', model.gpsVehicle === true && model.vehicleType === 'bus');
       entry.element.classList.toggle('is-gps-train', model.gpsVehicle === true && model.vehicleType === 'train');
       entry.element.classList.toggle('is-interpolating', model.displayInterpolated === true);
-      if (Number.isFinite(Number(model.bearing))) entry.element.style.setProperty('--gps-bearing', `${Number(model.bearing)}deg`);
-      else entry.element.style.removeProperty('--gps-bearing');
+      // Keep the last measured heading when a partial/stationary GPS frame omits bearing.
+      // Rotate the sprite pseudo-element, never MapLibre's geographic marker anchor.
+      if (model.bearing !== null && model.bearing !== undefined && model.bearing !== '' && Number.isFinite(Number(model.bearing))) {
+        const normalizedBearing = ((Number(model.bearing) % 360) + 360) % 360;
+        entry.element.style.setProperty('--gps-bearing', String(normalizedBearing) + 'deg');
+      }
       place(entry, Number(model.lat), Number(model.lon), {
         animate: model.gpsVehicle === true && model.displayInterpolated === true
       });
