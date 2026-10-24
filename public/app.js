@@ -280,6 +280,23 @@ async function activate3D(){
     state.threeController=null;state.threeModulePromise=null;state.threeImportAttempt+=1;activate2D('3D no disponible en este equipo; seguimos en 2D.');
   }
 }
+async function activateIso(){
+  const activationRevision=++state.threeActivationRevision;
+  map3dLayer.hidden=true;map3dLayer.style.opacity='';map3dAttribution.hidden=true;map3dQuality?.setAttribute('hidden','');
+  map3dStatus.textContent='Preparando vista isométrica ligera…';
+  if(!substrate.maplibreReady){
+    const ready=await startVectorUpgradeOnce();
+    if(activationRevision!==state.threeActivationRevision)return;
+    if(!ready||!substrate.maplibreReady){activate2D('Vista isométrica no disponible; continuamos en 2D.');return}
+  }
+  if(activationRevision!==state.threeActivationRevision)return;
+  if(!substrate.setCameraMode('isometric')){activate2D('Vista isométrica no disponible; continuamos en 2D.');return}
+  state.mapMode='2d';
+  substrate.setMode('2d');
+  map3dStatus.textContent='Vista isométrica ligera · mapa vectorial';
+  syncTrackerOverlays();
+}
+
 async function restart3DForRenderPolicy(){if(state.mapMode!=='3d')return;state.threeController?.dispose?.();state.threeController=null;await activate3D()}
 
 reducedMotionMedia.addEventListener?.('change',restart3DForRenderPolicy);
