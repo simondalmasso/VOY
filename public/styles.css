@@ -627,4 +627,6 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
 .truth-pill[data-state="realtime"] .truth-icon{color:#16a34a}
 .truth-pill[data-state="predicted"] .truth-icon{color:var(--accent-2)}
 .truth-pill[data-state="stale"] .truth-icon,.truth-pill[data-state="source_unavailable"] .truth-icon{color:var(--danger)}
-.truth-pill[data-state="unknown"] .truth-icon,.truth-pill[data-state="no_positions"] .truth-icon,.truth-pill[data-state="no_coverage"] .truth-icon{color:var(--muted)}
+.truth-pill[data-state="unknown"] .truth-icon{color:var(--muted)}
+.truth-pill[data-state="no_positions"] .truth-icon{color:var(--muted)}
+.truth-pill[data-state="no_coverage"] .truth-icon{color:var(--muted)}
