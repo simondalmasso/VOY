@@ -620,9 +620,13 @@ body.offline-page{display:grid;place-items:center;min-height:100svh;height:auto;
   .transit-context-control select{min-height:44px}
 }
 
-/* ORDER-108: replace the verbose GPS HUD with one accessible status dot. */
+/* ORDER-108: compact GPS status dot; red is reserved for stale or unavailable sources. */
 .map-hud .truth-pill{width:12px;height:12px;min-width:12px;min-height:12px;max-width:12px;padding:0;margin:0;gap:0;border:0;border-radius:50%;background:transparent;box-shadow:none;backdrop-filter:none;overflow:visible;display:inline-flex;align-items:center;justify-content:center}
 .truth-pill .truth-copy{display:none!important}
 .truth-pill .truth-icon{font-size:12px;line-height:12px}
 .truth-pill[data-state="realtime"] .truth-icon{color:#16a34a}
-.truth-pill:not([data-state="realtime"]) .truth-icon{color:#dc2626}
+.truth-pill[data-state="predicted"] .truth-icon{color:var(--accent-2)}
+.truth-pill[data-state="stale"] .truth-icon,.truth-pill[data-state="source_unavailable"] .truth-icon{color:var(--danger)}
+.truth-pill[data-state="unknown"] .truth-icon{color:var(--muted)}
+.truth-pill[data-state="no_positions"] .truth-icon{color:var(--muted)}
+.truth-pill[data-state="no_coverage"] .truth-icon{color:var(--muted)}

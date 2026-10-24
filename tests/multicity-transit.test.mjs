@@ -29,7 +29,9 @@ test('temporal truth is visibly rendered over the map, not screen-reader-only', 
   assert.match(app, /truthLabel\.hidden\s*=\s*true/);
   assert.match(app, /truthPill\.querySelector\('\.truth-copy'\)\.hidden\s*=\s*true/);
   assert.match(css, /\.truth-pill\{[^}]*width:\s*12px[^}]*height:\s*12px/s);
-  assert.match(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
+  assert.doesNotMatch(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon/);
+  assert.match(css, /\.truth-pill\[data-state="stale"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
+  assert.match(css, /\.truth-pill\[data-state="source_unavailable"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
   assert.doesNotMatch(css, /#truth-pill\.sr-only\{position:absolute!important;display:block!important;left:-10000px!important/);
 });
 
