@@ -15,7 +15,13 @@ test('MAP-FIRST temporal truth is visible and accessible, including empty and un
   assert.match(app, /truthLabel\.hidden\s*=\s*true/);
   assert.match(app, /truthPill\.querySelector\('\.truth-copy'\)\.hidden\s*=\s*true/);
   assert.match(app, /truthMeta\.hidden\s*=\s*true/);
-  assert.match(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
+  assert.doesNotMatch(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon/);
+  assert.match(css, /\.truth-pill\[data-state="realtime"\] \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
+  assert.match(css, /\.truth-pill\[data-state="stale"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
+  assert.match(css, /\.truth-pill\[data-state="source_unavailable"\] \.truth-icon\s*\{\s*color:\s*var\(--danger\)\s*\}/);
+  assert.match(css, /\.truth-pill\[data-state="predicted"\] \.truth-icon\s*\{\s*color:\s*var\(--accent-2\)\s*\}/);
+  assert.match(css, /\.truth-pill\[data-state="unknown"\] \.truth-icon\s*\{\s*color:\s*var\(--muted\)\s*\}/);
+  assert.match(css, /\.truth-pill\[data-state="no_positions"\] \.truth-icon\s*\{\s*color:\s*var\(--muted\)\s*\}/);
   assert.match(app, /no_positions:\{icon:'●',label:'Sin posiciones actuales'\}/);
   assert.match(app, /source_unavailable:\{icon:'●',label:'Fuente no disponible'\}/);
   assert.match(app, /entry=TRUTH_STATES\.no_positions/);
