@@ -52,3 +52,9 @@ test('GPS HUD is a dot only: green for verified realtime, red otherwise, with ac
   assert.match(css, /\.truth-pill\[data-state="realtime"\] \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
   assert.match(css, /\.truth-pill:not\(\[data-state="realtime"\]\) \.truth-icon\s*\{\s*color:\s*#[0-9a-f]{6}\s*\}/i);
 });
+
+
+test('vector PNG markers have an explicit zero-origin anchor independent of stylesheet load order', async () => {
+  const css = await read('public/styles.css');
+  assert.match(css, /\.tracker-marker\.is-vector[^{}]*\{[^}]*top:0;left:0;[^}]*margin:0/s);
+});

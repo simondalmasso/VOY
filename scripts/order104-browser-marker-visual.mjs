@@ -90,7 +90,7 @@ try {
     {name:'desktop',width:1440,height:900},
     {name:'mobile',width:390,height:844}
   ]) {
-    const context = await browser.newContext({viewport:{width:vp.width,height:vp.height},serviceWorkers:'block',reducedMotion:'no-preference'});
+    const context = await browser.newContext({viewport:{width:vp.width,height:vp.height},isMobile:vp.name==='mobile',hasTouch:vp.name==='mobile',deviceScaleFactor:1,serviceWorkers:'block',reducedMotion:'no-preference'});
     const page = await context.newPage();
     const consoleErrors = [], pageErrors = [], apiCalls = [];
     page.on('console',msg=>{if(msg.type()==='error')consoleErrors.push(msg.text())});
@@ -186,13 +186,39 @@ try {
     // Reproduce the mobile pinch/zoom regression: nearby live markers must not be
     // discarded merely because the effective map center shifts during zoom.
     await page.mouse.move(vp.width * 0.48, vp.height * 0.43);
+    const markerSeparation = async () => page.evaluate(() => {
+      const a=document.querySelector('[data-entity-id="visual-north"]')?.getBoundingClientRect();
+      const b=document.querySelector('[data-entity-id="visual-south"]')?.getBoundingClientRect();
+      if(!a||!b)return null;
+      return Math.hypot((a.x+a.width/2)-(b.x+b.width/2),(a.y+a.height/2)-(b.y+b.height/2));
+    });
     const markersBeforeZoom = await page.locator('.tracker-marker.is-gps-bus').count();
+    const separationBeforeZoom = await markerSeparation();
     await page.mouse.wheel(0, -360);
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(500);
+    const separationAfterZoomIn = await markerSeparation();
     await page.mouse.wheel(0, 520);
     await page.waitForTimeout(500);
+    const separationAfterZoomOut = await markerSeparation();
     const markersAfterZoom = await page.locator('.tracker-marker.is-gps-bus').count();
     if(markersAfterZoom < Math.min(markersBeforeZoom,4)) throw new Error(vp.name+' live bus markers dropped across zoom: '+markersBeforeZoom+' -> '+markersAfterZoom);
+    if(!(separationAfterZoomIn > separationBeforeZoom * 1.2)) throw new Error(vp.name+' PNG marker anchors did not scale with zoom-in: '+JSON.stringify({separationBeforeZoom,separationAfterZoomIn}));
+    if(!(separationAfterZoomOut < separationAfterZoomIn * 0.9)) throw new Error(vp.name+' PNG marker anchors did not scale back with zoom-out: '+JSON.stringify({separationAfterZoomIn,separationAfterZoomOut}));
+    let touchPinch = null;
+    if(vp.name==='mobile'){
+      const cdp=await context.newCDPSession(page);
+      const separationBeforePinch=await markerSeparation();
+      await cdp.send('Input.synthesizePinchGesture',{x:vp.width*0.5,y:vp.height*0.42,scaleFactor:1.7,relativeSpeed:800,gestureSourceType:'touch'});
+      await page.waitForTimeout(600);
+      const separationAfterPinchIn=await markerSeparation();
+      await cdp.send('Input.synthesizePinchGesture',{x:vp.width*0.5,y:vp.height*0.42,scaleFactor:0.65,relativeSpeed:800,gestureSourceType:'touch'});
+      await page.waitForTimeout(600);
+      const separationAfterPinchOut=await markerSeparation();
+      touchPinch={separationBeforePinch,separationAfterPinchIn,separationAfterPinchOut};
+      if(!(separationAfterPinchIn>separationBeforePinch*1.2)) throw new Error('mobile PNG anchors failed actual touch pinch-in: '+JSON.stringify(touchPinch));
+      if(!(separationAfterPinchOut<separationAfterPinchIn*0.9)) throw new Error('mobile PNG anchors failed actual touch pinch-out: '+JSON.stringify(touchPinch));
+      await cdp.detach();
+    }
 
     // Exercise Lines picker while the collapsed dashboard is active, then while
     // the dashboard is expanded; check real hit-testing, not just CSS visibility.
@@ -234,7 +260,7 @@ try {
     if(selectedLineEvidence.selected!=='9'||selectedLineEvidence.persisted!=='9'||selectedLineEvidence.routeSegments<1) {
       throw new Error(vp.name+' selecting line 9 did not persist and load published route geometry: '+JSON.stringify(selectedLineEvidence));
     }
-    const linesEvidence={linesPicker:pickerGeometry,expandedDashboardPicker:expandedPicker,selectedLine:selectedLineEvidence,zoomMarkers:{before:markersBeforeZoom,after:markersAfterZoom}};
+    const linesEvidence={linesPicker:pickerGeometry,expandedDashboardPicker:expandedPicker,selectedLine:selectedLineEvidence,zoomMarkers:{before:markersBeforeZoom,after:markersAfterZoom,separationBeforeZoom,separationAfterZoomIn,separationAfterZoomOut,touchPinch}};
 
     const screenshot=path.join(OUT,'gps-headings-'+vp.name+'.png');
     await page.screenshot({path:screenshot,fullPage:false});
