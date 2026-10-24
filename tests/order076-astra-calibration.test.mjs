@@ -52,16 +52,16 @@ test('ORDER076 CABA_OS-inspired urban HUD is dark-first, full-bleed and restrain
   assert.doesNotMatch(css,/crt-flicker|crt-overlay|background-music/i);
 });
 
-test('ORDER076 3D stays contextual, lazy and selected-only',async()=>{
-  const [html,app]=await Promise.all([read('public/index.html'),read('public/app.js')]);
-  assert.match(html,/id="map-3d-quality"[^>]*hidden/);
-  assert.match(app,/function has3DContext\(/);
-  assert.match(app,/function current3DTransportEntities\(\)[\s\S]*trackerStore\.selected\(\)/);
-  assert.doesNotMatch(app,/function current3DTransportEntities\(\)\{return trackerStore\.transportEntries\(\)\}/);
-  const guard=app.indexOf('if(!has3DContext())');
-  const dynamicImport=app.indexOf("state.threeModulePromise??=loadVoy3DModule()");
-  assert.ok(guard>=0,'3D activation must guard missing context');
-  assert.ok(dynamicImport>guard,'3D context guard must run before lazy import');
-  assert.match(app,/map3dQuality\.hidden=true/);
-  assert.match(app,/map3dQuality\.hidden=controller\.renderer==='MAPLIBRE_URBAN_3D'/,'do not show a quality selector that has no effect on the cartographic renderer');
+test('ORDER076 isometric mode reuses the live vector map without 3D quality controls',async()=>{
+  const [html,app,substrate]=await Promise.all([read('public/index.html'),read('public/app.js'),read('public/map/substrate.js')]);
+  assert.doesNotMatch(html,/id="map-3d-quality"|data-map-mode="3d"/);
+  assert.match(html,/data-map-mode="iso"/);
+  const isoStart=app.indexOf('async function activateIso()');
+  const isoEnd=app.indexOf('mapModeButtons.forEach',isoStart);
+  const activation=app.slice(isoStart,isoEnd);
+  assert.ok(isoStart>=0&&isoEnd>isoStart);
+  assert.match(activation,/startVectorUpgradeOnce\(\)/);
+  assert.match(activation,/substrate\.setCameraMode\('isometric'\)/);
+  assert.doesNotMatch(activation,/loadVoy3DModule|threeModulePromise/);
+  assert.match(substrate,/function setCameraMode\(/);
 });
